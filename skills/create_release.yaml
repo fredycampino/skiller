@@ -1,0 +1,36 @@
+name: create_release
+inputs:
+  repo: string
+  base_branch: string
+  release_branch: string
+  pr_title: string
+  publish_target: string
+
+steps:
+  - id: create_branch
+    type: tool
+    tool: mcp.git.create_branch
+    args:
+      repo: "{{inputs.repo}}"
+      from: "{{inputs.base_branch}}"
+      name: "{{inputs.release_branch}}"
+
+  - id: create_pr
+    type: tool
+    tool: mcp.git.create_pr
+    args:
+      repo: "{{inputs.repo}}"
+      head: "{{inputs.release_branch}}"
+      base: "{{inputs.base_branch}}"
+      title: "{{inputs.pr_title}}"
+
+  - id: wait_merge
+    type: wait_webhook
+    wait_key: webhook.merge.xyz
+    match:
+      repo: "{{inputs.repo}}"
+      branch: "{{inputs.release_branch}}"
+
+  - id: notify_done
+    type: notify
+    message: "Release workflow paused or completed"

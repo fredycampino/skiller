@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.24.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-runtime-poc"
+version = "0.1.0"
+description = "Agent Runtime POC: CLI + Webhooks + MCP + Skills"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Team" }]
+dependencies = [
+  "pydantic>=2.8.0",
+  "PyYAML>=6.0.1",
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "ruff>=0.5.0",
+]
+
+[project.scripts]
+agent = "runtime.interfaces.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/runtime"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

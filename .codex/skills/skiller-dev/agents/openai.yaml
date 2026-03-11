@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skiller Dev"
+  short_description: "Readable Skiller code style"
+  default_prompt: "Use $skiller-dev to keep Skiller code flat, explicit, and contract-driven."

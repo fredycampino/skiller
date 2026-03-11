@@ -1,0 +1,27 @@
+name: stdio_mcp_test
+description: "Test minimo MCP via stdio"
+version: "0.1"
+
+inputs:
+  file_path: string
+  content: string
+
+mcp:
+  - name: local-mcp
+    transport: stdio
+    command: .venv/bin/python
+    args:
+      - tests/integration/runtime/fixtures/mcp/test_file_mcp_server.py
+    cwd: .
+    env:
+      FILES_ALLOWED_ROOTS: /tmp
+
+steps:
+  - id: start
+    type: mcp
+    mcp: local-mcp
+    tool: files_action
+    args:
+      action: create
+      path: "{{inputs.file_path}}"
+      content: "{{inputs.content}}"

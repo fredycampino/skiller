@@ -1,47 +1,165 @@
-# System Block Diagram
+# System Diagram
 
-```mermaid
-flowchart LR
-  subgraph APP[Application Layer]
-    CLI[CLI<br/>run/status/logs/steer/cancel]
-    WH[Webhook Receiver<br/>FastAPI POST /webhooks/{key}]
-    BUS[Event Bus<br/>asyncio.Queue]
-    DB[(SQLite<br/>runs / waits / events)]
-  end
+## 1. Arquitectura
 
-  subgraph AGENT[Agent Layer]
-    RT[Runtime / Orchestrator<br/>State machine + scheduler]
-    SK[Skill Runner<br/>DSL YAML/JSON -> steps]
-    PG[Policy Gate<br/>allowlist / limits / confirmations]
-    TR[Tool Router]
-    LLM[LLM Adapter<br/>OpenAI / Anthropic / Local]
-  end
+```text
+                    imports
 
-  subgraph TOOLS[Tools Layer]
-    MCP[MCP Client<br/>mcp.call(server, tool, args)]
-    INT[Internal Tools<br/>wait_webhook, notify, set_context]
-  end
-
-  CLI --> BUS
-  WH --> BUS
-  BUS --> RT
-  RT --> SK
-  RT <--> LLM
-  RT --> PG --> TR
-  TR --> MCP
-  TR --> INT
-  RT <--> DB
-  WH --> DB
-
-  classDef ext fill:#f6f6f6,stroke:#777,stroke-width:1px;
-  class LLM,MCP ext;
+  +---------------------------+
+  | Interfaces                |
+  | - CLI                     |
+  | - tools/webhooks app      |
+  +-------------+-------------+
+                |
+                v
+  +-------------+-------------+
+  | Application               |
+  | - RuntimeApplicationService
+  | - QueryService            |
+  | - Use cases               |
+  | - Ports                   |
+  +------+------+-------------+
+         |      |
+ imports |      | implements ports / called by services
+         v      v
+  +------+--+  +-------------------------+
+  | Domain  |  | Infrastructure          |
+  | Models  |  | - SQLite                |
+  | Status  |  | - Skill runner          |
+  | Context |  | - MCP adapters          |
+  +---------+  +-------------------------+
 ```
 
-## Main flow
+## 2. Runtime principal
 
-1. CLI starts a run and emits `START_RUN`.
-2. Runtime executes skill steps through `Tool Router`.
-3. A `wait_webhook` step persists an active wait in SQLite and sets status to `WAITING`.
-4. Webhook receiver emits `WEBHOOK_RECEIVED` into the Event Bus.
-5. Runtime matches wait conditions, resumes execution, and completes with `SUCCEEDED` or `FAILED`.
-6. All transitions are stored as events/logs for observability.
+```text
+  skiller run
+      |
+      v
+  RuntimeController.run(...)
+      |
+      v
+  RuntimeApplicationService.start_run(...)
+      |
+      v
+  StartRunUseCase
+      |
+      v
+  store.create_run(...)
+      |
+      v
+  GetStartStepUseCase
+      |
+      v
+  _run_steps_loop(run_id)
+      |
+      v
+  RenderCurrentStepUseCase
+      |
+      +--> READY + assign ------> ExecuteAssignStepUseCase
+      |                              |
+      |                              +--> next -> loop sigue
+      |                              |
+      |                              +--> sin next -> CompleteRunUseCase
+      |
+      +--> READY + llm_prompt --> ExecuteLlmPromptStepUseCase
+      |                              |
+      |                              +--> next -> loop sigue
+      |                              |
+      |                              +--> sin next -> CompleteRunUseCase
+      |
+      +--> READY + mcp ---------> RenderMcpConfigUseCase
+      |                              |
+      |                              v
+      |                       ExecuteMcpStepUseCase
+      |                              |
+      |                              +--> next -> loop sigue
+      |                              |
+      |                              +--> sin next -> CompleteRunUseCase
+      |
+      +--> READY + notify ------> ExecuteNotifyStepUseCase
+      |                              |
+      |                              +--> next -> loop sigue
+      |                              |
+      |                              +--> sin next -> CompleteRunUseCase
+      |
+      +--> READY + wait_webhook -> ExecuteWaitWebhookStepUseCase
+      |                              |
+      |                              +--> next -> loop sigue
+      |                              |
+      |                              +--> sin next -> CompleteRunUseCase
+      |                              |
+      |                              +--> waiting -> return
+      |
+      +--> INVALID_* / error -------> FailRunUseCase
+      |
+      +--> RUN_NOT_FOUND / DONE / WAITING / CANCELLED / SUCCEEDED / FAILED
+                                     -> return
+```
+
+## 3. Flujo de webhooks
+
+```text
+  HTTP POST /webhooks/{webhook}/{key}
+      |
+      v
+  tools/webhooks/app.py
+      |
+      +--> valida firma con webhook_registrations
+      |
+      v
+  launcher.receive_webhook(...)
+      |
+      v
+  python -m skiller webhook receive ...
+      |
+      v
+  RuntimeController.receive_webhook(...)
+      |
+      v
+  RuntimeApplicationService.handle_webhook(...)
+      |
+      v
+  HandleWebhookUseCase
+      |
+      +--> persiste webhook
+      +--> deduplica
+      +--> devuelve run_ids
+      |
+      v
+  ResumeRunUseCase
+      |
+      v
+  _run_steps_loop(run_id)
+      |
+      v
+  ExecuteWaitWebhookStepUseCase
+      |
+      +--> puede dejar el run en `WAITING`
+      +--> o resolver el wait y mover `current` con `next`
+```
+
+## 4. Registro de webhooks
+
+```text
+  skiller webhook register <webhook>
+      |
+      v
+  RegisterWebhookUseCase
+      |
+      v
+  webhook_registrations
+      |
+      +--> webhook
+      +--> secret
+      +--> enabled
+      +--> created_at
+
+  skiller webhook remove <webhook>
+      |
+      v
+  RemoveWebhookUseCase
+      |
+      v
+  webhook_registrations
+```

@@ -1,0 +1,10 @@
+name: notify_test
+description: "Test minimo con un unico step notify"
+version: "0.1"
+
+inputs: {}
+
+steps:
+  - id: start
+    type: notify
+    message: "notify smoke ok"

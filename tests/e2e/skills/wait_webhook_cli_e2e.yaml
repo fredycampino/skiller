@@ -1,0 +1,17 @@
+name: wait_webhook_cli_e2e
+description: "CLI e2e for wait_webhook"
+version: "0.1"
+
+inputs:
+  key: string
+
+steps:
+  - id: start
+    type: wait_webhook
+    webhook: test
+    key: "{{inputs.key}}"
+    next: done
+
+  - id: done
+    type: notify
+    message: resumed from webhook

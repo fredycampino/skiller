@@ -1,0 +1,35 @@
+name: llm_prompt_cli_real_e2e
+inputs:
+  issue: string
+steps:
+  - id: start
+    type: llm_prompt
+    system: |
+      Eres un analista tecnico.
+      Responde solo con JSON valido.
+    prompt: |
+      Lee este texto:
+      {{inputs.issue}}
+
+      Devuelve un JSON con:
+      - summary: una frase corta
+      - severity: "low"
+      - next_action: "retry"
+    output:
+      format: json
+      schema:
+        type: object
+        required: [summary, severity, next_action]
+        properties:
+          summary:
+            type: string
+          severity:
+            type: string
+            enum: [low]
+          next_action:
+            type: string
+            enum: [retry]
+    next: done
+  - id: done
+    type: notify
+    message: "{{results.start.next_action}}"

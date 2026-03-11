@@ -14,6 +14,7 @@ dependencies = [
   "PyYAML>=6.0.1",
   "fastapi>=0.115.0",
   "uvicorn>=0.30.0",
+  "fastmcp>=2.10.0",
 ]
 
 [project.optional-dependencies]
@@ -23,13 +24,21 @@ dev = [
 ]
 
 [project.scripts]
-agent = "runtime.interfaces.cli.main:main"
+agent = "skiller.interfaces.cli.main:main"
+skiller = "skiller.interfaces.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/runtime"]
+packages = ["src/skiller"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+  "unit: fast isolated unit tests",
+  "integration: integration tests with component boundaries",
+  "e2e: end-to-end tests",
+  "smoke: fast end-to-end smoke checks"
+]
 
 [tool.ruff]
 line-length = 100

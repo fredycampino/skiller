@@ -1,0 +1,20 @@
+name: assign_cli_e2e
+description: "CLI e2e for assign"
+version: "0.1"
+
+inputs:
+  issue: string
+
+steps:
+  - id: start
+    type: assign
+    values:
+      action: retry
+      summary: "{{inputs.issue}}"
+      meta:
+        source: assign
+    next: done
+
+  - id: done
+    type: notify
+    message: "{{results.start.action}}"

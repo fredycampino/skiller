@@ -2,6 +2,9 @@
 
 Runtime experimental de skills con soporte actual para:
 - `notify`
+- `assign`
+- `switch`
+- `when`
 - `llm_prompt`
 - `mcp`
 - `wait_webhook`
@@ -17,8 +20,8 @@ Runtime experimental de skills con soporte actual para:
 
 - `docs/system_block_diagram.md`
 - `docs/reglas_arquitectura.md`
-- `docs/catalogo_use_cases.md`
 - `docs/backlog.md`
+- `docs/flow/flujo_run_actual.md`
 - `docs/guia_creacion_skills.md`
 - `docs/skiller_webhooks_functional_overview.md`
 
@@ -34,6 +37,14 @@ pip install -e .[dev]
 # Skill interna minima
 skiller run notify_test
 
+# Skill demo ramificada
+skiller run story_router --arg path=cave --arg mood=curious
+
+# Skill demo webhook + llm + switch
+# Requiere registrar antes el canal `signal`
+# skiller webhook register signal
+skiller run webhook_signal_oracle --arg key=demo --start-webhooks
+
 # Skill con llm_prompt usando MiniMax
 AGENT_LLM_PROVIDER=minimax \
 AGENT_MINIMAX_API_KEY=tu_api_key \
@@ -43,6 +54,8 @@ skiller run --file tests/e2e/skills/llm_prompt_cli_real_e2e.yaml --arg issue="Tr
 # E2E manuales por step
 ./tests/e2e/cli_notify.sh
 ./tests/e2e/cli_assign.sh "dependency timeout"
+./tests/e2e/cli_switch.sh "retry"
+./tests/e2e/cli_when.sh
 ./tests/e2e/cli_llm_prompt.sh
 ./tests/e2e/cli_mcp_stdio.sh "hola-e2e"
 ./tests/e2e/cli_wait_webhook.sh 42
@@ -69,8 +82,13 @@ skiller webhook register github-ci
 skiller webhook remove github-ci
 ```
 
-## Skills actuales
+## Skills incluidas
 
+Demo:
+- `skills/story_router.yaml`
+- `skills/webhook_signal_oracle.yaml`
+
+Test y referencia tecnica:
 - `skills/notify_test.yaml`
 - `skills/stdio_mcp_test.yaml`
 - `skills/http_mcp_test.yaml`
@@ -103,6 +121,8 @@ Los flujos manuales de e2e viven en `tests/e2e/cli_*.sh`.
 
 - `cli_notify.sh`
 - `cli_assign.sh`
+- `cli_switch.sh`
+- `cli_when.sh`
 - `cli_llm_prompt.sh`
 - `cli_mcp_stdio.sh`
 - `cli_wait_webhook.sh`

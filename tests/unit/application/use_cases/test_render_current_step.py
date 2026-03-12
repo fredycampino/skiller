@@ -137,6 +137,50 @@ def test_returns_ready_with_assign_step_type() -> None:
     assert result.current_step.step_type == StepType.ASSIGN
 
 
+def test_returns_ready_with_switch_step_type() -> None:
+    run = _build_run(current="decide")
+    run.skill_snapshot = {
+        "steps": [
+            {
+                "id": "decide",
+                "type": "switch",
+                "value": "{{results.start.action}}",
+                "cases": {"retry": "retry_notice"},
+                "default": "unknown_action",
+            }
+        ]
+    }
+    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+
+    result = use_case.execute("run-1")
+
+    assert result.status == CurrentStepStatus.READY
+    assert result.current_step is not None
+    assert result.current_step.step_type == StepType.SWITCH
+
+
+def test_returns_ready_with_when_step_type() -> None:
+    run = _build_run(current="decide")
+    run.skill_snapshot = {
+        "steps": [
+            {
+                "id": "decide",
+                "type": "when",
+                "value": "{{results.score}}",
+                "branches": [{"gt": 90, "then": "excellent"}],
+                "default": "fail",
+            }
+        ]
+    }
+    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+
+    result = use_case.execute("run-1")
+
+    assert result.status == CurrentStepStatus.READY
+    assert result.current_step is not None
+    assert result.current_step.step_type == StepType.WHEN
+
+
 def test_returns_invalid_skill_when_skill_shape_is_wrong() -> None:
     run = _build_run(skill_snapshot=[])  # type: ignore[arg-type]
     use_case = RenderCurrentStepUseCase(

@@ -33,6 +33,33 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - For ad hoc Python commands with local imports, use `PYTHONPATH=src python3 ...`.
 - When reporting verification, include the exact command so the next agent can repeat it without rediscovering the environment.
 
+## Release Workflow
+
+Use this repo flow unless the user says otherwise:
+
+1. The human creates a branch from `main` named `feature/<topic>`.
+2. The agent works on that branch, makes the required code changes, verifies them, and commits freely while the feature is in progress.
+3. When the branch is considered release-ready, the agent updates `CHANGELOG.md` with a short functional summary of the branch.
+4. The human reviews the changelog and confirms the branch is ready to go out.
+5. The agent squashes the branch into one clean commit on top of `main` and verifies the branch compares cleanly against `main`.
+6. The human opens and merges the pull request into `main`.
+7. The human creates the version tag on `main`.
+8. After merge, the agent can clean merged local branches if requested.
+
+Agent responsibilities:
+- implement the code and tests
+- run verification
+- prepare commits during development
+- maintain `CHANGELOG.md` before release
+- prepare the branch for PR, including squash cleanup
+- clean local branches after merge when asked
+
+Human responsibilities:
+- decide when a branch becomes a release
+- review the changelog and PR
+- open or merge the PR when the agent cannot do it directly
+- create the version tag on `main`
+
 ## Default Checklist
 
 - Is the control flow flat?

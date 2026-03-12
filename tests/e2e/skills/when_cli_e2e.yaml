@@ -1,0 +1,32 @@
+name: when_cli_e2e
+description: "CLI e2e for when"
+version: "0.1"
+
+steps:
+  - id: start
+    type: assign
+    values:
+      score: 85
+    next: decide_score
+
+  - id: decide_score
+    type: when
+    value: "{{results.start.score}}"
+    branches:
+      - gt: 90
+        then: excellent
+      - gt: 70
+        then: good
+    default: fail
+
+  - id: excellent
+    type: notify
+    message: "excellent chosen"
+
+  - id: good
+    type: notify
+    message: "good chosen"
+
+  - id: fail
+    type: notify
+    message: "fail chosen"

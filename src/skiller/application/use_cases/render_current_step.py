@@ -25,6 +25,8 @@ class StepType(str, Enum):
     NOTIFY = "notify"
     MCP = "mcp"
     LLM_PROMPT = "llm_prompt"
+    SWITCH = "switch"
+    WHEN = "when"
     WAIT_WEBHOOK = "wait_webhook"
 
 

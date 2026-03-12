@@ -29,21 +29,25 @@ flowchart TB
   I -->|READY + llm_prompt| P["ExecuteLlmPromptStepUseCase.execute(current_step)"]
   I -->|READY + mcp| R["RenderMcpConfigUseCase.execute(current_step) -> ExecuteMcpStepUseCase.execute(current_step, mcp_config)"]
   I -->|READY + notify| N["ExecuteNotifyStepUseCase.execute(current_step)"]
+  I -->|READY + switch| S["ExecuteSwitchStepUseCase.execute(current_step)"]
   I -->|READY + wait_webhook| W["ExecuteWaitWebhookStepUseCase.execute(current_step)"]
+  I -->|READY + when| Q["ExecuteWhenStepUseCase.execute(current_step)"]
 
   A --> H
   P --> H
   R --> H
   N --> H
+  S --> H
   W -->|NEXT| H
   W -->|WAITING| L
+  Q --> H
 ```
 
 ## Resumen
 - `start_run` carga la skill, congela un snapshot y crea el run
 - `GetStartStepUseCase` exige un step inicial con `id: start` y fija `run.current`
 - `RenderCurrentStepUseCase` ya resuelve el step actual por `run.current`, no por indice
-- en esta fase del refactor el loop canonico ya tiene migrados `notify`, `assign`, `llm_prompt`, `mcp` y `wait_webhook`
-- `notify`, `assign`, `llm_prompt` y `mcp` avanzan con `next` si existe; si no existe, el run se completa
+- en esta fase del refactor el loop canonico ya tiene migrados `notify`, `assign`, `switch`, `when`, `llm_prompt`, `mcp` y `wait_webhook`
+- `notify`, `assign`, `switch`, `when`, `llm_prompt` y `mcp` avanzan con `next` implícito resuelto por el propio step o completan el run
 - `wait_webhook` usa el mismo contrato de ejecución y puede devolver `NEXT`, `COMPLETED` o `WAITING`
 - errores o estados inválidos terminan en `FailRunUseCase`

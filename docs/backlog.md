@@ -4,9 +4,11 @@
 
 ### v1
 1. Steps complementarios
-- introducir `if` para ramificar según el resultado del LLM o de steps previos
-- bloqueado por la decision de modelo de control de flujo del runtime
-- hay que decidir si `Skiller` sigue con flujo lineal por indice o evoluciona hacia transiciones explicitas entre steps
+- `switch` y `when` v0 ya estan hechos como primitives de branching por `step_id`
+- siguiente pasada:
+  - validar casos reales de uso para decidir si el set de operadores de `when` es suficiente
+  - decidir si conviene añadir aliases o helpers semanticos sin inflar el DSL
+  - decidir si `when` necesita helpers de tipado/conversion o si eso debe seguir fuera del step
 - ver spike: `docs/spike/if-control-flow.md`
 
 2. Casos de uso reales y documentación
@@ -30,9 +32,25 @@
 - `GetStartStepUseCase` ya fija `current = start`
 - `RenderCurrentStepUseCase` ya resuelve el step actual por `current`
 - `notify`, `assign`, `llm_prompt`, `mcp` y `wait_webhook` ya usan el contrato común `NEXT | COMPLETED | WAITING`
+- `switch` y `when` ya siguen el mismo modelo de avance por `step_id`
 
 2. Limpieza restante
 - revisar nombres legacy del renderer y DTOs si sigue haciendo falta más limpieza
+
+## Docs / limpieza editorial
+
+### Siguiente pasada
+1. Marcar material histórico o exploratorio
+- dejar claro qué documentos en `docs/spike/` son históricos y no fuente de verdad operativa
+- evitar que un spike antiguo parezca backlog activo o diseño vigente
+
+2. Cerrar referencias muertas
+- revisar referencias a docs eliminadas o renombradas en `README.md` y `docs/`
+- corregir enlaces rotos antes de seguir ampliando documentación
+
+3. Alinear cobertura y examples
+- reflejar en `docs/feature_matrix.md` y docs de runtime que `assign` y `llm_prompt` ya son parte del camino canónico
+- reflejar que el e2e manual `stdio` usa una fixture interna del repo y no depende de `local_mcp.py` externo
 
 ## Webhooks / wait_webhook
 
@@ -76,9 +94,9 @@ Estado actual:
 - `mcp` ya funciona por YAML
 - hay ejemplos minimos y tests para `notify`, `stdio` y `streamable-http`
 - los e2e actuales entran por CLI real
-- `notify` y `stdio local-mcp` ya tienen e2e por CLI
+- `notify` y `stdio` ya tienen e2e manual por CLI
 - `http_mcp_test` sigue cubierto en integracion, no como e2e
-- el e2e `stdio local-mcp` debe mantenerse opt-in por configuracion externa, sin paths hardcodeados del autor
+- el e2e `stdio` estable usa una fixture interna del repo; `local_mcp.py` real queda para validacion manual aparte
 
 ### Imprescindible
 1. End-to-end reales estables
@@ -149,7 +167,7 @@ Estado actual:
 - el step ya falla con error claro si el modelo no devuelve JSON válido o no cumple el schema
 - ya existe proveedor real `MiniMax`
 - ya existe `FakeLLM` para tests deterministas
-- ya hay integración y e2e real opt-in para `llm_prompt`
+- ya hay integración y e2e manual opt-in para `llm_prompt`
 - ya existe observabilidad específica con `LLM_PROMPT_RESULT` y `LLM_PROMPT_ERROR`
 - `skiller run ... --logs` ya puede devolver los eventos del run al terminar
 
@@ -162,3 +180,19 @@ Estado actual:
 - ya existe `ExecuteAssignStepUseCase`
 - ya existe persistencia y reconstrucción desde `ASSIGN_RESULT`
 - ya hay integración y e2e CLI para `assign`
+
+### switch v0
+- `switch` ya existe como step canónico de routing por igualdad exacta
+- el step ya mueve `run.current` por `step_id`
+- el resultado ya se guarda como `{"value": ..., "next": ...}`
+- ya existe `ExecuteSwitchStepUseCase`
+- ya existe persistencia y reconstrucción desde `SWITCH_DECISION`
+- ya hay integración y e2e CLI para `switch`
+
+### when v0
+- `when` ya existe como step canónico de condiciones ordenadas
+- el step ya mueve `run.current` por `step_id`
+- el resultado ya se guarda como `{"value": ..., "next": ...}`
+- ya existe `ExecuteWhenStepUseCase`
+- ya existe persistencia y reconstrucción desde `WHEN_DECISION`
+- ya hay integración y e2e CLI para `when`

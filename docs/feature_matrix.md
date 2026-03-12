@@ -3,7 +3,11 @@
 | Feature | Estado | Entry Point | Persistencia | Tests | Notas |
 |---|---|---|---|---|---|
 | `notify` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e | Camino base estable |
-| `mcp` | Operativo | `skiller run` | `runs`, `events` | unit, integration | Usa config MCP desde YAML |
+| `assign` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e | Mapper puro con resultado en `context.results[step_id]` |
+| `switch` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e | Routing por igualdad exacta sobre un valor |
+| `when` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e | Routing por condiciones ordenadas sobre un valor |
+| `llm_prompt` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e manual opt-in | Requiere proveedor LLM configurado |
+| `mcp` | Operativo | `skiller run` | `runs`, `events` | unit, integration, e2e manual stdio | Usa config MCP desde YAML |
 | `wait_webhook` | Operativo | `skiller run` | `runs`, `waits`, `webhook_events`, `webhook_receipts` | integration, e2e | Reanuda por `webhook + key` |
 | Skill interna | Operativo | `skiller run <skill>` | `runs.skill_source=internal`, `skill_ref`, `skill_snapshot_json` | unit, integration, e2e | Carga desde `skills/` |
 | Skill externa por archivo | Operativo | `skiller run --file ...` | `runs.skill_source=file`, `skill_ref`, `skill_snapshot_json` | integration, e2e | Usa snapshot del YAML al crear el run |
@@ -16,4 +20,4 @@
 | Borrado de webhook | Operativo | `skiller webhook remove <webhook>` | `webhook_registrations` | unit | No hay `rotate` todavía |
 | Firma HMAC por canal | Operativo | `POST /webhooks/{webhook}/{key}` | Lee `webhook_registrations` | unit, e2e | Requiere `x-signature` válida |
 | Duplicados `webhook + key` | Pendiente | `wait_webhook` / `webhook receive` | `waits` | pendiente | Falta cerrar política de unicidad |
-| `http mcp` como e2e real | Parcial | `skiller run http_mcp_test` | `runs`, `events` | integration | No está como e2e estable |
+| `http mcp` como e2e real | Parcial | `skiller run http_mcp_test` | `runs`, `events` | integration | Sigue fuera de la suite manual estable |

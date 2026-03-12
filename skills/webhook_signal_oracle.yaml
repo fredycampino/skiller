@@ -1,0 +1,67 @@
+name: webhook_signal_oracle
+description: "Espera un webhook, lo clasifica con LLM y enruta la respuesta"
+version: "0.1"
+
+inputs:
+  key: string
+
+steps:
+  - id: start
+    type: wait_webhook
+    webhook: signal
+    key: "{{inputs.key}}"
+    next: analyze_signal
+
+  - id: analyze_signal
+    type: llm_prompt
+    system: |
+      Eres un analista de señales externas.
+      Responde solo JSON valido.
+    prompt: |
+      Ha llegado este webhook:
+      {{results.start.payload}}
+
+      Clasificalo y devuelve un JSON con:
+      - summary: una frase corta y clara
+      - mood: "bright", "tense" o "calm"
+      - next_action: "celebrate", "investigate" o "ignore"
+    output:
+      format: json
+      schema:
+        type: object
+        required: [summary, mood, next_action]
+        properties:
+          summary:
+            type: string
+          mood:
+            type: string
+            enum: [bright, tense, calm]
+          next_action:
+            type: string
+            enum: [celebrate, investigate, ignore]
+    next: route_signal
+
+  - id: route_signal
+    type: switch
+    value: "{{results.analyze_signal.next_action}}"
+    cases:
+      celebrate: celebrate_notice
+      investigate: investigate_notice
+      ignore: ignore_notice
+    default: unknown_notice
+
+  - id: celebrate_notice
+    type: notify
+    message: "Celebrate: {{results.analyze_signal.summary}}"
+
+  - id: investigate_notice
+    type: notify
+    message: "Investigate now: {{results.analyze_signal.summary}}"
+
+  - id: ignore_notice
+    type: notify
+    message: "Ignore for now: {{results.analyze_signal.summary}}"
+
+  - id: unknown_notice
+    type: notify
+    message: "The signal could not be routed cleanly."

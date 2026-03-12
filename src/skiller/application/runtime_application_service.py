@@ -11,6 +11,8 @@ from skiller.application.use_cases.execute_mcp_step import (
 from skiller.application.use_cases.execute_notify_step import (
     ExecuteNotifyStepUseCase,
 )
+from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
@@ -43,6 +45,8 @@ class RuntimeApplicationService:
         execute_llm_prompt_step_use_case: ExecuteLlmPromptStepUseCase,
         execute_mcp_step_use_case: ExecuteMcpStepUseCase,
         execute_notify_step_use_case: ExecuteNotifyStepUseCase,
+        execute_switch_step_use_case: ExecuteSwitchStepUseCase,
+        execute_when_step_use_case: ExecuteWhenStepUseCase,
         execute_wait_webhook_step_use_case: ExecuteWaitWebhookStepUseCase,
         handle_webhook_use_case: HandleWebhookUseCase,
         register_webhook_use_case: RegisterWebhookUseCase,
@@ -60,6 +64,8 @@ class RuntimeApplicationService:
         self.execute_llm_prompt_step_use_case = execute_llm_prompt_step_use_case
         self.execute_mcp_step_use_case = execute_mcp_step_use_case
         self.execute_notify_step_use_case = execute_notify_step_use_case
+        self.execute_switch_step_use_case = execute_switch_step_use_case
+        self.execute_when_step_use_case = execute_when_step_use_case
         self.execute_wait_webhook_step_use_case = execute_wait_webhook_step_use_case
         self.handle_webhook_use_case = handle_webhook_use_case
         self.register_webhook_use_case = register_webhook_use_case
@@ -192,6 +198,12 @@ class RuntimeApplicationService:
                 elif is_ready and current_step.step_type == StepType.WAIT_WEBHOOK:
                     execution_result = self.execute_wait_webhook_step_use_case.execute(current_step)
 
+                elif is_ready and current_step.step_type == StepType.SWITCH:
+                    execution_result = self.execute_switch_step_use_case.execute(current_step)
+
+                elif is_ready and current_step.step_type == StepType.WHEN:
+                    execution_result = self.execute_when_step_use_case.execute(current_step)
+
                 elif is_ready and current_step:
                     step_type = current_step.step_type.value
                     step_id = current_step.step_id
@@ -199,7 +211,7 @@ class RuntimeApplicationService:
                         run_id,
                         error=(
                             f"Unsupported step type '{step_type}' in step '{step_id}': "
-                            "only 'assign', 'llm_prompt', 'mcp', 'notify' and 'wait_webhook' are enabled in run loop"
+                            "only 'assign', 'llm_prompt', 'mcp', 'notify', 'switch', 'wait_webhook' and 'when' are enabled in run loop"
                         ),
                     )
                     return

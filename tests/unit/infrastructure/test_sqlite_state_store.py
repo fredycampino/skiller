@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from skiller.domain.run_context_model import RunContext
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
@@ -70,3 +71,66 @@ def test_init_db_drops_legacy_current_step_column(tmp_path) -> None:
     assert run is not None
     assert run.current == "start"
     assert not hasattr(run, "current_step")
+
+
+def test_get_run_rebuilds_switch_result_from_events(tmp_path) -> None:
+    db_path = tmp_path / "switch.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "demo",
+        {"steps": [{"id": "start", "type": "switch"}]},
+        RunContext(inputs={"repo": "acme"}, results={}),
+    )
+    store.append_event(
+        "SWITCH_DECISION",
+        {
+            "step": "start",
+            "value": "retry",
+            "next": "retry_notice",
+        },
+        run_id=run_id,
+    )
+
+    run = store.get_run(run_id)
+
+    assert run is not None
+    assert run.context.results["start"] == {
+        "value": "retry",
+        "next": "retry_notice",
+    }
+
+
+def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
+    db_path = tmp_path / "when.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "demo",
+        {"steps": [{"id": "start", "type": "when"}]},
+        RunContext(inputs={"repo": "acme"}, results={}),
+    )
+    store.append_event(
+        "WHEN_DECISION",
+        {
+            "step": "start",
+            "value": 85,
+            "next": "good",
+            "branch": 1,
+            "op": "gt",
+            "right": 70,
+        },
+        run_id=run_id,
+    )
+
+    run = store.get_run(run_id)
+
+    assert run is not None
+    assert run.context.results["start"] == {
+        "value": 85,
+        "next": "good",
+    }

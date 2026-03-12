@@ -1,5 +1,11 @@
 # Minimal Cline en Skiller
 
+## Estado
+
+Documento histórico de exploración.
+
+Se mantiene como spike de producto, no como fuente de verdad del runtime actual. Parte de su contenido describe limitaciones previas a `1.0.0-alpha.1`.
+
 ## Objetivo
 
 Explorar como se veria un agente tipo Cline sobre `Skiller`, sin intentar copiar toda su complejidad.
@@ -108,12 +114,13 @@ Eso lo hace una buena base para agentes que:
 
 Hoy `Skiller` todavia no es un runtime agentic completo.
 
-Le faltan, al menos:
+Le faltaban, al menos:
 
 - steps de lectura y escritura explicitos
-- un step LLM canonico
 - branching mas rico
 - espera conversacional
+
+Hoy `Skiller` ya tiene un step LLM canónico; lo que sigue abierto de este spike es el set de steps agentic y el branching.
 
 ## Conclusión
 

@@ -9,6 +9,8 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
@@ -44,6 +46,8 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_llm_prompt_step_use_case=ExecuteLlmPromptStepUseCase(store=store, llm=NullLLM()),
         execute_mcp_step_use_case=ExecuteMcpStepUseCase(store=store, mcp=mcp),
         execute_notify_step_use_case=ExecuteNotifyStepUseCase(store=store),
+        execute_switch_step_use_case=ExecuteSwitchStepUseCase(store=store),
+        execute_when_step_use_case=ExecuteWhenStepUseCase(store=store),
         execute_wait_webhook_step_use_case=ExecuteWaitWebhookStepUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
@@ -148,3 +152,126 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
             "meta": {"source": "assign"},
         }
         assert notify_event["payload"]["message"] == "retry"
+
+
+def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "switch.yaml"
+        skill_path.write_text(
+            (
+                "name: switch_demo\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: assign\n"
+                "    values:\n"
+                "      action: retry\n"
+                "    next: decide_action\n"
+                "  - id: decide_action\n"
+                "    type: switch\n"
+                "    value: \"{{results.start.action}}\"\n"
+                "    cases:\n"
+                "      retry: retry_notice\n"
+                "      ask_human: human_notice\n"
+                "    default: unknown_action\n"
+                "  - id: retry_notice\n"
+                "    type: notify\n"
+                "    message: retry chosen\n"
+                "  - id: human_notice\n"
+                "    type: notify\n"
+                "    message: human chosen\n"
+                "  - id: unknown_action\n"
+                "    type: notify\n"
+                "    message: unknown chosen\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.start_run(str(skill_path), {}, skill_source="file")
+
+        run = store.get_run(run_result["run_id"])
+        assert run is not None
+        assert run_result["status"] == "SUCCEEDED"
+        assert run.context.results["decide_action"] == {
+            "value": "retry",
+            "next": "retry_notice",
+        }
+
+        events = store.list_events(run_result["run_id"])
+        switch_event = next(event for event in events if event["type"] == "SWITCH_DECISION")
+        notify_event = next(event for event in events if event["type"] == "NOTIFY")
+
+        assert switch_event["payload"] == {
+            "step": "decide_action",
+            "value": "retry",
+            "next": "retry_notice",
+        }
+        assert notify_event["payload"]["message"] == "retry chosen"
+
+
+def test_when_step_routes_to_first_matching_branch_from_external_skill_file() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "when.yaml"
+        skill_path.write_text(
+            (
+                "name: when_demo\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: assign\n"
+                "    values:\n"
+                "      score: 85\n"
+                "    next: decide_score\n"
+                "  - id: decide_score\n"
+                "    type: when\n"
+                "    value: \"{{results.start.score}}\"\n"
+                "    branches:\n"
+                "      - gt: 90\n"
+                "        then: excellent\n"
+                "      - gt: 70\n"
+                "        then: good\n"
+                "    default: fail\n"
+                "  - id: excellent\n"
+                "    type: notify\n"
+                "    message: excellent chosen\n"
+                "  - id: good\n"
+                "    type: notify\n"
+                "    message: good chosen\n"
+                "  - id: fail\n"
+                "    type: notify\n"
+                "    message: fail chosen\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.start_run(str(skill_path), {}, skill_source="file")
+
+        run = store.get_run(run_result["run_id"])
+        assert run is not None
+        assert run_result["status"] == "SUCCEEDED"
+        assert run.context.results["decide_score"] == {
+            "value": 85,
+            "next": "good",
+        }
+
+        events = store.list_events(run_result["run_id"])
+        when_event = next(event for event in events if event["type"] == "WHEN_DECISION")
+        notify_event = next(event for event in events if event["type"] == "NOTIFY")
+
+        assert when_event["payload"] == {
+            "step": "decide_score",
+            "value": 85,
+            "next": "good",
+            "branch": 1,
+            "op": "gt",
+            "right": 70,
+        }
+        assert notify_event["payload"]["message"] == "good chosen"

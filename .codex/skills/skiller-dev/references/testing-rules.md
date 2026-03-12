@@ -32,9 +32,13 @@
 ## Current Repo Intent
 
 - `notify` through CLI is a valid `e2e`.
-- `stdio mcp` through CLI with a real local MCP installation is a valid `e2e`.
-  - make it opt-in through env/config, never by hardcoded machine paths in the repo
+- `assign`, `switch`, `when`, `wait_webhook`, and `llm_prompt` through CLI are valid manual operator flows.
+- `llm_prompt` CLI remains opt-in when it depends on real provider credentials.
+- `stdio mcp` through CLI is part of the manual CLI coverage in this repo.
 - MCP with test servers or repo fixtures belongs to `integration`.
+- Manual CLI wrappers live in `tests/e2e/cli_*.sh`.
+- `tests/e2e/cli_all.sh` is the manual aggregator for those flows.
+- When adding a new runtime step intended for real usage, add at least one `cli_<step>.sh` flow and register it in `cli_all.sh`.
 
 ## Placement
 
@@ -43,3 +47,4 @@
 - `tests/e2e/...`
 
 Keep fixtures near the integration tests that use them. Do not keep infrastructure fixtures under `tests/e2e/`.
+Small YAML skills used only by manual CLI wrappers may live under `tests/e2e/skills/`.

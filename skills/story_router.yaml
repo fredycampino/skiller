@@ -1,0 +1,78 @@
+name: story_router
+description: "Mini aventura ramificada con switch y when"
+version: "0.1"
+
+inputs:
+  path: string
+  mood: string
+
+steps:
+  - id: start
+    type: assign
+    values:
+      hero:
+        title: "Archivist of the Forking Paths"
+        path: "{{inputs.path}}"
+        mood: "{{inputs.mood}}"
+    next: choose_path
+
+  - id: choose_path
+    type: switch
+    value: "{{results.start.hero.path}}"
+    cases:
+      cave: cave_mood
+      market: market_scene
+      tower: tower_mood
+    default: lost_scene
+
+  - id: cave_mood
+    type: when
+    value: "{{results.start.hero.mood}}"
+    branches:
+      - eq: brave
+        then: cave_treasure
+      - eq: curious
+        then: cave_riddle
+    default: cave_escape
+
+  - id: tower_mood
+    type: when
+    value: "{{results.start.hero.mood}}"
+    branches:
+      - eq: brave
+        then: tower_storm
+      - eq: patient
+        then: tower_library
+    default: tower_echo
+
+  - id: market_scene
+    type: notify
+    message: "The market erupts in lantern light. A masked merchant slips you a map drawn on silver skin."
+
+  - id: lost_scene
+    type: notify
+    message: "You miss every obvious turn and end up crowned by goats as the accidental king of a very small hill."
+
+  - id: cave_treasure
+    type: notify
+    message: "You walk straight into the cave, stare down the guardian, and leave with a clockwork star in your pocket."
+
+  - id: cave_riddle
+    type: notify
+    message: "A stone door asks your true name. You answer with a question and it opens, delighted."
+
+  - id: cave_escape
+    type: notify
+    message: "A chorus of bats judges your lack of commitment. You retreat with dignity, mostly."
+
+  - id: tower_storm
+    type: notify
+    message: "At the top of the tower you ring the bronze bell, and the storm bows as if it knows you."
+
+  - id: tower_library
+    type: notify
+    message: "Behind a patient silence you find a hidden library where every book is about a future you almost chose."
+
+  - id: tower_echo
+    type: notify
+    message: "The tower answers each step with your own voice, but wiser and slightly more annoying."

@@ -439,6 +439,24 @@ class SqliteStateStore(SqliteRepository):
                     context.results[step_id] = result
                 continue
 
+            if event_type == "SWITCH_DECISION":
+                step_id = str(payload.get("step", "")).strip()
+                if step_id:
+                    context.results[step_id] = {
+                        "value": payload.get("value"),
+                        "next": str(payload.get("next", "")),
+                    }
+                continue
+
+            if event_type == "WHEN_DECISION":
+                step_id = str(payload.get("step", "")).strip()
+                if step_id:
+                    context.results[step_id] = {
+                        "value": payload.get("value"),
+                        "next": str(payload.get("next", "")),
+                    }
+                continue
+
             if event_type == "WAIT_RESOLVED":
                 step_id = str(payload.get("step", "")).strip()
                 if step_id:

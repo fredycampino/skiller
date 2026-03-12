@@ -17,6 +17,8 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
@@ -68,6 +70,8 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_llm_prompt_step_use_case=ExecuteLlmPromptStepUseCase(store=store, llm=NullLLM()),
         execute_mcp_step_use_case=ExecuteMcpStepUseCase(store=store, mcp=mcp),
         execute_notify_step_use_case=ExecuteNotifyStepUseCase(store=store),
+        execute_switch_step_use_case=ExecuteSwitchStepUseCase(store=store),
+        execute_when_step_use_case=ExecuteWhenStepUseCase(store=store),
         execute_wait_webhook_step_use_case=ExecuteWaitWebhookStepUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),

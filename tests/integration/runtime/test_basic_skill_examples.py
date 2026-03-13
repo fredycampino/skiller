@@ -154,6 +154,26 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
         assert notify_event["payload"]["message"] == "retry"
 
 
+def test_runtime_can_start_run_with_explicit_param_run_id() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        store = SqliteStateStore(db_path)
+        store.init_db()
+
+        runtime = _build_runtime(store)
+        run_result = runtime.start_run("notify_test", {}, param_run_id="550e8400-e29b-41d4-a716-446655440000")
+
+        run = store.get_run("550e8400-e29b-41d4-a716-446655440000")
+
+        assert run_result == {
+            "run_id": "550e8400-e29b-41d4-a716-446655440000",
+            "status": "SUCCEEDED",
+        }
+        assert run is not None
+        assert run.id == "550e8400-e29b-41d4-a716-446655440000"
+        assert run.status == "SUCCEEDED"
+
+
 def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")

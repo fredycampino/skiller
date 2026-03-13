@@ -83,6 +83,7 @@ def test_get_run_rebuilds_switch_result_from_events(tmp_path) -> None:
         "demo",
         {"steps": [{"id": "start", "type": "switch"}]},
         RunContext(inputs={"repo": "acme"}, results={}),
+        run_id="550e8400-e29b-41d4-a716-446655440001",
     )
     store.append_event(
         "SWITCH_DECISION",
@@ -113,6 +114,7 @@ def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
         "demo",
         {"steps": [{"id": "start", "type": "when"}]},
         RunContext(inputs={"repo": "acme"}, results={}),
+        run_id="550e8400-e29b-41d4-a716-446655440002",
     )
     store.append_event(
         "WHEN_DECISION",
@@ -134,3 +136,38 @@ def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
         "value": 85,
         "next": "good",
     }
+
+
+def test_create_run_uses_explicit_run_id(tmp_path) -> None:
+    db_path = tmp_path / "explicit-id.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    explicit_run_id = "550e8400-e29b-41d4-a716-446655440003"
+
+    run_id = store.create_run(
+        "internal",
+        "demo",
+        {"steps": [{"id": "start", "type": "notify"}]},
+        RunContext(inputs={}, results={}),
+        run_id=explicit_run_id,
+    )
+
+    run = store.get_run(explicit_run_id)
+
+    assert run_id == explicit_run_id
+    assert run is not None
+    assert run.id == explicit_run_id
+
+
+def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
+    db_path = tmp_path / "duplicate-id.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    skill_snapshot = {"steps": [{"id": "start", "type": "notify"}]}
+    context = RunContext(inputs={}, results={})
+    run_id = "550e8400-e29b-41d4-a716-446655440004"
+
+    store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)
+
+    with pytest.raises(ValueError, match=f"Run '{run_id}' already exists"):
+        store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)

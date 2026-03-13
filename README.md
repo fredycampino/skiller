@@ -53,6 +53,7 @@ skiller run --file tests/e2e/skills/llm_prompt_cli_real_e2e.yaml --arg issue="Tr
 
 # E2E manuales por step
 ./tests/e2e/cli_notify.sh
+./tests/e2e/cli_run_id.sh
 ./tests/e2e/cli_assign.sh "dependency timeout"
 ./tests/e2e/cli_switch.sh "retry"
 ./tests/e2e/cli_when.sh
@@ -120,6 +121,7 @@ Ejemplos mínimos:
 Los flujos manuales de e2e viven en `tests/e2e/cli_*.sh`.
 
 - `cli_notify.sh`
+- `cli_run_id.sh`
 - `cli_assign.sh`
 - `cli_switch.sh`
 - `cli_when.sh`

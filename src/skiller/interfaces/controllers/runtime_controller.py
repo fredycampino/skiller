@@ -28,8 +28,14 @@ class RuntimeController:
         inputs: dict[str, Any],
         *,
         skill_source: str = SkillSource.INTERNAL.value,
+        param_run_id: str | None = None,
     ) -> dict[str, str]:
-        return self.runtime_service.start_run(skill_ref, inputs, skill_source=skill_source)
+        return self.runtime_service.start_run(
+            skill_ref,
+            inputs,
+            skill_source=skill_source,
+            param_run_id=param_run_id,
+        )
 
     def receive_webhook(
         self,

@@ -81,6 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = sub.add_parser("run", help="Start a run with a skill")
     run_parser.add_argument("skill", nargs="?", help="Internal skill name (without extension)")
     run_parser.add_argument("--file", dest="skill_file", help="Path to an external skill file")
+    run_parser.add_argument("--run-id", help="Explicit run id to assign before execution starts")
     run_parser.add_argument("--arg", action="append", default=[], help="Input pair key=value")
     run_parser.add_argument(
         "--logs",
@@ -137,9 +138,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
-        skill_ref, skill_source = _resolve_run_target(parser, args)
-        inputs = _parse_key_value(args.arg)
-        run_result = controller.run(skill_ref, inputs, skill_source=skill_source)
+        try:
+            skill_ref, skill_source = _resolve_run_target(parser, args)
+            inputs = _parse_key_value(args.arg)
+            run_result = controller.run(
+                skill_ref,
+                inputs,
+                skill_source=skill_source,
+                param_run_id=args.run_id,
+            )
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
         run_result, exit_code = _maybe_start_webhooks(args, controller, container.settings, run_result)
         if args.logs and "logs" not in run_result:
             run_result["logs"] = controller.logs(run_result["run_id"])

@@ -79,8 +79,14 @@ class RuntimeApplicationService:
         inputs: dict[str, Any],
         *,
         skill_source: str = SkillSource.INTERNAL.value,
+        param_run_id: str | None = None,
     ) -> dict[str, str]:
-        run_id = self.start_run_use_case.execute(skill_ref, inputs, skill_source=skill_source)
+        run_id = self.start_run_use_case.execute(
+            skill_ref,
+            inputs,
+            skill_source=skill_source,
+            param_run_id=param_run_id,
+        )
         try:
             self.get_start_step_use_case.execute(run_id)
         except Exception as exc:  # noqa: BLE001

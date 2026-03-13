@@ -7,18 +7,28 @@ from skiller.interfaces.cli import main as cli_main
 
 class _FakeController:
     def __init__(self, bootstrap_service, runtime_service, query_service) -> None:  # noqa: ANN001
-        self.run_calls: list[tuple[str, dict[str, str], str]] = []
+        self.run_calls: list[tuple[str, dict[str, str], str, str | None]] = []
         self.resume_calls: list[str] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
         self.logs_calls: list[str] = []
         self.run_result = {"run_id": "run-1", "status": "CREATED"}
+        self.run_error: ValueError | None = None
         self.logs_result = [{"type": "NOTIFY", "payload": {"step": "done"}}]
 
     def initialize(self) -> None:
         return None
 
-    def run(self, skill_ref: str, inputs: dict[str, str], *, skill_source: str = "internal") -> dict[str, str]:
-        self.run_calls.append((skill_ref, inputs, skill_source))
+    def run(
+        self,
+        skill_ref: str,
+        inputs: dict[str, str],
+        *,
+        skill_source: str = "internal",
+        param_run_id: str | None = None,
+    ) -> dict[str, str]:
+        if self.run_error is not None:
+            raise self.run_error
+        self.run_calls.append((skill_ref, inputs, skill_source, param_run_id))
         return dict(self.run_result)
 
     def resume(self, run_id: str) -> dict[str, str]:
@@ -81,7 +91,7 @@ def test_run_internal_skill_by_name(monkeypatch: pytest.MonkeyPatch, fake_contai
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert controller.run_calls == [("notify_test", {"message": "ok"}, "internal")]
+    assert controller.run_calls == [("notify_test", {"message": "ok"}, "internal", None)]
     assert '"run_id": "run-1"' in captured.out
 
 
@@ -95,8 +105,64 @@ def test_run_external_skill_by_file(monkeypatch: pytest.MonkeyPatch, fake_contai
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert controller.run_calls == [("/tmp/demo.yaml", {"message": "ok"}, "file")]
+    assert controller.run_calls == [("/tmp/demo.yaml", {"message": "ok"}, "file", None)]
     assert '"status": "CREATED"' in captured.out
+
+
+def test_run_can_pass_explicit_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["run", "notify_test", "--run-id", "550e8400-e29b-41d4-a716-446655440000"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.run_calls == [("notify_test", {}, "internal", "550e8400-e29b-41d4-a716-446655440000")]
+    assert '"run_id": "run-1"' in captured.out
+
+
+def test_run_prints_friendly_error_when_run_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    controller.run_error = ValueError("Run '550e8400-e29b-41d4-a716-446655440000' already exists")
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["run", "notify_test", "--run-id", "550e8400-e29b-41d4-a716-446655440000"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Run '550e8400-e29b-41d4-a716-446655440000' already exists" in captured.err
+
+
+def test_run_rejects_non_uuid_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    controller.run_error = ValueError("Run id must be a valid UUID")
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["run", "notify_test", "--run-id", "run-ui-123"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Run id must be a valid UUID" in captured.err
 
 
 def test_run_can_include_logs_in_response(

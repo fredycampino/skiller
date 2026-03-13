@@ -14,6 +14,8 @@ class StateStorePort(Protocol):
         skill_ref: str,
         skill_snapshot: dict[str, object],
         context: RunContext,
+        *,
+        run_id: str,
     ) -> str:
         ...
 

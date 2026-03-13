@@ -20,6 +20,26 @@ All notable changes to this project should be summarized here before a version i
 - Update this section when a branch is ready for release.
 - Summarize the branch at a functional level; do not turn this file into a commit log.
 
+## 1.0.0-alpha.3 - 2026-03-13
+
+### Added
+- Added explicit `--run-id` support to `skiller run` so external callers can choose the run identifier before execution starts.
+- Added a manual CLI E2E flow `tests/e2e/cli_run_id.sh` and included it in `tests/e2e/cli_all.sh`.
+
+### Changed
+- Moved run-id generation and validation into `StartRunUseCase` so the runtime always persists a final UUID decided before hitting the store.
+- Simplified the state store contract so run creation always receives an effective `run_id` instead of generating one internally.
+- Refreshed README manual E2E listings to include the explicit run-id flow.
+
+### Fixed
+- Made `skiller run --run-id ...` fail with a clear CLI error when the UUID is invalid or already exists.
+
+### Removed
+- Nothing notable.
+
+### Notes
+- `--run-id` now accepts only UUID values; when omitted, the runtime generates a new UUID automatically.
+
 ## 1.0.0-alpha.2 - 2026-03-12
 
 ### Added

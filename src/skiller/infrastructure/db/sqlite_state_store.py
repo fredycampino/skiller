@@ -94,23 +94,27 @@ class SqliteStateStore(SqliteRepository):
         skill_ref: str,
         skill_snapshot: dict[str, object],
         context: RunContext,
+        *,
+        run_id: str,
     ) -> str:
-        run_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO runs (id, skill_source, skill_ref, skill_snapshot_json, status, current, inputs_json)
-                VALUES (?, ?, ?, ?, ?, NULL, ?)
-                """,
-                (
-                    run_id,
-                    skill_source,
-                    skill_ref,
-                    json.dumps(skill_snapshot),
-                    RunStatus.CREATED.value,
-                    json.dumps(context.inputs),
-                ),
-            )
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO runs (id, skill_source, skill_ref, skill_snapshot_json, status, current, inputs_json)
+                    VALUES (?, ?, ?, ?, ?, NULL, ?)
+                    """,
+                    (
+                        run_id,
+                        skill_source,
+                        skill_ref,
+                        json.dumps(skill_snapshot),
+                        RunStatus.CREATED.value,
+                        json.dumps(context.inputs),
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"Run '{run_id}' already exists") from exc
         return run_id
 
     def update_run(

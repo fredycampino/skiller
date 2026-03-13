@@ -24,7 +24,7 @@ def _build_signature(secret: str, raw_body: bytes) -> str:
 
 
 def create_app() -> Any:
-    app = FastAPI(title="Skiller Webhooks", version="0.1.0")
+    app = FastAPI(title="Skiller Webhooks", version="1.0.0-alpha.3")
 
     @app.get("/health")
     async def health() -> dict[str, str]:

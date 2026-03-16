@@ -1,5 +1,5 @@
 name: notify_test
-description: "Test minimo con un unico step notify"
+description: "Minimal single-step notify test"
 version: "0.1"
 
 inputs: {}

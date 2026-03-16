@@ -1,13 +1,13 @@
 # `notify`
 
-## Objetivo
+## Goal
 
-`notify` es el step operativo más simple del runtime.
+`notify` is the simplest operational step in the runtime.
 
-No llama a servicios externos ni transforma datos complejos.
-Solo emite un mensaje, guarda su resultado en el contexto y decide si el run continúa o termina.
+It does not call external services or transform complex data.
+It only emits a message, stores its result in the context, and decides whether the run continues or ends.
 
-## Shape mínimo
+## Minimal Shape
 
 ```yaml
 - id: start
@@ -15,7 +15,7 @@ Solo emite un mensaje, guarda su resultado en el contexto y decide si el run con
   message: "notify smoke ok"
 ```
 
-## Shape con `next`
+## Shape with `next`
 
 ```yaml
 - id: start
@@ -28,19 +28,19 @@ Solo emite un mensaje, guarda su resultado en el contexto y decide si el run con
   message: "second"
 ```
 
-## Renderizado
+## Rendering
 
-`notify` sigue el patrón normal del runtime:
+`notify` follows the normal runtime pattern:
 
-- `RenderCurrentStepUseCase` renderiza el step completo
-- `message` es renderizable
+- `RenderCurrentStepUseCase` renders the full step
+- `message` is renderable
 
-Placeholders esperados:
+Supported placeholders:
 
 - `{{inputs...}}`
 - `{{results...}}`
 
-Ejemplo:
+Example:
 
 ```yaml
 - id: done
@@ -48,15 +48,15 @@ Ejemplo:
   message: "{{results.start.next_action}}"
 ```
 
-## Resultado
+## Result
 
-`notify` guarda el resultado en:
+`notify` stores the result in:
 
 ```yaml
 results.<step_id>
 ```
 
-Con esta forma:
+With this shape:
 
 ```json
 {
@@ -65,30 +65,29 @@ Con esta forma:
 }
 ```
 
-## Persistencia
+## Persistence
 
-Además del resultado en `context.results[step_id]`, `notify` emite:
+In addition to the result in `context.results[step_id]`, `notify` emits:
 
 ```text
 NOTIFY
 ```
 
-con:
+with:
 
 - `step`
 - `message`
 
-## Transición
+## Transition
 
-En el loop nuevo:
+In the new loop:
 
-- si el step tiene `next`, el runtime mueve `current` a ese `step_id`
-- si el step no tiene `next`, el run se completa
+- if the step has `next`, the runtime moves `current` to that `step_id`
+- if the step has no `next`, the run completes
 
-## Restricciones
+## Restrictions
 
-En esta versión:
+In this version:
 
-- `message` se trata como string
-- `next`, si existe, debe ser un `step_id` no vacío
-
+- `message` is treated as a string
+- `next`, if present, must be a non-empty `step_id`

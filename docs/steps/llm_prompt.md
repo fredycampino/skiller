@@ -1,35 +1,35 @@
 # `llm_prompt`
 
-## Estado
+## Status
 
-Implementado y operativo dentro del loop nuevo basado en `current + start/next`.
+Implemented and active in the new loop based on `current + start/next`.
 
-## Objetivo
+## Goal
 
-`llm_prompt` es el step LLM canónico para una primera versión.
+`llm_prompt` is the canonical LLM step for the first version.
 
-Debe servir para:
-- resumir
-- clasificar
-- extraer datos
-- proponer una siguiente acción
-- redactar una respuesta estructurada
+It should cover:
+- summarization
+- classification
+- data extraction
+- proposing a next action
+- writing a structured response
 
-La diferencia entre usos no la marca un tipo distinto de step, sino:
-- el `prompt`
-- el `system`
-- el `schema` de salida
+The difference between use cases should come from:
+- the `prompt`
+- the `system`
+- the output `schema`
 
-## Shape mínimo
+## Minimal Shape
 
 ```yaml
 - id: start
   type: llm_prompt
   system: |
-    Eres un analista técnico.
-    Responde solo en JSON válido.
+    You are a technical analyst.
+    Respond only with valid JSON.
   prompt: |
-    Analiza este error:
+    Analyze this error:
     {{results.test_run.stderr}}
   output:
     format: json
@@ -48,33 +48,32 @@ La diferencia entre usos no la marca un tipo distinto de step, sino:
   next: done
 ```
 
-## Renderizado
+## Rendering
 
-`llm_prompt` debe seguir el patrón actual del runtime:
+`llm_prompt` follows the current runtime pattern:
 
-- `RenderCurrentStepUseCase` renderiza el step completo
-- por tanto:
-  - `system` es renderizable
-  - `prompt` es renderizable
-  - cualquier string dentro del step es renderizable
+- `RenderCurrentStepUseCase` renders the full step
+- `system` is renderable
+- `prompt` is renderable
+- any string inside the step is renderable
 
-Los placeholders esperados son los mismos que ya soporta el repo:
+Supported placeholders:
 - `{{inputs...}}`
 - `{{results...}}`
 
-## Salida
+## Output
 
-La salida debe ser siempre `json`.
+The output must always be `json`.
 
-No se propone una primera versión con salida libre en texto.
+This first version does not support free-form text output.
 
-El resultado esperado se guarda en:
+The expected result is stored in:
 
 ```yaml
 results.<step_id>
 ```
 
-Ejemplo:
+Example:
 
 ```yaml
 results.start.summary
@@ -82,41 +81,42 @@ results.start.severity
 results.start.next_action
 ```
 
-## Restricción del formato
+## Format Restriction
 
-No se debe confiar solo en el prompt.
+The contract must not rely on the prompt alone.
 
-La restricción debe venir de:
+The restriction must come from:
 - `output.format: json`
 - `output.schema`
 
-El flujo esperado del executor sería:
+The expected executor flow is:
 
-1. tomar el `CurrentStep` ya renderizado
-2. llamar al LLM con `system` + `prompt`
-3. parsear JSON
-4. validar contra `schema`
-5. si es válido, guardar resultado
-6. si hay `next`, mover `current` a ese `step_id`
-7. si no es válido, fallar el step con error explícito
+1. take the already rendered `CurrentStep`
+2. call the LLM with `system` + `prompt`
+3. parse JSON
+4. validate it against `schema`
+5. if valid, store the result
+6. if `next` exists, move `current` to that `step_id`
+7. if invalid, fail the step with an explicit error
 
-## Use case
+## Use Case
 
-Responsabilidad actual:
-- ejecutar el step `llm_prompt`
-- validar JSON contra schema
-- guardar el resultado en `context.results[step_id]`
-- emitir `LLM_PROMPT_RESULT`
-- emitir `LLM_PROMPT_ERROR` cuando haga falta
-- avanzar `current` con `next` o completar el run si no existe
+Current responsibility:
 
-## Steps complementarios
+- execute the `llm_prompt` step
+- validate JSON against the schema
+- store the result in `context.results[step_id]`
+- emit `LLM_PROMPT_RESULT`
+- emit `LLM_PROMPT_ERROR` when needed
+- advance `current` with `next` or complete the run if `next` does not exist
+
+## Complementary Steps
 
 ### `assign`
 
-`assign` ya existe como mapper puro para limpiar o derivar valores del resultado del LLM.
+`assign` already exists as a pure mapper for cleaning up or deriving values from the LLM result.
 
-Ejemplo:
+Example:
 
 ```yaml
 - id: assign_decision
@@ -126,24 +126,28 @@ Ejemplo:
     severity: "{{results.analyze_issue.severity}}"
 ```
 
-### `if`
+### `switch` or `when`
 
-`if` sirve para ramificar en función del resultado del LLM.
+Use `switch` or `when` to branch from the LLM result.
 
-Ejemplo:
+Example:
 
 ```yaml
 - id: check_decision
-  type: if
-  condition: "{{results.assign_decision.next_action}} == retry"
+  type: switch
+  value: "{{results.assign_decision.next_action}}"
+  cases:
+    retry: retry_path
+    ask_human: ask_human_path
+  default: fail_path
 ```
 
-## Dirección recomendada
+## Recommended Direction
 
-Secuencia recomendada a partir del estado actual:
+Recommended sequence from the current state:
 
-1. usar `llm_prompt` para producir salida estructurada
-2. usar `assign` para normalizar o simplificar resultados
-3. introducir `if` para ramificar sin convertir `llm_prompt` en un step con lógica interna
+1. use `llm_prompt` to produce structured output
+2. use `assign` to normalize or simplify results
+3. use `switch` or `when` to branch without turning `llm_prompt` into a step with internal logic
 
-La idea sigue siendo evitar una familia grande de steps LLM (`extract`, `classify`, `summarize`, etc.) antes de validar bien un contrato simple y fuerte.
+The intent is still to avoid a large family of LLM-specific steps before validating a simple and strong contract.

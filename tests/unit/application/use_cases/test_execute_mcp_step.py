@@ -25,7 +25,9 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "evt-1"
 
@@ -51,7 +53,9 @@ class _FakeMCP:
         args: dict[str, object],
         config: RenderedMcpConfig | None = None,
     ) -> dict[str, object]:
-        self.calls.append({"server": server_name, "tool": tool_name, "args": args, "config": config})
+        self.calls.append(
+            {"server": server_name, "tool": tool_name, "args": args, "config": config}
+        )
         return {
             "server": server_name,
             "tool": tool_name,
@@ -94,7 +98,9 @@ def test_execute_mcp_step_moves_current_to_explicit_next() -> None:
             "server": "chrome-mcp",
             "tool": "navigate_page",
             "args": {"url": "https://example.com"},
-            "config": RenderedMcpConfig(name="chrome-mcp", transport="stdio", command="/usr/bin/python3"),
+            "config": RenderedMcpConfig(
+                name="chrome-mcp", transport="stdio", command="/usr/bin/python3"
+            ),
         }
     ]
     assert context.results["open_example"]["ok"] is True
@@ -169,10 +175,27 @@ def test_execute_mcp_step_raises_and_does_not_advance_on_mcp_error() -> None:
     [
         ({"type": "mcp", "tool": "navigate_page", "args": {}}, "requires mcp server name"),
         ({"type": "mcp", "mcp": "chrome-mcp", "args": {}}, "requires tool name"),
-        ({"type": "mcp", "mcp": "chrome-mcp", "tool": "mcp.chrome-mcp.navigate_page", "args": {}}, "plain tool name"),
-        ({"type": "mcp", "mcp": "chrome-mcp", "tool": "navigate_page", "args": "not-a-dict"}, "args must be an object"),
         (
-            {"type": "mcp", "mcp": "chrome-mcp", "tool": "navigate_page", "args": {}, "next": "   "},
+            {
+                "type": "mcp",
+                "mcp": "chrome-mcp",
+                "tool": "mcp.chrome-mcp.navigate_page",
+                "args": {},
+            },
+            "plain tool name",
+        ),
+        (
+            {"type": "mcp", "mcp": "chrome-mcp", "tool": "navigate_page", "args": "not-a-dict"},
+            "args must be an object",
+        ),
+        (
+            {
+                "type": "mcp",
+                "mcp": "chrome-mcp",
+                "tool": "navigate_page",
+                "args": {},
+                "next": "   ",
+            },
             "requires non-empty next",
         ),
     ],

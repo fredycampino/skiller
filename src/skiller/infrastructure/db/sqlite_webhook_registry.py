@@ -4,7 +4,6 @@ from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteWebhookRegistry(SqliteRepository):
-
     def register_webhook(self, webhook: str, secret: str) -> None:
         with self._connect() as conn:
             conn.execute(

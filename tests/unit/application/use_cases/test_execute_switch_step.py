@@ -24,7 +24,9 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "event-1"
 
@@ -39,7 +41,9 @@ def _build_current_step(
         "id": "decide_action",
         "type": "switch",
         "value": value,
-        "cases": cases if cases is not None else {"retry": "retry_notice", "ask_human": "human_notice"},
+        "cases": cases
+        if cases is not None
+        else {"retry": "retry_notice", "ask_human": "human_notice"},
         "default": default,
     }
     return CurrentStep(
@@ -110,10 +114,16 @@ def test_switch_step_falls_back_to_default_when_no_case_matches() -> None:
         ("cases_empty", {"cases": {}}, "requires non-empty cases object"),
         ("default_missing", {"default": None}, "requires default"),
         ("case_target_empty", {"cases": {"retry": "   "}}, "requires non-empty cases target"),
-        ("default_target_empty", {"value": "done", "default": "   "}, "requires non-empty default target"),
+        (
+            "default_target_empty",
+            {"value": "done", "default": "   "},
+            "requires non-empty default target",
+        ),
     ],
 )
-def test_switch_step_validates_contract(field: str, step_kwargs: dict[str, object], expected_message: str | None) -> None:
+def test_switch_step_validates_contract(
+    field: str, step_kwargs: dict[str, object], expected_message: str | None
+) -> None:
     _ = field
     if expected_message is None:
         store = _FakeStore()

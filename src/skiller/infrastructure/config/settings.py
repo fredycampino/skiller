@@ -1,7 +1,6 @@
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
-
 
 _DOTENV_LOADED = False
 
@@ -10,7 +9,9 @@ _DOTENV_LOADED = False
 class Settings:
     db_path: str = "./runtime.db"
     llm_provider: str = "null"
-    fake_llm_response_json: str = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
+    fake_llm_response_json: str = (
+        '{"summary":"fake summary","severity":"low","next_action":"retry"}'
+    )
     fake_llm_model: str = "fake-llm"
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"

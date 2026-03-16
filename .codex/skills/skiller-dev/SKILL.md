@@ -23,6 +23,8 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - For runtime patterns used in this repo, read `SKILL.md -> references/runtime-patterns.md`.
 - For test taxonomy and what counts as unit/integration/e2e here, read `SKILL.md -> references/testing-rules.md`.
 - For the general pre-commit checklist used in this repo, read `SKILL.md -> references/pre-commit-checklist.md`.
+- For the documented pre-release procedure of this repo, read `SKILL.md -> references/pre_release.md`.
+- For the documented release procedure of this repo, read `SKILL.md -> references/release.md`.
 - For functional runtime rules around waiting, resume, and persisted external events, prefer `SKILL.md -> references/runtime-patterns.md`.
 
 ## Sandbox Execution
@@ -35,16 +37,7 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 ## Release Workflow
 
-Use this repo flow unless the user says otherwise:
-
-1. The human creates a branch from `main` named `feature/<topic>`.
-2. The agent works on that branch, makes the required code changes, verifies them, and commits freely while the feature is in progress.
-3. When the branch is considered release-ready, the agent updates `CHANGELOG.md` with a short functional summary of the branch.
-4. The human reviews the changelog and confirms the branch is ready to go out.
-5. The agent squashes the branch into one clean commit on top of `main` and verifies the branch compares cleanly against `main`.
-6. The human opens and merges the pull request into `main`.
-7. The human creates the version tag on `main`.
-8. After merge, the agent can clean merged local branches if requested.
+Use the documented repo flow in `references/pre_release.md` and `references/release.md` unless the user says otherwise.
 
 Agent responsibilities:
 - implement the code and tests

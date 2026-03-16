@@ -5,19 +5,25 @@ All notable changes to this project should be summarized here before a version i
 ## Unreleased
 
 ### Added
-- Nothing yet.
+- Added a worker-based CLI lifecycle with `worker start`, `worker run`, and `worker resume`.
+- Added live CLI watch output so `skiller run` reports progress while the worker executes.
+- Added GitHub MCP HTTP auth support with rendered `headers` and `{{env.*}}` templates.
+- Added a manual GitHub Actions `Release` workflow for post-merge validation and tag creation.
 
 ### Changed
-- Nothing yet.
+- Changed `skiller run` to create the run, launch the worker flow, and report progress instead of executing the full loop inline.
+- Changed the runtime to use `RunWorkerService` as the canonical owner of step execution.
+- Changed active docs and skill examples to English and trimmed legacy documentation from the repo.
 
 ### Fixed
-- Nothing yet.
+- Fixed the webhook CLI flow to wait for the resumed worker instead of reading a transient `RUNNING` state.
 
 ### Removed
-- Nothing yet.
+- Removed explicit external `run_id` injection from `skiller run`.
+- Removed `RuntimeBootstrapService` as a separate layer and folded bootstrap into `RuntimeApplicationService`.
 
 ### Notes
-- Update this section when a branch is ready for release.
+- Prepared release candidate `1.0.0-alpha.4`.
 - Summarize the branch at a functional level; do not turn this file into a commit log.
 
 ## 1.0.0-alpha.3 - 2026-03-13

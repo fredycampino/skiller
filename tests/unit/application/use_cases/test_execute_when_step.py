@@ -24,7 +24,9 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "event-1"
 
@@ -151,14 +153,26 @@ def test_when_step_falls_back_to_default_when_no_branch_matches() -> None:
         ("default_missing", {"default": None}, "requires default"),
         ("branch_shape", {"branches": ["bad"]}, "requires branch 0 object"),
         ("branch_missing_then", {"branches": [{"gt": 90}]}, "requires branch 0 then"),
-        ("branch_empty_then", {"branches": [{"gt": 90, "then": "   "}]}, "requires non-empty branch 0 then"),
-        ("branch_no_op", {"branches": [{"then": "good"}]}, "requires exactly one operator in branch 0"),
+        (
+            "branch_empty_then",
+            {"branches": [{"gt": 90, "then": "   "}]},
+            "requires non-empty branch 0 then",
+        ),
+        (
+            "branch_no_op",
+            {"branches": [{"then": "good"}]},
+            "requires exactly one operator in branch 0",
+        ),
         (
             "branch_two_ops",
             {"branches": [{"gt": 90, "lt": 100, "then": "good"}]},
             "requires exactly one operator in branch 0",
         ),
-        ("branch_bad_op", {"branches": [{"contains": 90, "then": "good"}]}, "uses unsupported when operator"),
+        (
+            "branch_bad_op",
+            {"branches": [{"contains": 90, "then": "good"}]},
+            "uses unsupported when operator",
+        ),
         (
             "numeric_left_invalid",
             {"value": "85", "branches": [{"gt": 70, "then": "good"}]},
@@ -171,7 +185,9 @@ def test_when_step_falls_back_to_default_when_no_branch_matches() -> None:
         ),
     ],
 )
-def test_when_step_validates_contract(label: str, step_kwargs: dict[str, object], expected_message: str) -> None:
+def test_when_step_validates_contract(
+    label: str, step_kwargs: dict[str, object], expected_message: str
+) -> None:
     _ = label
     step: dict[str, object] = {
         "id": "decide_score",

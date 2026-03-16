@@ -1,10 +1,10 @@
 # Step `switch`
 
-## Objetivo
+## Goal
 
-`switch` enruta la ejecucion al siguiente `step_id` segun igualdad exacta sobre un valor ya normalizado.
+`switch` routes execution to the next `step_id` based on exact equality over an already normalized value.
 
-## Contrato v0
+## v0 Contract
 
 ```yaml
 - id: decide_action
@@ -17,31 +17,31 @@
   default: unknown_action
 ```
 
-Campos:
+Fields:
 
-- `value`: obligatorio
-- `cases`: obligatorio, objeto no vacio con forma `valor -> step_id`
-- `default`: obligatorio, `step_id` de fallback
+- `value`: required
+- `cases`: required, non-empty object with shape `value -> step_id`
+- `default`: required fallback `step_id`
 
-## Semantica
+## Semantics
 
-- evalua `value`
-- compara por igualdad exacta contra las claves de `cases`
-- si hay match, mueve `run.current` al `step_id` asociado
-- si no hay match, mueve `run.current` a `default`
+- evaluates `value`
+- compares it by exact equality against the keys in `cases`
+- if there is a match, moves `run.current` to the associated `step_id`
+- if there is no match, moves `run.current` to `default`
 
-## Persistencia
+## Persistence
 
-Guarda en `context.results[step_id]`:
+Stores in `context.results[step_id]`:
 
 ```json
 {"value": "retry", "next": "retry_notice"}
 ```
 
-Tambien emite el evento:
+It also emits:
 
 ```json
 {"step": "decide_action", "value": "retry", "next": "retry_notice"}
 ```
 
-con tipo `SWITCH_DECISION`.
+with type `SWITCH_DECISION`.

@@ -1,28 +1,28 @@
 from dataclasses import dataclass
 
 from skiller.application.query_service import RunQueryService
+from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.runtime_bootstrap_service import RuntimeBootstrapService
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
+from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
-from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
+from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
-from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
+from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
+from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.start_run import StartRunUseCase
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -36,7 +36,6 @@ from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 @dataclass(frozen=True)
 class RuntimeContainer:
     settings: Settings
-    bootstrap_service: RuntimeBootstrapService
     runtime_service: RuntimeApplicationService
     query_service: RunQueryService
 
@@ -53,10 +52,9 @@ def build_runtime_container(
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
 
-    bootstrap_use_case = BootstrapRuntimeUseCase(store)
-    bootstrap_service = RuntimeBootstrapService(bootstrap_runtime_use_case=bootstrap_use_case)
+    bootstrap_runtime_use_case = BootstrapRuntimeUseCase(store)
 
-    start_run_use_case = StartRunUseCase(store, skill_runner)
+    create_run_use_case = CreateRunUseCase(store, skill_runner)
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
@@ -76,16 +74,9 @@ def build_runtime_container(
     resume_run_use_case = ResumeRunUseCase(store=store)
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(store)
-    query_service = RunQueryService(
-        get_run_status_use_case=get_run_status_use_case,
-        get_run_logs_use_case=get_run_logs_use_case,
-    )
-
-    runtime_service = RuntimeApplicationService(
-        start_run_use_case=start_run_use_case,
+    run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
-        get_start_step_use_case=get_start_step_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
@@ -95,15 +86,26 @@ def build_runtime_container(
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
+    )
+    query_service = RunQueryService(
+        get_run_status_use_case=get_run_status_use_case,
+        get_run_logs_use_case=get_run_logs_use_case,
+    )
+
+    runtime_service = RuntimeApplicationService(
+        bootstrap_runtime_use_case=bootstrap_runtime_use_case,
+        create_run_use_case=create_run_use_case,
+        fail_run_use_case=fail_run_use_case,
+        get_start_step_use_case=get_start_step_use_case,
         handle_webhook_use_case=handle_webhook_use_case,
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,
         resume_run_use_case=resume_run_use_case,
         get_run_status_use_case=get_run_status_use_case,
+        run_worker_service=run_worker_service,
     )
     return RuntimeContainer(
         settings=cfg,
-        bootstrap_service=bootstrap_service,
         runtime_service=runtime_service,
         query_service=query_service,
     )
@@ -130,5 +132,6 @@ def _build_llm(settings: Settings) -> NullLLM | FakeLLM | MinimaxLLM:
         )
 
     raise ValueError(
-        f"Unsupported AGENT_LLM_PROVIDER='{settings.llm_provider}'. Use 'null', 'fake' or 'minimax'."
+        f"Unsupported AGENT_LLM_PROVIDER='{settings.llm_provider}'. "
+        "Use 'null', 'fake' or 'minimax'."
     )

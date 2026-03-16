@@ -6,7 +6,6 @@ import pytest
 
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -84,3 +83,28 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
     }
     assert rendered["values"]["copied_list"] == ["triage", "retry"]
     assert rendered["values"]["text"] == "severity=low"
+
+
+def test_render_step_can_resolve_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENT_GITHUB_MCP_URL", "https://api.github.example/mcp")
+    monkeypatch.setenv("AGENT_GITHUB_MCP_TOKEN", "secret-token")
+    runner = FilesystemSkillRunner(skills_dir="skills")
+
+    rendered = runner.render_step(
+        {
+            "mcp": [
+                {
+                    "name": "github",
+                    "transport": "streamable-http",
+                    "url": "{{env.AGENT_GITHUB_MCP_URL}}",
+                    "headers": {
+                        "Authorization": "Bearer {{env.AGENT_GITHUB_MCP_TOKEN}}",
+                    },
+                }
+            ]
+        },
+        {"inputs": {}, "results": {}},
+    )
+
+    assert rendered["mcp"][0]["url"] == "https://api.github.example/mcp"
+    assert rendered["mcp"][0]["headers"]["Authorization"] == "Bearer secret-token"

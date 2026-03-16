@@ -5,8 +5,7 @@ from skiller.domain.run_model import Run, RunStatus
 
 
 class StateStorePort(Protocol):
-    def init_db(self) -> None:
-        ...
+    def init_db(self) -> None: ...
 
     def create_run(
         self,
@@ -16,8 +15,7 @@ class StateStorePort(Protocol):
         context: RunContext,
         *,
         run_id: str,
-    ) -> str:
-        ...
+    ) -> str: ...
 
     def update_run(
         self,
@@ -26,17 +24,15 @@ class StateStorePort(Protocol):
         status: RunStatus | None = None,
         current: str | None = None,
         context: RunContext | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def get_run(self, run_id: str) -> Run | None:
-        ...
+    def get_run(self, run_id: str) -> Run | None: ...
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
-        ...
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str: ...
 
-    def list_events(self, run_id: str) -> list[dict[str, object]]:
-        ...
+    def list_events(self, run_id: str) -> list[dict[str, object]]: ...
 
     def create_wait(
         self,
@@ -46,17 +42,13 @@ class StateStorePort(Protocol):
         *,
         step_id: str | None = None,
         expires_at: str | None = None,
-    ) -> str:
-        ...
+    ) -> str: ...
 
-    def resolve_wait(self, wait_id: str) -> None:
-        ...
+    def resolve_wait(self, wait_id: str) -> None: ...
 
-    def get_active_wait(self, run_id: str, step_id: str) -> dict[str, object] | None:
-        ...
+    def get_active_wait(self, run_id: str, step_id: str) -> dict[str, object] | None: ...
 
-    def find_matching_waits(self, webhook: str, key: str) -> list[dict[str, object]]:
-        ...
+    def find_matching_waits(self, webhook: str, key: str) -> list[dict[str, object]]: ...
 
     def create_webhook_event(
         self,
@@ -64,8 +56,7 @@ class StateStorePort(Protocol):
         key: str,
         payload: dict[str, object],
         dedup_key: str,
-    ) -> str:
-        ...
+    ) -> str: ...
 
     def get_latest_webhook_event(
         self,
@@ -73,8 +64,7 @@ class StateStorePort(Protocol):
         key: str,
         *,
         since_created_at: str | None = None,
-    ) -> dict[str, object] | None:
-        ...
+    ) -> dict[str, object] | None: ...
 
     def register_webhook_receipt(
         self,
@@ -82,8 +72,6 @@ class StateStorePort(Protocol):
         webhook: str,
         key: str,
         payload: dict[str, object],
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
-    def expire_active_waits_for_run(self, run_id: str) -> int:
-        ...
+    def expire_active_waits_for_run(self, run_id: str) -> int: ...

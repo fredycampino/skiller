@@ -35,7 +35,7 @@ def test_receive_webhook_invokes_runtime_cli(monkeypatch: pytest.MonkeyPatch) ->
         "test",
         "42",
         "--json",
-        "{\"ok\":true}",
+        '{"ok":true}',
         "--dedup-key",
         "delivery-1",
     ]

@@ -1,5 +1,6 @@
-import pytest
 import re
+
+import pytest
 
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.render_mcp_config import (
@@ -42,10 +43,15 @@ class _FakeSkillRunner:
         if isinstance(value, list):
             return [self._render_value(item, context) for item in value]
         if isinstance(value, str):
-            return re.sub(
+            rendered = re.sub(
                 r"\{\{\s*inputs\.([a-zA-Z0-9_]+)\s*\}\}",
                 lambda match: str(context["inputs"].get(match.group(1), match.group(0))),
                 value,
+            )
+            return re.sub(
+                r"\{\{\s*env\.([a-zA-Z0-9_]+)\s*\}\}",
+                lambda match: str(context.get("env", {}).get(match.group(1), match.group(0))),
+                rendered,
             )
         return value
 
@@ -73,7 +79,9 @@ def _build_run(skill_snapshot: dict[str, object] | None = None) -> Run:
     )
 
 
-def _build_run_with_inputs(*, skill_snapshot: dict[str, object] | None = None, **inputs: str) -> Run:
+def _build_run_with_inputs(
+    *, skill_snapshot: dict[str, object] | None = None, **inputs: str
+) -> Run:
     return Run(
         id="run-1",
         skill_source="internal",
@@ -123,7 +131,9 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
             ]
         }
     )
-    use_case = RenderMcpConfigUseCase(store=_FakeStore(_build_run(skill_snapshot)), skill_runner=skill_runner)
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(_build_run(skill_snapshot)), skill_runner=skill_runner
+    )
 
     result = use_case.execute(
         CurrentStep(
@@ -173,11 +183,7 @@ def test_render_mcp_config_rejects_non_mcp_step() -> None:
 
 
 def test_render_mcp_config_rejects_missing_declared_server() -> None:
-    run = _build_run(
-        {
-            "mcp": [{"name": "other-mcp", "transport": "stdio", "command": "/bin/true"}]
-        }
-    )
+    run = _build_run({"mcp": [{"name": "other-mcp", "transport": "stdio", "command": "/bin/true"}]})
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
         skill_runner=_FakeSkillRunner(
@@ -244,6 +250,60 @@ def test_render_mcp_config_returns_rendered_http_config() -> None:
         name="chrome-mcp",
         transport="streamable-http",
         url="http://127.0.0.1:7821/mcp",
+    )
+
+
+def test_render_mcp_config_returns_rendered_http_config_with_headers() -> None:
+    run = _build_run(
+        {
+            "mcp": [
+                {
+                    "name": "github",
+                    "transport": "streamable-http",
+                    "url": "https://api.github.example/mcp",
+                    "headers": {
+                        "Authorization": "Bearer {{inputs.token}}",
+                    },
+                }
+            ]
+        }
+    )
+    run.context.inputs["token"] = "secret-token"
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(run),
+        skill_runner=_FakeSkillRunner(
+            {
+                "mcp": [
+                    {
+                        "name": "github",
+                        "transport": "streamable-http",
+                        "url": "https://api.github.example/mcp",
+                        "headers": {
+                            "Authorization": "Bearer {{inputs.token}}",
+                        },
+                    }
+                ]
+            }
+        ),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="verify_repo",
+            step_type=StepType.MCP,
+            step={"type": "mcp", "mcp": "github", "tool": "get_repository", "args": {}},
+            context=run.context,
+        )
+    )
+
+    assert result.status == RenderMcpConfigStatus.RENDERED
+    assert result.mcp_config == RenderedMcpConfig(
+        name="github",
+        transport="streamable-http",
+        url="https://api.github.example/mcp",
+        headers={"Authorization": "Bearer secret-token"},
     )
 
 
@@ -347,12 +407,31 @@ def test_render_mcp_config_requires_explicit_transport() -> None:
             "MCP server 'test-mcp' requires url for http transport",
         ),
         (
-            {"name": "local-mcp", "transport": "stdio", "command": "/usr/bin/python3", "args": "bad"},
+            {
+                "name": "local-mcp",
+                "transport": "stdio",
+                "command": "/usr/bin/python3",
+                "args": "bad",
+            },
             "Invalid MCP args for server 'local-mcp'. Expected a list.",
         ),
         (
-            {"name": "local-mcp", "transport": "stdio", "command": "/usr/bin/python3", "env": "bad"},
+            {
+                "name": "local-mcp",
+                "transport": "stdio",
+                "command": "/usr/bin/python3",
+                "env": "bad",
+            },
             "Invalid MCP env for server 'local-mcp'. Expected an object.",
+        ),
+        (
+            {
+                "name": "test-mcp",
+                "transport": "streamable-http",
+                "url": "http://127.0.0.1:7821/mcp",
+                "headers": "bad",
+            },
+            "Invalid MCP headers for server 'test-mcp'. Expected an object.",
         ),
         (
             {"name": "local-mcp", "transport": "websocket", "url": "ws://localhost:1234"},
@@ -447,4 +526,6 @@ def test_render_mcp_config_rejects_unresolved_template() -> None:
     )
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
-    assert result.error == "Unresolved template in MCP config for server 'local-mcp' at 'mcp.command'"
+    assert (
+        result.error == "Unresolved template in MCP config for server 'local-mcp' at 'mcp.command'"
+    )

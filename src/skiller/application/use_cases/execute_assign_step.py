@@ -2,7 +2,10 @@ from typing import Any
 
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
-from skiller.application.use_cases.step_execution_result import StepExecutionResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import (
+    StepExecutionResult,
+    StepExecutionStatus,
+)
 from skiller.domain.run_model import RunStatus
 
 

@@ -11,7 +11,6 @@ from skiller.domain.mcp_config_model import RenderedMcpConfig
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -30,8 +29,12 @@ def _pick_free_port() -> int:
         pytest.skip("Local TCP sockets are not available in this environment")
 
 
-def _configure_test_mcp_autostart(monkeypatch: pytest.MonkeyPatch, *, server_name: str, port: int) -> RenderedMcpConfig:
-    server_script = Path(__file__).parents[1] / "runtime" / "fixtures" / "mcp" / "test_mcp_server.py"
+def _configure_test_mcp_autostart(
+    monkeypatch: pytest.MonkeyPatch, *, server_name: str, port: int
+) -> RenderedMcpConfig:
+    server_script = (
+        Path(__file__).parents[1] / "runtime" / "fixtures" / "mcp" / "test_mcp_server.py"
+    )
     assert server_script.exists(), f"MCP fixture server script not found: {server_script}"
 
     prefix = f"AGENT_MCP_{server_name.upper().replace('-', '_')}"

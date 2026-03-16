@@ -91,7 +91,9 @@ def test_receive_webhook_rejects_non_object_payload() -> None:
     assert response.json()["detail"] == "Payload must be a JSON object"
 
 
-def test_receive_webhook_requires_signature_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_receive_webhook_requires_signature_when_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",

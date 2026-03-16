@@ -85,7 +85,9 @@ def test_minimax_llm_uses_model_override_from_config(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(minimax_llm, "urlopen", fake_urlopen)
 
     llm = MinimaxLLM(api_key="secret-key")
-    llm.generate([{"role": "user", "content": "Analyze"}], config={"model": "MiniMax-M2.5-highspeed"})
+    llm.generate(
+        [{"role": "user", "content": "Analyze"}], config={"model": "MiniMax-M2.5-highspeed"}
+    )
 
     assert captured["body"]["model"] == "MiniMax-M2.5-highspeed"
 
@@ -117,7 +119,9 @@ def test_minimax_llm_returns_error_message_from_http_error(monkeypatch: pytest.M
     assert result == {"ok": False, "error": "Invalid API key"}
 
 
-def test_minimax_llm_returns_error_on_invalid_response_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_minimax_llm_returns_error_on_invalid_response_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_urlopen(request, timeout=0):  # noqa: ANN001, ANN202
         _ = (request, timeout)
         return _FakeHTTPResponse({"choices": []})

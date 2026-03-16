@@ -2,7 +2,6 @@ from typing import Any
 
 from skiller.application.query_service import RunQueryService
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.runtime_bootstrap_service import RuntimeBootstrapService
 from skiller.domain.run_model import SkillSource
 
 
@@ -11,31 +10,33 @@ class RuntimeController:
 
     def __init__(
         self,
-        bootstrap_service: RuntimeBootstrapService,
         runtime_service: RuntimeApplicationService,
         query_service: RunQueryService,
     ) -> None:
-        self.bootstrap_service = bootstrap_service
         self.runtime_service = runtime_service
         self.query_service = query_service
 
     def initialize(self) -> None:
-        self.bootstrap_service.initialize()
+        self.runtime_service.initialize()
 
-    def run(
+    def create_run(
         self,
         skill_ref: str,
         inputs: dict[str, Any],
         *,
         skill_source: str = SkillSource.INTERNAL.value,
-        param_run_id: str | None = None,
     ) -> dict[str, str]:
-        return self.runtime_service.start_run(
+        return self.runtime_service.create_run(
             skill_ref,
             inputs,
             skill_source=skill_source,
-            param_run_id=param_run_id,
         )
+
+    def start_worker(self, run_id: str) -> dict[str, str]:
+        return self.runtime_service.start_worker(run_id)
+
+    def run_worker(self, run_id: str) -> dict[str, str]:
+        return self.runtime_service.run_worker(run_id)
 
     def receive_webhook(
         self,

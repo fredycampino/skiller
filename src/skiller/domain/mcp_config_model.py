@@ -10,3 +10,4 @@ class RenderedMcpConfig:
     args: list[str] = field(default_factory=list)
     cwd: str | None = None
     env: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)

@@ -1,10 +1,10 @@
 # Step `when`
 
-## Objetivo
+## Goal
 
-`when` enruta la ejecucion al siguiente `step_id` evaluando ramas en orden sobre un mismo valor.
+`when` routes execution to the next `step_id` by evaluating branches in order over a single value.
 
-## Contrato v0
+## v0 Contract
 
 ```yaml
 - id: decide_score
@@ -18,19 +18,19 @@
   default: fail
 ```
 
-Campos:
+Fields:
 
-- `value`: obligatorio
-- `branches`: obligatorio, lista no vacia
-- `default`: obligatorio, `step_id` de fallback
+- `value`: required
+- `branches`: required, non-empty list
+- `default`: required fallback `step_id`
 
-Reglas por rama:
+Per-branch rules:
 
-- cada rama define exactamente un operador
-- cada rama define `then`
-- la primera rama que cumple gana
+- each branch defines exactly one operator
+- each branch defines `then`
+- the first matching branch wins
 
-Operadores v0:
+v0 operators:
 
 - `eq`
 - `ne`
@@ -39,25 +39,25 @@ Operadores v0:
 - `lt`
 - `lte`
 
-## Semantica
+## Semantics
 
-- evalua `value`
-- recorre `branches` en orden
-- la primera rama que cumple mueve `run.current` al `step_id` indicado por `then`
-- si ninguna cumple, mueve `run.current` a `default`
+- evaluates `value`
+- iterates through `branches` in order
+- the first matching branch moves `run.current` to the `step_id` declared in `then`
+- if none matches, moves `run.current` to `default`
 
-## Persistencia
+## Persistence
 
-Guarda en `context.results[step_id]`:
+Stores in `context.results[step_id]`:
 
 ```json
 {"value": 85, "next": "good"}
 ```
 
-Tambien emite el evento:
+It also emits:
 
 ```json
 {"step": "decide_score", "value": 85, "next": "good", "branch": 1, "op": "gt", "right": 70}
 ```
 
-con tipo `WHEN_DECISION`.
+with type `WHEN_DECISION`.

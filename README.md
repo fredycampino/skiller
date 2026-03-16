@@ -1,6 +1,6 @@
-# Skiller Runtime POC
+# Skiller Runtime
 
-Runtime experimental de skills con soporte actual para:
+Experimental skill runtime with current support for:
 - `notify`
 - `assign`
 - `switch`
@@ -9,104 +9,105 @@ Runtime experimental de skills con soporte actual para:
 - `mcp`
 - `wait_webhook`
 
-## Estructura
+## Structure
 
-- `src/skiller`: código de aplicación.
-- `skills`: skills declarativas YAML/JSON.
-- `tests`: pruebas básicas.
-- `docs`: documentación técnica y diseño.
+- `src/skiller`: application code
+- `skills`: declarative YAML/JSON skills
+- `tests`: automated and manual verification
+- `docs`: technical documentation for skills and steps
 
-## Documentación
+## Documentation
 
-- `docs/system_block_diagram.md`
-- `docs/reglas_arquitectura.md`
-- `docs/backlog.md`
-- `docs/flow/flujo_run_actual.md`
 - `docs/guia_creacion_skills.md`
-- `docs/skiller_webhooks_functional_overview.md`
+- `docs/steps/assign.md`
+- `docs/steps/llm_prompt.md`
+- `docs/steps/mcp.md`
+- `docs/steps/notify.md`
+- `docs/steps/switch.md`
+- `docs/steps/wait_webhook.md`
+- `docs/steps/when.md`
 
 ## Quickstart
 
-Comando recomendado: `skiller`.
+Recommended command: `skiller`.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 
-# Skill interna minima
+# Minimal internal skill
 skiller run notify_test
 
-# Skill demo ramificada
+# Branched demo skill
 skiller run story_router --arg path=cave --arg mood=curious
 
-# Skill demo webhook + llm + switch
-# Requiere registrar antes el canal `signal`
+# Demo skill with webhook + llm + switch
+# Register the `signal` channel first
 # skiller webhook register signal
 skiller run webhook_signal_oracle --arg key=demo --start-webhooks
 
-# Skill con llm_prompt usando MiniMax
+# llm_prompt skill using MiniMax
 AGENT_LLM_PROVIDER=minimax \
-AGENT_MINIMAX_API_KEY=tu_api_key \
+AGENT_MINIMAX_API_KEY=your_api_key \
 AGENT_MINIMAX_MODEL=MiniMax-M2.5 \
 skiller run --file tests/e2e/skills/llm_prompt_cli_real_e2e.yaml --arg issue="Traceback auth failed"
 
-# E2E manuales por step
+# Manual E2E by step
 ./tests/e2e/cli_notify.sh
-./tests/e2e/cli_run_id.sh
 ./tests/e2e/cli_assign.sh "dependency timeout"
 ./tests/e2e/cli_switch.sh "retry"
 ./tests/e2e/cli_when.sh
 ./tests/e2e/cli_llm_prompt.sh
-./tests/e2e/cli_mcp_stdio.sh "hola-e2e"
+./tests/e2e/cli_mcp_stdio.sh "hello-e2e"
 ./tests/e2e/cli_wait_webhook.sh 42
 ./tests/e2e/cli_all.sh
 
-# Skill externa por archivo
+# External skill file
 skiller run --file skills/notify_test.yaml
 
-# Estado y logs
+# Status and logs
 skiller status <run_id>
 skiller logs <run_id>
 
-# Reanudar un run en WAITING
+# Resume a run in WAITING
 skiller resume <run_id>
 
-# Inyectar webhook para wait_webhook
+# Inject a webhook for wait_webhook
 skiller webhook receive github-pr-merged 42 --json '{"merged": true}' --dedup-key delivery-123
 
-# Arrancar el proceso webhooks al dejar un run en WAITING
+# Start the webhooks process when a run ends in WAITING
 skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-webhooks
 
-# Registrar y borrar un canal webhook
+# Register and remove a webhook channel
 skiller webhook register github-ci
 skiller webhook remove github-ci
 ```
 
-## Skills incluidas
+## Included Skills
 
 Demo:
 - `skills/story_router.yaml`
 - `skills/webhook_signal_oracle.yaml`
 
-Test y referencia tecnica:
+Test and technical reference:
 - `skills/notify_test.yaml`
 - `skills/stdio_mcp_test.yaml`
 - `skills/http_mcp_test.yaml`
 
 ## MCP
 
-La fuente de verdad de la conexión MCP vive en el YAML de la skill, dentro del bloque `mcp:`.
+The source of truth for MCP connection settings lives in the skill YAML under the `mcp:` block.
 
-Ejemplos mínimos:
-- `stdio` en `skills/stdio_mcp_test.yaml`
-- `streamable-http` en `skills/http_mcp_test.yaml`
+Minimal examples:
+- `stdio` in `skills/stdio_mcp_test.yaml`
+- `streamable-http` in `skills/http_mcp_test.yaml`
 
-## Comandos disponibles
+## Available Commands
 
 - `skiller init-db`
 - `skiller run <skill> --arg key=value`
-- `skiller run --file /ruta/skill.yaml --arg key=value`
+- `skiller run --file /path/to/skill.yaml --arg key=value`
 - `skiller run ... --start-webhooks`
 - `skiller resume <run_id>`
 - `skiller status <run_id>`
@@ -116,12 +117,11 @@ Ejemplos mínimos:
 - `skiller webhook receive <webhook> <key> --json '{...}' --dedup-key <key>`
 - `python -m skiller.tools.webhooks`
 
-## CLI Manuales E2E
+## Manual CLI E2E
 
-Los flujos manuales de e2e viven en `tests/e2e/cli_*.sh`.
+Manual E2E flows live in `tests/e2e/cli_*.sh`.
 
 - `cli_notify.sh`
-- `cli_run_id.sh`
 - `cli_assign.sh`
 - `cli_switch.sh`
 - `cli_when.sh`
@@ -130,12 +130,12 @@ Los flujos manuales de e2e viven en `tests/e2e/cli_*.sh`.
 - `cli_wait_webhook.sh`
 - `cli_all.sh`
 
-Cada `cli_*.sh` usa una DB temporal aislada y la limpia al terminar para no dejar basura en el entorno.
-Intentan hacer solo lo minimo: lanzar los comandos reales de `skiller` y devolver un JSON corto con `run_id` y `status`.
-`cli_all.sh` consume esa salida y muestra un resumen corto `PASS/SKIP/FAIL`.
+Each `cli_*.sh` uses an isolated temporary DB and removes it at the end so it does not leave garbage behind.
+They intentionally do the minimum: run the real `skiller` commands and return a short JSON payload with `run_id` and `status`.
+`cli_all.sh` consumes that output and prints a short `PASS/SKIP/FAIL` summary.
 
-`cli_mcp_stdio.sh` valida el step `mcp` por `stdio` con una fixture interna del repo.
-No usa la configuracion `AGENT_MCP_LOCAL_MCP_*` ni permite controlar roots desde el cliente.
-Si pruebas contra `local_mcp.py` real, los roots de `files_action` se resuelven del servidor MCP y no de variables inyectadas por `skiller`.
+`cli_mcp_stdio.sh` validates the `mcp` step over `stdio` using an internal fixture from this repo.
+It does not use `AGENT_MCP_LOCAL_MCP_*` and does not let the client control filesystem roots.
+If you test against a real `local_mcp.py`, the `files_action` roots are resolved by the MCP server, not by env vars injected by `skiller`.
 
-Los `test_*_e2e.py` se retiraron para no mezclar en `pytest` casos manuales u opt-in que no forman parte de una suite automatizada estable.
+The old `test_*_e2e.py` files were removed so `pytest` does not mix stable automated coverage with manual or opt-in flows.

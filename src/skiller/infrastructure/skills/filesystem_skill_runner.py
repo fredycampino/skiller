@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -37,7 +38,9 @@ class FilesystemSkillRunner:
 
     def render_step(self, step: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         rendered = deepcopy(step)
-        return self._render_value(rendered, context)
+        render_context = dict(context)
+        render_context.setdefault("env", dict(os.environ))
+        return self._render_value(rendered, render_context)
 
     def _render_value(self, value: Any, context: dict[str, Any]) -> Any:
         if isinstance(value, dict):

@@ -1,6 +1,6 @@
+import secrets
 from dataclasses import dataclass
 from enum import Enum
-import secrets
 
 from skiller.application.ports.webhook_registry_port import WebhookRegistryPort
 

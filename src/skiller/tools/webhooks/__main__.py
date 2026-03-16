@@ -1,7 +1,7 @@
 import uvicorn
 
 from skiller.infrastructure.config.settings import get_settings
-from skiller.tools.webhooks.app import create_app
+
 
 def main() -> None:
     """Webhook process entrypoint."""

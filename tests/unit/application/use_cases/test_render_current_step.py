@@ -1,6 +1,10 @@
 import pytest
 
-from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase, CurrentStepStatus, StepType
+from skiller.application.use_cases.render_current_step import (
+    CurrentStepStatus,
+    RenderCurrentStepUseCase,
+    StepType,
+)
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
 
@@ -43,7 +47,9 @@ def _build_run(
         id="run-1",
         skill_source="internal",
         skill_ref="demo",
-        skill_snapshot=skill_snapshot if skill_snapshot is not None else {"steps": [{"id": "start", "type": "notify"}]},
+        skill_snapshot=skill_snapshot
+        if skill_snapshot is not None
+        else {"steps": [{"id": "start", "type": "notify"}]},
         status=status,
         current=current,
         context=RunContext(inputs={"repo": "acme"}, results={"prev": {"ok": True}}),
@@ -86,7 +92,9 @@ def test_blocks_when_run_is_not_executable(status: str, expected: CurrentStepSta
 
 def test_returns_invalid_skill_when_current_is_missing() -> None:
     run = _build_run(current=None)
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 
@@ -116,7 +124,9 @@ def test_returns_ready_with_rendered_step() -> None:
 def test_returns_ready_with_llm_prompt_step_type() -> None:
     run = _build_run(current="analyze")
     run.skill_snapshot = {"steps": [{"id": "analyze", "type": "llm_prompt", "prompt": "hello"}]}
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 
@@ -127,8 +137,12 @@ def test_returns_ready_with_llm_prompt_step_type() -> None:
 
 def test_returns_ready_with_assign_step_type() -> None:
     run = _build_run(current="prepare")
-    run.skill_snapshot = {"steps": [{"id": "prepare", "type": "assign", "values": {"action": "retry"}}]}
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    run.skill_snapshot = {
+        "steps": [{"id": "prepare", "type": "assign", "values": {"action": "retry"}}]
+    }
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 
@@ -150,7 +164,9 @@ def test_returns_ready_with_switch_step_type() -> None:
             }
         ]
     }
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 
@@ -172,7 +188,9 @@ def test_returns_ready_with_when_step_type() -> None:
             }
         ]
     }
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 
@@ -197,7 +215,9 @@ def test_returns_invalid_skill_when_skill_shape_is_wrong() -> None:
 def test_returns_invalid_skill_when_current_id_does_not_exist() -> None:
     run = _build_run(current="missing")
     run.skill_snapshot = {"steps": [{"id": "start", "type": "notify"}]}
-    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []}))
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
 
     result = use_case.execute("run-1")
 

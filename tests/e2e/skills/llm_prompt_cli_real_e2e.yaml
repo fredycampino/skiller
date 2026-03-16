@@ -5,14 +5,14 @@ steps:
   - id: start
     type: llm_prompt
     system: |
-      Eres un analista tecnico.
-      Responde solo con JSON valido.
+      You are a technical analyst.
+      Respond only with valid JSON.
     prompt: |
-      Lee este texto:
+      Read this text:
       {{inputs.issue}}
 
-      Devuelve un JSON con:
-      - summary: una frase corta
+      Return a JSON object with:
+      - summary: one short sentence
       - severity: "low"
       - next_action: "retry"
     output:

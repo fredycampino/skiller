@@ -36,7 +36,9 @@ def receive_webhook(
         env=os.environ.copy(),
     )
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "webhook receive command failed"
+        detail = (
+            completed.stderr.strip() or completed.stdout.strip() or "webhook receive command failed"
+        )
         raise RuntimeError(detail)
 
     try:

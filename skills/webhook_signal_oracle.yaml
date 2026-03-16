@@ -1,5 +1,5 @@
 name: webhook_signal_oracle
-description: "Espera un webhook, lo clasifica con LLM y enruta la respuesta"
+description: "Wait for a webhook, classify it with an LLM, and route the response"
 version: "0.1"
 
 inputs:
@@ -15,16 +15,16 @@ steps:
   - id: analyze_signal
     type: llm_prompt
     system: |
-      Eres un analista de señales externas.
-      Responde solo JSON valido.
+      You are an analyst of external signals.
+      Respond only with valid JSON.
     prompt: |
-      Ha llegado este webhook:
+      This webhook has arrived:
       {{results.start.payload}}
 
-      Clasificalo y devuelve un JSON con:
-      - summary: una frase corta y clara
-      - mood: "bright", "tense" o "calm"
-      - next_action: "celebrate", "investigate" o "ignore"
+      Classify it and return a JSON object with:
+      - summary: one short, clear sentence
+      - mood: "bright", "tense", or "calm"
+      - next_action: "celebrate", "investigate", or "ignore"
     output:
       format: json
       schema:

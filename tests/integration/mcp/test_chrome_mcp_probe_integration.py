@@ -9,7 +9,6 @@ import pytest
 from skiller.domain.mcp_config_model import RenderedMcpConfig
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -69,7 +68,8 @@ def _build_chrome_mcp_config() -> RenderedMcpConfig:
 
     if not _has_browser(extra_env):
         pytest.fail(
-            "No Chrome/Chromium found. Set CHROME_PATH/CHROME_BIN or install a browser to run chrome-mcp integration"
+            "No Chrome/Chromium found. Set CHROME_PATH/CHROME_BIN "
+            "or install a browser to run chrome-mcp integration"
         )
 
     cwd = os.getenv("CHROME_MCP_CWD")

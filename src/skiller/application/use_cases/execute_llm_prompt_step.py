@@ -5,7 +5,10 @@ from typing import Any
 from skiller.application.ports.llm_port import LLMPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
-from skiller.application.use_cases.step_execution_result import StepExecutionResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import (
+    StepExecutionResult,
+    StepExecutionStatus,
+)
 from skiller.domain.run_model import RunStatus
 
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL | re.IGNORECASE)
@@ -136,7 +139,10 @@ class ExecuteLlmPromptStepUseCase:
             if not isinstance(enum_values, list):
                 raise ValueError(f"Invalid schema at {path}: field 'enum' must be an array")
             if value not in enum_values:
-                raise ValueError(f"LLM step output schema validation failed at {path}: value must be one of {enum_values}")
+                raise ValueError(
+                    "LLM step output schema validation failed "
+                    f"at {path}: value must be one of {enum_values}"
+                )
 
         if schema_type == "object":
             self._validate_object_schema(schema=schema, value=value, path=path)
@@ -149,9 +155,13 @@ class ExecuteLlmPromptStepUseCase:
         if schema_type == "string" and not isinstance(value, str):
             raise ValueError(f"LLM step output schema validation failed at {path}: expected string")
         if schema_type == "boolean" and not isinstance(value, bool):
-            raise ValueError(f"LLM step output schema validation failed at {path}: expected boolean")
+            raise ValueError(
+                f"LLM step output schema validation failed at {path}: expected boolean"
+            )
         if schema_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
-            raise ValueError(f"LLM step output schema validation failed at {path}: expected integer")
+            raise ValueError(
+                f"LLM step output schema validation failed at {path}: expected integer"
+            )
         if schema_type == "number" and not self._is_number(value):
             raise ValueError(f"LLM step output schema validation failed at {path}: expected number")
 
@@ -161,7 +171,9 @@ class ExecuteLlmPromptStepUseCase:
 
         required = schema.get("required", [])
         if not isinstance(required, list) or any(not isinstance(item, str) for item in required):
-            raise ValueError(f"Invalid schema at {path}: field 'required' must be an array of strings")
+            raise ValueError(
+                f"Invalid schema at {path}: field 'required' must be an array of strings"
+            )
 
         properties = schema.get("properties", {})
         if not isinstance(properties, dict):
@@ -169,14 +181,21 @@ class ExecuteLlmPromptStepUseCase:
 
         for field_name in required:
             if field_name not in value:
-                raise ValueError(f"LLM step output schema validation failed at {path}.{field_name}: required field is missing")
+                raise ValueError(
+                    "LLM step output schema validation failed "
+                    f"at {path}.{field_name}: required field is missing"
+                )
 
         for field_name, field_schema in properties.items():
             if field_name not in value:
                 continue
             if not isinstance(field_schema, dict):
-                raise ValueError(f"Invalid schema at {path}.{field_name}: property schema must be an object")
-            self._validate_schema(schema=field_schema, value=value[field_name], path=f"{path}.{field_name}")
+                raise ValueError(
+                    f"Invalid schema at {path}.{field_name}: property schema must be an object"
+                )
+            self._validate_schema(
+                schema=field_schema, value=value[field_name], path=f"{path}.{field_name}"
+            )
 
     def _validate_array_schema(self, *, schema: dict[str, Any], value: Any, path: str) -> None:
         if not isinstance(value, list):

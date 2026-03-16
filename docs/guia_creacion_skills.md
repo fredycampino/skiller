@@ -1,14 +1,12 @@
-# Guia de Creacion de Skills
+# Skill Creation Guide
 
-## Objetivo
-Definir el formato YAML canonico de una skill y las reglas minimas para que el runtime actual la pueda ejecutar.
+## Goal
 
-## Runtime actual
-En esta fase del refactor, el camino canonico del loop nuevo ya deja activos `notify`, `assign`, `llm_prompt`, `mcp` y `wait_webhook`.
+Define the canonical YAML format for a skill and the minimum rules required for the current runtime to execute it.
 
-Otros `type` existentes siguen formando parte del repo, pero su integracion en el loop se esta migrando al modelo `current + start/next`.
+## Current Runtime
 
-Hoy existen estos `type`:
+At this stage of the refactor, the canonical loop already supports:
 
 - `assign`
 - `notify`
@@ -16,43 +14,46 @@ Hoy existen estos `type`:
 - `mcp`
 - `wait_webhook`
 
-Si una skill usa otros `type`, hoy no forma parte del camino canonico de ejecucion.
+Other `type` values may still exist in the repo, but they are outside the current canonical execution path.
 
-## Ubicacion y formato
-- Carpeta: `skills/`
-- Extension recomendada: `.yaml`
-- `name` debe coincidir con el nombre del archivo
+## Location and Format
 
-## Carga de skills
-Hay dos modos de ejecutar una skill:
+- Folder: `skills/`
+- Recommended extension: `.yaml`
+- `name` must match the file name
 
-- `internal`: por nombre desde `skills/`
-- `file`: por path explicito a un `.yaml` o `.json`
+## Loading Skills
 
-Ejemplos:
+There are two ways to execute a skill:
+
+- `internal`: by name from `skills/`
+- `file`: by explicit `.yaml` or `.json` path
+
+Examples:
 
 ```bash
 skiller run notify_test
-skiller run --file /ruta/a/mi_skill.yaml
+skiller run --file /path/to/my_skill.yaml
 ```
 
-Al crear un run, la skill queda congelada en un snapshot dentro de la DB.
-Si el YAML cambia despues, solo afecta a runs nuevos.
+When a run is created, the skill is frozen as a snapshot inside the DB.
+If the YAML changes later, it only affects new runs.
 
-## Estructura minima
+## Current Flow Rules
 
-## Reglas actuales del flujo
+- the initial step must have `id: start`
+- `GetStartStepUseCase` sets `run.current` to `start`
+- in the migrated path, each step decides the next transition
+- for `notify`, `assign`, `llm_prompt`, `mcp`, and `wait_webhook`, `next` is optional
+- if one of those steps has no `next`, the run completes when that step resolves
 
-- el step inicial debe tener `id: start`
-- `GetStartStepUseCase` fija `run.current` apuntando a `start`
-- en el camino ya migrado, cada step decide la transicion siguiente
-- para `notify`, `assign`, `llm_prompt`, `mcp` y `wait_webhook`, `next` es opcional
-- si uno de esos steps no tiene `next`, el run termina al resolverse
+## Examples
 
-### Skill con `assign`
+### Skill with `assign`
+
 ```yaml
 name: assign_demo
-description: "Test minimo con assign"
+description: "Minimal assign test"
 version: "0.1"
 
 inputs:
@@ -71,10 +72,11 @@ steps:
     message: "{{results.start.action}}"
 ```
 
-### Skill con `llm_prompt`
+### Skill with `llm_prompt`
+
 ```yaml
 name: llm_prompt_test
-description: "Test minimo llm_prompt"
+description: "Minimal llm_prompt test"
 version: "0.1"
 
 inputs:
@@ -107,10 +109,11 @@ steps:
     message: "{{results.start.next_action}}"
 ```
 
-### Skill con `notify`
+### Skill with `notify`
+
 ```yaml
 name: notify_test
-description: "Test minimo con un unico step notify"
+description: "Minimal single-step notify test"
 version: "0.1"
 
 inputs: {}
@@ -121,10 +124,11 @@ steps:
     message: "notify smoke ok"
 ```
 
-### Skill con `notify` y `next`
+### Skill with `notify` and `next`
+
 ```yaml
 name: notify_chain
-description: "Dos notify enlazados"
+description: "Two chained notify steps"
 version: "0.1"
 
 inputs: {}
@@ -140,10 +144,11 @@ steps:
     message: "second"
 ```
 
-### Skill con `mcp`
+### Skill with `mcp`
+
 ```yaml
 name: stdio_mcp_test
-description: "Test minimo MCP via stdio"
+description: "Minimal MCP test over stdio"
 version: "0.1"
 
 inputs:
@@ -174,10 +179,11 @@ steps:
     message: "created"
 ```
 
-### Skill con `wait_webhook`
+### Skill with `wait_webhook`
+
 ```yaml
 name: wait_webhook_test
-description: "Test minimo wait_webhook"
+description: "Minimal wait_webhook test"
 version: "0.1"
 
 inputs:
@@ -195,212 +201,127 @@ steps:
     message: "resumed from webhook"
 ```
 
-## Reglas del bloque `mcp`
-Cada servidor MCP declarado en `mcp:` debe tener:
+## Rules for the `mcp` Block
+
+Each MCP server declared under `mcp:` must define:
 
 - `name`
 - `transport`
 
-Segun el `transport`:
+Depending on `transport`:
 
-- `stdio` requiere `command`
-- `http` o `streamable-http` requiere `url`
+- `stdio` requires `command`
+- `http` or `streamable-http` requires `url`
 
-Campos opcionales:
+Optional fields:
 
 - `args`
 - `cwd`
 - `env`
+- `headers`
 
-## Renderizado
-La configuracion MCP tambien se renderiza con el contexto del run.
+## Rendering
 
-Ejemplo valido:
+The MCP configuration is rendered with the run context.
+Supported templates include `{{inputs.*}}`, `{{results.*}}`, and `{{env.*}}`.
+
+Valid example:
 
 ```yaml
 mcp:
-  - name: local-mcp
-    transport: stdio
-    command: /opt/local-mcp/.venv/bin/python
-    args:
-      - /opt/local-mcp/local_mcp.py
+  - name: github
+    transport: streamable-http
+    url: "{{env.AGENT_GITHUB_MCP_URL}}"
+    headers:
+      Authorization: "Bearer {{env.AGENT_GITHUB_MCP_TOKEN}}"
 ```
 
-Si una plantilla queda sin resolver, la configuracion MCP es invalida.
+If a template stays unresolved, the MCP configuration is invalid.
 
-Nota:
-Si el servidor MCP expone herramientas de filesystem, no asumas que sus roots se pueden controlar desde `mcp.env`.
-En `local_mcp.py`, `FILES_ALLOWED_ROOTS` es configuracion propia del servidor y puede ignorar overrides del cliente.
+If the MCP server exposes filesystem tools, do not assume its roots can be controlled from `mcp.env`.
+For `local_mcp.py`, `FILES_ALLOWED_ROOTS` belongs to the server configuration and may ignore client-side overrides.
 
-## Casos validos
+## Common Invalid Cases
 
-### `assign`
+### `mcp` step with an undeclared server
+
 ```yaml
-steps:
-  - id: start
-    type: assign
-    values:
-      action: retry
-      summary: "{{inputs.issue}}"
-    next: done
-```
-
-### `llm_prompt`
-```yaml
-steps:
-  - id: start
-    type: llm_prompt
-    prompt: "{{inputs.issue}}"
-    next: done
-    output:
-      format: json
-      schema:
-        type: object
-        required: [summary]
-        properties:
-          summary:
-            type: string
-```
-
-### `notify`
-```yaml
-steps:
-  - id: start
-    type: notify
-    message: "ok"
-```
-
-### `mcp` con `stdio`
-```yaml
-mcp:
-  - name: local-mcp
-    transport: stdio
-    command: /opt/mcp/python
-
 steps:
   - id: start
     type: mcp
     mcp: local-mcp
     tool: files_action
-    next: done
+    args: {}
 ```
 
-### `mcp` con `streamable-http`
-```yaml
-inputs:
-  mcp_url: string
+Reason: the step uses `local-mcp`, but `mcp:` does not declare it.
 
-mcp:
-  - name: test-mcp
-    transport: streamable-http
-    url: "{{inputs.mcp_url}}"
+### `stdio` without `command`
 
-steps:
-  - id: start
-    type: mcp
-    mcp: test-mcp
-    tool: ping
-    next: done
-```
-
-### `wait_webhook` con `webhook + key`
-```yaml
-steps:
-  - id: wait_merge
-    type: wait_webhook
-    webhook: github-pr-merged
-    key: "{{results.create_pr.pr}}"
-```
-
-## Casos invalidos
-
-### Servidor MCP no declarado
-```yaml
-steps:
-  - id: create_file
-    type: mcp
-    mcp: local-mcp
-    tool: files_action
-```
-
-Motivo: el step usa `local-mcp`, pero `mcp:` no lo declara.
-
-### `stdio` sin `command`
 ```yaml
 mcp:
   - name: local-mcp
     transport: stdio
 ```
 
-Motivo: `stdio` requiere `command`.
+### `streamable-http` without `url`
 
-### `streamable-http` sin `url`
 ```yaml
 mcp:
-  - name: test-mcp
+  - name: github
     transport: streamable-http
 ```
 
-Motivo: `http` y `streamable-http` requieren `url`.
+### Unresolved template
 
-### Template sin resolver
 ```yaml
-inputs:
-  python_bin: string
-
 mcp:
   - name: local-mcp
     transport: stdio
     command: "{{inputs.python_bin}}"
 ```
 
-Motivo: si `inputs.python_bin` no existe, la config MCP queda invalida.
+Reason: if `inputs.python_bin` does not exist, the MCP config is invalid.
 
-### `wait_webhook` sin `webhook`
+### `wait_webhook` without `webhook`
+
 ```yaml
-steps:
-  - id: wait_merge
-    type: wait_webhook
-    key: "42"
+- id: start
+  type: wait_webhook
+  key: "{{inputs.key}}"
 ```
 
-Motivo: `wait_webhook` requiere `webhook`.
+### `wait_webhook` without `key`
 
-### `wait_webhook` sin `key`
 ```yaml
-steps:
-  - id: wait_merge
-    type: wait_webhook
-    webhook: github-pr-merged
+- id: start
+  type: wait_webhook
+  webhook: github-pr-merged
 ```
 
-Motivo: `wait_webhook` requiere `key`.
+### `assign` without `values`
 
-### `assign` sin `values`
 ```yaml
-steps:
-  - id: prepare
-    type: assign
+- id: start
+  type: assign
 ```
 
-Motivo: `assign` requiere `values`.
+### `assign` with empty `values`
 
-### `assign` con `values` vacío
 ```yaml
-steps:
-  - id: prepare
-    type: assign
-    values: {}
+- id: start
+  type: assign
+  values: {}
 ```
 
-Motivo: `assign` requiere un objeto `values` no vacío.
+Reason: `assign` requires a non-empty `values` object.
 
-## Checklist rapido
-1. La skill vive en `skills/<nombre>.yaml`.
-2. `name` coincide con el nombre del archivo.
-3. Cada step tiene `id` unico.
-4. Cada step usa un `type` soportado por el runtime actual: `assign`, `notify`, `llm_prompt`, `mcp` o `wait_webhook`.
-5. Si un step usa `type: mcp`, el servidor existe en `mcp:`.
-6. Si un step usa `type: wait_webhook`, declara `webhook` y `key`.
-7. El bloque `mcp:` declara `transport` y los campos obligatorios para ese transport.
-8. Los placeholders `{{inputs.x}}` o `{{results.x}}` existen y se resuelven.
+## Minimal Checklist
+
+1. The file lives in `skills/` or is loaded via `--file`.
+2. `name` matches the file name.
+3. A `steps:` section exists.
+4. Each step uses a currently supported runtime `type`: `assign`, `notify`, `llm_prompt`, `mcp`, or `wait_webhook`.
+5. If a step uses `type: mcp`, the server exists in `mcp:`.
+6. The initial step has `id: start`.
+7. The `mcp:` block declares `transport` and the required fields for that transport.

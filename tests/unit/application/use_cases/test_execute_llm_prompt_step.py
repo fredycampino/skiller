@@ -24,17 +24,21 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "evt-1"
 
 
 class _FakeLLM:
     def __init__(self, response: dict[str, object] | None = None) -> None:
-        self.response = response or {"ok": True, "content": "{\"summary\":\"ok\",\"severity\":\"low\"}"}
+        self.response = response or {"ok": True, "content": '{"summary":"ok","severity":"low"}'}
         self.calls: list[dict[str, object]] = []
 
-    def generate(self, messages: list[dict[str, str]], config: dict[str, object] | None = None) -> dict[str, object]:
+    def generate(
+        self, messages: list[dict[str, str]], config: dict[str, object] | None = None
+    ) -> dict[str, object]:
         self.calls.append({"messages": messages, "config": config})
         return self.response
 
@@ -302,15 +306,15 @@ def test_execute_llm_prompt_step_logs_raw_response_in_invalid_json_error() -> No
         ({"ok": False, "error": "provider down"}, "provider down"),
         ({"ok": True, "content": "not-json"}, "returned invalid JSON"),
         (
-            {"ok": True, "content": "{\"summary\":\"ok\"}"},
+            {"ok": True, "content": '{"summary":"ok"}'},
             "required field is missing",
         ),
         (
-            {"ok": True, "content": "{\"summary\":\"ok\",\"severity\":\"urgent\"}"},
+            {"ok": True, "content": '{"summary":"ok","severity":"urgent"}'},
             "value must be one of",
         ),
         (
-            {"ok": True, "content": "{\"summary\":\"ok\",\"severity\":\"low\"}"},
+            {"ok": True, "content": '{"summary":"ok","severity":"low"}'},
             "unsupported type",
         ),
     ],
@@ -365,7 +369,11 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
             "requires output object",
         ),
         (
-            {"type": "llm_prompt", "prompt": "Analyze", "output": {"format": "text", "schema": {"type": "object"}}},
+            {
+                "type": "llm_prompt",
+                "prompt": "Analyze",
+                "output": {"format": "text", "schema": {"type": "object"}},
+            },
             "requires output.format 'json'",
         ),
         (
@@ -374,7 +382,9 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
         ),
     ],
 )
-def test_execute_llm_prompt_step_validation_errors(step: dict[str, object], expected_error: str) -> None:
+def test_execute_llm_prompt_step_validation_errors(
+    step: dict[str, object], expected_error: str
+) -> None:
     use_case = ExecuteLlmPromptStepUseCase(store=_FakeStore(), llm=_FakeLLM())
     context = RunContext(inputs={}, results={})
 

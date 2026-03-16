@@ -1,24 +1,24 @@
 # `wait_webhook`
 
-## Estado
+## Status
 
-Diseño funcional activo.
+Active functional design.
 
-La base del step ya está implementada, pero algunos detalles todavía pueden cambiar durante el desarrollo, sobre todo si aparecen:
-- problemas con claves duplicadas `webhook + key`
-- necesidades nuevas de correlación
-- o cambios en la operación del proceso `webhooks`
+The base step is already implemented, but some details may still change during development, especially if we find:
+- duplicate `webhook + key` problems
+- new correlation needs
+- changes in how the `webhooks` process operates
 
-## Objetivo
+## Goal
 
-`wait_webhook` permite pausar un run hasta que llegue un evento externo.
+`wait_webhook` pauses a run until an external event arrives.
 
-Debe servir para:
-- dejar el run en `WAITING`
-- persistir una espera durable
-- reanudar el flujo cuando llegue un webhook con el `webhook + key` esperado
+It should:
+- leave the run in `WAITING`
+- persist a durable wait
+- resume the flow when a webhook with the expected `webhook + key` arrives
 
-## Shape mínimo
+## Minimal Shape
 
 ```yaml
 - id: start
@@ -28,38 +28,37 @@ Debe servir para:
   next: done
 ```
 
-## Renderizado
+## Rendering
 
-`wait_webhook` sigue el patrón actual del runtime:
+`wait_webhook` follows the current runtime pattern:
 
-- `RenderCurrentStepUseCase` renderiza el step completo
-- por tanto:
-  - `webhook` es renderizable
-  - `key` es renderizable
+- `RenderCurrentStepUseCase` renders the full step
+- `webhook` is renderable
+- `key` is renderable
 
-Los placeholders esperados son los mismos del resto del sistema:
+Supported placeholders:
 - `{{inputs...}}`
 - `{{results...}}`
 
-## Semántica de espera
+## Waiting Semantics
 
-Cuando el step se ejecuta:
+When the step runs:
 
-1. si no existe un evento persistido para ese `webhook + key`:
-- el run pasa a `WAITING`
-- se crea o reutiliza una entrada en `waits`
-- `current` se mantiene en este mismo step
-- el step no se consume todavía
+1. if no persisted event exists for that `webhook + key`:
+- the run moves to `WAITING`
+- an entry in `waits` is created or reused
+- `current` stays on the same step
+- the step is not consumed yet
 
-2. si el evento ya existe:
-- el step se resuelve
-- se escribe el resultado en `context.results[step_id]`
-- si existe `next`, el run mueve `current` a ese step
-- si no existe `next`, el run se completa
+2. if the event already exists:
+- the step resolves
+- the result is written to `context.results[step_id]`
+- if `next` exists, the run moves `current` to that step
+- if `next` does not exist, the run completes
 
-## Resultado
+## Result
 
-Cuando el step queda resuelto, el resultado esperado es algo como:
+When the step resolves, the expected result looks like:
 
 ```yaml
 results.wait_merge.ok
@@ -68,7 +67,7 @@ results.wait_merge.key
 results.wait_merge.payload
 ```
 
-Ejemplo:
+Example:
 
 ```json
 {
@@ -81,55 +80,55 @@ Ejemplo:
 }
 ```
 
-## Recepción del webhook
+## Webhook Reception
 
-La recepción mínima del sistema hoy es:
+The current minimal system entrypoint is:
 
 ```text
 POST /webhooks/{webhook}/{key}
 ```
 
-El evento recibido debe:
-- quedar persistido primero
-- y solo después intentar reanudar el run
+The received event must:
+- be persisted first
+- and only then attempt to resume the run
 
-## Reanudación
+## Resume Flow
 
-El flujo esperado es:
+The expected flow is:
 
-1. llega el webhook
-2. se persiste el evento
-3. `HandleWebhookUseCase` encuentra runs candidatos
-4. `ResumeRunUseCase` deja el run reanudable
-5. el runtime vuelve a entrar al loop
-6. `ExecuteWaitWebhookStepUseCase` encuentra el evento persistido y resuelve el step
+1. the webhook arrives
+2. the event is persisted
+3. `HandleWebhookUseCase` finds candidate runs
+4. `ResumeRunUseCase` makes the run resumable
+5. the runtime re-enters the loop
+6. `ExecuteWaitWebhookStepUseCase` finds the persisted event and resolves the step
 
-## Use case esperado
+## Expected Use Case
 
-Nombre actual:
+Current name:
 
 - `ExecuteWaitWebhookStepUseCase`
 
-Responsabilidad:
-- ejecutar el step `wait_webhook`
-- dejar el run en `WAITING` si no existe evento
-- resolver el mismo step si el evento ya existe
-- devolver `NEXT`, `COMPLETED` o `WAITING` al loop
+Responsibility:
+- execute the `wait_webhook` step
+- leave the run in `WAITING` if no event exists
+- resolve the same step if the event already exists
+- return `NEXT`, `COMPLETED`, or `WAITING` to the loop
 
-## Reglas funcionales importantes
+## Important Functional Rules
 
-- un step de espera no debe consumirse antes de resolverse
-- el mismo step de espera debe ser dueño de resolverse cuando el evento ya existe
-- el webhook debe persistirse antes de intentar reanudar el run
-- el estado de espera debe sobrevivir reinicios del proceso y apagados de la máquina
+- a waiting step must not be consumed before it resolves
+- the waiting step itself must own its own resolution when the event already exists
+- the webhook must be persisted before attempting to resume the run
+- the waiting state must survive process restarts and machine shutdowns
 
-## Dirección actual
+## Current Direction
 
-La base actual usa correlación por:
+The current base uses correlation by:
 
 - `webhook`
 - `key`
 
-Y deja pendiente una decisión importante:
+And it still leaves one important decision open:
 
-- qué hacer cuando existen claves duplicadas `webhook + key`
+- what to do when duplicate `webhook + key` values exist

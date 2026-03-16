@@ -22,7 +22,9 @@ class MCPResolvedTarget:
 class MCPClientTool:
     _managed_processes: dict[str, subprocess.Popen[Any]] = {}
 
-    def call(self, tool_name: str, args: dict[str, Any], config: RenderedMcpConfig | None = None) -> dict[str, Any]:
+    def call(
+        self, tool_name: str, args: dict[str, Any], config: RenderedMcpConfig | None = None
+    ) -> dict[str, Any]:
         server_name, remote_tool_name = self._parse_tool_name(tool_name)
         target = self._resolve_server_target(server_name, config=config)
         self._maybe_start_http_server(server_name, target.endpoint)
@@ -55,7 +57,9 @@ class MCPClientTool:
 
         return result
 
-    def probe_server(self, server_name: str, config: RenderedMcpConfig | None = None) -> dict[str, Any]:
+    def probe_server(
+        self, server_name: str, config: RenderedMcpConfig | None = None
+    ) -> dict[str, Any]:
         try:
             target = self._resolve_server_target(server_name, config=config)
             self._maybe_start_http_server(server_name, target.endpoint)
@@ -106,7 +110,8 @@ class MCPClientTool:
             from fastmcp import Client
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(
-                "fastmcp is required for MCP tool execution. Install project deps with 'pip install -e .'."
+                "fastmcp is required for MCP tool execution. "
+                "Install project deps with 'pip install -e .'."
             ) from exc
 
         async with Client(transport, init_timeout=15.0, timeout=15.0) as client:
@@ -119,7 +124,8 @@ class MCPClientTool:
             from fastmcp import Client
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(
-                "fastmcp is required for MCP connection checks. Install project deps with 'pip install -e .'."
+                "fastmcp is required for MCP connection checks. "
+                "Install project deps with 'pip install -e .'."
             ) from exc
 
         async with Client(transport, init_timeout=15.0, timeout=15.0) as client:
@@ -139,7 +145,8 @@ class MCPClientTool:
             from fastmcp import Client
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(
-                "fastmcp is required for MCP resource reads. Install project deps with 'pip install -e .'."
+                "fastmcp is required for MCP resource reads. "
+                "Install project deps with 'pip install -e .'."
             ) from exc
 
         async with Client(transport, init_timeout=15.0, timeout=15.0) as client:
@@ -151,7 +158,9 @@ class MCPClientTool:
     def _parse_tool_name(tool_name: str) -> tuple[str, str]:
         parts = tool_name.split(".")
         if len(parts) < 3 or parts[0] != "mcp":
-            raise ValueError(f"Invalid MCP tool name '{tool_name}'. Expected format: mcp.<server>.<tool>")
+            raise ValueError(
+                f"Invalid MCP tool name '{tool_name}'. Expected format: mcp.<server>.<tool>"
+            )
 
         server = parts[1].strip()
         remote_tool = ".".join(parts[2:]).strip()
@@ -170,7 +179,9 @@ class MCPClientTool:
 
         return self._build_target_from_config(server_name, config)
 
-    def _build_target_from_config(self, server_name: str, config: RenderedMcpConfig) -> MCPResolvedTarget:
+    def _build_target_from_config(
+        self, server_name: str, config: RenderedMcpConfig
+    ) -> MCPResolvedTarget:
         if config.name != server_name:
             raise ValueError(
                 f"MCP config name '{config.name}' does not match requested server '{server_name}'"
@@ -179,7 +190,8 @@ class MCPClientTool:
         if config.transport in {"http", "streamable-http"}:
             if not config.url:
                 raise ValueError(f"MCP server '{server_name}' requires url for http transport")
-            return MCPResolvedTarget(transport=config.url, endpoint=config.url)
+            transport = self._build_http_transport(config)
+            return MCPResolvedTarget(transport=transport, endpoint=config.url)
 
         if config.transport == "stdio":
             if not config.command:
@@ -202,7 +214,26 @@ class MCPClientTool:
             endpoint_label = f"stdio://{config.command}"
             return MCPResolvedTarget(transport=transport, endpoint=endpoint_label)
 
-        raise ValueError(f"Unsupported MCP transport '{config.transport}' for server '{server_name}'")
+        raise ValueError(
+            f"Unsupported MCP transport '{config.transport}' for server '{server_name}'"
+        )
+
+    def _build_http_transport(self, config: RenderedMcpConfig) -> Any:
+        if not config.headers:
+            return config.url
+
+        try:
+            from fastmcp.client.transports import StreamableHttpTransport
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "fastmcp is required for MCP HTTP headers support. "
+                "Install project deps with 'pip install -e .'."
+            ) from exc
+
+        return StreamableHttpTransport(
+            str(config.url),
+            headers={str(key): str(value) for key, value in config.headers.items()},
+        )
 
     def _maybe_start_http_server(self, server_name: str, endpoint: str) -> None:
         if not endpoint.startswith("http"):
@@ -217,7 +248,9 @@ class MCPClientTool:
 
         process = self._managed_processes.get(server_name)
         if process is not None and process.poll() is None:
-            self._wait_until_endpoint_ready(endpoint, process, timeout_seconds=config["timeout_seconds"])
+            self._wait_until_endpoint_ready(
+                endpoint, process, timeout_seconds=config["timeout_seconds"]
+            )
             return
 
         env = os.environ.copy()
@@ -232,7 +265,9 @@ class MCPClientTool:
             stderr=subprocess.DEVNULL,
         )
         self._managed_processes[server_name] = process
-        self._wait_until_endpoint_ready(endpoint, process, timeout_seconds=config["timeout_seconds"])
+        self._wait_until_endpoint_ready(
+            endpoint, process, timeout_seconds=config["timeout_seconds"]
+        )
 
     def _read_autostart_config(self, server_name: str) -> dict[str, Any] | None:
         env_prefix = f"AGENT_MCP_{server_name.upper().replace('-', '_')}"
@@ -243,9 +278,14 @@ class MCPClientTool:
         return {
             "command": command,
             "args": self._parse_json_list_env(f"{env_prefix}_AUTOSTART_ARGS"),
-            "env": {str(k): str(v) for k, v in self._parse_json_object_env(f"{env_prefix}_AUTOSTART_ENV").items()},
+            "env": {
+                str(k): str(v)
+                for k, v in self._parse_json_object_env(f"{env_prefix}_AUTOSTART_ENV").items()
+            },
             "cwd": (os.getenv(f"{env_prefix}_AUTOSTART_CWD") or "").strip() or None,
-            "timeout_seconds": self._parse_timeout_seconds(f"{env_prefix}_AUTOSTART_TIMEOUT", default=10.0),
+            "timeout_seconds": self._parse_timeout_seconds(
+                f"{env_prefix}_AUTOSTART_TIMEOUT", default=10.0
+            ),
         }
 
     def _wait_until_endpoint_ready(
@@ -259,7 +299,8 @@ class MCPClientTool:
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise RuntimeError(
-                    f"MCP autostart process exited with code {process.returncode} before endpoint became ready: {endpoint}"
+                    "MCP autostart process exited with code "
+                    f"{process.returncode} before endpoint became ready: {endpoint}"
                 )
             if self._is_endpoint_ready(endpoint):
                 return

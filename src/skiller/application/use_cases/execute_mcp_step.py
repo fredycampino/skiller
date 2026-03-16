@@ -1,9 +1,10 @@
-from typing import Any
-
 from skiller.application.ports.mcp_port import MCPPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
-from skiller.application.use_cases.step_execution_result import StepExecutionResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import (
+    StepExecutionResult,
+    StepExecutionStatus,
+)
 from skiller.domain.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run_model import RunStatus
 
@@ -13,7 +14,9 @@ class ExecuteMcpStepUseCase:
         self.store = store
         self.mcp = mcp
 
-    def execute(self, current_step: CurrentStep, mcp_config: RenderedMcpConfig) -> StepExecutionResult:
+    def execute(
+        self, current_step: CurrentStep, mcp_config: RenderedMcpConfig
+    ) -> StepExecutionResult:
         step_id = current_step.step_id
         step = current_step.step
         context = current_step.context
@@ -28,7 +31,9 @@ class ExecuteMcpStepUseCase:
             raise ValueError(f"Step '{step_id}' requires tool name in field 'tool'")
         if tool_name.startswith("mcp."):
             raise ValueError(
-                f"Step '{step_id}' invalid tool '{tool_name}'. For type 'mcp', use plain tool name without 'mcp.<server>.' prefix."
+                f"Step '{step_id}' invalid tool '{tool_name}'. "
+                "For type 'mcp', use plain tool name without "
+                "'mcp.<server>.' prefix."
             )
         if not isinstance(args, dict):
             raise ValueError(f"Step '{step_id}' args must be an object")

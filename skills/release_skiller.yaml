@@ -1,0 +1,36 @@
+name: release_skiller
+description: "Open a GitHub pull request for the pre-release flow"
+version: "0.1"
+
+inputs:
+  owner: string
+  repo: string
+  head: string
+  base: string
+  title: string
+  body: string
+
+mcp:
+  - name: github
+    transport: streamable-http
+    url: "{{env.AGENT_GITHUB_MCP_URL}}"
+    headers:
+      Authorization: "Bearer {{env.AGENT_GITHUB_MCP_TOKEN}}"
+
+steps:
+  - id: start
+    type: mcp
+    mcp: github
+    tool: create_pull_request
+    args:
+      owner: "{{inputs.owner}}"
+      repo: "{{inputs.repo}}"
+      head: "{{inputs.head}}"
+      base: "{{inputs.base}}"
+      title: "{{inputs.title}}"
+      body: "{{inputs.body}}"
+    next: done
+
+  - id: done
+    type: notify
+    message: "pull request created for {{inputs.owner}}/{{inputs.repo}} {{inputs.head}} -> {{inputs.base}}"

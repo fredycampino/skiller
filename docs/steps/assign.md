@@ -1,17 +1,17 @@
 # `assign`
 
-## Objetivo
+## Goal
 
-`assign` es un step de mapeo puro.
+`assign` is a pure mapping step.
 
-No llama a servicios externos, no decide ramas y no espera eventos.
-Solo toma valores ya disponibles en el contexto del run y los guarda en:
+It does not call external services, decide branches, or wait for events.
+It only takes values that already exist in the run context and stores them in:
 
 ```yaml
 results.<step_id>
 ```
 
-## Shape mínimo
+## Minimal Shape
 
 ```yaml
 - id: prepare_issue
@@ -21,30 +21,30 @@ results.<step_id>
     summary: "{{results.analyze_issue.summary}}"
 ```
 
-Resultado esperado:
+Expected result:
 
 ```yaml
 results.prepare_issue.action
 results.prepare_issue.summary
 ```
 
-## Uso recomendado
+## Recommended Use
 
-`assign` sirve para:
+`assign` is useful for:
 
-- renombrar campos
-- aplanar estructuras incómodas
-- preparar un objeto más claro para steps siguientes
-- evitar repetir rutas largas como `results.algo.muy.profundo`
+- renaming fields
+- flattening awkward structures
+- preparing a clearer object for later steps
+- avoiding long paths such as `results.something.very.deep`
 
-## Renderizado
+## Rendering
 
-`assign` sigue el renderizado normal del runtime:
+`assign` follows the normal runtime rendering rules:
 
-- `RenderCurrentStepUseCase` renderiza el step completo
-- cualquier string dentro de `values` es renderizable
+- `RenderCurrentStepUseCase` renders the full step
+- any string inside `values` is renderable
 
-Ejemplo:
+Example:
 
 ```yaml
 - id: prepare
@@ -59,41 +59,41 @@ Ejemplo:
       - "{{results.analyze_issue.severity}}"
 ```
 
-Si una entrada de `values` es un placeholder completo como `{{results.foo}}`, el renderer conserva el valor real cuando existe, en vez de convertirlo siempre a string.
+If an entry in `values` is a full placeholder such as `{{results.foo}}`, the renderer keeps the original value when it exists instead of always converting it to a string.
 
-## Restricciones v0
+## v0 Restrictions
 
-En esta versión:
+In this version:
 
-- `values` es obligatorio
-- `values` debe ser un objeto
-- `values` no debe estar vacío
+- `values` is mandatory
+- `values` must be an object
+- `values` must not be empty
 
-No hace:
+It does not support:
 
-- expresiones
-- comparaciones
-- funciones
+- expressions
+- comparisons
+- functions
 - casts
-- validación por schema propia
+- its own schema validation
 
-Si hace falta lógica, eso pertenece a `if` o a una versión futura más expresiva.
+If you need logic, that belongs in `switch`, `when`, or a future more expressive step.
 
-## Persistencia
+## Persistence
 
-`assign` guarda el resultado en:
+`assign` stores the result in:
 
 ```yaml
 results.<step_id>
 ```
 
-Y además emite el evento:
+It also emits:
 
 ```text
 ASSIGN_RESULT
 ```
 
-con:
+with:
 
 - `step`
 - `result`

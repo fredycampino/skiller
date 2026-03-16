@@ -10,7 +10,6 @@ from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteStateStore(SqliteRepository):
-
     def init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
@@ -77,8 +76,10 @@ class SqliteStateStore(SqliteRepository):
 
                 CREATE INDEX IF NOT EXISTS idx_runs_status_updated_at ON runs(status, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_waits_run_status ON waits(run_id, status);
-                CREATE INDEX IF NOT EXISTS idx_waits_webhook_key_status ON waits(webhook, key, status);
-                CREATE INDEX IF NOT EXISTS idx_events_run_created_at ON events(run_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_waits_webhook_key_status
+                  ON waits(webhook, key, status);
+                CREATE INDEX IF NOT EXISTS idx_events_run_created_at
+                  ON events(run_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_webhook_receipts_webhook_key_created_at
                   ON webhook_receipts(webhook, key, created_at);
                 CREATE INDEX IF NOT EXISTS idx_webhook_events_webhook_key_created_at
@@ -101,7 +102,15 @@ class SqliteStateStore(SqliteRepository):
             with self._connect() as conn:
                 conn.execute(
                     """
-                    INSERT INTO runs (id, skill_source, skill_ref, skill_snapshot_json, status, current, inputs_json)
+                    INSERT INTO runs (
+                      id,
+                      skill_source,
+                      skill_ref,
+                      skill_snapshot_json,
+                      status,
+                      current,
+                      inputs_json
+                    )
                     VALUES (?, ?, ?, ?, ?, NULL, ?)
                     """,
                     (
@@ -154,7 +163,17 @@ class SqliteStateStore(SqliteRepository):
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, skill_source, skill_ref, skill_snapshot_json, status, current, inputs_json, cancel_reason, created_at, updated_at
+                SELECT
+                  id,
+                  skill_source,
+                  skill_ref,
+                  skill_snapshot_json,
+                  status,
+                  current,
+                  inputs_json,
+                  cancel_reason,
+                  created_at,
+                  updated_at
                 FROM runs WHERE id = ?
                 """,
                 (run_id,),
@@ -167,7 +186,9 @@ class SqliteStateStore(SqliteRepository):
         inputs_dict = json.loads(row["inputs_json"])
         if not isinstance(inputs_dict, dict):
             inputs_dict = {}
-        context = self._build_context(run_id, inputs=inputs_dict, cancel_reason=row["cancel_reason"])
+        context = self._build_context(
+            run_id, inputs=inputs_dict, cancel_reason=row["cancel_reason"]
+        )
 
         return Run(
             id=row["id"],
@@ -195,7 +216,9 @@ class SqliteStateStore(SqliteRepository):
             return
         conn.execute("ALTER TABLE runs DROP COLUMN current_step")
 
-    def append_event(self, event_type: str, payload: dict[str, Any], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, Any], run_id: str | None = None
+    ) -> str:
         event_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
@@ -259,7 +282,16 @@ class SqliteStateStore(SqliteRepository):
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, run_id, step_id, webhook, key, status, created_at, resolved_at, expires_at
+                SELECT
+                  id,
+                  run_id,
+                  step_id,
+                  webhook,
+                  key,
+                  status,
+                  created_at,
+                  resolved_at,
+                  expires_at
                 FROM waits
                 WHERE run_id = ? AND step_id = ? AND status = 'ACTIVE'
                 ORDER BY created_at DESC
@@ -285,7 +317,16 @@ class SqliteStateStore(SqliteRepository):
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT id, run_id, step_id, webhook, key, status, created_at, resolved_at, expires_at
+                SELECT
+                  id,
+                  run_id,
+                  step_id,
+                  webhook,
+                  key,
+                  status,
+                  created_at,
+                  resolved_at,
+                  expires_at
                 FROM waits
                 WHERE webhook = ? AND key = ? AND status = 'ACTIVE'
                 ORDER BY created_at ASC
@@ -308,7 +349,9 @@ class SqliteStateStore(SqliteRepository):
             for row in rows
         ]
 
-    def create_webhook_event(self, webhook: str, key: str, payload: dict[str, Any], dedup_key: str) -> str:
+    def create_webhook_event(
+        self, webhook: str, key: str, payload: dict[str, Any], dedup_key: str
+    ) -> str:
         event_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
@@ -365,7 +408,9 @@ class SqliteStateStore(SqliteRepository):
             "created_at": row["created_at"],
         }
 
-    def register_webhook_receipt(self, dedup_key: str, webhook: str, key: str, payload: dict[str, Any]) -> bool:
+    def register_webhook_receipt(
+        self, dedup_key: str, webhook: str, key: str, payload: dict[str, Any]
+    ) -> bool:
         try:
             with self._connect() as conn:
                 conn.execute(
@@ -391,7 +436,9 @@ class SqliteStateStore(SqliteRepository):
             )
             return result.rowcount
 
-    def _build_context(self, run_id: str, *, inputs: dict[str, Any], cancel_reason: str | None) -> RunContext:
+    def _build_context(
+        self, run_id: str, *, inputs: dict[str, Any], cancel_reason: str | None
+    ) -> RunContext:
         context = RunContext(inputs=inputs, results={})
         if isinstance(cancel_reason, str) and cancel_reason.strip():
             context.cancel_reason = cancel_reason

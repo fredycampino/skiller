@@ -1,18 +1,18 @@
 # `mcp`
 
-## Objetivo
+## Goal
 
-`mcp` ejecuta una tool de un servidor MCP declarado en la skill.
+`mcp` runs a tool from an MCP server declared in the skill.
 
-El step:
+The step:
 
-- renderiza sus argumentos con el contexto del run
-- resuelve la configuracion del servidor MCP desde el bloque `mcp:`
-- ejecuta la tool
-- guarda el resultado en `results.<step_id>`
-- decide si el run continua o termina
+- renders its arguments with the run context
+- resolves the MCP server configuration from the `mcp:` block
+- runs the tool
+- stores the result in `results.<step_id>`
+- decides whether the run continues or ends
 
-## Shape mínimo
+## Minimal Shape
 
 ```yaml
 mcp:
@@ -33,7 +33,7 @@ steps:
       content: "{{inputs.content}}"
 ```
 
-## Shape con `next`
+## Shape with `next`
 
 ```yaml
 mcp:
@@ -54,14 +54,14 @@ steps:
     message: "pong"
 ```
 
-## Renderizado
+## Rendering
 
-`mcp` sigue el patrón normal del runtime:
+`mcp` follows the normal runtime pattern:
 
-- `RenderCurrentStepUseCase` renderiza el step completo
-- `RenderMcpConfigUseCase` renderiza la configuracion MCP declarada en la skill
+- `RenderCurrentStepUseCase` renders the full step
+- `RenderMcpConfigUseCase` renders the MCP configuration declared in the skill
 
-Campos renderizables habituales:
+Common renderable fields:
 
 - `args`
 - `mcp[].url`
@@ -69,27 +69,28 @@ Campos renderizables habituales:
 - `mcp[].args`
 - `mcp[].cwd`
 - `mcp[].env`
+- `mcp[].headers`
 
-## Validaciones
+## Validations
 
-En esta versión:
+In this version:
 
-- el step debe declarar `mcp`
-- el step debe declarar `tool`
-- `tool` no puede venir con prefijo `mcp.<server>.`
-- `args` debe ser un objeto
-- el servidor debe existir en el bloque `mcp:`
-- la configuracion MCP renderizada no puede dejar templates sin resolver
+- the step must declare `mcp`
+- the step must declare `tool`
+- `tool` must not use an `mcp.<server>.` prefix
+- `args` must be an object
+- the server must exist in the `mcp:` block
+- the rendered MCP configuration must not leave templates unresolved
 
-## Resultado
+## Result
 
-`mcp` guarda el resultado de la tool en:
+`mcp` stores the tool result in:
 
 ```yaml
 results.<step_id>
 ```
 
-Ejemplo:
+Example:
 
 ```json
 {
@@ -98,25 +99,24 @@ Ejemplo:
 }
 ```
 
-## Persistencia
+## Persistence
 
-Además del resultado en `context.results[step_id]`, `mcp` emite:
+In addition to the result in `context.results[step_id]`, `mcp` emits:
 
 ```text
 MCP_RESULT
 ```
 
-con:
+with:
 
 - `step`
 - `mcp`
 - `tool`
 - `result`
 
-## Transición
+## Transition
 
-En el loop nuevo:
+In the new loop:
 
-- si el step tiene `next`, el runtime mueve `current` a ese `step_id`
-- si el step no tiene `next`, el run se completa
-
+- if the step has `next`, the runtime moves `current` to that `step_id`
+- if the step has no `next`, the run completes

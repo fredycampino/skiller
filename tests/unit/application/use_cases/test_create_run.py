@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from skiller.application.use_cases.start_run import StartRunUseCase
+from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.domain.run_context_model import RunContext
 
 pytestmark = pytest.mark.unit
@@ -43,30 +43,29 @@ class _FakeSkillRunner:
         return self.skill_snapshot
 
 
-def test_start_run_passes_trimmed_param_run_id_to_store() -> None:
+def test_create_run_generates_uuid_for_store() -> None:
     store = _FakeStore()
     skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
-    use_case = StartRunUseCase(store=store, skill_runner=skill_runner)
-    raw_run_id = "550e8400-e29b-41d4-a716-446655440000"
+    use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
-    run_id = use_case.execute("notify_test", {"message": "ok"}, param_run_id=f"  {raw_run_id}  ")
+    run_id = use_case.execute("notify_test", {"message": "ok"})
 
-    assert run_id == raw_run_id
+    assert str(uuid.UUID(run_id)) == run_id
     assert store.create_calls == [
         {
             "skill_source": "internal",
             "skill_ref": "notify_test",
             "skill_snapshot": {"steps": [{"id": "start", "type": "notify", "message": "ok"}]},
             "context": RunContext(inputs={"message": "ok"}, results={}),
-            "run_id": raw_run_id,
+            "run_id": run_id,
         }
     ]
 
 
-def test_start_run_generates_uuid_when_param_run_id_is_missing() -> None:
+def test_create_run_generates_uuid_when_called_without_inputs() -> None:
     store = _FakeStore()
     skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
-    use_case = StartRunUseCase(store=store, skill_runner=skill_runner)
+    use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
     run_id = use_case.execute("notify_test", {})
 
@@ -74,28 +73,10 @@ def test_start_run_generates_uuid_when_param_run_id_is_missing() -> None:
     assert str(uuid.UUID(run_id)) == run_id
 
 
-def test_start_run_rejects_blank_param_run_id() -> None:
-    store = _FakeStore()
-    skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
-    use_case = StartRunUseCase(store=store, skill_runner=skill_runner)
-
-    with pytest.raises(ValueError, match="Run id must be a non-empty string"):
-        use_case.execute("notify_test", {}, param_run_id="   ")
-
-
-def test_start_run_rejects_non_uuid_param_run_id() -> None:
-    store = _FakeStore()
-    skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
-    use_case = StartRunUseCase(store=store, skill_runner=skill_runner)
-
-    with pytest.raises(ValueError, match="Run id must be a valid UUID"):
-        use_case.execute("notify_test", {}, param_run_id="run-ui-123")
-
-
-def test_start_run_rejects_invalid_skill_payload() -> None:
+def test_create_run_rejects_invalid_skill_payload() -> None:
     store = _FakeStore()
     skill_runner = _FakeSkillRunner(["bad-skill"])
-    use_case = StartRunUseCase(store=store, skill_runner=skill_runner)
+    use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
     with pytest.raises(ValueError, match="Invalid skill format"):
         use_case.execute("notify_test", {})

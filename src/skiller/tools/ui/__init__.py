@@ -1,0 +1,1 @@
+"""Minimal interactive UI tool."""

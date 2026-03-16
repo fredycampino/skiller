@@ -1,5 +1,5 @@
 name: http_mcp_test
-description: "Test minimo MCP via streamable-http"
+description: "Minimal MCP test over streamable-http"
 version: "0.1"
 
 inputs:

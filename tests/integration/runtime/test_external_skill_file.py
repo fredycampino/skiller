@@ -5,26 +5,30 @@ from pathlib import Path
 
 import pytest
 
+from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
+from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
-from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
+from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
-from skiller.application.use_cases.get_start_step import GetStartStepUseCase
-from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
-from skiller.application.use_cases.render_current_step import CurrentStepStatus
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
+from skiller.application.use_cases.render_current_step import (
+    CurrentStepStatus,
+    RenderCurrentStepUseCase,
+)
+from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.start_run import StartRunUseCase
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -40,26 +44,42 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(skills_dir="skills")
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
+    fail_run_use_case = FailRunUseCase(store)
+    complete_run_use_case = CompleteRunUseCase(store)
+    render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
+    render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
+    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(store=store, llm=NullLLM())
+    execute_mcp_step_use_case = ExecuteMcpStepUseCase(store=store, mcp=mcp)
+    execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
+    execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
+    run_worker_service = RunWorkerService(
+        complete_run_use_case=complete_run_use_case,
+        fail_run_use_case=fail_run_use_case,
+        render_current_step_use_case=render_current_step_use_case,
+        render_mcp_config_use_case=render_mcp_config_use_case,
+        execute_assign_step_use_case=execute_assign_step_use_case,
+        execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
+        execute_mcp_step_use_case=execute_mcp_step_use_case,
+        execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_switch_step_use_case=execute_switch_step_use_case,
+        execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
+    )
 
     runtime = RuntimeApplicationService(
-        start_run_use_case=StartRunUseCase(store, skill_runner),
-        complete_run_use_case=CompleteRunUseCase(store),
-        fail_run_use_case=FailRunUseCase(store),
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        create_run_use_case=CreateRunUseCase(store, skill_runner),
+        fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
-        render_current_step_use_case=RenderCurrentStepUseCase(store=store, skill_runner=skill_runner),
-        render_mcp_config_use_case=RenderMcpConfigUseCase(store=store, skill_runner=skill_runner),
-        execute_assign_step_use_case=ExecuteAssignStepUseCase(store=store),
-        execute_llm_prompt_step_use_case=ExecuteLlmPromptStepUseCase(store=store, llm=NullLLM()),
-        execute_mcp_step_use_case=ExecuteMcpStepUseCase(store=store, mcp=mcp),
-        execute_notify_step_use_case=ExecuteNotifyStepUseCase(store=store),
-        execute_switch_step_use_case=ExecuteSwitchStepUseCase(store=store),
-        execute_when_step_use_case=ExecuteWhenStepUseCase(store=store),
-        execute_wait_webhook_step_use_case=ExecuteWaitWebhookStepUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),
         get_run_status_use_case=GetRunStatusUseCase(store),
+        run_worker_service=run_worker_service,
     )
     return runtime
 
@@ -69,7 +89,14 @@ def test_run_external_skill_file_succeeds() -> None:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "external_notify.yaml"
         skill_path.write_text(
-            "name: external_notify\ninputs: {}\nsteps:\n  - id: start\n    type: notify\n    message: external ok\n",
+            (
+                "name: external_notify\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: notify\n"
+                "    message: external ok\n"
+            ),
             encoding="utf-8",
         )
 
@@ -77,7 +104,7 @@ def test_run_external_skill_file_succeeds() -> None:
         store.init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.start_run(str(skill_path), {}, skill_source="file")
+        run_result = runtime.run(str(skill_path), {}, skill_source="file")
 
         run = store.get_run(run_result["run_id"])
         assert run_result["status"] == "SUCCEEDED"
@@ -95,22 +122,38 @@ def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "external_notify.yaml"
         skill_path.write_text(
-            "name: external_notify\ninputs: {}\nsteps:\n  - id: start\n    type: notify\n    message: original\n",
+            (
+                "name: external_notify\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: notify\n"
+                "    message: original\n"
+            ),
             encoding="utf-8",
         )
 
         store = SqliteStateStore(db_path)
         store.init_db()
         skill_runner = FilesystemSkillRunner(skills_dir="skills")
-        start_run_use_case = StartRunUseCase(store, skill_runner)
+        create_run_use_case = CreateRunUseCase(store, skill_runner)
         get_start_step_use_case = GetStartStepUseCase(store=store)
-        render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
+        render_current_step_use_case = RenderCurrentStepUseCase(
+            store=store, skill_runner=skill_runner
+        )
 
-        run_id = start_run_use_case.execute(str(skill_path), {}, skill_source="file")
+        run_id = create_run_use_case.execute(str(skill_path), {}, skill_source="file")
         get_start_step_use_case.execute(run_id)
 
         skill_path.write_text(
-            "name: external_notify\ninputs: {}\nsteps:\n  - id: start\n    type: notify\n    message: mutated\n",
+            (
+                "name: external_notify\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: notify\n"
+                "    message: mutated\n"
+            ),
             encoding="utf-8",
         )
 
@@ -137,7 +180,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
                 "  - id: start\n"
                 "    type: wait_webhook\n"
                 "    webhook: github-pr-merged\n"
-                "    key: \"{{inputs.pr}}\"\n"
+                '    key: "{{inputs.pr}}"\n'
                 "    next: done\n"
                 "  - id: done\n"
                 "    type: notify\n"
@@ -150,7 +193,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         store.init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.start_run(str(skill_path), {"pr": "42"}, skill_source="file")
+        run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
         run_id = run_result["run_id"]
         run = store.get_run(run_id)
 
@@ -158,7 +201,9 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert run is not None
         assert run.status == "WAITING"
 
-        wait_event = next(event for event in store.list_events(run_id) if event["type"] == "WAITING")
+        wait_event = next(
+            event for event in store.list_events(run_id) if event["type"] == "WAITING"
+        )
         assert wait_event["payload"]["webhook"] == "github-pr-merged"
         assert wait_event["payload"]["key"] == "42"
 
@@ -188,7 +233,7 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
                 "  - id: start\n"
                 "    type: wait_webhook\n"
                 "    webhook: github-pr-merged\n"
-                "    key: \"{{inputs.pr}}\"\n"
+                '    key: "{{inputs.pr}}"\n'
                 "    next: done\n"
                 "  - id: done\n"
                 "    type: notify\n"
@@ -201,17 +246,27 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         store.init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.start_run(str(skill_path), {"pr": "42"}, skill_source="file")
+        run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
         run_id = run_result["run_id"]
 
         assert run_result["status"] == "WAITING"
 
-        resumed_runs = runtime.handle_webhook("github-pr-merged", "42", {"merged": True}, dedup_key="dedup-1")
+        matched_runs = runtime.handle_webhook(
+            "github-pr-merged", "42", {"merged": True}, dedup_key="dedup-1"
+        )
+        matched_run = store.get_run(run_id)
+
+        assert matched_runs["accepted"] is True
+        assert matched_runs["duplicate"] is False
+        assert matched_runs["matched_runs"] == [run_id]
+        assert matched_run is not None
+        assert matched_run.status == "WAITING"
+
+        resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
 
-        assert resumed_runs["accepted"] is True
-        assert resumed_runs["duplicate"] is False
-        assert resumed_runs["matched_runs"] == [run_id]
+        assert resume_result["resume_status"] == "RESUMED"
+        assert resume_result["status"] == "SUCCEEDED"
         assert resumed_run is not None
         assert resumed_run.status == "SUCCEEDED"
 

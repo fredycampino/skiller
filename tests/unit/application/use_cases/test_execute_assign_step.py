@@ -24,7 +24,9 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "event-1"
 
@@ -40,7 +42,9 @@ def _build_current_step(values: object, *, next_step_id: object = "done") -> Cur
         step_id="prepare",
         step_type=StepType.ASSIGN,
         step=step,
-        context=RunContext(inputs={"issue": "boom"}, results={"analyze_issue": {"next_action": "retry"}}),
+        context=RunContext(
+            inputs={"issue": "boom"}, results={"analyze_issue": {"next_action": "retry"}}
+        ),
     )
 
 

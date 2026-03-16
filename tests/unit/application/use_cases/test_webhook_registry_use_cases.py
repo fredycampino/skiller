@@ -1,4 +1,7 @@
-from skiller.application.use_cases.register_webhook import RegisterWebhookStatus, RegisterWebhookUseCase
+from skiller.application.use_cases.register_webhook import (
+    RegisterWebhookStatus,
+    RegisterWebhookUseCase,
+)
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
 
 

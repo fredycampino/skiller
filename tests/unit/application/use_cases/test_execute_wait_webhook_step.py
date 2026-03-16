@@ -70,7 +70,9 @@ class _FakeStore:
             }
         )
 
-    def append_event(self, event_type: str, payload: dict[str, object], run_id: str | None = None) -> str:
+    def append_event(
+        self, event_type: str, payload: dict[str, object], run_id: str | None = None
+    ) -> str:
         self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
         return "event-1"
 

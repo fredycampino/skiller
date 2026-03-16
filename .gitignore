@@ -48,3 +48,4 @@ htmlcov/
 *.db
 *.sqlite3
 logs/
+docs-legacy/

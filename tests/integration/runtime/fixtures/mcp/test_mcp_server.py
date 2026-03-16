@@ -4,7 +4,6 @@ import os
 
 from fastmcp import FastMCP
 
-
 mcp = FastMCP("test-mcp")
 
 

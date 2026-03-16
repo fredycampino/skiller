@@ -56,6 +56,23 @@ def test_resolve_target_builds_http_transport_from_config() -> None:
     assert target.transport == "http://127.0.0.1:7821/mcp"
 
 
+def test_resolve_target_builds_http_transport_with_headers_from_config() -> None:
+    client = MCPClientTool()
+    target = client._resolve_server_target(
+        "github",
+        config=RenderedMcpConfig(
+            name="github",
+            transport="streamable-http",
+            url="https://api.github.example/mcp",
+            headers={"Authorization": "Bearer secret-token"},
+        ),
+    )
+
+    assert target.endpoint == "https://api.github.example/mcp"
+    assert target.transport.url == "https://api.github.example/mcp"
+    assert target.transport.headers == {"Authorization": "Bearer secret-token"}
+
+
 def test_resolve_target_requires_config() -> None:
     client = MCPClientTool()
 

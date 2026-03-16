@@ -2,7 +2,10 @@ from typing import Any
 
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
-from skiller.application.use_cases.step_execution_result import StepExecutionResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import (
+    StepExecutionResult,
+    StepExecutionStatus,
+)
 from skiller.domain.run_model import RunStatus
 
 _SUPPORTED_WHEN_OPERATORS = {"eq", "ne", "gt", "gte", "lt", "lte"}
@@ -75,7 +78,9 @@ class ExecuteWhenStepUseCase:
         raw_default: object,
     ) -> tuple[str, dict[str, Any]]:
         for index, raw_branch in enumerate(raw_branches):
-            operator, right, next_step_id = self._parse_branch(step_id=step_id, index=index, raw_branch=raw_branch)
+            operator, right, next_step_id = self._parse_branch(
+                step_id=step_id, index=index, raw_branch=raw_branch
+            )
             if self._matches(step_id=step_id, value=value, operator=operator, right=right):
                 return next_step_id, {
                     "branch": index,
@@ -83,7 +88,9 @@ class ExecuteWhenStepUseCase:
                     "right": self._clone(right),
                 }
 
-        return self._normalize_next_step_id(step_id=step_id, raw_next=raw_default, field="default"), {
+        return self._normalize_next_step_id(
+            step_id=step_id, raw_next=raw_default, field="default"
+        ), {
             "branch": None,
             "op": None,
             "right": None,
@@ -107,13 +114,17 @@ class ExecuteWhenStepUseCase:
         if not next_step_id:
             raise ValueError(f"Step '{step_id}' requires non-empty branch {index} then")
 
-        operator_keys = [str(key).strip() for key in raw_branch.keys() if str(key).strip() != "then"]
+        operator_keys = [
+            str(key).strip() for key in raw_branch.keys() if str(key).strip() != "then"
+        ]
         if len(operator_keys) != 1:
             raise ValueError(f"Step '{step_id}' requires exactly one operator in branch {index}")
 
         operator = operator_keys[0]
         if operator not in _SUPPORTED_WHEN_OPERATORS:
-            raise ValueError(f"Step '{step_id}' uses unsupported when operator '{operator}' in branch {index}")
+            raise ValueError(
+                f"Step '{step_id}' uses unsupported when operator '{operator}' in branch {index}"
+            )
 
         return operator, raw_branch[operator], next_step_id
 
@@ -136,7 +147,9 @@ class ExecuteWhenStepUseCase:
 
     def _as_number(self, *, step_id: str, operator: str, value: Any) -> float:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"Step '{step_id}' requires numeric operands for operator '{operator}'")
+            raise ValueError(
+                f"Step '{step_id}' requires numeric operands for operator '{operator}'"
+            )
         return float(value)
 
     def _normalize_next_step_id(self, *, step_id: str, raw_next: object, field: str) -> str:

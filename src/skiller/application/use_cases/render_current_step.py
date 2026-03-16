@@ -107,7 +107,9 @@ class RenderCurrentStepUseCase:
             ),
         )
 
-    def _find_step(self, raw_steps: list[object], step_id: str) -> tuple[int, dict[str, Any] | None]:
+    def _find_step(
+        self, raw_steps: list[object], step_id: str
+    ) -> tuple[int, dict[str, Any] | None]:
         match_index = -1
         match_step: dict[str, Any] | None = None
 

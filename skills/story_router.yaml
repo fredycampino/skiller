@@ -1,5 +1,5 @@
 name: story_router
-description: "Mini aventura ramificada con switch y when"
+description: "Mini branching adventure with switch and when"
 version: "0.1"
 
 inputs:

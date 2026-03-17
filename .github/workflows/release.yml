@@ -1,25 +1,29 @@
-name: Release
+name: Release PR
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release, without leading v"
-        required: true
-        type: string
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - closed
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  validate:
+    if: github.event.action != 'closed' && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -32,59 +36,26 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[dev] build
 
-      - name: Validate workflow is running on main
-        run: |
-          current_branch="$(git branch --show-current)"
-          if [ "$current_branch" != "main" ]; then
-            echo "release workflow must run on main, got: $current_branch" >&2
-            exit 1
-          fi
-
-      - name: Validate version matches pyproject
+      - name: Validate branch shape
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
-          project_version="$(python - <<'PY'
-          import tomllib
+          python scripts/ci/validate_pr_branch.py \
+            --base-ref "$GITHUB_BASE_REF" \
+            --expected-base "main" \
+            --head-ref "$GITHUB_HEAD_REF" \
+            --head-prefix "release/"
 
-          with open("pyproject.toml", "rb") as fh:
-              data = tomllib.load(fh)
-          print(data["project"]["version"])
-          PY
-          )"
-          if [ "$project_version" != "$RELEASE_VERSION" ]; then
-            echo "pyproject version $project_version does not match requested release $RELEASE_VERSION" >&2
-            exit 1
-          fi
-
-      - name: Validate changelog unreleased section is not placeholder
+      - name: Validate release metadata
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          lines = Path("CHANGELOG.md").read_text().splitlines()
-
-          try:
-              start = lines.index("## Unreleased") + 1
-          except ValueError:
-              raise SystemExit("CHANGELOG.md is missing the Unreleased section")
-
-          end = len(lines)
-          for idx in range(start, len(lines)):
-              if idx > start and lines[idx].startswith("## "):
-                  end = idx
-                  break
-
-          body = [line.strip() for line in lines[start:end]]
-          meaningful_entries = [
-              line
-              for line in body
-              if line.startswith("- ")
-              and line not in {"- Nothing yet.", "- Update this section when a branch is ready for release."}
-          ]
-          if not meaningful_entries:
-              raise SystemExit("CHANGELOG.md Unreleased section does not contain release content")
-          PY
+          python scripts/ci/validate_release_pr.py \
+            --base-ref "$GITHUB_BASE_REF" \
+            --expected-base "main" \
+            --head-ref "$GITHUB_HEAD_REF"
 
       - name: Run ruff
         run: python -m ruff check src tests
@@ -95,20 +66,36 @@ jobs:
       - name: Build package
         run: python -m build
 
+  create_tag:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout merged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
       - name: Ensure tag does not already exist
         env:
-          RELEASE_TAG: v${{ inputs.version }}
+          RELEASE_TAG: v${{ github.event.pull_request.head.ref }}
         run: |
-          if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "tag already exists: $RELEASE_TAG" >&2
+          release_version="${RELEASE_TAG#vrelease/}"
+          release_tag="v${release_version}"
+          if git rev-parse "$release_tag" >/dev/null 2>&1; then
+            echo "tag already exists: $release_tag" >&2
             exit 1
           fi
 
       - name: Create and push tag
         env:
-          RELEASE_TAG: v${{ inputs.version }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
+          release_version="${RELEASE_BRANCH#release/}"
+          release_tag="v${release_version}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
+          git tag "$release_tag" "$MERGE_COMMIT_SHA"
+          git push origin "$release_tag"

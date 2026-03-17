@@ -1,5 +1,5 @@
-name: release_skiller
-description: "Open a GitHub pull request for the pre-release flow"
+name: pull_request
+description: "Open a GitHub pull request for a branch workflow"
 version: "0.1"
 
 inputs:

@@ -1,0 +1,56 @@
+name: Feature PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: startsWith(github.event.pull_request.head.ref, 'feature/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev] build
+
+      - name: Validate branch shape
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          python scripts/ci/validate_pr_branch.py \
+            --base-ref "$GITHUB_BASE_REF" \
+            --expected-base "main" \
+            --head-ref "$GITHUB_HEAD_REF" \
+            --head-prefix "feature/"
+
+      - name: Run ruff
+        run: python -m ruff check src tests
+
+      - name: Run pytest
+        run: python -m pytest
+
+      - name: Build package
+        run: python -m build

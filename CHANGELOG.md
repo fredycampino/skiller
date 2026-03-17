@@ -5,6 +5,44 @@ All notable changes to this project should be summarized here before a version i
 ## Unreleased
 
 ### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+### Fixed
+- Nothing yet.
+
+### Removed
+- Nothing yet.
+
+### Notes
+- Update this section when a branch is ready for release.
+
+## 1.0.0-alpha.5 - 2026-03-17
+
+### Added
+- Added a dedicated `Feature PR` GitHub Actions workflow for `feature/*` pull requests.
+- Added repository scripts to validate PR branch shape and release metadata in CI.
+- Added a reusable internal `pull_request` skill for opening both feature and release pull requests.
+
+### Changed
+- Changed release validation to run on `release/*` pull requests instead of a manual workflow on `main`.
+- Changed release tagging so CI creates `v<version>` only after the release PR is merged.
+- Changed `skiller-dev` to use a single workflow reference with explicit `[Agent]`, `[User]`, `[Admin]`, and `[Workflow]` responsibilities.
+
+### Fixed
+- Fixed the release instructions so the documented flow matches the active CI and pull request process.
+
+### Removed
+- Removed obsolete split release references from `skiller-dev` in favor of the consolidated workflow guide.
+
+### Notes
+- This release focuses on CI and release-process coherence after `v1.0.0-alpha.4`.
+
+## 1.0.0-alpha.4 - 2026-03-16
+
+### Added
 - Added a worker-based CLI lifecycle with `worker start`, `worker run`, and `worker resume`.
 - Added live CLI watch output so `skiller run` reports progress while the worker executes.
 - Added GitHub MCP HTTP auth support with rendered `headers` and `{{env.*}}` templates.
@@ -23,8 +61,7 @@ All notable changes to this project should be summarized here before a version i
 - Removed `RuntimeBootstrapService` as a separate layer and folded bootstrap into `RuntimeApplicationService`.
 
 ### Notes
-- Prepared release candidate `1.0.0-alpha.4`.
-- Summarize the branch at a functional level; do not turn this file into a commit log.
+- Established the worker-based execution path and live CLI watch output as the base runtime flow.
 
 ## 1.0.0-alpha.3 - 2026-03-13
 

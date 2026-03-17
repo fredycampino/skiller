@@ -23,8 +23,7 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - For runtime patterns used in this repo, read `SKILL.md -> references/runtime-patterns.md`.
 - For test taxonomy and what counts as unit/integration/e2e here, read `SKILL.md -> references/testing-rules.md`.
 - For the general pre-commit checklist used in this repo, read `SKILL.md -> references/pre-commit-checklist.md`.
-- For the documented pre-release procedure of this repo, read `SKILL.md -> references/pre_release.md`.
-- For the documented release procedure of this repo, read `SKILL.md -> references/release.md`.
+- For the documented feature and release branch flow of this repo, read `SKILL.md -> references/workflow.md`.
 - For functional runtime rules around waiting, resume, and persisted external events, prefer `SKILL.md -> references/runtime-patterns.md`.
 
 ## Sandbox Execution
@@ -37,21 +36,9 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 ## Release Workflow
 
-Use the documented repo flow in `references/pre_release.md` and `references/release.md` unless the user says otherwise.
-
-Agent responsibilities:
-- implement the code and tests
-- run verification
-- prepare commits during development
-- maintain `CHANGELOG.md` before release
-- prepare the branch for PR, including squash cleanup
-- clean local branches after merge when asked
-
-Human responsibilities:
-- decide when a branch becomes a release
-- review the changelog and PR
-- open or merge the PR when the agent cannot do it directly
-- create the version tag on `main`
+Use the documented repo flow in `references/workflow.md` unless the user says otherwise.
+- Treat the `[Agent]`, `[User]`, `[Admin]`, and `[Workflow]` labels in `references/workflow.md` as the source of truth for responsibilities.
+- If the environment lacks the required GitHub permissions or tools, report that as a blocker instead of inventing a different flow.
 
 ## Default Checklist
 
@@ -62,3 +49,4 @@ Human responsibilities:
 - Would a new reader understand the happy path first?
 - Are invalid cases reported with one clear message?
 - If behavior or step contracts changed, did you review the affected docs, especially `docs/steps/*` and `docs/guia_creacion_skills.md`?
+- If the task involves integration or release prep, did you follow `references/workflow.md` instead of an older manual flow?

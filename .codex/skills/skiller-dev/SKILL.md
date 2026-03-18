@@ -38,7 +38,6 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 Use the documented repo flow in `references/workflow.md` unless the user says otherwise.
 - Treat the `[Agent]`, `[User]`, `[Admin]`, and `[Workflow]` labels in `references/workflow.md` as the source of truth for responsibilities.
-- If the environment lacks the required GitHub permissions or tools, report that as a blocker instead of inventing a different flow.
 
 ## Default Checklist
 

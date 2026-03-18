@@ -12,6 +12,7 @@ At this stage of the refactor, the canonical loop already supports:
 - `notify`
 - `llm_prompt`
 - `mcp`
+- `wait_input`
 - `wait_webhook`
 
 Other `type` values may still exist in the repo, but they are outside the current canonical execution path.
@@ -44,7 +45,7 @@ If the YAML changes later, it only affects new runs.
 - the initial step must have `id: start`
 - `GetStartStepUseCase` sets `run.current` to `start`
 - in the migrated path, each step decides the next transition
-- for `notify`, `assign`, `llm_prompt`, `mcp`, and `wait_webhook`, `next` is optional
+- for `notify`, `assign`, `llm_prompt`, `mcp`, `wait_input`, and `wait_webhook`, `next` is optional
 - if one of those steps has no `next`, the run completes when that step resolves
 
 ## Examples
@@ -199,6 +200,26 @@ steps:
   - id: done
     type: notify
     message: "resumed from webhook"
+
+### Skill with `wait_input`
+
+```yaml
+name: wait_input_test
+description: "Minimal wait_input test"
+version: "0.1"
+
+inputs: {}
+
+steps:
+  - id: start
+    type: wait_input
+    prompt: "Write a short summary"
+    next: done
+
+  - id: done
+    type: notify
+    message: "{{results.start.payload.text}}"
+```
 ```
 
 ## Rules for the `mcp` Block
@@ -297,6 +318,13 @@ Reason: if `inputs.python_bin` does not exist, the MCP config is invalid.
 - id: start
   type: wait_webhook
   webhook: github-pr-merged
+
+### `wait_input` without `prompt`
+
+```yaml
+- id: start
+  type: wait_input
+```
 ```
 
 ### `assign` without `values`
@@ -321,7 +349,7 @@ Reason: `assign` requires a non-empty `values` object.
 1. The file lives in `skills/` or is loaded via `--file`.
 2. `name` matches the file name.
 3. A `steps:` section exists.
-4. Each step uses a currently supported runtime `type`: `assign`, `notify`, `llm_prompt`, `mcp`, or `wait_webhook`.
+4. Each step uses a currently supported runtime `type`: `assign`, `notify`, `llm_prompt`, `mcp`, `wait_input`, or `wait_webhook`.
 5. If a step uses `type: mcp`, the server exists in `mcp:`.
 6. The initial step has `id: start`.
 7. The `mcp:` block declares `transport` and the required fields for that transport.

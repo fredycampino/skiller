@@ -12,6 +12,7 @@ class _FakeController:
         self.start_worker_calls: list[str] = []
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
+        self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
         self.logs_calls: list[str] = []
         self.status_calls: list[str] = []
@@ -84,6 +85,14 @@ class _FakeController:
             "webhook": webhook,
             "key": key,
             "matched_runs": ["run-1"],
+        }
+
+    def receive_input(self, run_id: str, *, text: str) -> dict[str, object]:
+        self.receive_input_calls.append((run_id, text))
+        return {
+            "accepted": True,
+            "run_id": run_id,
+            "matched_runs": [run_id],
         }
 
     def register_webhook(self, webhook: str) -> dict[str, object]:
@@ -435,6 +444,29 @@ def test_webhook_receive_uses_webhook_and_key(
     assert worker_process_service.calls == [("resume", "run-1")]
     assert '"accepted": true' in captured.out
     assert '"duplicate": false' in captured.out
+    assert '"matched_runs": [' in captured.out
+    assert '"resumed_runs": [' in captured.out
+
+
+def test_input_receive_uses_run_id_and_text(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    worker_process_service = _FakeWorkerProcessService()
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+
+    exit_code = cli_main.main(["input", "receive", "run-1", "--text", "database timeout"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.receive_input_calls == [("run-1", "database timeout")]
+    assert worker_process_service.calls == [("resume", "run-1")]
+    assert '"accepted": true' in captured.out
     assert '"matched_runs": [' in captured.out
     assert '"resumed_runs": [' in captured.out
 

@@ -22,6 +22,7 @@
   - no infrastructure fixtures from the repo
   - validates an observable final result
   - keep these few and high-value
+  - treat them as manual operator smoke tests, not exhaustive behavioral tests
 
 ## Classification Rule
 
@@ -31,8 +32,14 @@
 
 ## Current Repo Intent
 
-- `notify` through CLI is a valid `e2e`.
-- `assign`, `switch`, `when`, `wait_webhook`, and `llm_prompt` through CLI are valid manual operator flows.
+- Prefer one script per operator flow under `tests/e2e/cli_*.sh`.
+- Isolate each run with a temporary DB via `AGENT_DB_PATH`.
+- Execute the real runtime entrypoint with `PYTHONPATH=src ... -m skiller`.
+- Assert a small final JSON contract such as `run_id`, `status`, and only the minimum extra fields needed for the flow.
+- Do not assert internal persistence details, event payloads, or intermediate state if `integration` already covers them.
+- Use `SKIPPED` instead of failing when the flow depends on external credentials or provider access that may not exist locally.
+- Reserve multi-command E2E flows for genuinely operational paths such as wait/resume.
+- `notify`, `assign`, `switch`, `when`, `wait_webhook`, and `llm_prompt` through CLI are valid manual operator flows in this repo.
 - `llm_prompt` CLI remains opt-in when it depends on real provider credentials.
 - `stdio mcp` through CLI is part of the manual CLI coverage in this repo.
 - MCP with test servers or repo fixtures belongs to `integration`.

@@ -47,6 +47,9 @@ class RuntimeController:
     ) -> dict[str, Any]:
         return self.runtime_service.handle_webhook(webhook, key, payload, dedup_key=dedup_key)
 
+    def receive_input(self, run_id: str, *, text: str) -> dict[str, Any]:
+        return self.runtime_service.handle_input(run_id.strip(), text=text.strip())
+
     def resume(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.resume_run(run_id)
 

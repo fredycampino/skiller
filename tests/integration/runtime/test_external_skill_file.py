@@ -15,11 +15,13 @@ from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmProm
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
@@ -54,6 +56,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
@@ -66,6 +69,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_notify_step_use_case=execute_notify_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
 
@@ -74,6 +78,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
+        handle_input_use_case=HandleInputUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
@@ -277,3 +282,64 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         assert wait_resolved["payload"]["key"] == "42"
         notify_event = next(event for event in events if event["type"] == "NOTIFY")
         assert notify_event["payload"]["message"] == "resumed from webhook"
+
+
+def test_external_wait_input_file_can_resume_from_cli_input() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_wait_input.yaml"
+        skill_path.write_text(
+            (
+                "name: external_wait_input\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: wait_input\n"
+                "    prompt: Write a short summary\n"
+                "    next: done\n"
+                "  - id: done\n"
+                "    type: notify\n"
+                '    message: "{{results.start.payload.text}}"\n'
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_id = run_result["run_id"]
+
+        assert run_result["status"] == "WAITING"
+
+        input_result = runtime.handle_input(run_id, text="database timeout")
+        waiting_run = store.get_run(run_id)
+
+        assert input_result == {
+            "accepted": True,
+            "run_id": run_id,
+            "matched_runs": [run_id],
+        }
+        assert waiting_run is not None
+        assert waiting_run.status == "WAITING"
+
+        resume_result = runtime.resume_run(run_id)
+        resumed_run = store.get_run(run_id)
+
+        assert resume_result["resume_status"] == "RESUMED"
+        assert resume_result["status"] == "SUCCEEDED"
+        assert resumed_run is not None
+        assert resumed_run.status == "SUCCEEDED"
+        assert resumed_run.context.results["start"] == {
+            "ok": True,
+            "prompt": "Write a short summary",
+            "payload": {"text": "database timeout"},
+        }
+
+        events = store.list_events(run_id)
+        input_resolved = next(event for event in events if event["type"] == "INPUT_RESOLVED")
+        assert input_resolved["payload"]["step"] == "start"
+        assert input_resolved["payload"]["prompt"] == "Write a short summary"
+        notify_event = next(event for event in events if event["type"] == "NOTIFY")
+        assert notify_event["payload"]["message"] == "database timeout"

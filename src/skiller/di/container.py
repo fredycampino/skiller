@@ -11,12 +11,14 @@ from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmProm
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
@@ -58,6 +60,7 @@ def build_runtime_container(
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
+    handle_input_use_case = HandleInputUseCase(store=store)
     handle_webhook_use_case = HandleWebhookUseCase(store=store)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
@@ -70,6 +73,7 @@ def build_runtime_container(
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
     resume_run_use_case = ResumeRunUseCase(store=store)
     get_run_status_use_case = GetRunStatusUseCase(store)
@@ -85,6 +89,7 @@ def build_runtime_container(
         execute_notify_step_use_case=execute_notify_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
     query_service = RunQueryService(
@@ -97,6 +102,7 @@ def build_runtime_container(
         create_run_use_case=create_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,
+        handle_input_use_case=handle_input_use_case,
         handle_webhook_use_case=handle_webhook_use_case,
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,

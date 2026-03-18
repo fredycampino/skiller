@@ -60,4 +60,7 @@ Use this repo flow unless the user says otherwise.
 - Do not update `CHANGELOG.md` on feature branches unless the user explicitly asks for it.
 - Do not open a release PR with extra file changes.
 - Do not leave a feature or release branch as multiple commits when the workflow requires one clean commit.
-- If `AGENT_GITHUB_MCP_URL` or `AGENT_GITHUB_MCP_TOKEN` is missing, report that as a blocker when opening the PR.
+- Do not read or inspect tokens, secrets, or `.env` contents directly.
+- Use trusted repo commands that consume credentials implicitly for their normal operation, for example `skiller run pull_request`.
+- Do not use ad hoc scripts or generic tooling around credentials when a trusted repo command already exists for the task.
+- If a trusted repo command cannot authenticate because the required environment is missing, report that as a blocker.

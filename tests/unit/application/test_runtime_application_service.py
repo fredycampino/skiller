@@ -63,6 +63,20 @@ class _FakeHandleWebhookUseCase:
         )
 
 
+class _FakeHandleInputUseCase:
+    def __init__(self, run_ids: list[str] | None = None, *, accepted: bool = True) -> None:
+        self.run_ids = run_ids or []
+        self.accepted = accepted
+
+    def execute(self, run_id: str, *, text: str):  # noqa: ANN201
+        _ = (run_id, text)
+        return SimpleNamespace(
+            accepted=self.accepted,
+            run_ids=self.run_ids,
+            error=None,
+        )
+
+
 class _FakeRegisterWebhookUseCase:
     def execute(self, webhook: str):  # noqa: ANN201
         return SimpleNamespace(
@@ -117,6 +131,7 @@ class _FakeRunWorkerService:
 def _build_service(
     *,
     get_run_status_use_case: _FakeGetRunStatusUseCase | None = None,
+    handle_input_use_case: _FakeHandleInputUseCase | None = None,
     handle_webhook_use_case: _FakeHandleWebhookUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
@@ -139,6 +154,7 @@ def _build_service(
         create_run_use_case=create_run_use_case,
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
+        handle_input_use_case=handle_input_use_case or _FakeHandleInputUseCase(),
         handle_webhook_use_case=handle_webhook_use_case or _FakeHandleWebhookUseCase(),
         register_webhook_use_case=_FakeRegisterWebhookUseCase(),
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
@@ -217,5 +233,20 @@ def test_handle_webhook_only_returns_matched_runs() -> None:
         "webhook": "github",
         "key": "42",
         "matched_runs": ["run-1", "run-2"],
+    }
+    assert run_worker_service.calls == []
+
+
+def test_handle_input_only_returns_matched_runs() -> None:
+    service, _create_run_use_case, _get_start_step_use_case, run_worker_service = _build_service(
+        handle_input_use_case=_FakeHandleInputUseCase(run_ids=["run-1"]),
+    )
+
+    result = service.handle_input("run-1", text="hello")
+
+    assert result == {
+        "accepted": True,
+        "run_id": "run-1",
+        "matched_runs": ["run-1"],
     }
     assert run_worker_service.calls == []

@@ -74,6 +74,8 @@ run_cli "cli_switch.sh" ./cli_switch.sh "retry"
 echo
 run_cli "cli_when.sh" ./cli_when.sh
 echo
+run_cli "cli_wait_input.sh" ./cli_wait_input.sh
+echo
 run_cli "cli_wait_webhook.sh" ./cli_wait_webhook.sh
 echo
 run_cli "cli_llm_prompt.sh" ./cli_llm_prompt.sh

@@ -6,6 +6,7 @@ from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
@@ -26,11 +27,13 @@ class RuntimeApplicationService:
         resume_run_use_case: ResumeRunUseCase,
         get_run_status_use_case: GetRunStatusUseCase,
         run_worker_service: RunWorkerService,
+        handle_input_use_case: HandleInputUseCase | None = None,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.create_run_use_case = create_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
+        self.handle_input_use_case = handle_input_use_case
         self.handle_webhook_use_case = handle_webhook_use_case
         self.register_webhook_use_case = register_webhook_use_case
         self.remove_webhook_use_case = remove_webhook_use_case
@@ -137,6 +140,19 @@ class RuntimeApplicationService:
             "key": key,
             "matched_runs": result.run_ids,
         }
+
+    def handle_input(self, run_id: str, *, text: str) -> dict[str, Any]:
+        if self.handle_input_use_case is None:
+            raise ValueError("input handling is not configured")
+        result = self.handle_input_use_case.execute(run_id, text=text)
+        payload = {
+            "accepted": result.accepted,
+            "run_id": run_id,
+            "matched_runs": result.run_ids,
+        }
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
 
     def register_webhook(self, webhook: str) -> dict[str, Any]:
         result = self.register_webhook_use_case.execute(webhook)

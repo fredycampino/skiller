@@ -58,6 +58,27 @@ class StateStorePort(Protocol):
         dedup_key: str,
     ) -> str: ...
 
+    def create_input_wait(self, run_id: str, step_id: str) -> str: ...
+
+    def resolve_input_wait(self, wait_id: str) -> None: ...
+
+    def get_active_input_wait(self, run_id: str, step_id: str) -> dict[str, object] | None: ...
+
+    def create_input_event(
+        self,
+        run_id: str,
+        step_id: str,
+        payload: dict[str, object],
+    ) -> str: ...
+
+    def get_latest_input_event(
+        self,
+        run_id: str,
+        step_id: str,
+        *,
+        since_created_at: str | None = None,
+    ) -> dict[str, object] | None: ...
+
     def get_latest_webhook_event(
         self,
         webhook: str,

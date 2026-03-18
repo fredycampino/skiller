@@ -119,6 +119,7 @@ def _build_service(
     *,
     render_results: list[RenderCurrentStepResult],
     notify_results: list[StepExecutionResult] | None = None,
+    input_wait_results: list[StepExecutionResult] | None = None,
     wait_results: list[StepExecutionResult] | None = None,
     mcp_render_result: _FakeRenderMcpConfigResult | None = None,
     notify_error: Exception | None = None,
@@ -138,6 +139,7 @@ def _build_service(
         execute_notify_step_use_case=_FakeStepUseCase(notify_results, error=notify_error),
         execute_switch_step_use_case=_FakeStepUseCase(),
         execute_when_step_use_case=_FakeStepUseCase(),
+        execute_wait_input_step_use_case=_FakeStepUseCase(input_wait_results),
         execute_wait_webhook_step_use_case=_FakeStepUseCase(wait_results),
     )
     return service, complete_run_use_case, fail_run_use_case
@@ -176,6 +178,24 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
             )
         ],
         wait_results=[StepExecutionResult(status=StepExecutionStatus.WAITING)],
+    )
+
+    result = service.run("run-1")
+
+    assert result.status == RunWorkerStatus.WAITING
+    assert complete_run_use_case.calls == []
+    assert fail_run_use_case.calls == []
+
+
+def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
+    service, complete_run_use_case, fail_run_use_case = _build_service(
+        render_results=[
+            RenderCurrentStepResult(
+                status=CurrentStepStatus.READY,
+                current_step=_build_current_step(StepType.WAIT_INPUT),
+            )
+        ],
+        input_wait_results=[StepExecutionResult(status=StepExecutionStatus.WAITING)],
     )
 
     result = service.run("run-1")

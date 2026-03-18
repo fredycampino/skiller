@@ -6,6 +6,7 @@ from skiller.application.ports.skill_runner_port import SkillRunnerPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_type import StepType
 
 
 class CurrentStepStatus(str, Enum):
@@ -18,16 +19,6 @@ class CurrentStepStatus(str, Enum):
     FAILED = RunStatus.FAILED.value
     INVALID_SKILL = "INVALID_SKILL"
     INVALID_STEP = "INVALID_STEP"
-
-
-class StepType(str, Enum):
-    ASSIGN = "assign"
-    NOTIFY = "notify"
-    MCP = "mcp"
-    LLM_PROMPT = "llm_prompt"
-    SWITCH = "switch"
-    WHEN = "when"
-    WAIT_WEBHOOK = "wait_webhook"
 
 
 @dataclass(frozen=True)

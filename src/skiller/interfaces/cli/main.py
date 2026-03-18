@@ -198,6 +198,11 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
             _format_field("webhook", payload.get("webhook")),
             _format_field("key", payload.get("key")),
         ]
+    elif event_type in {"INPUT_WAITING", "INPUT_RESOLVED"}:
+        parts = [
+            _format_field("step", payload.get("step")),
+            _format_field("prompt", payload.get("prompt")),
+        ]
     elif event_type == "RUN_RESUMED":
         parts = [_format_field("source", payload.get("source"))]
     elif event_type == "RUN_FAILED":
@@ -289,6 +294,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch_parser = sub.add_parser("watch", help="Watch a run until it finishes or waits")
     watch_parser.add_argument("run_id")
+
+    input_parser = sub.add_parser("input", help="Human input operations")
+    input_sub = input_parser.add_subparsers(dest="input_command", required=True)
+
+    input_receive_parser = input_sub.add_parser(
+        "receive",
+        help="Receive human input into a waiting run",
+    )
+    input_receive_parser.add_argument("run_id", help="Run id")
+    input_receive_parser.add_argument("--text", required=True, help="Input text")
 
     webhook_parser = sub.add_parser("webhook", help="Webhook operations")
     webhook_sub = webhook_parser.add_subparsers(dest="webhook_command", required=True)
@@ -441,6 +456,20 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(result, indent=2))
         return 0 if result["status"] != RunStatus.FAILED.value else 1
+
+    if args.command == "input" and args.input_command == "receive":
+        result = controller.receive_input(args.run_id, text=args.text)
+        resumed_runs: list[str] = []
+        for run_id in result["matched_runs"]:
+            try:
+                WorkerProcessService().resume(run_id)
+            except OSError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            resumed_runs.append(run_id)
+        result["resumed_runs"] = resumed_runs
+        print(json.dumps(result, indent=2))
+        return 0 if result["accepted"] else 1
 
     if args.command == "webhook" and args.webhook_command == "receive":
         payload = _load_json_payload(args.json_inline, args.json_file)

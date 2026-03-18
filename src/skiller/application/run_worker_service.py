@@ -7,6 +7,7 @@ from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmProm
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
@@ -54,6 +55,7 @@ class RunWorkerService:
         execute_switch_step_use_case: ExecuteSwitchStepUseCase,
         execute_when_step_use_case: ExecuteWhenStepUseCase,
         execute_wait_webhook_step_use_case: ExecuteWaitWebhookStepUseCase,
+        execute_wait_input_step_use_case: ExecuteWaitInputStepUseCase | None = None,
     ) -> None:
         self.complete_run_use_case = complete_run_use_case
         self.fail_run_use_case = fail_run_use_case
@@ -65,6 +67,7 @@ class RunWorkerService:
         self.execute_notify_step_use_case = execute_notify_step_use_case
         self.execute_switch_step_use_case = execute_switch_step_use_case
         self.execute_when_step_use_case = execute_when_step_use_case
+        self.execute_wait_input_step_use_case = execute_wait_input_step_use_case
         self.execute_wait_webhook_step_use_case = execute_wait_webhook_step_use_case
 
     def run(self, run_id: str) -> RunWorkerResult:
@@ -124,6 +127,11 @@ class RunWorkerService:
                         current_step, render_result.mcp_config
                     )
 
+                elif is_ready and current_step.step_type == StepType.WAIT_INPUT:
+                    if self.execute_wait_input_step_use_case is None:
+                        raise ValueError("wait_input step executor is not configured")
+                    execution_result = self.execute_wait_input_step_use_case.execute(current_step)
+
                 elif is_ready and current_step.step_type == StepType.WAIT_WEBHOOK:
                     execution_result = self.execute_wait_webhook_step_use_case.execute(current_step)
 
@@ -139,7 +147,7 @@ class RunWorkerService:
                     error = (
                         f"Unsupported step type '{step_type}' in step '{step_id}': "
                         "only 'assign', 'llm_prompt', 'mcp', 'notify', 'switch', "
-                        "'wait_webhook' and 'when' are enabled in run loop"
+                        "'wait_input', 'wait_webhook' and 'when' are enabled in run loop"
                     )
                     self.fail_run_use_case.execute(run_id, error=error)
                     return RunWorkerResult(

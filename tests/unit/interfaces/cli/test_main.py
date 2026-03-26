@@ -16,6 +16,7 @@ class _FakeController:
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
         self.logs_calls: list[str] = []
         self.status_calls: list[str] = []
+        self.list_runs_calls: list[tuple[int, list[str] | None]] = []
         self.run_result = {"run_id": "run-1", "status": "CREATED"}
         self.start_worker_result = {
             "run_id": "run-1",
@@ -30,6 +31,23 @@ class _FakeController:
         self.status_results: list[dict[str, object]] = [
             {"id": "run-1", "status": "RUNNING"},
             {"id": "run-1", "status": "SUCCEEDED"},
+        ]
+        self.list_runs_result: list[dict[str, object]] = [
+            {
+                "id": "run-1",
+                "status": "WAITING",
+                "skill_ref": "webhook_signal_oracle",
+                "current": "start",
+                "updated_at": "2026-03-18 11:42:10",
+            }
+        ]
+        self.list_webhooks_result: list[dict[str, object]] = [
+            {
+                "webhook": "github-ci",
+                "secret": "secret-123",
+                "enabled": True,
+                "created_at": "2026-03-19 10:00:00",
+            }
         ]
 
     def initialize(self) -> None:
@@ -71,6 +89,15 @@ class _FakeController:
             return dict(self.status_results[0])
         return dict(self.status_results.pop(0))
 
+    def list_runs(
+        self,
+        *,
+        limit: int = 20,
+        statuses: list[str] | None = None,
+    ) -> list[dict[str, object]]:
+        self.list_runs_calls.append((limit, statuses))
+        return list(self.list_runs_result)
+
     def receive_webhook(
         self,
         webhook: str,
@@ -102,6 +129,9 @@ class _FakeController:
             "secret": "secret-123",
             "enabled": True,
         }
+
+    def list_webhooks(self) -> list[dict[str, object]]:
+        return list(self.list_webhooks_result)
 
     def remove_webhook(self, webhook: str) -> dict[str, object]:
         return {
@@ -238,6 +268,37 @@ def test_run_can_start_webhooks_when_waiting(
     assert '"status": "SUCCEEDED"' in captured.out
     assert '"webhooks_started": true' in captured.out
     assert '"webhooks_pid": 1234' in captured.out
+
+
+def test_run_waiting_result_includes_waiting_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    controller.status_results = [
+        {
+            "id": "run-1",
+            "status": "WAITING",
+            "current": "start",
+            "wait_type": "input",
+            "prompt": "Write a short summary",
+        }
+    ]
+    worker_process_service = _FakeWorkerProcessService()
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
+
+    exit_code = cli_main.main(["run", "wait_input_test"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"status": "WAITING"' in captured.out
+    assert '"wait_type": "input"' in captured.out
+    assert '"prompt": "Write a short summary"' in captured.out
 
 
 def test_run_fails_when_webhooks_requested_but_process_does_not_start(
@@ -422,6 +483,73 @@ def test_watch_prints_progress_and_final_status(
     assert '[123] WAITING step="start" webhook="test" key="42"' in captured.err
 
 
+def test_status_can_include_waiting_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    controller.status_results = [
+        {
+            "id": "run-1",
+            "skill_ref": "webhook_signal_oracle",
+            "status": "WAITING",
+            "current": "start",
+            "wait_type": "webhook",
+            "webhook": "market-signal",
+            "key": "btc-usd",
+        }
+    ]
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["status", "run-1"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"wait_type": "webhook"' in captured.out
+    assert '"webhook": "market-signal"' in captured.out
+    assert '"key": "btc-usd"' in captured.out
+
+
+def test_runs_lists_recent_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["runs", "--limit", "5"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.list_runs_calls == [(5, [])]
+    assert '"id": "run-1"' in captured.out
+    assert '"skill_ref": "webhook_signal_oracle"' in captured.out
+
+
+def test_runs_accepts_status_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["runs", "--status", "waiting", "--limit", "5"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.list_runs_calls == [(5, ["WAITING"])]
+    assert '"status": "WAITING"' in captured.out
+
+
 def test_webhook_receive_uses_webhook_and_key(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -488,6 +616,24 @@ def test_webhook_register(
     assert '"status": "REGISTERED"' in captured.out
     assert '"secret": "secret-123"' in captured.out
     assert '"webhook_url": "http://127.0.0.1:8001/webhooks/github-ci/{key}"' in captured.out
+
+
+def test_webhook_list(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["webhook", "list"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"webhook": "github-ci"' in captured.out
+    assert '"enabled": true' in captured.out
 
 
 def test_webhook_remove(

@@ -203,27 +203,42 @@ class SqliteStateStore(SqliteRepository):
             ).fetchone()
         if row is None:
             return None
-        skill_snapshot = json.loads(row["skill_snapshot_json"])
-        if not isinstance(skill_snapshot, dict):
-            skill_snapshot = {}
-        inputs_dict = json.loads(row["inputs_json"])
-        if not isinstance(inputs_dict, dict):
-            inputs_dict = {}
-        context = self._build_context(
-            run_id, inputs=inputs_dict, cancel_reason=row["cancel_reason"]
-        )
+        return self._build_run_from_row(row)
 
-        return Run(
-            id=row["id"],
-            skill_source=row["skill_source"],
-            skill_ref=row["skill_ref"],
-            skill_snapshot=skill_snapshot,
-            status=row["status"],
-            current=(str(row["current"]) if row["current"] is not None else None),
-            context=context,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+    def list_runs(self, *, limit: int = 20, statuses: list[str] | None = None) -> list[Run]:
+        normalized_limit = max(1, limit)
+        normalized_statuses = [
+            status.strip().upper()
+            for status in statuses or []
+            if status.strip()
+        ]
+        query = """
+            SELECT
+              id,
+              skill_source,
+              skill_ref,
+              skill_snapshot_json,
+              status,
+              current,
+              inputs_json,
+              cancel_reason,
+              created_at,
+              updated_at
+            FROM runs
+        """
+        params: list[Any] = []
+        if normalized_statuses:
+            placeholders = ", ".join("?" for _ in normalized_statuses)
+            query += f" WHERE status IN ({placeholders})"
+            params.extend(normalized_statuses)
+        query += """
+            ORDER BY updated_at DESC, rowid DESC
+            LIMIT ?
+        """
+        params.append(normalized_limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._build_run_from_row(row) for row in rows]
 
     def _ensure_runs_current_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()
@@ -238,6 +253,30 @@ class SqliteStateStore(SqliteRepository):
         if "current_step" not in column_names:
             return
         conn.execute("ALTER TABLE runs DROP COLUMN current_step")
+
+    def _build_run_from_row(self, row: sqlite3.Row) -> Run:
+        skill_snapshot = json.loads(row["skill_snapshot_json"])
+        if not isinstance(skill_snapshot, dict):
+            skill_snapshot = {}
+        inputs_dict = json.loads(row["inputs_json"])
+        if not isinstance(inputs_dict, dict):
+            inputs_dict = {}
+        run_id = str(row["id"])
+        context = self._build_context(
+            run_id, inputs=inputs_dict, cancel_reason=row["cancel_reason"]
+        )
+
+        return Run(
+            id=run_id,
+            skill_source=row["skill_source"],
+            skill_ref=row["skill_ref"],
+            skill_snapshot=skill_snapshot,
+            status=row["status"],
+            current=(str(row["current"]) if row["current"] is not None else None),
+            context=context,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     def append_event(
         self, event_type: str, payload: dict[str, Any], run_id: str | None = None

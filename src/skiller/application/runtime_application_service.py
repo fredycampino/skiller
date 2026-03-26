@@ -8,6 +8,7 @@ from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
 from skiller.application.use_cases.resume_run import ResumeRunStatus, ResumeRunUseCase
@@ -22,6 +23,7 @@ class RuntimeApplicationService:
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
         handle_webhook_use_case: HandleWebhookUseCase,
+        list_webhooks_use_case: ListWebhooksUseCase,
         register_webhook_use_case: RegisterWebhookUseCase,
         remove_webhook_use_case: RemoveWebhookUseCase,
         resume_run_use_case: ResumeRunUseCase,
@@ -35,6 +37,7 @@ class RuntimeApplicationService:
         self.get_start_step_use_case = get_start_step_use_case
         self.handle_input_use_case = handle_input_use_case
         self.handle_webhook_use_case = handle_webhook_use_case
+        self.list_webhooks_use_case = list_webhooks_use_case
         self.register_webhook_use_case = register_webhook_use_case
         self.remove_webhook_use_case = remove_webhook_use_case
         self.resume_run_use_case = resume_run_use_case
@@ -167,6 +170,10 @@ class RuntimeApplicationService:
         if result.error is not None:
             payload["error"] = result.error
         return payload
+
+    def list_webhooks(self) -> list[dict[str, Any]]:
+        result = self.list_webhooks_use_case.execute()
+        return result.webhooks
 
     def remove_webhook(self, webhook: str) -> dict[str, Any]:
         result = self.remove_webhook_use_case.execute(webhook)

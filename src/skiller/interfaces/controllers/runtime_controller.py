@@ -56,6 +56,9 @@ class RuntimeController:
     def register_webhook(self, webhook: str) -> dict[str, Any]:
         return self.runtime_service.register_webhook(webhook)
 
+    def list_webhooks(self) -> list[dict[str, Any]]:
+        return self.runtime_service.list_webhooks()
+
     def remove_webhook(self, webhook: str) -> dict[str, Any]:
         return self.runtime_service.remove_webhook(webhook)
 
@@ -64,3 +67,11 @@ class RuntimeController:
 
     def logs(self, run_id: str) -> list[dict[str, Any]]:
         return self.query_service.get_logs(run_id)
+
+    def list_runs(
+        self,
+        *,
+        limit: int = 20,
+        statuses: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.query_service.list_runs(limit=limit, statuses=statuses)

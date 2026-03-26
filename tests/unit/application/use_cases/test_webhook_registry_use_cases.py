@@ -1,3 +1,4 @@
+from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import (
     RegisterWebhookStatus,
     RegisterWebhookUseCase,
@@ -14,6 +15,9 @@ class _FakeRegistry:
 
     def get_webhook_registration(self, webhook: str) -> dict[str, object] | None:
         return self.records.get(webhook)
+
+    def list_webhook_registrations(self) -> list[dict[str, object]]:
+        return list(self.records.values())
 
     def remove_webhook(self, webhook: str) -> bool:
         return self.records.pop(webhook, None) is not None
@@ -57,3 +61,13 @@ def test_remove_webhook_returns_not_found() -> None:
 
     assert result.status == RemoveWebhookStatus.NOT_FOUND
     assert result.error == "Webhook 'github-ci' is not registered"
+
+
+def test_list_webhooks_returns_registered_channels() -> None:
+    registry = _FakeRegistry()
+    registry.register_webhook("github-ci", "secret-1")
+    registry.register_webhook("market-signal", "secret-2")
+
+    result = ListWebhooksUseCase(registry).execute()
+
+    assert [item["webhook"] for item in result.webhooks] == ["github-ci", "market-signal"]

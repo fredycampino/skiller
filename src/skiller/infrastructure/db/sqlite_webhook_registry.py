@@ -33,6 +33,25 @@ class SqliteWebhookRegistry(SqliteRepository):
             "created_at": row["created_at"],
         }
 
+    def list_webhook_registrations(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT webhook, secret, enabled, created_at
+                FROM webhook_registrations
+                ORDER BY created_at DESC, webhook ASC
+                """
+            ).fetchall()
+        return [
+            {
+                "webhook": row["webhook"],
+                "secret": row["secret"],
+                "enabled": bool(row["enabled"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     def remove_webhook(self, webhook: str) -> bool:
         with self._connect() as conn:
             cursor = conn.execute("DELETE FROM webhook_registrations WHERE webhook = ?", (webhook,))

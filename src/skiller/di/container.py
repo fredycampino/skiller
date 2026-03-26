@@ -17,9 +17,12 @@ from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCa
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.get_runs import GetRunsUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.get_waiting_metadata import GetWaitingMetadataUseCase
 from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
@@ -62,6 +65,7 @@ def build_runtime_container(
     get_start_step_use_case = GetStartStepUseCase(store=store)
     handle_input_use_case = HandleInputUseCase(store=store)
     handle_webhook_use_case = HandleWebhookUseCase(store=store)
+    list_webhooks_use_case = ListWebhooksUseCase(registry=webhook_registry)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
 
@@ -78,6 +82,11 @@ def build_runtime_container(
     resume_run_use_case = ResumeRunUseCase(store=store)
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(store)
+    get_runs_use_case = GetRunsUseCase(store)
+    get_waiting_metadata_use_case = GetWaitingMetadataUseCase(
+        store=store,
+        skill_runner=skill_runner,
+    )
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
@@ -95,6 +104,8 @@ def build_runtime_container(
     query_service = RunQueryService(
         get_run_status_use_case=get_run_status_use_case,
         get_run_logs_use_case=get_run_logs_use_case,
+        get_runs_use_case=get_runs_use_case,
+        get_waiting_metadata_use_case=get_waiting_metadata_use_case,
     )
 
     runtime_service = RuntimeApplicationService(
@@ -104,6 +115,7 @@ def build_runtime_container(
         get_start_step_use_case=get_start_step_use_case,
         handle_input_use_case=handle_input_use_case,
         handle_webhook_use_case=handle_webhook_use_case,
+        list_webhooks_use_case=list_webhooks_use_case,
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,
         resume_run_use_case=resume_run_use_case,

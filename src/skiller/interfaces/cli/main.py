@@ -44,6 +44,29 @@ def _load_json_payload(inline_json: str | None, json_file: str | None) -> dict:
     return payload
 
 
+def _normalize_status_filters(statuses: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    for status in statuses or []:
+        value = status.strip().upper()
+        if not value:
+            continue
+        normalized.append(value)
+    return normalized
+
+
+def _merge_waiting_metadata(
+    run_result: dict[str, Any],
+    status_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if status_payload is None:
+        return run_result
+
+    for field in ("current", "wait_type", "webhook", "key", "prompt"):
+        if field in status_payload:
+            run_result[field] = status_payload[field]
+    return run_result
+
+
 def _resolve_run_target(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
@@ -289,6 +312,10 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
 
+    runs_parser = sub.add_parser("runs", help="List recent runs")
+    runs_parser.add_argument("--limit", type=int, default=20)
+    runs_parser.add_argument("--status", action="append", default=[])
+
     logs_parser = sub.add_parser("logs", help="List run events")
     logs_parser.add_argument("run_id")
 
@@ -313,6 +340,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Register a webhook channel and generate its secret",
     )
     register_parser.add_argument("webhook", help="Webhook channel name")
+
+    webhook_sub.add_parser("list", help="List registered webhook channels")
 
     remove_parser = webhook_sub.add_parser("remove", help="Remove a webhook channel registration")
     remove_parser.add_argument("webhook", help="Webhook channel name")
@@ -383,6 +412,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(str(exc), file=sys.stderr)
                 return 1
             run_result["status"] = watched["status"]
+            if watched["status"] == RunStatus.WAITING.value:
+                run_result = _merge_waiting_metadata(
+                    run_result,
+                    controller.status(run_result["run_id"]),
+                )
         if args.logs and "logs" not in run_result:
             run_result["logs"] = controller.logs(run_result["run_id"])
         print(json.dumps(run_result, indent=2))
@@ -443,6 +477,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(run, indent=2))
         return 0
 
+    if args.command == "runs":
+        runs = controller.list_runs(
+            limit=args.limit,
+            statuses=_normalize_status_filters(args.status),
+        )
+        print(json.dumps(runs, indent=2))
+        return 0
+
     if args.command == "logs":
         events = controller.logs(args.run_id)
         print(json.dumps(events, indent=2))
@@ -500,6 +542,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "REGISTERED" else 1
+
+    if args.command == "webhook" and args.webhook_command == "list":
+        result = controller.list_webhooks()
+        print(json.dumps(result, indent=2))
+        return 0
 
     if args.command == "webhook" and args.webhook_command == "remove":
         result = controller.remove_webhook(args.webhook)

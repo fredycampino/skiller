@@ -21,6 +21,7 @@ from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
@@ -92,6 +93,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
+        list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),

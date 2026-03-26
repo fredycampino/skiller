@@ -4,6 +4,7 @@ import pytest
 
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.list_webhooks import ListWebhooksResult
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus
 from skiller.application.use_cases.resume_run import ResumeRunResult, ResumeRunStatus
 
@@ -128,6 +129,20 @@ class _FakeRunWorkerService:
         return SimpleNamespace(run_id=run_id, status=self.final_status, error=None)
 
 
+class _FakeListWebhooksUseCase:
+    def execute(self) -> ListWebhooksResult:
+        return ListWebhooksResult(
+            webhooks=[
+                {
+                    "webhook": "github-ci",
+                    "secret": "secret-1",
+                    "enabled": True,
+                    "created_at": "2026-03-19 10:00:00",
+                }
+            ]
+        )
+
+
 def _build_service(
     *,
     get_run_status_use_case: _FakeGetRunStatusUseCase | None = None,
@@ -156,6 +171,7 @@ def _build_service(
         get_start_step_use_case=get_start_step_use_case,
         handle_input_use_case=handle_input_use_case or _FakeHandleInputUseCase(),
         handle_webhook_use_case=handle_webhook_use_case or _FakeHandleWebhookUseCase(),
+        list_webhooks_use_case=_FakeListWebhooksUseCase(),
         register_webhook_use_case=_FakeRegisterWebhookUseCase(),
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
         resume_run_use_case=_FakeResumeRunUseCase(),
@@ -250,3 +266,18 @@ def test_handle_input_only_returns_matched_runs() -> None:
         "matched_runs": ["run-1"],
     }
     assert run_worker_service.calls == []
+
+
+def test_list_webhooks_returns_registered_channels() -> None:
+    service, _create_run_use_case, _get_start_step_use_case, _run_worker_service = _build_service()
+
+    result = service.list_webhooks()
+
+    assert result == [
+        {
+            "webhook": "github-ci",
+            "secret": "secret-1",
+            "enabled": True,
+            "created_at": "2026-03-19 10:00:00",
+        }
+    ]

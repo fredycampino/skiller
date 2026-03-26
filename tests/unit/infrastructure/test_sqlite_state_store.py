@@ -3,7 +3,9 @@ import sqlite3
 import pytest
 
 from skiller.domain.run_context_model import RunContext
+from skiller.domain.run_model import RunStatus
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
+from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -171,3 +173,81 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
 
     with pytest.raises(ValueError, match=f"Run '{run_id}' already exists"):
         store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)
+
+
+def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
+    db_path = tmp_path / "runs.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    first_run_id = "550e8400-e29b-41d4-a716-446655440010"
+    second_run_id = "550e8400-e29b-41d4-a716-446655440011"
+
+    store.create_run(
+        "internal",
+        "notify_test",
+        {"steps": [{"id": "start", "type": "notify"}]},
+        RunContext(inputs={}, results={}),
+        run_id=first_run_id,
+    )
+    store.create_run(
+        "internal",
+        "wait_input_test",
+        {"steps": [{"id": "start", "type": "wait_input"}]},
+        RunContext(inputs={}, results={}),
+        run_id=second_run_id,
+    )
+    store.update_run(first_run_id, status=RunStatus.SUCCEEDED)
+    store.update_run(second_run_id, status=RunStatus.WAITING)
+
+    runs = store.list_runs(limit=20)
+
+    assert [run.id for run in runs] == [second_run_id, first_run_id]
+    assert runs[0].skill_ref == "wait_input_test"
+    assert runs[1].skill_ref == "notify_test"
+
+
+def test_list_runs_can_filter_by_status(tmp_path) -> None:
+    db_path = tmp_path / "runs-filter.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    waiting_run_id = "550e8400-e29b-41d4-a716-446655440012"
+    failed_run_id = "550e8400-e29b-41d4-a716-446655440013"
+
+    store.create_run(
+        "internal",
+        "wait_input_test",
+        {"steps": [{"id": "start", "type": "wait_input"}]},
+        RunContext(inputs={}, results={}),
+        run_id=waiting_run_id,
+    )
+    store.create_run(
+        "internal",
+        "pull_request",
+        {"steps": [{"id": "start", "type": "mcp"}]},
+        RunContext(inputs={}, results={}),
+        run_id=failed_run_id,
+    )
+    store.update_run(waiting_run_id, status=RunStatus.WAITING)
+    store.update_run(failed_run_id, status=RunStatus.FAILED)
+
+    runs = store.list_runs(limit=20, statuses=["waiting"])
+
+    assert [run.id for run in runs] == [waiting_run_id]
+    assert runs[0].status == RunStatus.WAITING.value
+
+
+def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:
+    db_path = tmp_path / "webhooks.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    registry = SqliteWebhookRegistry(str(db_path))
+
+    registry.register_webhook("github-ci", "secret-1")
+    registry.register_webhook("market-signal", "secret-2")
+
+    webhooks = registry.list_webhook_registrations()
+
+    assert [item["webhook"] for item in webhooks] == ["github-ci", "market-signal"]
+    assert all("created_at" in item for item in webhooks)

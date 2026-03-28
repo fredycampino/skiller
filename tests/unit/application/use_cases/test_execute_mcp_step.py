@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import McpResult, StepExecutionStatus
 from skiller.domain.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
@@ -93,6 +93,16 @@ def test_execute_mcp_step_moves_current_to_explicit_next() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == McpResult(
+        ok=True,
+        text="chrome-mcp.navigate_page completed successfully.",
+        data={
+            "server": "chrome-mcp",
+            "tool": "navigate_page",
+            "args": {"url": "https://example.com"},
+            "ok": True,
+        },
+    )
     assert mcp.calls == [
         {
             "server": "chrome-mcp",
@@ -107,9 +117,7 @@ def test_execute_mcp_step_moves_current_to_explicit_next() -> None:
     assert store.updated[0]["run_id"] == "run-1"
     assert store.updated[0]["status"] == RunStatus.RUNNING
     assert store.updated[0]["current"] == "done"
-    assert store.events[0]["type"] == "MCP_RESULT"
-    assert store.events[0]["run_id"] == "run-1"
-    assert store.events[0]["payload"]["mcp"] == "chrome-mcp"
+    assert store.events == []
 
 
 def test_execute_mcp_step_marks_completed_when_next_is_missing() -> None:
@@ -137,6 +145,16 @@ def test_execute_mcp_step_marks_completed_when_next_is_missing() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
+    assert result.result == McpResult(
+        ok=True,
+        text="chrome-mcp.navigate_page completed successfully.",
+        data={
+            "server": "chrome-mcp",
+            "tool": "navigate_page",
+            "args": {"url": "https://example.com"},
+            "ok": True,
+        },
+    )
     assert store.updated[0]["current"] is None
 
 
@@ -165,8 +183,7 @@ def test_execute_mcp_step_raises_and_does_not_advance_on_mcp_error() -> None:
         )
 
     assert store.updated == []
-    assert store.events[0]["type"] == "MCP_RESULT"
-    assert store.events[0]["payload"]["result"]["ok"] is False
+    assert store.events == []
     assert context.results["create_file"]["ok"] is False
 
 

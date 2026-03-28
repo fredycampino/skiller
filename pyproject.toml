@@ -15,6 +15,7 @@ dependencies = [
   "fastapi>=0.115.0",
   "uvicorn>=0.30.0",
   "fastmcp>=2.10.0",
+  "prompt_toolkit>=3.0.36",
 ]
 
 [project.optional-dependencies]

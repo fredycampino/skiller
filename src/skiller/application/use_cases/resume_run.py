@@ -28,9 +28,4 @@ class ResumeRunUseCase:
             return ResumeRunResult(status=ResumeRunStatus.NOT_WAITING)
 
         self.store.update_run(run_id, status=RunStatus.RUNNING)
-        self.store.append_event(
-            "RUN_RESUMED",
-            {"source": source},
-            run_id=run_id,
-        )
         return ResumeRunResult(status=ResumeRunStatus.RESUMED)

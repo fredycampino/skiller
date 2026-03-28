@@ -17,6 +17,7 @@ class UiRun:
     error: str | None = None
     last_payload: dict[str, Any] = field(default_factory=dict)
     logs: list[dict[str, Any]] = field(default_factory=list)
+    seen_event_ids: set[str] = field(default_factory=set)
 
 
 @dataclass

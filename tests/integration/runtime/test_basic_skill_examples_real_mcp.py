@@ -13,6 +13,7 @@ import pytest
 
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.create_run import CreateRunUseCase
@@ -61,6 +62,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     fail_run_use_case = FailRunUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -74,6 +76,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
@@ -87,6 +90,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
@@ -163,9 +167,13 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
         assert run.status == "SUCCEEDED"
         assert file_path.read_text(encoding="utf-8") == "hola-e2e"
         events = store.list_events(run_result["run_id"])
-        mcp_event = next(event for event in events if event["type"] == "MCP_RESULT")
+        mcp_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "mcp"
+        )
         assert mcp_event["payload"]["result"]["ok"] is True
-        assert mcp_event["payload"]["tool"] == "files_action"
+        assert mcp_event["payload"]["result"]["data"]["tool"] == "files_action"
 
 
 def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
@@ -185,6 +193,10 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
         assert run is not None
         assert run.status == "SUCCEEDED"
         events = store.list_events(run_result["run_id"])
-        mcp_event = next(event for event in events if event["type"] == "MCP_RESULT")
+        mcp_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "mcp"
+        )
         assert mcp_event["payload"]["result"]["ok"] is True
-        assert mcp_event["payload"]["tool"] == "ping"
+        assert mcp_event["payload"]["result"]["data"]["tool"] == "ping"

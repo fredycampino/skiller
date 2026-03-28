@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 from skiller.application.run_worker_service import RunWorkerService, RunWorkerStatus
+from skiller.application.use_cases.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.render_current_step import (
     CurrentStep,
     CurrentStepStatus,
@@ -11,8 +12,11 @@ from skiller.application.use_cases.render_current_step import (
 )
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigStatus
 from skiller.application.use_cases.step_execution_result import (
+    NotifyResult,
     StepExecutionResult,
     StepExecutionStatus,
+    WaitInputResult,
+    WaitWebhookResult,
 )
 from skiller.domain.run_context_model import RunContext
 
@@ -45,6 +49,26 @@ class _FakeFailRunUseCase:
 
     def execute(self, run_id: str, *, error: str) -> None:
         self.calls.append({"run_id": run_id, "error": error})
+
+
+class _FakeAppendRuntimeEventUseCase:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def execute(
+        self,
+        run_id: str,
+        *,
+        event_type: RuntimeEventType,
+        payload: dict[str, object],
+    ) -> None:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "event_type": event_type,
+                "payload": payload,
+            }
+        )
 
 
 class _FakeStepUseCase:
@@ -126,9 +150,11 @@ def _build_service(
 ) -> tuple[RunWorkerService, _FakeCompleteRunUseCase, _FakeFailRunUseCase]:
     complete_run_use_case = _FakeCompleteRunUseCase()
     fail_run_use_case = _FakeFailRunUseCase()
+    append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=_FakeRenderCurrentStepUseCase(render_results),
         render_mcp_config_use_case=_FakeRenderMcpConfigUseCase(mcp_render_result),
         execute_assign_step_use_case=_FakeStepUseCase(),
@@ -142,6 +168,7 @@ def _build_service(
         execute_wait_input_step_use_case=_FakeStepUseCase(input_wait_results),
         execute_wait_webhook_step_use_case=_FakeStepUseCase(wait_results),
     )
+    service.append_runtime_event_use_case = append_runtime_event_use_case
     return service, complete_run_use_case, fail_run_use_case
 
 
@@ -167,6 +194,13 @@ def test_worker_completes_run_when_renderer_reports_done() -> None:
     assert result.status == RunWorkerStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_FINISHED,
+            "payload": {"status": "SUCCEEDED"},
+        }
+    ]
 
 
 def test_worker_returns_waiting_when_wait_step_blocks() -> None:
@@ -177,7 +211,12 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
                 current_step=_build_current_step(StepType.WAIT_WEBHOOK),
             )
         ],
-        wait_results=[StepExecutionResult(status=StepExecutionStatus.WAITING)],
+        wait_results=[
+            StepExecutionResult(
+                status=StepExecutionStatus.WAITING,
+                result=WaitWebhookResult(webhook="github", key="pr-1"),
+            )
+        ],
     )
 
     result = service.run("run-1")
@@ -185,6 +224,22 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
     assert result.status == RunWorkerStatus.WAITING
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "wait_webhook"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_WAITING,
+            "payload": {
+                "step": "start",
+                "step_type": "wait_webhook",
+                "result": {"webhook": "github", "key": "pr-1", "payload": None},
+            },
+        },
+    ]
 
 
 def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
@@ -195,7 +250,12 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
                 current_step=_build_current_step(StepType.WAIT_INPUT),
             )
         ],
-        input_wait_results=[StepExecutionResult(status=StepExecutionStatus.WAITING)],
+        input_wait_results=[
+            StepExecutionResult(
+                status=StepExecutionStatus.WAITING,
+                result=WaitInputResult(prompt="Write a message."),
+            )
+        ],
     )
 
     result = service.run("run-1")
@@ -203,6 +263,26 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
     assert result.status == RunWorkerStatus.WAITING
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "wait_input"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_WAITING,
+            "payload": {
+                "step": "start",
+                "step_type": "wait_input",
+                "result": {
+                    "prompt": "Write a message.",
+                    "payload": None,
+                    "input_event_id": None,
+                },
+            },
+        },
+    ]
 
 
 def test_worker_loops_on_next_and_then_completes() -> None:
@@ -218,8 +298,15 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             ),
         ],
         notify_results=[
-            StepExecutionResult(status=StepExecutionStatus.NEXT, next_step_id="done"),
-            StepExecutionResult(status=StepExecutionStatus.COMPLETED),
+            StepExecutionResult(
+                status=StepExecutionStatus.NEXT,
+                next_step_id="done",
+                result=NotifyResult(message="first"),
+            ),
+            StepExecutionResult(
+                status=StepExecutionStatus.COMPLETED,
+                result=NotifyResult(message="done"),
+            ),
         ],
     )
 
@@ -228,6 +315,42 @@ def test_worker_loops_on_next_and_then_completes() -> None:
     assert result.status == RunWorkerStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "notify"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_SUCCESS,
+            "payload": {
+                "step": "start",
+                "step_type": "notify",
+                "result": {"message": "first"},
+                "next": "done",
+            },
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "done", "step_type": "notify"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_SUCCESS,
+            "payload": {
+                "step": "done",
+                "step_type": "notify",
+                "result": {"message": "done"},
+            },
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_FINISHED,
+            "payload": {"status": "SUCCEEDED"},
+        },
+    ]
 
 
 def test_worker_fails_invalid_skill_state() -> None:
@@ -265,6 +388,30 @@ def test_worker_fails_when_step_executor_raises() -> None:
     assert result.error == "notify failed"
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == [{"run_id": "run-1", "error": "notify failed"}]
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "notify"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_ERROR,
+            "payload": {
+                "step": "start",
+                "step_type": "notify",
+                "error": "notify failed",
+            },
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_FINISHED,
+            "payload": {
+                "status": "FAILED",
+                "error": "notify failed",
+            },
+        },
+    ]
 
 
 def test_worker_fails_when_step_type_is_not_supported() -> None:

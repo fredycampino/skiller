@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import AssignResult, StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -64,6 +64,14 @@ def test_assign_step_persists_values_and_moves_current_to_explicit_next() -> Non
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == AssignResult(
+        value={
+            "action": "retry",
+            "summary": "boom",
+            "meta": {"source": "assign"},
+            "tags": ["triage", "retry"],
+        }
+    )
     assert current_step.context.results["prepare"] == {
         "action": "retry",
         "summary": "boom",
@@ -78,21 +86,7 @@ def test_assign_step_persists_values_and_moves_current_to_explicit_next() -> Non
             "context": current_step.context,
         }
     ]
-    assert store.events == [
-        {
-            "type": "ASSIGN_RESULT",
-            "payload": {
-                "step": "prepare",
-                "result": {
-                    "action": "retry",
-                    "summary": "boom",
-                    "meta": {"source": "assign"},
-                    "tags": ["triage", "retry"],
-                },
-            },
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 def test_assign_step_marks_completed_when_next_is_missing() -> None:
@@ -104,6 +98,7 @@ def test_assign_step_marks_completed_when_next_is_missing() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
+    assert result.result == AssignResult(value={"action": "retry"})
     assert store.updated_runs == [
         {
             "run_id": "run-1",

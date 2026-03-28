@@ -6,6 +6,7 @@ from skiller.application.ports.llm_port import LLMPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
+    LlmPromptResult,
     StepExecutionResult,
     StepExecutionStatus,
 )
@@ -45,25 +46,20 @@ class ExecuteLlmPromptStepUseCase:
 
         if response.get("ok") is False:
             error = str(response.get("error", "")).strip() or f"LLM step '{step_id}' failed"
-            self._append_error_event(current_step=current_step, message=error, response=response)
             raise ValueError(error)
 
         try:
             parsed = self._parse_response_payload(step_id=step_id, response=response)
             self._validate_schema(schema=schema, value=parsed, path="$")
-        except ValueError as exc:
-            self._append_error_event(current_step=current_step, message=str(exc), response=response)
+        except ValueError:
             raise
 
         current_step.context.results[step_id] = parsed
-        self.store.append_event(
-            "LLM_PROMPT_RESULT",
-            {
-                "step": step_id,
-                "result": parsed,
-                "model": response.get("model"),
-            },
-            run_id=current_step.run_id,
+
+        result_payload = LlmPromptResult(
+            text=self._build_result_text(parsed),
+            json=parsed if isinstance(parsed, dict) else None,
+            model=str(response.get("model", "")).strip() or None,
         )
 
         raw_next = step.get("next")
@@ -73,7 +69,10 @@ class ExecuteLlmPromptStepUseCase:
                 status=RunStatus.RUNNING,
                 context=current_step.context,
             )
-            return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+            return StepExecutionResult(
+                status=StepExecutionStatus.COMPLETED,
+                result=result_payload,
+            )
 
         next_step_id = str(raw_next).strip()
         if not next_step_id:
@@ -88,6 +87,7 @@ class ExecuteLlmPromptStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=result_payload,
         )
 
     def _build_messages(self, *, system: str, prompt: str) -> list[dict[str, str]]:
@@ -96,6 +96,17 @@ class ExecuteLlmPromptStepUseCase:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         return messages
+
+    def _build_result_text(self, value: Any) -> str:
+        if isinstance(value, dict):
+            if "text" in value and isinstance(value["text"], str):
+                return value["text"]
+            if "reply" in value and isinstance(value["reply"], str):
+                return value["reply"]
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        if isinstance(value, list):
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        return str(value)
 
     def _parse_response_payload(self, *, step_id: str, response: dict[str, Any]) -> Any:
         if "json" in response:
@@ -212,50 +223,6 @@ class ExecuteLlmPromptStepUseCase:
 
     def _is_number(self, value: Any) -> bool:
         return isinstance(value, int | float) and not isinstance(value, bool)
-
-    def _append_error_event(
-        self,
-        *,
-        current_step: CurrentStep,
-        message: str,
-        response: dict[str, Any],
-    ) -> None:
-        step_id = current_step.step_id
-        model = response.get("model")
-        formatted_model = model.strip() if isinstance(model, str) and model.strip() else None
-
-        if "json" in response:
-            raw_response = self._truncate_debug_value(response["json"])
-        elif "content" in response:
-            raw_response = self._truncate_debug_value(response["content"])
-        else:
-            raw_response = None
-
-        payload: dict[str, Any] = {
-            "step": step_id,
-            "error": message,
-        }
-        if formatted_model is not None:
-            payload["model"] = formatted_model
-        if raw_response is not None:
-            payload["raw_response"] = raw_response
-
-        self.store.append_event(
-            "LLM_PROMPT_ERROR",
-            payload,
-            run_id=current_step.run_id,
-        )
-
-    def _truncate_debug_value(self, value: Any) -> str:
-        if isinstance(value, str):
-            raw = value
-        else:
-            raw = json.dumps(value, ensure_ascii=True)
-
-        compact = raw.replace("\n", "\\n")
-        if len(compact) <= 300:
-            return compact
-        return f"{compact[:300]}..."
 
     def _strip_json_fence(self, content: str) -> str:
         match = _JSON_FENCE_RE.match(content)

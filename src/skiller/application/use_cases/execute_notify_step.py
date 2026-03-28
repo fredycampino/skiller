@@ -1,6 +1,7 @@
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
+    NotifyResult,
     StepExecutionResult,
     StepExecutionStatus,
 )
@@ -18,9 +19,6 @@ class ExecuteNotifyStepUseCase:
 
         message = str(step.get("message", ""))
         context.results[step_id] = {"ok": True, "message": message}
-        self.store.append_event(
-            "NOTIFY", {"step": step_id, "message": message}, run_id=next_step.run_id
-        )
 
         raw_next = step.get("next")
         if raw_next is None:
@@ -29,7 +27,10 @@ class ExecuteNotifyStepUseCase:
                 status=RunStatus.RUNNING,
                 context=context,
             )
-            return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+            return StepExecutionResult(
+                status=StepExecutionStatus.COMPLETED,
+                result=NotifyResult(message=message),
+            )
 
         next_step_id = str(raw_next).strip()
         if not next_step_id:
@@ -44,4 +45,5 @@ class ExecuteNotifyStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=NotifyResult(message=message),
         )

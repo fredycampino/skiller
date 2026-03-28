@@ -109,9 +109,10 @@ def _watch_run(
     run_id: str,
     *,
     initial_status: str = RunStatus.CREATED.value,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     last_status = ""
     seen_event_ids: set[str] = set()
+    collected_events: list[dict[str, Any]] = []
 
     if initial_status:
         _print_watch_status(run_id, initial_status)
@@ -128,6 +129,7 @@ def _watch_run(
             if not event_id or event_id in seen_event_ids:
                 continue
             seen_event_ids.add(event_id)
+            collected_events.append(dict(event))
             formatted_event = _format_watch_event(run_id, event)
             if formatted_event is None:
                 continue
@@ -142,6 +144,7 @@ def _watch_run(
             return {
                 "run_id": str(run.get("id", run_id)),
                 "status": status,
+                "events": collected_events,
             }
 
         time.sleep(0.1)
@@ -153,7 +156,7 @@ def _print_watch_status(run_id: str, status: str) -> None:
 
 def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
     event_type = str(event.get("type", "")).strip().upper()
-    if not event_type or event_type == "RUN_FINISHED":
+    if not event_type:
         return None
 
     payload = event.get("payload", {})
@@ -163,73 +166,45 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
     label = event_type
     parts: list[str] = []
 
-    if event_type == "NOTIFY":
+    if event_type == "RUN_CREATE":
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("message", payload.get("message")),
+            _format_field("skill", payload.get("skill")),
+            _format_field("skill_source", payload.get("skill_source")),
         ]
-    elif event_type == "ASSIGN_RESULT":
-        label = "ASSIGN"
+    elif event_type == "RUN_RESUME":
+        parts = [_format_field("source", payload.get("source"))]
+    elif event_type == "STEP_STARTED":
         parts = [
             _format_field("step", payload.get("step")),
+            _format_field("step_type", payload.get("step_type")),
+        ]
+    elif event_type == "STEP_SUCCESS":
+        parts = [
+            _format_field("step", payload.get("step")),
+            _format_field("step_type", payload.get("step_type")),
             _format_field("result", payload.get("result")),
+            _format_field("next", payload.get("next")),
         ]
-    elif event_type == "LLM_PROMPT_RESULT":
-        label = "LLM_PROMPT"
+    elif event_type == "STEP_ERROR":
         parts = [
             _format_field("step", payload.get("step")),
-            _format_field("model", payload.get("model")),
-            _format_field("result", payload.get("result")),
-        ]
-    elif event_type == "LLM_PROMPT_ERROR":
-        parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("model", payload.get("model")),
+            _format_field("step_type", payload.get("step_type")),
             _format_field("error", payload.get("error")),
         ]
-    elif event_type == "MCP_RESULT":
-        label = "MCP"
-        result = payload.get("result")
+    elif event_type == "RUN_WAITING":
         parts = [
             _format_field("step", payload.get("step")),
-            _format_field("mcp", payload.get("mcp")),
-            _format_field("tool", payload.get("tool")),
+            _format_field("step_type", payload.get("step_type")),
+            _format_field("result", payload.get("result")),
         ]
-        if isinstance(result, dict):
-            if "ok" in result:
-                parts.append(_format_field("ok", result.get("ok")))
-            if result.get("ok") is False and "error" in result:
-                parts.append(_format_field("error", result.get("error")))
-    elif event_type == "SWITCH_DECISION":
-        label = "SWITCH"
+    elif event_type == "RUN_FINISHED":
+        status = str(payload.get("status", "")).upper()
+        if status == RunStatus.SUCCEEDED.value:
+            return None
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("value", payload.get("value")),
-            _format_field("next", payload.get("next")),
+            _format_field("status", payload.get("status")),
+            _format_field("error", payload.get("error")),
         ]
-    elif event_type == "WHEN_DECISION":
-        label = "WHEN"
-        parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("op", payload.get("op")),
-            _format_field("right", payload.get("right")),
-            _format_field("next", payload.get("next")),
-        ]
-    elif event_type in {"WAITING", "WAIT_RESOLVED"}:
-        parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("webhook", payload.get("webhook")),
-            _format_field("key", payload.get("key")),
-        ]
-    elif event_type in {"INPUT_WAITING", "INPUT_RESOLVED"}:
-        parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("prompt", payload.get("prompt")),
-        ]
-    elif event_type == "RUN_RESUMED":
-        parts = [_format_field("source", payload.get("source"))]
-    elif event_type == "RUN_FAILED":
-        parts = [_format_field("error", payload.get("error"))]
     else:
         parts = [_format_field(key, value) for key, value in payload.items()]
 
@@ -264,7 +239,7 @@ def _compact_value(value: Any) -> str:
     if isinstance(value, str):
         raw = json.dumps(value, ensure_ascii=True)
     else:
-        raw = json.dumps(value, ensure_ascii=True, sort_keys=True)
+        raw = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     if len(raw) <= 120:
         return raw
     return f"{raw[:117]}..."

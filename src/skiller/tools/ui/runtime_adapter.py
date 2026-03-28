@@ -72,13 +72,12 @@ def _run_json_command(*args: str) -> Any:
 def _run_watch_command(run_id: str) -> dict[str, Any]:
     completed = _run_cli_command("watch", run_id)
 
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "watch command failed"
-        raise RuntimeError(detail)
-
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or "watch command failed"
+            raise RuntimeError(detail) from exc
         raise RuntimeError("watch command returned invalid JSON") from exc
 
     if not isinstance(payload, dict):

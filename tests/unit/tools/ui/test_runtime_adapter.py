@@ -244,8 +244,27 @@ def test_cli_runtime_adapter_watch_captures_events_text(monkeypatch: pytest.Monk
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=json.dumps({"run_id": "run-1", "status": "WAITING"}),
-            stderr='[1234] INPUT_WAITING step="start"',
+            stdout=json.dumps(
+                {
+                    "run_id": "run-1",
+                    "status": "WAITING",
+                    "events": [
+                        {
+                            "id": "evt-1",
+                            "type": "RUN_WAITING",
+                            "payload": {
+                                "step": "start",
+                                "step_type": "wait_input",
+                                "result": {"prompt": "Write a message."},
+                            },
+                        }
+                    ],
+                }
+            ),
+            stderr=(
+                '[1234] RUN_WAITING step="start" step_type="wait_input" '
+                'result={"prompt":"Write a message."}'
+            ),
         )
 
     monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
@@ -256,7 +275,71 @@ def test_cli_runtime_adapter_watch_captures_events_text(monkeypatch: pytest.Monk
     assert result == {
         "run_id": "run-1",
         "status": "WAITING",
-        "events_text": '[1234] INPUT_WAITING step="start"',
+        "events": [
+            {
+                "id": "evt-1",
+                "type": "RUN_WAITING",
+                "payload": {
+                    "step": "start",
+                    "step_type": "wait_input",
+                    "result": {"prompt": "Write a message."},
+                },
+            }
+        ],
+        "events_text": (
+            '[1234] RUN_WAITING step="start" step_type="wait_input" '
+            'result={"prompt":"Write a message."}'
+        ),
+    }
+
+
+def test_cli_runtime_adapter_watch_accepts_failed_terminal_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout=json.dumps(
+                {
+                    "run_id": "run-1",
+                    "status": "FAILED",
+                    "events": [
+                        {
+                            "id": "evt-2",
+                            "type": "STEP_ERROR",
+                            "payload": {
+                                "step": "answer",
+                                "step_type": "llm_prompt",
+                                "error": "network down",
+                            },
+                        }
+                    ],
+                }
+            ),
+            stderr='[1234] RUN_FINISHED status="FAILED" error="network down"',
+        )
+
+    monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
+
+    adapter = runtime_adapter.CliRuntimeAdapter()
+    result = adapter.watch(run_id="run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "status": "FAILED",
+        "events": [
+            {
+                "id": "evt-2",
+                "type": "STEP_ERROR",
+                "payload": {
+                    "step": "answer",
+                    "step_type": "llm_prompt",
+                    "error": "network down",
+                },
+            }
+        ],
+        "events_text": '[1234] RUN_FINISHED status="FAILED" error="network down"',
     }
 
 

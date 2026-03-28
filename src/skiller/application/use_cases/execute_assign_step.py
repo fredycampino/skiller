@@ -3,6 +3,7 @@ from typing import Any
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
+    AssignResult,
     StepExecutionResult,
     StepExecutionStatus,
 )
@@ -26,15 +27,6 @@ class ExecuteAssignStepUseCase:
         result = self._clone(values)
         current_step.context.results[step_id] = result
 
-        self.store.append_event(
-            "ASSIGN_RESULT",
-            {
-                "step": step_id,
-                "result": result,
-            },
-            run_id=current_step.run_id,
-        )
-
         raw_next = step.get("next")
         if raw_next is None:
             self.store.update_run(
@@ -42,7 +34,10 @@ class ExecuteAssignStepUseCase:
                 status=RunStatus.RUNNING,
                 context=current_step.context,
             )
-            return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+            return StepExecutionResult(
+                status=StepExecutionStatus.COMPLETED,
+                result=AssignResult(value=result),
+            )
 
         next_step_id = str(raw_next).strip()
         if not next_step_id:
@@ -57,6 +52,7 @@ class ExecuteAssignStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=AssignResult(value=result),
         )
 
     def _clone(self, value: Any) -> Any:

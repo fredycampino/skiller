@@ -26,7 +26,15 @@ class _FakeController:
         self.run_worker_result = {"run_id": "run-1", "status": "SUCCEEDED"}
         self.run_error: ValueError | None = None
         self.logs_result = [
-            {"id": "evt-1", "type": "NOTIFY", "payload": {"step": "done", "message": "done"}}
+            {
+                "id": "evt-1",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "done",
+                    "step_type": "notify",
+                    "result": {"message": "done"},
+                },
+            }
         ]
         self.status_results: list[dict[str, object]] = [
             {"id": "run-1", "status": "RUNNING"},
@@ -193,7 +201,7 @@ def test_run_internal_skill_by_name(
     assert '"status": "SUCCEEDED"' in captured.out
     assert "[1] CREATED" in captured.err
     assert "[1] RUNNING" in captured.err
-    assert "[1] NOTIFY" in captured.err
+    assert "[1] STEP_SUCCESS" in captured.err
     assert "[1] SUCCEEDED" in captured.err
 
 
@@ -237,7 +245,7 @@ def test_run_can_include_logs_in_response(
     assert exit_code == 0
     assert controller.logs_calls[-1] == "run-1"
     assert '"logs": [' in captured.out
-    assert '"type": "NOTIFY"' in captured.out
+    assert '"type": "STEP_SUCCESS"' in captured.out
 
 
 def test_run_can_start_webhooks_when_waiting(
@@ -464,8 +472,12 @@ def test_watch_prints_progress_and_final_status(
     controller.logs_result = [
         {
             "id": "evt-1",
-            "type": "WAITING",
-            "payload": {"step": "start", "webhook": "test", "key": "42"},
+            "type": "RUN_WAITING",
+            "payload": {
+                "step": "start",
+                "step_type": "wait_webhook",
+                "result": {"webhook": "test", "key": "42"},
+            },
         }
     ]
 
@@ -479,8 +491,12 @@ def test_watch_prints_progress_and_final_status(
     assert exit_code == 0
     assert '"run_id": "run-123"' in captured.out
     assert '"status": "WAITING"' in captured.out
+    assert '"events": [' in captured.out
     assert "[123] RUNNING" in captured.err
-    assert '[123] WAITING step="start" webhook="test" key="42"' in captured.err
+    assert (
+        '[123] RUN_WAITING step="start" step_type="wait_webhook" '
+        'result={"key":"42","webhook":"test"}'
+    ) in captured.err
 
 
 def test_status_can_include_waiting_metadata(

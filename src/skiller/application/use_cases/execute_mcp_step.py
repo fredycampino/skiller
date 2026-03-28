@@ -2,6 +2,7 @@ from skiller.application.ports.mcp_port import MCPPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
+    McpResult,
     StepExecutionResult,
     StepExecutionStatus,
 )
@@ -41,20 +42,15 @@ class ExecuteMcpStepUseCase:
         result = self.mcp.call_tool(server_name, tool_name, args, config=mcp_config)
         context.results[step_id] = result
 
-        self.store.append_event(
-            "MCP_RESULT",
-            {
-                "step": step_id,
-                "mcp": server_name,
-                "tool": tool_name,
-                "result": result,
-            },
-            run_id=current_step.run_id,
-        )
-
         if result.get("ok") is False:
             error = str(result.get("error", "")).strip() or f"MCP step '{step_id}' failed"
             raise ValueError(error)
+
+        result_payload = McpResult(
+            ok=True,
+            text=f"{server_name}.{tool_name} completed successfully.",
+            data=result,
+        )
 
         raw_next = step.get("next")
         if raw_next is None:
@@ -63,7 +59,10 @@ class ExecuteMcpStepUseCase:
                 status=RunStatus.RUNNING,
                 context=context,
             )
-            return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+            return StepExecutionResult(
+                status=StepExecutionStatus.COMPLETED,
+                result=result_payload,
+            )
 
         next_step_id = str(raw_next).strip()
         if not next_step_id:
@@ -78,4 +77,5 @@ class ExecuteMcpStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=result_payload,
         )

@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus, WaitInputResult
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -87,6 +87,7 @@ def test_wait_input_returns_waiting_and_persists_wait() -> None:
     result = use_case.execute(_build_current_step())
 
     assert result.status == StepExecutionStatus.WAITING
+    assert result.result == WaitInputResult(prompt="Write a short summary")
     assert store.created_waits == [{"run_id": "run-1", "step_id": "ask_user"}]
     assert store.updated == [
         {
@@ -96,17 +97,7 @@ def test_wait_input_returns_waiting_and_persists_wait() -> None:
             "context": _build_current_step().context,
         }
     ]
-    assert store.events == [
-        {
-            "type": "INPUT_WAITING",
-            "payload": {
-                "step": "ask_user",
-                "wait_id": "input-wait-1",
-                "prompt": "Write a short summary",
-            },
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
@@ -121,10 +112,16 @@ def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == WaitInputResult(
+        prompt="Write a short summary",
+        payload={"text": "database timeout"},
+        input_event_id="input-1",
+    )
     assert current_step.context.results["ask_user"] == {
         "ok": True,
         "prompt": "Write a short summary",
         "payload": {"text": "database timeout"},
+        "input_event_id": "input-1",
     }
     assert store.resolved_wait_ids == ["input-wait-1"]
     assert store.updated == [
@@ -135,7 +132,7 @@ def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
             "context": current_step.context,
         }
     ]
-    assert store.events[0]["type"] == "INPUT_RESOLVED"
+    assert store.events == []
 
 
 def test_wait_input_returns_completed_when_event_exists_and_next_missing() -> None:
@@ -146,6 +143,11 @@ def test_wait_input_returns_completed_when_event_exists_and_next_missing() -> No
     result = use_case.execute(current_step)
 
     assert result.status == StepExecutionStatus.COMPLETED
+    assert result.result == WaitInputResult(
+        prompt="Write a short summary",
+        payload={"text": "database timeout"},
+        input_event_id="input-1",
+    )
     assert store.updated == [
         {
             "run_id": "run-1",
@@ -154,6 +156,36 @@ def test_wait_input_returns_completed_when_event_exists_and_next_missing() -> No
             "context": current_step.context,
         }
     ]
+
+
+def test_wait_input_ignores_input_event_already_consumed_for_same_step() -> None:
+    store = _FakeStore(
+        input_event={"id": "input-1", "payload": {"text": "database timeout"}},
+    )
+    use_case = ExecuteWaitInputStepUseCase(store=store)
+    current_step = _build_current_step()
+    current_step.context.results["ask_user"] = {
+        "ok": True,
+        "prompt": "Write a short summary",
+        "payload": {"text": "database timeout"},
+        "input_event_id": "input-1",
+    }
+
+    result = use_case.execute(current_step)
+
+    assert result.status == StepExecutionStatus.WAITING
+    assert result.result == WaitInputResult(prompt="Write a short summary")
+    assert store.created_waits == [{"run_id": "run-1", "step_id": "ask_user"}]
+    assert store.resolved_wait_ids == []
+    assert store.updated == [
+        {
+            "run_id": "run-1",
+            "status": RunStatus.WAITING,
+            "current": "ask_user",
+            "context": current_step.context,
+        }
+    ]
+    assert store.events == []
 
 
 def test_wait_input_rejects_empty_next_when_declared() -> None:

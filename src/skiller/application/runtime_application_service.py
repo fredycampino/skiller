@@ -1,6 +1,10 @@
 from typing import Any
 
 from skiller.application.run_worker_service import RunWorkerService
+from skiller.application.use_cases.append_runtime_event import (
+    AppendRuntimeEventUseCase,
+    RuntimeEventType,
+)
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
@@ -19,6 +23,7 @@ class RuntimeApplicationService:
     def __init__(
         self,
         bootstrap_runtime_use_case: BootstrapRuntimeUseCase,
+        append_runtime_event_use_case: AppendRuntimeEventUseCase,
         create_run_use_case: CreateRunUseCase,
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
@@ -32,6 +37,7 @@ class RuntimeApplicationService:
         handle_input_use_case: HandleInputUseCase | None = None,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
+        self.append_runtime_event_use_case = append_runtime_event_use_case
         self.create_run_use_case = create_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
@@ -106,13 +112,27 @@ class RuntimeApplicationService:
             inputs,
             skill_source=skill_source,
         )
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.RUN_CREATE,
+            payload={
+                "skill": skill_ref,
+                "skill_source": skill_source,
+            },
+        )
         return {"run_id": run_id, "status": RunStatus.CREATED.value}
 
     def prepare_run(self, run_id: str) -> None:
         try:
             self.get_start_step_use_case.execute(run_id)
         except Exception as exc:  # noqa: BLE001
-            self.fail_run_use_case.execute(run_id, error=str(exc))
+            error = str(exc)
+            self.fail_run_use_case.execute(run_id, error=error)
+            self.append_runtime_event_use_case.execute(
+                run_id,
+                event_type=RuntimeEventType.RUN_FINISHED,
+                payload={"status": RunStatus.FAILED.value, "error": error},
+            )
 
     def dispatch_run(self, run_id: str) -> None:
         self.run_worker_service.run(run_id)
@@ -189,6 +209,11 @@ class RuntimeApplicationService:
     def resume_run(self, run_id: str) -> dict[str, Any]:
         result = self.resume_run_use_case.execute(run_id, source="manual")
         if result.status == ResumeRunStatus.RESUMED:
+            self.append_runtime_event_use_case.execute(
+                run_id,
+                event_type=RuntimeEventType.RUN_RESUME,
+                payload={"source": "manual"},
+            )
             self.run_worker_service.run(run_id)
         status_payload = self.get_run_result(run_id)
         return {

@@ -152,6 +152,7 @@ skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --sta
 ## Documentation
 
 Core guides:
+- [`docs/cli/command-guide.md`](/home/fede/develop/py/skiller/docs/cli/command-guide.md)
 - [`docs/guia_creacion_skills.md`](/home/fede/develop/py/skiller/docs/guia_creacion_skills.md)
 - [`docs/steps/mcp.md`](/home/fede/develop/py/skiller/docs/steps/mcp.md)
 - [`docs/steps/wait_input.md`](/home/fede/develop/py/skiller/docs/steps/wait_input.md)

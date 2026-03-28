@@ -3,6 +3,7 @@ from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepExecutionResult,
     StepExecutionStatus,
+    WaitInputResult,
 )
 from skiller.domain.run_model import RunStatus
 
@@ -26,6 +27,12 @@ class ExecuteWaitInputStepUseCase:
             step_id,
             since_created_at=since_created_at,
         )
+        if input_event is not None and self._is_already_consumed(
+            current_step=current_step,
+            step_id=step_id,
+            input_event_id=str(input_event.get("id", "")).strip(),
+        ):
+            input_event = None
 
         if input_event is not None:
             payload = input_event.get("payload", {})
@@ -36,21 +43,10 @@ class ExecuteWaitInputStepUseCase:
                 "ok": True,
                 "prompt": prompt,
                 "payload": payload,
+                "input_event_id": str(input_event.get("id", "")).strip(),
             }
             if active_wait is not None:
                 self.store.resolve_input_wait(str(active_wait["id"]))
-
-            self.store.append_event(
-                "INPUT_RESOLVED",
-                {
-                    "step": step_id,
-                    "wait_id": (active_wait["id"] if active_wait is not None else None),
-                    "prompt": prompt,
-                    "payload": payload,
-                    "input_event_id": input_event["id"],
-                },
-                run_id=current_step.run_id,
-            )
 
             raw_next = step.get("next")
             if raw_next is None:
@@ -59,7 +55,14 @@ class ExecuteWaitInputStepUseCase:
                     status=RunStatus.RUNNING,
                     context=current_step.context,
                 )
-                return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+                return StepExecutionResult(
+                    status=StepExecutionStatus.COMPLETED,
+                    result=WaitInputResult(
+                        prompt=prompt,
+                        payload=payload,
+                        input_event_id=str(input_event.get("id", "")).strip() or None,
+                    ),
+                )
 
             next_step_id = str(raw_next).strip()
             if not next_step_id:
@@ -74,23 +77,39 @@ class ExecuteWaitInputStepUseCase:
             return StepExecutionResult(
                 status=StepExecutionStatus.NEXT,
                 next_step_id=next_step_id,
+                result=WaitInputResult(
+                    prompt=prompt,
+                    payload=payload,
+                    input_event_id=str(input_event.get("id", "")).strip() or None,
+                ),
             )
 
-        wait_id = (
-            str(active_wait["id"])
-            if active_wait is not None
-            else self.store.create_input_wait(current_step.run_id, step_id)
-        )
+        if active_wait is None:
+            self.store.create_input_wait(current_step.run_id, step_id)
         self.store.update_run(
             current_step.run_id,
             status=RunStatus.WAITING,
             current=step_id,
             context=current_step.context,
         )
-        if active_wait is None:
-            self.store.append_event(
-                "INPUT_WAITING",
-                {"step": step_id, "wait_id": wait_id, "prompt": prompt},
-                run_id=current_step.run_id,
-            )
-        return StepExecutionResult(status=StepExecutionStatus.WAITING)
+        return StepExecutionResult(
+            status=StepExecutionStatus.WAITING,
+            result=WaitInputResult(prompt=prompt),
+        )
+
+    def _is_already_consumed(
+        self,
+        *,
+        current_step: CurrentStep,
+        step_id: str,
+        input_event_id: str,
+    ) -> bool:
+        if not input_event_id:
+            return False
+
+        resolved = current_step.context.results.get(step_id)
+        if not isinstance(resolved, dict):
+            return False
+
+        consumed_input_event_id = str(resolved.get("input_event_id", "")).strip()
+        return consumed_input_event_id == input_event_id

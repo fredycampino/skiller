@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus, SwitchResult
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -65,6 +65,7 @@ def test_switch_step_moves_current_to_matching_case() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "retry_notice"
+    assert result.result == SwitchResult(next="retry_notice")
     assert current_step.context.results["decide_action"] == {
         "value": "retry",
         "next": "retry_notice",
@@ -77,17 +78,7 @@ def test_switch_step_moves_current_to_matching_case() -> None:
             "context": current_step.context,
         }
     ]
-    assert store.events == [
-        {
-            "type": "SWITCH_DECISION",
-            "payload": {
-                "step": "decide_action",
-                "value": "retry",
-                "next": "retry_notice",
-            },
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 def test_switch_step_falls_back_to_default_when_no_case_matches() -> None:
@@ -99,6 +90,7 @@ def test_switch_step_falls_back_to_default_when_no_case_matches() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "unknown_action"
+    assert result.result == SwitchResult(next="unknown_action")
     assert current_step.context.results["decide_action"] == {
         "value": "done",
         "next": "unknown_action",
@@ -133,6 +125,7 @@ def test_switch_step_validates_contract(
         result = use_case.execute(current_step)
 
         assert result.next_step_id == "unknown_action"
+        assert result.result == SwitchResult(next="unknown_action")
         assert current_step.context.results["decide_action"] == {
             "value": None,
             "next": "unknown_action",

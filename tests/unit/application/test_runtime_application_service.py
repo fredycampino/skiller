@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.list_webhooks import ListWebhooksResult
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus
@@ -30,6 +31,26 @@ class _FakeCreateRunUseCase:
             }
         )
         return "run-1"
+
+
+class _FakeAppendRuntimeEventUseCase:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def execute(
+        self,
+        run_id: str,
+        *,
+        event_type: RuntimeEventType,
+        payload: dict[str, object],
+    ) -> None:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "event_type": event_type,
+                "payload": payload,
+            }
+        )
 
 
 class _FakeFailRunUseCase:
@@ -95,9 +116,13 @@ class _FakeRemoveWebhookUseCase:
 
 
 class _FakeResumeRunUseCase:
+    def __init__(self, *, status: ResumeRunStatus = ResumeRunStatus.NOT_WAITING) -> None:
+        self.status = status
+        self.calls: list[dict[str, str]] = []
+
     def execute(self, run_id: str, *, source: str = "manual") -> ResumeRunResult:
-        _ = (run_id, source)
-        return ResumeRunResult(status=ResumeRunStatus.NOT_WAITING)
+        self.calls.append({"run_id": run_id, "source": source})
+        return ResumeRunResult(status=self.status)
 
 
 class _FakeGetRunStatusUseCase:
@@ -151,10 +176,12 @@ def _build_service(
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RuntimeApplicationService,
+    _FakeAppendRuntimeEventUseCase,
     _FakeCreateRunUseCase,
     _FakeGetStartStepUseCase,
     _FakeRunWorkerService,
 ]:
+    append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     create_run_use_case = _FakeCreateRunUseCase()
     status_use_case = get_run_status_use_case or _FakeGetRunStatusUseCase()
     get_start_step_use_case = _FakeGetStartStepUseCase(run_status_use_case=status_use_case)
@@ -166,6 +193,7 @@ def _build_service(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SimpleNamespace(init_db=lambda: None),
         ),
+        append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
@@ -178,11 +206,23 @@ def _build_service(
         get_run_status_use_case=status_use_case,
         run_worker_service=run_worker_service,
     )
-    return service, create_run_use_case, get_start_step_use_case, run_worker_service
+    return (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+    )
 
 
 def test_create_run_only_creates_run() -> None:
-    service, create_run_use_case, get_start_step_use_case, run_worker_service = _build_service()
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service()
 
     result = service.create_run("notify_test", {"message": "ok"}, skill_source="internal")
 
@@ -196,11 +236,24 @@ def test_create_run_only_creates_run() -> None:
     ]
     assert get_start_step_use_case.calls == []
     assert run_worker_service.calls == []
+    assert append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_CREATE,
+            "payload": {"skill": "notify_test", "skill_source": "internal"},
+        }
+    ]
 
 
 def test_run_prepares_dispatches_and_reads_final_status() -> None:
     get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
-    service, _create_run_use_case, get_start_step_use_case, run_worker_service = _build_service(
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service(
         get_run_status_use_case=get_run_status_use_case,
         worker_final_status="WAITING",
     )
@@ -214,7 +267,13 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
 
 
 def test_start_worker_prepares_created_run() -> None:
-    service, _create_run_use_case, get_start_step_use_case, run_worker_service = _build_service()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service()
 
     result = service.start_worker("run-1")
 
@@ -225,7 +284,13 @@ def test_start_worker_prepares_created_run() -> None:
 
 def test_run_worker_dispatches_prepared_run() -> None:
     get_run_status_use_case = _FakeGetRunStatusUseCase(status="RUNNING", current="start")
-    service, _create_run_use_case, _get_start_step_use_case, run_worker_service = _build_service(
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service(
         get_run_status_use_case=get_run_status_use_case,
     )
     service.prepare_run("run-1")
@@ -237,7 +302,13 @@ def test_run_worker_dispatches_prepared_run() -> None:
 
 
 def test_handle_webhook_only_returns_matched_runs() -> None:
-    service, _create_run_use_case, _get_start_step_use_case, run_worker_service = _build_service(
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service(
         handle_webhook_use_case=_FakeHandleWebhookUseCase(run_ids=["run-1", "run-2"]),
     )
 
@@ -254,7 +325,13 @@ def test_handle_webhook_only_returns_matched_runs() -> None:
 
 
 def test_handle_input_only_returns_matched_runs() -> None:
-    service, _create_run_use_case, _get_start_step_use_case, run_worker_service = _build_service(
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+    ) = _build_service(
         handle_input_use_case=_FakeHandleInputUseCase(run_ids=["run-1"]),
     )
 
@@ -269,7 +346,13 @@ def test_handle_input_only_returns_matched_runs() -> None:
 
 
 def test_list_webhooks_returns_registered_channels() -> None:
-    service, _create_run_use_case, _get_start_step_use_case, _run_worker_service = _build_service()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+    ) = _build_service()
 
     result = service.list_webhooks()
 
@@ -281,3 +364,50 @@ def test_list_webhooks_returns_registered_channels() -> None:
             "created_at": "2026-03-19 10:00:00",
         }
     ]
+
+
+def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
+    get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
+    append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
+    resume_run_use_case = _FakeResumeRunUseCase(status=ResumeRunStatus.RESUMED)
+    run_worker_service = _FakeRunWorkerService(
+        run_status_use_case=get_run_status_use_case,
+        final_status="WAITING",
+    )
+
+    service = RuntimeApplicationService(
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
+            store=SimpleNamespace(init_db=lambda: None),
+        ),
+        append_runtime_event_use_case=append_runtime_event_use_case,
+        create_run_use_case=_FakeCreateRunUseCase(),
+        fail_run_use_case=_FakeFailRunUseCase(),
+        get_start_step_use_case=_FakeGetStartStepUseCase(
+            run_status_use_case=get_run_status_use_case
+        ),
+        handle_input_use_case=_FakeHandleInputUseCase(),
+        handle_webhook_use_case=_FakeHandleWebhookUseCase(),
+        list_webhooks_use_case=_FakeListWebhooksUseCase(),
+        register_webhook_use_case=_FakeRegisterWebhookUseCase(),
+        remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
+        resume_run_use_case=resume_run_use_case,
+        get_run_status_use_case=get_run_status_use_case,
+        run_worker_service=run_worker_service,
+    )
+
+    result = service.resume_run("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "resume_status": "RESUMED",
+        "status": "WAITING",
+    }
+    assert resume_run_use_case.calls == [{"run_id": "run-1", "source": "manual"}]
+    assert append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_RESUME,
+            "payload": {"source": "manual"},
+        }
+    ]
+    assert run_worker_service.calls == ["run-1"]

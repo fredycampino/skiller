@@ -1,6 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import Any
 
+from skiller.application.use_cases.append_runtime_event import (
+    AppendRuntimeEventUseCase,
+    RuntimeEventType,
+)
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
@@ -12,6 +17,7 @@ from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitW
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.render_current_step import (
+    CurrentStep,
     CurrentStepStatus,
     RenderCurrentStepUseCase,
     StepType,
@@ -46,6 +52,7 @@ class RunWorkerService:
         self,
         complete_run_use_case: CompleteRunUseCase,
         fail_run_use_case: FailRunUseCase,
+        append_runtime_event_use_case: AppendRuntimeEventUseCase,
         render_current_step_use_case: RenderCurrentStepUseCase,
         render_mcp_config_use_case: RenderMcpConfigUseCase,
         execute_assign_step_use_case: ExecuteAssignStepUseCase,
@@ -59,6 +66,7 @@ class RunWorkerService:
     ) -> None:
         self.complete_run_use_case = complete_run_use_case
         self.fail_run_use_case = fail_run_use_case
+        self.append_runtime_event_use_case = append_runtime_event_use_case
         self.render_current_step_use_case = render_current_step_use_case
         self.render_mcp_config_use_case = render_mcp_config_use_case
         self.execute_assign_step_use_case = execute_assign_step_use_case
@@ -71,6 +79,7 @@ class RunWorkerService:
         self.execute_wait_webhook_step_use_case = execute_wait_webhook_step_use_case
 
     def run(self, run_id: str) -> RunWorkerResult:
+        current_step: CurrentStep | None = None
         try:
             while True:
                 result = self.render_current_step_use_case.execute(run_id)
@@ -81,6 +90,7 @@ class RunWorkerService:
 
                 if status == CurrentStepStatus.DONE:
                     self.complete_run_use_case.execute(run_id)
+                    self._append_run_finished(run_id, status=RunWorkerStatus.SUCCEEDED)
                     return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.SUCCEEDED)
 
                 if status == CurrentStepStatus.CANCELLED:
@@ -98,6 +108,7 @@ class RunWorkerService:
                 if status in {CurrentStepStatus.INVALID_SKILL, CurrentStepStatus.INVALID_STEP}:
                     error = f"Run '{run_id}' is invalid: status={status}"
                     self.fail_run_use_case.execute(run_id, error=error)
+                    self._append_run_finished(run_id, status=RunWorkerStatus.FAILED, error=error)
                     return RunWorkerResult(
                         run_id=run_id, status=RunWorkerStatus.FAILED, error=error
                     )
@@ -106,70 +117,158 @@ class RunWorkerService:
                 is_ready = status == CurrentStepStatus.READY and current_step
                 execution_result: StepExecutionResult | None = None
 
-                if is_ready and current_step.step_type == StepType.NOTIFY:
-                    execution_result = self.execute_notify_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.ASSIGN:
-                    execution_result = self.execute_assign_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.LLM_PROMPT:
-                    execution_result = self.execute_llm_prompt_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.MCP:
-                    render_result = self.render_mcp_config_use_case.execute(current_step)
-                    if render_result.status != RenderMcpConfigStatus.RENDERED:
-                        raise ValueError(
-                            render_result.error
-                            or f"Invalid MCP config for step '{current_step.step_id}'"
-                        )
-
-                    execution_result = self.execute_mcp_step_use_case.execute(
-                        current_step, render_result.mcp_config
-                    )
-
-                elif is_ready and current_step.step_type == StepType.WAIT_INPUT:
-                    if self.execute_wait_input_step_use_case is None:
-                        raise ValueError("wait_input step executor is not configured")
-                    execution_result = self.execute_wait_input_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.WAIT_WEBHOOK:
-                    execution_result = self.execute_wait_webhook_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.SWITCH:
-                    execution_result = self.execute_switch_step_use_case.execute(current_step)
-
-                elif is_ready and current_step.step_type == StepType.WHEN:
-                    execution_result = self.execute_when_step_use_case.execute(current_step)
-
-                elif is_ready and current_step:
-                    step_type = current_step.step_type.value
-                    step_id = current_step.step_id
-                    error = (
-                        f"Unsupported step type '{step_type}' in step '{step_id}': "
-                        "only 'assign', 'llm_prompt', 'mcp', 'notify', 'switch', "
-                        "'wait_input', 'wait_webhook' and 'when' are enabled in run loop"
-                    )
-                    self.fail_run_use_case.execute(run_id, error=error)
-                    return RunWorkerResult(
-                        run_id=run_id, status=RunWorkerStatus.FAILED, error=error
-                    )
+                if is_ready and current_step:
+                    self._append_step_started(run_id, current_step)
+                    execution_result = self._execute_ready_step(current_step)
 
                 if execution_result is None:
                     raise ValueError(f"Run '{run_id}' reached unexpected loop state")
 
                 if execution_result.status == StepExecutionStatus.NEXT:
+                    self._append_step_success(run_id, current_step, execution_result)
                     continue
 
                 if execution_result.status == StepExecutionStatus.COMPLETED:
+                    self._append_step_success(run_id, current_step, execution_result)
                     self.complete_run_use_case.execute(run_id)
+                    self._append_run_finished(run_id, status=RunWorkerStatus.SUCCEEDED)
                     return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.SUCCEEDED)
 
                 if execution_result.status == StepExecutionStatus.WAITING:
+                    self._append_run_waiting(run_id, current_step, execution_result)
                     return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.WAITING)
 
                 raise ValueError(f"Unsupported step execution status '{execution_result.status}'")
 
         except Exception as exc:  # noqa: BLE001
             error = str(exc)
+            if current_step is not None:
+                self._append_step_error(run_id, current_step, error)
             self.fail_run_use_case.execute(run_id, error=error)
+            self._append_run_finished(run_id, status=RunWorkerStatus.FAILED, error=error)
             return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.FAILED, error=error)
+
+    def _execute_ready_step(self, current_step: CurrentStep) -> StepExecutionResult:
+        if current_step.step_type == StepType.NOTIFY:
+            return self.execute_notify_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.ASSIGN:
+            return self.execute_assign_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.LLM_PROMPT:
+            return self.execute_llm_prompt_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.MCP:
+            render_result = self.render_mcp_config_use_case.execute(current_step)
+            if render_result.status != RenderMcpConfigStatus.RENDERED:
+                raise ValueError(
+                    render_result.error or f"Invalid MCP config for step '{current_step.step_id}'"
+                )
+
+            return self.execute_mcp_step_use_case.execute(current_step, render_result.mcp_config)
+
+        if current_step.step_type == StepType.WAIT_INPUT:
+            if self.execute_wait_input_step_use_case is None:
+                raise ValueError("wait_input step executor is not configured")
+            return self.execute_wait_input_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.WAIT_WEBHOOK:
+            return self.execute_wait_webhook_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.SWITCH:
+            return self.execute_switch_step_use_case.execute(current_step)
+
+        if current_step.step_type == StepType.WHEN:
+            return self.execute_when_step_use_case.execute(current_step)
+
+        raise ValueError(
+            f"Unsupported step type '{current_step.step_type.value}' in step "
+            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', 'notify', "
+            "'switch', 'wait_input', 'wait_webhook' and 'when' are enabled in run loop"
+        )
+
+    def _append_step_started(self, run_id: str, current_step: CurrentStep) -> None:
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.STEP_STARTED,
+            payload={
+                "step": current_step.step_id,
+                "step_type": current_step.step_type.value,
+            },
+        )
+
+    def _append_step_success(
+        self,
+        run_id: str,
+        current_step: CurrentStep,
+        execution_result: StepExecutionResult,
+    ) -> None:
+        payload = {
+            "step": current_step.step_id,
+            "step_type": current_step.step_type.value,
+        }
+        result_payload = self._serialize_step_result(execution_result)
+        if result_payload is not None:
+            payload["result"] = result_payload
+        if execution_result.next_step_id is not None:
+            payload["next"] = execution_result.next_step_id
+
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.STEP_SUCCESS,
+            payload=payload,
+        )
+
+    def _append_run_waiting(
+        self,
+        run_id: str,
+        current_step: CurrentStep,
+        execution_result: StepExecutionResult,
+    ) -> None:
+        payload = {
+            "step": current_step.step_id,
+            "step_type": current_step.step_type.value,
+        }
+        result_payload = self._serialize_step_result(execution_result)
+        if result_payload is not None:
+            payload["result"] = result_payload
+
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.RUN_WAITING,
+            payload=payload,
+        )
+
+    def _append_step_error(self, run_id: str, current_step: CurrentStep, error: str) -> None:
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.STEP_ERROR,
+            payload={
+                "step": current_step.step_id,
+                "step_type": current_step.step_type.value,
+                "error": error,
+            },
+        )
+
+    def _append_run_finished(
+        self,
+        run_id: str,
+        *,
+        status: RunWorkerStatus,
+        error: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"status": status.value}
+        if error is not None:
+            payload["error"] = error
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.RUN_FINISHED,
+            payload=payload,
+        )
+
+    def _serialize_step_result(
+        self, execution_result: StepExecutionResult
+    ) -> dict[str, Any] | None:
+        if execution_result.result is None:
+            return None
+        return asdict(execution_result.result)

@@ -2,7 +2,10 @@ import pytest
 
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import (
+    StepExecutionStatus,
+    WaitWebhookResult,
+)
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -106,6 +109,7 @@ def test_wait_webhook_returns_waiting_and_persists_wait() -> None:
 
     assert result.status == StepExecutionStatus.WAITING
     assert result.next_step_id is None
+    assert result.result == WaitWebhookResult(webhook="test", key="42")
     assert store.created_waits == [
         {
             "run_id": "run-1",
@@ -123,13 +127,7 @@ def test_wait_webhook_returns_waiting_and_persists_wait() -> None:
             "context": current_step.context,
         }
     ]
-    assert store.events == [
-        {
-            "type": "WAITING",
-            "payload": {"step": "wait_test", "wait_id": "wait-1", "webhook": "test", "key": "42"},
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 def test_wait_webhook_returns_next_when_event_exists_and_next_declared() -> None:
@@ -144,6 +142,11 @@ def test_wait_webhook_returns_next_when_event_exists_and_next_declared() -> None
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == WaitWebhookResult(
+        webhook="test",
+        key="42",
+        payload={"ok": True},
+    )
     assert current_step.context.results["wait_test"] == {
         "ok": True,
         "webhook": "test",
@@ -159,7 +162,7 @@ def test_wait_webhook_returns_next_when_event_exists_and_next_declared() -> None
             "context": current_step.context,
         }
     ]
-    assert store.events[0]["type"] == "WAIT_RESOLVED"
+    assert store.events == []
 
 
 def test_wait_webhook_returns_completed_when_event_exists_and_next_missing() -> None:
@@ -171,6 +174,11 @@ def test_wait_webhook_returns_completed_when_event_exists_and_next_missing() -> 
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
+    assert result.result == WaitWebhookResult(
+        webhook="test",
+        key="42",
+        payload={"ok": True},
+    )
     assert store.updated == [
         {
             "run_id": "run-1",

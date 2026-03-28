@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus, WhenResult
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -68,6 +68,7 @@ def test_when_step_moves_current_to_first_matching_branch() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "good"
+    assert result.result == WhenResult(next="good")
     assert current_step.context.results["decide_score"] == {
         "value": 85,
         "next": "good",
@@ -80,20 +81,7 @@ def test_when_step_moves_current_to_first_matching_branch() -> None:
             "context": current_step.context,
         }
     ]
-    assert store.events == [
-        {
-            "type": "WHEN_DECISION",
-            "payload": {
-                "step": "decide_score",
-                "value": 85,
-                "next": "good",
-                "branch": 1,
-                "op": "gt",
-                "right": 70,
-            },
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 def test_when_step_supports_single_branch_as_binary_if() -> None:
@@ -109,6 +97,7 @@ def test_when_step_supports_single_branch_as_binary_if() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "retry_notice"
+    assert result.result == WhenResult(next="retry_notice")
     assert current_step.context.results["decide_score"] == {
         "value": "retry",
         "next": "retry_notice",
@@ -124,24 +113,12 @@ def test_when_step_falls_back_to_default_when_no_branch_matches() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "fail"
+    assert result.result == WhenResult(next="fail")
     assert current_step.context.results["decide_score"] == {
         "value": 40,
         "next": "fail",
     }
-    assert store.events == [
-        {
-            "type": "WHEN_DECISION",
-            "payload": {
-                "step": "decide_score",
-                "value": 40,
-                "next": "fail",
-                "branch": None,
-                "op": None,
-                "right": None,
-            },
-            "run_id": "run-1",
-        }
-    ]
+    assert store.events == []
 
 
 @pytest.mark.parametrize(

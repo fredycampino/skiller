@@ -14,4 +14,3 @@ class FailRunUseCase:
             current=(run.current if run else None),
             context=(run.context if run else None),
         )
-        self.store.append_event("RUN_FAILED", {"error": error}, run_id=run_id)

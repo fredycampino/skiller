@@ -133,7 +133,7 @@ def test_logs_command_returns_log_list() -> None:
 
         def logs(self, *, run_id: str) -> list[dict[str, object]]:
             assert run_id == "run-1"
-            return [{"id": "evt-1", "type": "NOTIFY", "payload": {}}]
+            return [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
 
         def watch(self, *, run_id: str) -> dict[str, object]:
             raise AssertionError("not expected")
@@ -151,10 +151,129 @@ def test_logs_command_returns_log_list() -> None:
     )
 
     assert result.kind == "logs"
-    assert result.logs == [{"id": "evt-1", "type": "NOTIFY", "payload": {}}]
+    assert result.logs == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
     assert result.run is not None
     assert result.run.run_id == "run-1"
-    assert result.run.logs == [{"id": "evt-1", "type": "NOTIFY", "payload": {}}]
+    assert result.run.logs == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
+
+
+def test_logs_command_uses_selected_run_when_run_id_is_missing() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            assert run_id == "run-2"
+            return [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    session = UiSession(session_key="a1b2c3d4")
+    session.ensure_run("run-1", raw_args="notify_test")
+    selected_run = session.ensure_run("run-2", raw_args="chat")
+    session.selected_run_id = "run-2"
+    session.last_run_id = "run-1"
+
+    result = handle_command(
+        session=session,
+        command=LogsCommand(run_id=""),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "logs"
+    assert result.run is selected_run
+    assert result.logs == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
+
+
+def test_logs_command_uses_last_run_when_selected_run_is_missing() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            assert run_id == "run-1"
+            return [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    session = UiSession(session_key="a1b2c3d4")
+    last_run = session.ensure_run("run-1", raw_args="notify_test")
+    session.last_run_id = "run-1"
+
+    result = handle_command(
+        session=session,
+        command=LogsCommand(run_id=""),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "logs"
+    assert result.run is last_run
+    assert result.logs == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
+
+
+def test_logs_command_returns_error_when_no_selected_or_last_run_exists() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=LogsCommand(run_id=""),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "logs"
+    assert result.logs == []
+    assert result.run is not None
+    assert result.run.status == "FAILED"
+    assert result.run.error == "No selected or last run is available for /logs"
 
 
 def test_input_command_returns_payload() -> None:
@@ -215,7 +334,21 @@ def test_watch_command_updates_existing_run_to_succeeded() -> None:
             return {
                 "run_id": "run-1",
                 "status": "SUCCEEDED",
-                "events_text": '[1234] NOTIFY step="done"',
+                "events": [
+                    {
+                        "id": "evt-1",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "done",
+                            "step_type": "notify",
+                            "result": {"message": "done"},
+                        },
+                    }
+                ],
+                "events_text": (
+                    '[1234] STEP_SUCCESS step="done" step_type="notify" '
+                    'result={"message":"done"}'
+                ),
             }
 
         def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
@@ -238,17 +371,124 @@ def test_watch_command_updates_existing_run_to_succeeded() -> None:
     assert result.payload == {
         "run_id": "run-1",
         "status": "SUCCEEDED",
-        "events_text": '[1234] NOTIFY step="done"',
+        "events": [
+            {
+                "id": "evt-1",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "done",
+                    "step_type": "notify",
+                    "result": {"message": "done"},
+                },
+            }
+        ],
+        "events_text": (
+            '[1234] STEP_SUCCESS step="done" step_type="notify" '
+            'result={"message":"done"}'
+        ),
     }
     assert result.run is run
     assert run.status == "SUCCEEDED"
     assert run.last_payload == {
         "run_id": "run-1",
         "status": "SUCCEEDED",
-        "events_text": '[1234] NOTIFY step="done"',
+        "events": [
+            {
+                "id": "evt-1",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "done",
+                    "step_type": "notify",
+                    "result": {"message": "done"},
+                },
+            }
+        ],
+        "events_text": (
+            '[1234] STEP_SUCCESS step="done" step_type="notify" '
+            'result={"message":"done"}'
+        ),
     }
     assert session.selected_run_id == "run-1"
     assert session.last_run_id == "run-1"
+    assert run.seen_event_ids == {"evt-1"}
+
+
+def test_watch_command_filters_events_already_seen_in_run() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            assert run_id == "run-1"
+            return {
+                "run_id": "run-1",
+                "status": "WAITING",
+                "events": [
+                    {
+                        "id": "evt-1",
+                        "type": "RUN_WAITING",
+                        "payload": {
+                            "step": "start",
+                            "step_type": "wait_input",
+                            "result": {"prompt": "old"},
+                        },
+                    },
+                    {
+                        "id": "evt-2",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "done",
+                            "step_type": "notify",
+                            "result": {"message": "new"},
+                        },
+                    },
+                ],
+                "events_text": "",
+            }
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    session = UiSession(session_key="a1b2c3d4")
+    run = session.ensure_run("run-1", raw_args="chat")
+    run.seen_event_ids.add("evt-1")
+
+    result = handle_command(
+        session=session,
+        command=WatchCommand(run_id="run-1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.payload == {
+        "run_id": "run-1",
+        "status": "WAITING",
+        "events": [
+            {
+                "id": "evt-2",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "done",
+                    "step_type": "notify",
+                    "result": {"message": "new"},
+                },
+            }
+        ],
+        "events_text": "",
+    }
+    assert run.seen_event_ids == {"evt-1", "evt-2"}
 
 
 def test_runs_command_updates_session_with_global_runs() -> None:

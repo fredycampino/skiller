@@ -7,6 +7,7 @@ import pytest
 
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.create_run import CreateRunUseCase
@@ -48,6 +49,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     fail_run_use_case = FailRunUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -62,6 +64,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
@@ -76,6 +79,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
@@ -120,8 +124,12 @@ def test_run_external_skill_file_succeeds() -> None:
         assert run.skill_ref == str(skill_path)
         assert run.skill_snapshot["name"] == "external_notify"
         events = store.list_events(run_result["run_id"])
-        notify_event = next(event for event in events if event["type"] == "NOTIFY")
-        assert notify_event["payload"]["message"] == "external ok"
+        notify_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
+        assert notify_event["payload"]["result"]["message"] == "external ok"
 
 
 def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
@@ -209,10 +217,12 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert run.status == "WAITING"
 
         wait_event = next(
-            event for event in store.list_events(run_id) if event["type"] == "WAITING"
+            event
+            for event in store.list_events(run_id)
+            if event["type"] == "RUN_WAITING"
         )
-        assert wait_event["payload"]["webhook"] == "github-pr-merged"
-        assert wait_event["payload"]["key"] == "42"
+        assert wait_event["payload"]["result"]["webhook"] == "github-pr-merged"
+        assert wait_event["payload"]["result"]["key"] == "42"
 
         resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
@@ -223,8 +233,11 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert resumed_run.status == "WAITING"
 
         events = store.list_events(run_id)
-        assert any(event["type"] == "RUN_RESUMED" for event in events)
-        assert not any(event["type"] == "NOTIFY" for event in events)
+        assert any(event["type"] == "RUN_RESUME" for event in events)
+        assert not any(
+            event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "notify"
+            for event in events
+        )
 
 
 def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
@@ -278,12 +291,22 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         assert resumed_run.status == "SUCCEEDED"
 
         events = store.list_events(run_id)
-        wait_resolved = next(event for event in events if event["type"] == "WAIT_RESOLVED")
-        assert wait_resolved["payload"]["step"] == "start"
-        assert wait_resolved["payload"]["webhook"] == "github-pr-merged"
-        assert wait_resolved["payload"]["key"] == "42"
-        notify_event = next(event for event in events if event["type"] == "NOTIFY")
-        assert notify_event["payload"]["message"] == "resumed from webhook"
+        wait_resolved = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
+        assert wait_resolved["payload"]["result"] == {
+            "webhook": "github-pr-merged",
+            "key": "42",
+            "payload": {"merged": True},
+        }
+        notify_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
+        )
+        assert notify_event["payload"]["result"]["message"] == "resumed from webhook"
 
 
 def test_external_wait_input_file_can_resume_from_cli_input() -> None:
@@ -333,15 +356,126 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         assert resume_result["status"] == "SUCCEEDED"
         assert resumed_run is not None
         assert resumed_run.status == "SUCCEEDED"
-        assert resumed_run.context.results["start"] == {
-            "ok": True,
+        assert resumed_run.context.results["start"]["ok"] is True
+        assert resumed_run.context.results["start"]["prompt"] == "Write a short summary"
+        assert resumed_run.context.results["start"]["payload"] == {
+            "text": "database timeout"
+        }
+        assert resumed_run.context.results["start"]["input_event_id"]
+
+        events = store.list_events(run_id)
+        run_waiting_event = next(event for event in events if event["type"] == "RUN_WAITING")
+        assert run_waiting_event["payload"]["step"] == "start"
+        assert run_waiting_event["payload"]["step_type"] == "wait_input"
+        assert run_waiting_event["payload"]["result"]["prompt"] == "Write a short summary"
+
+        step_success_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
+        assert step_success_event["payload"]["result"] == {
             "prompt": "Write a short summary",
             "payload": {"text": "database timeout"},
+            "input_event_id": resumed_run.context.results["start"]["input_event_id"],
+        }
+
+        notify_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
+        )
+        assert notify_event["payload"]["result"]["message"] == "database timeout"
+
+
+def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_wait_input_loop.yaml"
+        skill_path.write_text(
+            (
+                "name: external_wait_input_loop\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - id: start\n"
+                "    type: wait_input\n"
+                "    prompt: Write a short summary\n"
+                "    next: echo\n"
+                "  - id: echo\n"
+                "    type: notify\n"
+                '    message: "{{results.start.payload.text}}"\n'
+                "    next: start\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_id = run_result["run_id"]
+
+        assert run_result["status"] == "WAITING"
+
+        first_input = runtime.handle_input(run_id, text="first reply")
+        first_resume = runtime.resume_run(run_id)
+        run_after_first_resume = store.get_run(run_id)
+
+        assert first_input == {
+            "accepted": True,
+            "run_id": run_id,
+            "matched_runs": [run_id],
+        }
+        assert first_resume["resume_status"] == "RESUMED"
+        assert first_resume["status"] == "WAITING"
+        assert run_after_first_resume is not None
+        assert run_after_first_resume.status == "WAITING"
+        assert run_after_first_resume.current == "start"
+        assert run_after_first_resume.context.results["start"]["payload"] == {
+            "text": "first reply"
+        }
+
+        second_input = runtime.handle_input(run_id, text="second reply")
+        second_resume = runtime.resume_run(run_id)
+        run_after_second_resume = store.get_run(run_id)
+
+        assert second_input == {
+            "accepted": True,
+            "run_id": run_id,
+            "matched_runs": [run_id],
+        }
+        assert second_resume["resume_status"] == "RESUMED"
+        assert second_resume["status"] == "WAITING"
+        assert run_after_second_resume is not None
+        assert run_after_second_resume.status == "WAITING"
+        assert run_after_second_resume.current == "start"
+        assert run_after_second_resume.context.results["start"]["payload"] == {
+            "text": "second reply"
         }
 
         events = store.list_events(run_id)
-        input_resolved = next(event for event in events if event["type"] == "INPUT_RESOLVED")
-        assert input_resolved["payload"]["step"] == "start"
-        assert input_resolved["payload"]["prompt"] == "Write a short summary"
-        notify_event = next(event for event in events if event["type"] == "NOTIFY")
-        assert notify_event["payload"]["message"] == "database timeout"
+        input_resolved_events = [
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        ]
+        notify_events = [
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "echo"
+        ]
+        input_waiting_events = [event for event in events if event["type"] == "RUN_WAITING"]
+
+        assert len(input_resolved_events) == 2
+        assert input_resolved_events[0]["payload"]["result"]["payload"] == {"text": "first reply"}
+        assert input_resolved_events[1]["payload"]["result"]["payload"] == {"text": "second reply"}
+        assert (
+            input_resolved_events[0]["payload"]["result"]["input_event_id"]
+            != input_resolved_events[1]["payload"]["result"]["input_event_id"]
+        )
+        assert [event["payload"]["result"]["message"] for event in notify_events] == [
+            "first reply",
+            "second reply",
+        ]
+        assert len(input_waiting_events) == 3

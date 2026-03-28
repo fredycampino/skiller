@@ -166,8 +166,23 @@ def _handle_logs_command(
     command: LogsCommand,
     runtime: RuntimeAdapter,
 ) -> ActionResult:
-    logs = runtime.logs(run_id=command.run_id)
-    run = session.ensure_run(command.run_id)
+    run_id = _resolve_optional_run_id(
+        session=session,
+        requested_run_id=command.run_id,
+    )
+    if run_id is None:
+        return ActionResult(
+            kind="logs",
+            run=UiRun(
+                raw_args="logs",
+                status="FAILED",
+                error="No selected or last run is available for /logs",
+            ),
+            logs=[],
+        )
+
+    logs = runtime.logs(run_id=run_id)
+    run = session.ensure_run(run_id)
     run.logs = list(logs)
     session.remember_run(run)
     return ActionResult(kind="logs", logs=logs, run=run)
@@ -183,6 +198,20 @@ def _handle_watch_command(
     payload_dict = dict(payload)
     run_id = str(payload_dict.get("run_id", command.run_id)).strip() or command.run_id
     run = session.ensure_run(run_id)
+    events = payload_dict.get("events")
+    if isinstance(events, list):
+        fresh_events: list[dict[str, object]] = []
+        for item in events:
+            if not isinstance(item, dict):
+                continue
+            event_dict = dict(item)
+            event_id = str(event_dict.get("id", "")).strip()
+            if event_id:
+                if event_id in run.seen_event_ids:
+                    continue
+                run.seen_event_ids.add(event_id)
+            fresh_events.append(event_dict)
+        payload_dict["events"] = fresh_events
     run.status = str(payload_dict.get("status", run.status))
     run.last_payload = payload_dict
     session.remember_run(run)
@@ -216,3 +245,18 @@ def _handle_input_command(
     run.last_payload = payload_dict
     session.remember_run(run)
     return ActionResult(kind="input", payload=payload_dict, run=run)
+
+
+def _resolve_optional_run_id(
+    *,
+    session: UiSession,
+    requested_run_id: str,
+) -> str | None:
+    run_id = requested_run_id.strip()
+    if run_id:
+        return run_id
+    if session.selected_run_id:
+        return session.selected_run_id
+    if session.last_run_id:
+        return session.last_run_id
+    return None

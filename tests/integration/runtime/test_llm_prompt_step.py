@@ -7,6 +7,7 @@ import pytest
 
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.create_run import CreateRunUseCase
@@ -63,6 +64,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     fail_run_use_case = FailRunUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -76,6 +78,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
@@ -89,6 +92,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
@@ -164,12 +168,19 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
         }
 
         events = store.list_events(run_result["run_id"])
-        llm_event = next(event for event in events if event["type"] == "LLM_PROMPT_RESULT")
-        notify_event = next(event for event in events if event["type"] == "NOTIFY")
+        llm_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
+        notify_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
+        )
 
-        assert llm_event["payload"]["step"] == "start"
-        assert llm_event["payload"]["result"]["severity"] == "high"
-        assert notify_event["payload"]["message"] == "retry"
+        assert llm_event["payload"]["result"]["json"]["severity"] == "high"
+        assert notify_event["payload"]["result"]["message"] == "retry"
         assert llm.calls[0]["messages"][1]["content"].endswith("Traceback auth failed\n")
 
 
@@ -238,14 +249,22 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
         }
 
         events = container.query_service.get_run_logs_use_case.execute(run_result["run_id"])
-        llm_event = next(event for event in events if event["type"] == "LLM_PROMPT_RESULT")
-        notify_event = next(event for event in events if event["type"] == "NOTIFY")
+        llm_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
+        notify_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
+        )
 
-        assert llm_event["payload"]["model"] == "fake-llm-integration"
-        assert notify_event["payload"]["message"] == "ask_human"
+        assert llm_event["payload"]["result"]["model"] == "fake-llm-integration"
+        assert notify_event["payload"]["result"]["message"] == "ask_human"
 
 
-def test_llm_prompt_failure_persists_debug_info_in_run_failed_event() -> None:
+def test_llm_prompt_failure_persists_step_error_and_run_finished() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "llm_prompt.yaml"
@@ -284,22 +303,21 @@ def test_llm_prompt_failure_persists_debug_info_in_run_failed_event() -> None:
         run_result = container.runtime_service.run("llm_prompt", {"issue": "boom"})
         run = container.query_service.get_run_status_use_case.execute(run_result["run_id"])
         events = container.query_service.get_run_logs_use_case.execute(run_result["run_id"])
-        llm_error_event = next(event for event in events if event["type"] == "LLM_PROMPT_ERROR")
-        failed_event = next(event for event in events if event["type"] == "RUN_FAILED")
+        llm_error_event = next(event for event in events if event["type"] == "STEP_ERROR")
+        failed_event = next(event for event in events if event["type"] == "RUN_FINISHED")
 
         assert run_result["status"] == "FAILED"
         assert run is not None
         assert run.status == "FAILED"
         assert llm_error_event["payload"] == {
             "step": "start",
+            "step_type": "llm_prompt",
             "error": "LLM step 'start' returned invalid JSON: Expecting value",
-            "model": "fake-llm-integration",
-            "raw_response": "not-json",
         }
-        assert (
-            failed_event["payload"]["error"]
-            == "LLM step 'start' returned invalid JSON: Expecting value"
-        )
+        assert failed_event["payload"] == {
+            "status": "FAILED",
+            "error": "LLM step 'start' returned invalid JSON: Expecting value",
+        }
 
 
 def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
@@ -351,7 +369,11 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
         run_result = container.runtime_service.run("llm_prompt", {"issue": "boom"})
         run = container.query_service.get_run_status_use_case.execute(run_result["run_id"])
         events = container.query_service.get_run_logs_use_case.execute(run_result["run_id"])
-        llm_event = next(event for event in events if event["type"] == "LLM_PROMPT_RESULT")
+        llm_event = next(
+            event
+            for event in events
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+        )
 
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
@@ -360,4 +382,4 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
             "severity": "low",
             "next_action": "retry",
         }
-        assert llm_event["payload"]["result"]["next_action"] == "retry"
+        assert llm_event["payload"]["result"]["json"]["next_action"] == "retry"

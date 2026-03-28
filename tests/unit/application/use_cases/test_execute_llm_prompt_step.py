@@ -2,7 +2,7 @@ import pytest
 
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import LlmPromptResult, StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 
@@ -78,6 +78,10 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == LlmPromptResult(
+        text='{"severity": "low", "summary": "ok"}',
+        json={"summary": "ok", "severity": "low"},
+    )
     assert llm.calls == [
         {
             "messages": [
@@ -103,8 +107,7 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
     assert context.results["analyze_issue"] == {"summary": "ok", "severity": "low"}
     assert store.updated[0]["status"] == RunStatus.RUNNING
     assert store.updated[0]["current"] == "done"
-    assert store.events[0]["type"] == "LLM_PROMPT_RESULT"
-    assert store.events[0]["payload"]["step"] == "analyze_issue"
+    assert store.events == []
 
 
 def test_execute_llm_prompt_step_preserves_prompt_whitespace() -> None:
@@ -185,8 +188,13 @@ def test_execute_llm_prompt_step_accepts_json_inside_markdown_fence() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
+    assert result.result == LlmPromptResult(
+        text='{"severity": "low", "summary": "ok"}',
+        json={"summary": "ok", "severity": "low"},
+        model="fake-llm",
+    )
     assert context.results["analyze_issue"] == {"summary": "ok", "severity": "low"}
-    assert store.events[0]["type"] == "LLM_PROMPT_RESULT"
+    assert store.events == []
 
 
 def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
@@ -222,6 +230,10 @@ def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
+    assert result.result == LlmPromptResult(
+        text='{"severity": "low", "summary": "ok"}',
+        json={"summary": "ok", "severity": "low"},
+    )
     assert store.updated[0]["current"] is None
 
 
@@ -259,7 +271,7 @@ def test_execute_llm_prompt_step_rejects_empty_next_when_declared() -> None:
         )
 
 
-def test_execute_llm_prompt_step_logs_raw_response_in_invalid_json_error() -> None:
+def test_execute_llm_prompt_step_raises_invalid_json_error_without_legacy_event() -> None:
     store = _FakeStore()
     llm = _FakeLLM(response={"ok": True, "content": "not-json", "model": "fake-llm"})
     use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
@@ -288,16 +300,7 @@ def test_execute_llm_prompt_step_logs_raw_response_in_invalid_json_error() -> No
             )
         )
 
-    assert store.events[0] == {
-        "type": "LLM_PROMPT_ERROR",
-        "payload": {
-            "step": "analyze_issue",
-            "error": "LLM step 'analyze_issue' returned invalid JSON: Expecting value",
-            "model": "fake-llm",
-            "raw_response": "not-json",
-        },
-        "run_id": "run-1",
-    }
+    assert store.events == []
 
 
 @pytest.mark.parametrize(

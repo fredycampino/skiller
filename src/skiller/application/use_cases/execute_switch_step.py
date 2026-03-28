@@ -5,6 +5,7 @@ from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepExecutionResult,
     StepExecutionStatus,
+    SwitchResult,
 )
 from skiller.domain.run_model import RunStatus
 
@@ -42,16 +43,6 @@ class ExecuteSwitchStepUseCase:
             "next": next_step_id,
         }
         current_step.context.results[step_id] = result
-
-        self.store.append_event(
-            "SWITCH_DECISION",
-            {
-                "step": step_id,
-                "value": result["value"],
-                "next": next_step_id,
-            },
-            run_id=current_step.run_id,
-        )
         self.store.update_run(
             current_step.run_id,
             status=RunStatus.RUNNING,
@@ -61,6 +52,7 @@ class ExecuteSwitchStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=SwitchResult(next=next_step_id),
         )
 
     def _resolve_next_step_id(

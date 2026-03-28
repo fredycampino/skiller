@@ -1,0 +1,57 @@
+name: chat
+description: "Direct chat loop with the LLM until the user types exit, quit, or bye"
+version: "0.1"
+
+inputs: {}
+
+steps:
+  - id: start
+    type: wait_input
+    prompt: "Write a message. Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - id: decide_exit
+    type: switch
+    value: "{{results.start.payload.text}}"
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: answer
+
+  - id: answer
+    type: llm_prompt
+    system: |
+      You are a helpful assistant in a terminal chat.
+      Be concise, clear, and direct.
+      Return only valid JSON.
+      Do not wrap the response in markdown.
+      Do not include explanations outside the JSON object.
+      The response must have exactly this shape:
+      {"reply":"<text>"}
+      The value of "reply" must always be a string.
+    prompt: |
+      User message:
+      {{results.start.payload.text}}
+      
+      Return JSON with exactly one field:
+      {"reply":"<your response>"}
+    output:
+      format: json
+      schema:
+        type: object
+        required: [reply]
+        properties:
+          reply:
+            type: string
+        additionalProperties: false
+    next: show_reply
+
+  - id: show_reply
+    type: notify
+    message: "{{results.answer.reply}}"
+    next: start
+
+  - id: done
+    type: notify
+    message: "Chat closed."

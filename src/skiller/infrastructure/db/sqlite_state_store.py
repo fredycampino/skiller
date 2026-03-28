@@ -23,6 +23,8 @@ class SqliteStateStore(SqliteRepository):
                   status TEXT NOT NULL,
                   current TEXT,
                   inputs_json TEXT NOT NULL DEFAULT '{}',
+                  results_json TEXT NOT NULL DEFAULT '{}',
+                  steering_messages_json TEXT NOT NULL DEFAULT '[]',
                   cancel_reason TEXT,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -110,6 +112,8 @@ class SqliteStateStore(SqliteRepository):
                 """
             )
             self._ensure_runs_current_column(conn)
+            self._ensure_runs_results_column(conn)
+            self._ensure_runs_steering_messages_column(conn)
             self._drop_runs_current_step_column(conn)
 
     def create_run(
@@ -132,9 +136,11 @@ class SqliteStateStore(SqliteRepository):
                       skill_snapshot_json,
                       status,
                       current,
-                      inputs_json
+                      inputs_json,
+                      results_json,
+                      steering_messages_json
                     )
-                    VALUES (?, ?, ?, ?, ?, NULL, ?)
+                    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
                     """,
                     (
                         run_id,
@@ -143,6 +149,8 @@ class SqliteStateStore(SqliteRepository):
                         json.dumps(skill_snapshot),
                         RunStatus.CREATED.value,
                         json.dumps(context.inputs),
+                        json.dumps(context.results),
+                        json.dumps(context.steering_messages),
                     ),
                 )
         except sqlite3.IntegrityError as exc:
@@ -167,6 +175,10 @@ class SqliteStateStore(SqliteRepository):
             updates.append("current = ?")
             params.append(current)
         if context is not None:
+            updates.append("results_json = ?")
+            params.append(json.dumps(context.results))
+            updates.append("steering_messages_json = ?")
+            params.append(json.dumps(context.steering_messages))
             updates.append("cancel_reason = ?")
             params.append(context.cancel_reason)
         if status in (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED):
@@ -194,6 +206,8 @@ class SqliteStateStore(SqliteRepository):
                   status,
                   current,
                   inputs_json,
+                  results_json,
+                  steering_messages_json,
                   cancel_reason,
                   created_at,
                   updated_at
@@ -221,6 +235,8 @@ class SqliteStateStore(SqliteRepository):
               status,
               current,
               inputs_json,
+              results_json,
+              steering_messages_json,
               cancel_reason,
               created_at,
               updated_at
@@ -247,6 +263,22 @@ class SqliteStateStore(SqliteRepository):
             return
         conn.execute("ALTER TABLE runs ADD COLUMN current TEXT")
 
+    def _ensure_runs_results_column(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(runs)").fetchall()
+        column_names = {str(row["name"]) for row in rows}
+        if "results_json" in column_names:
+            return
+        conn.execute("ALTER TABLE runs ADD COLUMN results_json TEXT NOT NULL DEFAULT '{}'")
+
+    def _ensure_runs_steering_messages_column(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(runs)").fetchall()
+        column_names = {str(row["name"]) for row in rows}
+        if "steering_messages_json" in column_names:
+            return
+        conn.execute(
+            "ALTER TABLE runs ADD COLUMN steering_messages_json TEXT NOT NULL DEFAULT '[]'"
+        )
+
     def _drop_runs_current_step_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()
         column_names = {str(row["name"]) for row in rows}
@@ -261,9 +293,18 @@ class SqliteStateStore(SqliteRepository):
         inputs_dict = json.loads(row["inputs_json"])
         if not isinstance(inputs_dict, dict):
             inputs_dict = {}
+        results_dict = json.loads(row["results_json"])
+        if not isinstance(results_dict, dict):
+            results_dict = {}
+        steering_messages = json.loads(row["steering_messages_json"])
+        if not isinstance(steering_messages, list):
+            steering_messages = []
         run_id = str(row["id"])
         context = self._build_context(
-            run_id, inputs=inputs_dict, cancel_reason=row["cancel_reason"]
+            inputs=inputs_dict,
+            results=results_dict,
+            steering_messages=steering_messages,
+            cancel_reason=row["cancel_reason"],
         )
 
         return Run(
@@ -611,107 +652,19 @@ class SqliteStateStore(SqliteRepository):
             return webhook_result.rowcount + input_result.rowcount
 
     def _build_context(
-        self, run_id: str, *, inputs: dict[str, Any], cancel_reason: str | None
+        self,
+        *,
+        inputs: dict[str, Any],
+        results: dict[str, Any],
+        steering_messages: list[str],
+        cancel_reason: str | None,
     ) -> RunContext:
-        context = RunContext(inputs=inputs, results={})
+        context = RunContext(
+            inputs=inputs,
+            results=results if isinstance(results, dict) else {},
+            steering_messages=steering_messages if isinstance(steering_messages, list) else [],
+        )
         if isinstance(cancel_reason, str) and cancel_reason.strip():
             context.cancel_reason = cancel_reason
-
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT type, payload_json
-                FROM events
-                WHERE run_id = ?
-                ORDER BY rowid ASC
-                """,
-                (run_id,),
-            ).fetchall()
-
-        for row in rows:
-            event_type = row["type"]
-            payload = json.loads(row["payload_json"])
-            if not isinstance(payload, dict):
-                continue
-
-            if event_type == "NOTIFY":
-                step_id = str(payload.get("step", "")).strip()
-                if step_id:
-                    context.results[step_id] = {
-                        "ok": True,
-                        "message": str(payload.get("message", "")),
-                    }
-                continue
-
-            if event_type == "ASSIGN_RESULT":
-                step_id = str(payload.get("step", "")).strip()
-                result = payload.get("result")
-                if step_id:
-                    context.results[step_id] = result
-                continue
-
-            if event_type in {"TOOL_RESULT", "MCP_RESULT"}:
-                step_id = str(payload.get("step", "")).strip()
-                result = payload.get("result")
-                if step_id:
-                    context.results[step_id] = result
-                continue
-
-            if event_type == "LLM_PROMPT_RESULT":
-                step_id = str(payload.get("step", "")).strip()
-                result = payload.get("result")
-                if step_id:
-                    context.results[step_id] = result
-                continue
-
-            if event_type == "SWITCH_DECISION":
-                step_id = str(payload.get("step", "")).strip()
-                if step_id:
-                    context.results[step_id] = {
-                        "value": payload.get("value"),
-                        "next": str(payload.get("next", "")),
-                    }
-                continue
-
-            if event_type == "WHEN_DECISION":
-                step_id = str(payload.get("step", "")).strip()
-                if step_id:
-                    context.results[step_id] = {
-                        "value": payload.get("value"),
-                        "next": str(payload.get("next", "")),
-                    }
-                continue
-
-            if event_type == "WAIT_RESOLVED":
-                step_id = str(payload.get("step", "")).strip()
-                if step_id:
-                    context.results[step_id] = {
-                        "ok": True,
-                        "webhook": str(payload.get("webhook", "")),
-                        "key": str(payload.get("key", "")),
-                        "payload": payload.get("payload", {}),
-                    }
-                continue
-
-            if event_type == "INPUT_RESOLVED":
-                step_id = str(payload.get("step", "")).strip()
-                if step_id:
-                    context.results[step_id] = {
-                        "ok": True,
-                        "prompt": str(payload.get("prompt", "")),
-                        "payload": payload.get("payload", {}),
-                    }
-                continue
-
-            if event_type == "STEER_RECORDED":
-                message = str(payload.get("message", "")).strip()
-                if message:
-                    context.steering_messages.append(message)
-                continue
-
-            if event_type == "RUN_CANCELLED" and not context.cancel_reason:
-                reason = str(payload.get("reason", "")).strip()
-                if reason:
-                    context.cancel_reason = reason
 
         return context

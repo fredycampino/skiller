@@ -3,6 +3,7 @@ from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepExecutionResult,
     StepExecutionStatus,
+    WaitWebhookResult,
 )
 from skiller.domain.run_model import RunStatus
 
@@ -38,19 +39,6 @@ class ExecuteWaitWebhookStepUseCase:
             if active_wait is not None:
                 self.store.resolve_wait(str(active_wait["id"]))
 
-            self.store.append_event(
-                "WAIT_RESOLVED",
-                {
-                    "step": step_id,
-                    "wait_id": (active_wait["id"] if active_wait is not None else None),
-                    "webhook": webhook,
-                    "key": key,
-                    "payload": webhook_event["payload"],
-                    "webhook_event_id": webhook_event["id"],
-                },
-                run_id=current_step.run_id,
-            )
-
             raw_next = step.get("next")
             if raw_next is None:
                 self.store.update_run(
@@ -58,7 +46,14 @@ class ExecuteWaitWebhookStepUseCase:
                     status=RunStatus.RUNNING,
                     context=current_step.context,
                 )
-                return StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+                return StepExecutionResult(
+                    status=StepExecutionStatus.COMPLETED,
+                    result=WaitWebhookResult(
+                        webhook=webhook,
+                        key=key,
+                        payload=webhook_event["payload"],
+                    ),
+                )
 
             next_step_id = str(raw_next).strip()
             if not next_step_id:
@@ -73,28 +68,27 @@ class ExecuteWaitWebhookStepUseCase:
             return StepExecutionResult(
                 status=StepExecutionStatus.NEXT,
                 next_step_id=next_step_id,
+                result=WaitWebhookResult(
+                    webhook=webhook,
+                    key=key,
+                    payload=webhook_event["payload"],
+                ),
             )
 
-        wait_id = (
-            str(active_wait["id"])
-            if active_wait is not None
-            else self.store.create_wait(
+        if active_wait is None:
+            self.store.create_wait(
                 current_step.run_id,
                 webhook,
                 key,
                 step_id=step_id,
             )
-        )
         self.store.update_run(
             current_step.run_id,
             status=RunStatus.WAITING,
             current=step_id,
             context=current_step.context,
         )
-        if active_wait is None:
-            self.store.append_event(
-                "WAITING",
-                {"step": step_id, "wait_id": wait_id, "webhook": webhook, "key": key},
-                run_id=current_step.run_id,
-            )
-        return StepExecutionResult(status=StepExecutionStatus.WAITING)
+        return StepExecutionResult(
+            status=StepExecutionStatus.WAITING,
+            result=WaitWebhookResult(webhook=webhook, key=key),
+        )

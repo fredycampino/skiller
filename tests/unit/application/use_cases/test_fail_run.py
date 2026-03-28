@@ -11,7 +11,6 @@ class _FakeStore:
     def __init__(self, run: Run | None) -> None:
         self.run = run
         self.updates: list[dict[str, object]] = []
-        self.events: list[dict[str, object]] = []
 
     def get_run(self, run_id: str) -> Run | None:
         _ = run_id
@@ -34,14 +33,7 @@ class _FakeStore:
             }
         )
 
-    def append_event(
-        self, event_type: str, payload: dict[str, object], run_id: str | None = None
-    ) -> str:
-        self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
-        return "event-1"
-
-
-def test_fail_run_marks_failed_and_logs_error() -> None:
+def test_fail_run_marks_failed() -> None:
     run = Run(
         id="run-1",
         skill_source="internal",
@@ -64,12 +56,5 @@ def test_fail_run_marks_failed_and_logs_error() -> None:
             "status": RunStatus.FAILED,
             "current": "done",
             "context": run.context,
-        }
-    ]
-    assert store.events == [
-        {
-            "type": "RUN_FAILED",
-            "payload": {"error": "boom"},
-            "run_id": "run-1",
         }
     ]

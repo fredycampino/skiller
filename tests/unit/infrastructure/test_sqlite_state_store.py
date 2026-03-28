@@ -67,6 +67,8 @@ def test_init_db_drops_legacy_current_step_column(tmp_path) -> None:
         columns = [row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()]
 
     assert "current_step" not in columns
+    assert "results_json" in columns
+    assert "steering_messages_json" in columns
 
     run = store.get_run("run-1")
 
@@ -75,8 +77,8 @@ def test_init_db_drops_legacy_current_step_column(tmp_path) -> None:
     assert not hasattr(run, "current_step")
 
 
-def test_get_run_rebuilds_switch_result_from_events(tmp_path) -> None:
-    db_path = tmp_path / "switch.db"
+def test_get_run_uses_persisted_results_json(tmp_path) -> None:
+    db_path = tmp_path / "persisted-results.db"
     store = SqliteStateStore(str(db_path))
     store.init_db()
 
@@ -87,14 +89,14 @@ def test_get_run_rebuilds_switch_result_from_events(tmp_path) -> None:
         RunContext(inputs={"repo": "acme"}, results={}),
         run_id="550e8400-e29b-41d4-a716-446655440001",
     )
-    store.append_event(
-        "SWITCH_DECISION",
-        {
-            "step": "start",
-            "value": "retry",
-            "next": "retry_notice",
-        },
-        run_id=run_id,
+    store.update_run(
+        run_id,
+        status=RunStatus.RUNNING,
+        current="start",
+        context=RunContext(
+            inputs={"repo": "acme"},
+            results={"start": {"value": "retry", "next": "retry_notice"}},
+        ),
     )
 
     run = store.get_run(run_id)
@@ -106,8 +108,8 @@ def test_get_run_rebuilds_switch_result_from_events(tmp_path) -> None:
     }
 
 
-def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
-    db_path = tmp_path / "when.db"
+def test_get_run_uses_persisted_when_result(tmp_path) -> None:
+    db_path = tmp_path / "persisted-when.db"
     store = SqliteStateStore(str(db_path))
     store.init_db()
 
@@ -118,17 +120,14 @@ def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
         RunContext(inputs={"repo": "acme"}, results={}),
         run_id="550e8400-e29b-41d4-a716-446655440002",
     )
-    store.append_event(
-        "WHEN_DECISION",
-        {
-            "step": "start",
-            "value": 85,
-            "next": "good",
-            "branch": 1,
-            "op": "gt",
-            "right": 70,
-        },
-        run_id=run_id,
+    store.update_run(
+        run_id,
+        status=RunStatus.RUNNING,
+        current="start",
+        context=RunContext(
+            inputs={"repo": "acme"},
+            results={"start": {"value": 85, "next": "good"}},
+        ),
     )
 
     run = store.get_run(run_id)
@@ -138,6 +137,33 @@ def test_get_run_rebuilds_when_result_from_events(tmp_path) -> None:
         "value": 85,
         "next": "good",
     }
+
+
+def test_update_run_persists_context_results_and_steering_messages(tmp_path) -> None:
+    db_path = tmp_path / "persisted-context.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "demo",
+        {"steps": [{"id": "start", "type": "notify"}]},
+        RunContext(inputs={"repo": "acme"}, results={}),
+        run_id="550e8400-e29b-41d4-a716-446655440005",
+    )
+    context = RunContext(
+        inputs={"repo": "acme"},
+        results={"start": {"message": "ok"}},
+        steering_messages=["be concise"],
+    )
+
+    store.update_run(run_id, status=RunStatus.RUNNING, current="start", context=context)
+
+    run = store.get_run(run_id)
+
+    assert run is not None
+    assert run.context.results == {"start": {"message": "ok"}}
+    assert run.context.steering_messages == ["be concise"]
 
 
 def test_create_run_uses_explicit_run_id(tmp_path) -> None:
@@ -236,6 +262,46 @@ def test_list_runs_can_filter_by_status(tmp_path) -> None:
 
     assert [run.id for run in runs] == [waiting_run_id]
     assert runs[0].status == RunStatus.WAITING.value
+
+
+def test_get_run_uses_persisted_input_result(tmp_path) -> None:
+    db_path = tmp_path / "persisted-input.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "chat",
+        {"steps": [{"id": "start", "type": "wait_input"}]},
+        RunContext(inputs={}, results={}),
+        run_id="550e8400-e29b-41d4-a716-446655440099",
+    )
+    store.update_run(
+        run_id,
+        status=RunStatus.RUNNING,
+        current="start",
+        context=RunContext(
+            inputs={},
+            results={
+                "start": {
+                    "ok": True,
+                    "prompt": "Write a message",
+                    "payload": {"text": "hola"},
+                    "input_event_id": "input-1",
+                }
+            },
+        ),
+    )
+
+    run = store.get_run(run_id)
+
+    assert run is not None
+    assert run.context.results["start"] == {
+        "ok": True,
+        "prompt": "Write a message",
+        "payload": {"text": "hola"},
+        "input_event_id": "input-1",
+    }
 
 
 def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:

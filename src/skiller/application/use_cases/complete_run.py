@@ -11,8 +11,3 @@ class CompleteRunUseCase:
             run_id,
             status=RunStatus.SUCCEEDED,
         )
-        self.store.append_event(
-            "RUN_FINISHED",
-            {"status": RunStatus.SUCCEEDED.value},
-            run_id=run_id,
-        )

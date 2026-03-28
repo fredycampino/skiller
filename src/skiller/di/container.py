@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from skiller.application.query_service import RunQueryService
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.create_run import CreateRunUseCase
@@ -60,6 +61,7 @@ def build_runtime_container(
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(store)
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
@@ -90,6 +92,7 @@ def build_runtime_container(
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
@@ -110,6 +113,7 @@ def build_runtime_container(
 
     runtime_service = RuntimeApplicationService(
         bootstrap_runtime_use_case=bootstrap_runtime_use_case,
+        append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,

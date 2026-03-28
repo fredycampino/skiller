@@ -5,6 +5,7 @@ from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepExecutionResult,
     StepExecutionStatus,
+    WhenResult,
 )
 from skiller.domain.run_model import RunStatus
 
@@ -45,19 +46,6 @@ class ExecuteWhenStepUseCase:
             "next": next_step_id,
         }
         current_step.context.results[step_id] = result
-
-        self.store.append_event(
-            "WHEN_DECISION",
-            {
-                "step": step_id,
-                "value": result["value"],
-                "next": next_step_id,
-                "branch": decision["branch"],
-                "op": decision["op"],
-                "right": decision["right"],
-            },
-            run_id=current_step.run_id,
-        )
         self.store.update_run(
             current_step.run_id,
             status=RunStatus.RUNNING,
@@ -67,6 +55,7 @@ class ExecuteWhenStepUseCase:
         return StepExecutionResult(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
+            result=WhenResult(next=next_step_id),
         )
 
     def _resolve_next_step_id(

@@ -29,7 +29,9 @@ from skiller.application.use_cases.render_current_step import RenderCurrentStepU
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
 from skiller.di.container import build_runtime_container
+from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings
+from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
@@ -61,6 +63,8 @@ class _FakeLLM:
 
 def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(skills_dir="skills")
+    execution_output_store = SqliteExecutionOutputStore(store.db_path)
+    execution_output_store.init_db()
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     fail_run_use_case = FailRunUseCase(store)
@@ -69,8 +73,18 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    execute_mcp_step_use_case = ExecuteMcpStepUseCase(store=store, mcp=mcp)
+    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        llm=llm,
+        large_result_truncator=LargeResultTruncator(),
+    )
+    execute_mcp_step_use_case = ExecuteMcpStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        mcp=mcp,
+        large_result_truncator=LargeResultTruncator(),
+    )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -91,7 +105,11 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     )
 
     runtime = RuntimeApplicationService(
-        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
+            store=store,
+            execution_output_store=execution_output_store,
+            webhook_registry=webhook_registry,
+        ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
@@ -116,11 +134,11 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
         skill_path.write_text(
             (
                 "name: llm_prompt_demo\n"
+                "start: analyze_issue\n"
                 "inputs:\n"
                 "  stderr: string\n"
                 "steps:\n"
-                "  - id: start\n"
-                "    type: llm_prompt\n"
+                "  - llm_prompt: analyze_issue\n"
                 "    system: |\n"
                 "      Eres un analista tecnico.\n"
                 "      Responde solo JSON.\n"
@@ -142,9 +160,8 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
                 "            type: string\n"
                 "            enum: [retry, ask_human, fail]\n"
                 "    next: done\n"
-                "  - id: done\n"
-                "    type: notify\n"
-                '    message: "{{results.start.next_action}}"\n'
+                "  - notify: done\n"
+                '    message: "{{step_executions.analyze_issue.output.value.data.next_action}}"\n'
             ),
             encoding="utf-8",
         )
@@ -161,17 +178,26 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
         assert run.status == "SUCCEEDED"
-        assert run.context.results["start"] == {
-            "summary": "tests failing on auth",
-            "severity": "high",
-            "next_action": "retry",
+        assert run.context.step_executions["analyze_issue"].output.to_public_dict() == {
+            "text": (
+                '{"next_action": "retry", "severity": "high", '
+                '"summary": "tests failing on auth"}'
+            ),
+            "value": {
+                "data": {
+                    "summary": "tests failing on auth",
+                    "severity": "high",
+                    "next_action": "retry",
+                }
+            },
+            "body_ref": None,
         }
 
         events = store.list_events(run_result["run_id"])
         llm_event = next(
             event
             for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "analyze_issue"
         )
         notify_event = next(
             event
@@ -179,9 +205,85 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
             if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
         )
 
-        assert llm_event["payload"]["result"]["json"]["severity"] == "high"
-        assert notify_event["payload"]["result"]["message"] == "retry"
+        assert llm_event["payload"]["output"]["value"]["data"]["severity"] == "high"
+        assert notify_event["payload"]["output"]["value"]["message"] == "retry"
         assert llm.calls[0]["messages"][1]["content"].endswith("Traceback auth failed\n")
+
+
+def test_llm_prompt_step_persists_large_result_body_and_truncates_output_value() -> None:
+    llm = _FakeLLM()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "llm_prompt_large.yaml"
+        skill_path.write_text(
+            (
+                "name: llm_prompt_large_demo\n"
+                "start: analyze_issue\n"
+                "inputs:\n"
+                "  stderr: string\n"
+                "steps:\n"
+                "  - llm_prompt: analyze_issue\n"
+                "    prompt: '{{inputs.stderr}}'\n"
+                "    large_result: true\n"
+                "    output:\n"
+                "      format: json\n"
+                "      schema:\n"
+                "        type: object\n"
+                "        required: [summary, severity, next_action]\n"
+                "        properties:\n"
+                "          summary:\n"
+                "            type: string\n"
+                "          severity:\n"
+                "            type: string\n"
+                "          next_action:\n"
+                "            type: string\n"
+                "    next: done\n"
+                "  - notify: done\n"
+                '    message: "{{step_executions.analyze_issue.output.value.data.summary}}"\n'
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store, llm)
+        execution_output_store = SqliteExecutionOutputStore(store.db_path)
+
+        run_result = runtime.run(
+            str(skill_path), {"stderr": "Traceback auth failed"}, skill_source="file"
+        )
+
+        run = store.get_run(run_result["run_id"])
+        assert run_result["status"] == "SUCCEEDED"
+        assert run is not None
+        body_ref = run.context.step_executions["analyze_issue"].output.body_ref
+        assert isinstance(body_ref, str)
+        assert body_ref.startswith("execution_output:")
+        assert run.context.step_executions["analyze_issue"].output.to_public_dict() == {
+            "text": (
+                '{"next_action": "retry", "severity": "high", '
+                '"summary": "tests failing on auth", "truncated": true}'
+            ),
+            "value": {
+                "data": {
+                    "truncated": True,
+                    "summary": "tests failing on auth",
+                    "severity": "high",
+                    "next_action": "retry",
+                }
+            },
+            "body_ref": body_ref,
+        }
+        assert execution_output_store.get_execution_output(body_ref) == {
+            "value": {
+                "data": {
+                    "summary": "tests failing on auth",
+                    "severity": "high",
+                    "next_action": "retry",
+                }
+            },
+        }
 
 
 def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> None:
@@ -191,11 +293,11 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
         skill_path.write_text(
             (
                 "name: llm_prompt_demo\n"
+                "start: analyze_issue\n"
                 "inputs:\n"
                 "  stderr: string\n"
                 "steps:\n"
-                "  - id: start\n"
-                "    type: llm_prompt\n"
+                "  - llm_prompt: analyze_issue\n"
                 "    system: Return JSON only.\n"
                 "    prompt: '{{inputs.stderr}}'\n"
                 "    output:\n"
@@ -213,9 +315,8 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
                 "            type: string\n"
                 "            enum: [retry, ask_human, fail]\n"
                 "    next: done\n"
-                "  - id: done\n"
-                "    type: notify\n"
-                "    message: '{{results.start.next_action}}'\n"
+                "  - notify: done\n"
+                "    message: '{{step_executions.analyze_issue.output.value.data.next_action}}'\n"
             ),
             encoding="utf-8",
         )
@@ -242,17 +343,26 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
 
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
-        assert run.context.results["start"] == {
-            "summary": "container fake",
-            "severity": "medium",
-            "next_action": "ask_human",
+        assert run.context.step_executions["analyze_issue"].output.to_public_dict() == {
+            "text": (
+                '{"next_action": "ask_human", "severity": "medium", '
+                '"summary": "container fake"}'
+            ),
+            "value": {
+                "data": {
+                    "summary": "container fake",
+                    "severity": "medium",
+                    "next_action": "ask_human",
+                }
+            },
+            "body_ref": None,
         }
 
         events = container.query_service.get_run_logs_use_case.execute(run_result["run_id"])
         llm_event = next(
             event
             for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "analyze_issue"
         )
         notify_event = next(
             event
@@ -260,8 +370,8 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
             if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
         )
 
-        assert llm_event["payload"]["result"]["model"] == "fake-llm-integration"
-        assert notify_event["payload"]["result"]["message"] == "ask_human"
+        assert llm_event["payload"]["output"]["value"]["data"]["next_action"] == "ask_human"
+        assert notify_event["payload"]["output"]["value"]["message"] == "ask_human"
 
 
 def test_llm_prompt_failure_persists_step_error_and_run_finished() -> None:
@@ -271,11 +381,11 @@ def test_llm_prompt_failure_persists_step_error_and_run_finished() -> None:
         skill_path.write_text(
             (
                 "name: llm_prompt_demo\n"
+                "start: analyze_issue\n"
                 "inputs:\n"
                 "  issue: string\n"
                 "steps:\n"
-                "  - id: start\n"
-                "    type: llm_prompt\n"
+                "  - llm_prompt: analyze_issue\n"
                 "    prompt: '{{inputs.issue}}'\n"
                 "    output:\n"
                 "      format: json\n"
@@ -310,13 +420,13 @@ def test_llm_prompt_failure_persists_step_error_and_run_finished() -> None:
         assert run is not None
         assert run.status == "FAILED"
         assert llm_error_event["payload"] == {
-            "step": "start",
+            "step": "analyze_issue",
             "step_type": "llm_prompt",
-            "error": "LLM step 'start' returned invalid JSON: Expecting value",
+            "error": "LLM step 'analyze_issue' returned invalid JSON: Expecting value",
         }
         assert failed_event["payload"] == {
             "status": "FAILED",
-            "error": "LLM step 'start' returned invalid JSON: Expecting value",
+            "error": "LLM step 'analyze_issue' returned invalid JSON: Expecting value",
         }
 
 
@@ -327,11 +437,11 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
         skill_path.write_text(
             (
                 "name: llm_prompt_demo\n"
+                "start: analyze_issue\n"
                 "inputs:\n"
                 "  issue: string\n"
                 "steps:\n"
-                "  - id: start\n"
-                "    type: llm_prompt\n"
+                "  - llm_prompt: analyze_issue\n"
                 "    prompt: '{{inputs.issue}}'\n"
                 "    output:\n"
                 "      format: json\n"
@@ -348,9 +458,8 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
                 "            type: string\n"
                 "            enum: [retry]\n"
                 "    next: done\n"
-                "  - id: done\n"
-                "    type: notify\n"
-                "    message: '{{results.start.next_action}}'\n"
+                "  - notify: done\n"
+                "    message: '{{step_executions.analyze_issue.output.value.data.next_action}}'\n"
             ),
             encoding="utf-8",
         )
@@ -372,14 +481,20 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
         llm_event = next(
             event
             for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "start"
+            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "analyze_issue"
         )
 
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
-        assert run.context.results["start"] == {
-            "summary": "ok",
-            "severity": "low",
-            "next_action": "retry",
+        assert run.context.step_executions["analyze_issue"].output.to_public_dict() == {
+            "text": '{"next_action": "retry", "severity": "low", "summary": "ok"}',
+            "value": {
+                "data": {
+                    "summary": "ok",
+                    "severity": "low",
+                    "next_action": "retry",
+                }
+            },
+            "body_ref": None,
         }
-        assert llm_event["payload"]["result"]["json"]["next_action"] == "retry"
+        assert llm_event["payload"]["output"]["value"]["data"]["next_action"] == "retry"

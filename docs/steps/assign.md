@@ -2,98 +2,51 @@
 
 ## Goal
 
-`assign` is a pure mapping step.
+`assign` is a pure mapping step. It copies already rendered values into a new named step execution.
 
-It does not call external services, decide branches, or wait for events.
-It only takes values that already exist in the run context and stores them in:
-
-```yaml
-results.<step_id>
-```
-
-## Minimal Shape
+## Shape
 
 ```yaml
-- id: prepare_issue
-  type: assign
+- assign: prepare_issue
   values:
-    action: "{{results.analyze_issue.next_action}}"
-    summary: "{{results.analyze_issue.summary}}"
+    action: "{{step_executions.analyze_issue.output.value.data.next_action}}"
+    summary: "{{step_executions.analyze_issue.output.value.data.summary}}"
 ```
-
-Expected result:
-
-```yaml
-results.prepare_issue.action
-results.prepare_issue.summary
-```
-
-## Recommended Use
-
-`assign` is useful for:
-
-- renaming fields
-- flattening awkward structures
-- preparing a clearer object for later steps
-- avoiding long paths such as `results.something.very.deep`
-
-## Rendering
-
-`assign` follows the normal runtime rendering rules:
-
-- `RenderCurrentStepUseCase` renders the full step
-- any string inside `values` is renderable
-
-Example:
-
-```yaml
-- id: prepare
-  type: assign
-  values:
-    action: "{{results.analyze_issue.next_action}}"
-    meta:
-      severity: "{{results.analyze_issue.severity}}"
-      source: "llm"
-    tags:
-      - triage
-      - "{{results.analyze_issue.severity}}"
-```
-
-If an entry in `values` is a full placeholder such as `{{results.foo}}`, the renderer keeps the original value when it exists instead of always converting it to a string.
-
-## v0 Restrictions
-
-In this version:
-
-- `values` is mandatory
-- `values` must be an object
-- `values` must not be empty
-
-It does not support:
-
-- expressions
-- comparisons
-- functions
-- casts
-- its own schema validation
-
-If you need logic, that belongs in `switch`, `when`, or a future more expressive step.
 
 ## Persistence
 
-`assign` stores the result in:
+`assign` stores:
 
-```yaml
-results.<step_id>
+```json
+{
+  "step_executions": {
+    "prepare_issue": {
+      "step_type": "assign",
+      "input": {
+        "values": {
+          "action": "retry",
+          "summary": "dependency timeout"
+        }
+      },
+      "evaluation": {},
+      "output": {
+        "text": "Values assigned.",
+        "value": {
+          "assigned": {
+            "action": "retry",
+            "summary": "dependency timeout"
+          }
+        },
+        "body_ref": null
+      }
+    }
+  }
+}
 ```
 
-It also emits:
+Template access:
 
 ```text
-ASSIGN_RESULT
+{{step_executions.prepare_issue.output.value.assigned.action}}
+{{step_executions.prepare_issue.output.value.assigned.summary}}
 ```
-
-with:
-
-- `step`
-- `result`

@@ -35,7 +35,7 @@ def _build_run(skill_snapshot: object) -> Run:
         skill_snapshot=skill_snapshot,  # type: ignore[arg-type]
         status=RunStatus.CREATED.value,
         current=None,
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
         created_at="2026-03-10 10:00:00",
         updated_at="2026-03-10 10:00:00",
     )
@@ -45,9 +45,10 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
     store = _FakeStore(
         _build_run(
             {
+                "start": "ask_user",
                 "steps": [
-                    {"id": "start", "type": "notify", "message": "ok"},
-                    {"id": "done", "type": "notify", "message": "done"},
+                    {"notify": "ask_user", "message": "ok"},
+                    {"notify": "done", "message": "done"},
                 ]
             }
         )
@@ -56,12 +57,12 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
 
     step_id = use_case.execute("run-1")
 
-    assert step_id == "start"
+    assert step_id == "ask_user"
     assert store.updates == [
         {
             "run_id": "run-1",
             "status": None,
-            "current": "start",
+            "current": "ask_user",
             "context": None,
         }
     ]
@@ -71,8 +72,9 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
     "skill_snapshot",
     [
         {"steps": []},
-        {"steps": [{"id": "done", "type": "notify"}]},
-        {"steps": [{"id": "start"}, {"id": "start"}]},
+        {"start": "start", "steps": [{"notify": "done"}]},
+        {"start": "start", "steps": [{"notify": "start"}, {"notify": "start"}]},
+        {"start": "start", "steps": []},
         {"steps": ["bad-step"]},
         [],
     ],

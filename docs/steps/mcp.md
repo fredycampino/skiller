@@ -2,17 +2,9 @@
 
 ## Goal
 
-`mcp` runs a tool from an MCP server declared in the skill.
+`mcp` runs a tool from an MCP server declared in the skill and stores the returned tool payload as structured output.
 
-The step:
-
-- renders its arguments with the run context
-- resolves the MCP server configuration from the `mcp:` block
-- runs the tool
-- stores the result in `results.<step_id>`
-- decides whether the run continues or ends
-
-## Minimal Shape
+## Shape
 
 ```yaml
 mcp:
@@ -23,9 +15,8 @@ mcp:
       - /opt/local-mcp/local_mcp.py
 
 steps:
-  - id: start
-    type: mcp
-    mcp: local-mcp
+  - mcp: create_file
+    server: local-mcp
     tool: files_action
     args:
       action: create
@@ -33,90 +24,41 @@ steps:
       content: "{{inputs.content}}"
 ```
 
-## Shape with `next`
+Optional:
 
 ```yaml
-mcp:
-  - name: test-mcp
-    transport: streamable-http
-    url: "{{inputs.mcp_url}}"
-
 steps:
-  - id: start
-    type: mcp
-    mcp: test-mcp
-    tool: ping
-    args: {}
-    next: done
-
-  - id: done
-    type: notify
-    message: "pong"
-```
-
-## Rendering
-
-`mcp` follows the normal runtime pattern:
-
-- `RenderCurrentStepUseCase` renders the full step
-- `RenderMcpConfigUseCase` renders the MCP configuration declared in the skill
-
-Common renderable fields:
-
-- `args`
-- `mcp[].url`
-- `mcp[].command`
-- `mcp[].args`
-- `mcp[].cwd`
-- `mcp[].env`
-- `mcp[].headers`
-
-## Validations
-
-In this version:
-
-- the step must declare `mcp`
-- the step must declare `tool`
-- `tool` must not use an `mcp.<server>.` prefix
-- `args` must be an object
-- the server must exist in the `mcp:` block
-- the rendered MCP configuration must not leave templates unresolved
-
-## Result
-
-`mcp` stores the tool result in:
-
-```yaml
-results.<step_id>
-```
-
-Example:
-
-```json
-{
-  "ok": true,
-  "path": "/tmp/demo.txt"
-}
+  - mcp: search
+    server: local-mcp
+    tool: search
+    args:
+      query: "{{inputs.query}}"
+    large_result: true
 ```
 
 ## Persistence
 
-In addition to the result in `context.results[step_id]`, `mcp` emits:
-
-```text
-MCP_RESULT
+```json
+{
+  "output": {
+    "text": "local-mcp.files_action completed successfully.",
+    "value": {
+      "data": {
+        "ok": true,
+        "path": "/tmp/demo.txt"
+      }
+    },
+    "body_ref": null
+  }
+}
 ```
 
-with:
+With `large_result: true`, the runtime stores the full `output_body` in `execution_outputs`, keeps a small summary in `output.value.data`, marks it with `truncated: true`, and fills `output.body_ref`.
 
-- `step`
-- `mcp`
-- `tool`
-- `result`
+Template access:
 
-## Transition
+```text
+{{step_executions.create_file.output.value.data.path}}
+```
 
-In the new loop:
-
-- if the step has `next`, the runtime moves `current` to that `step_id`
-- if the step has no `next`, the run completes
+The transport outcome is also kept in `evaluation.ok`.

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from skiller.application.ports.state_store_port import StateStorePort
+from skiller.domain.external_event_type import ExternalEventType
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,13 @@ class HandleWebhookUseCase:
                 run_ids=[],
             )
 
-        event_id = self.store.create_webhook_event(webhook, key, payload, final_dedup_key)
+        event_id = self.store.create_external_event(
+            event_type=ExternalEventType.WEBHOOK,
+            webhook=webhook,
+            key=key,
+            dedup_key=final_dedup_key,
+            payload=payload,
+        )
         waits = self.store.find_matching_waits(webhook, key)
         run_ids = [str(wait["run_id"]) for wait in waits]
         return HandleWebhookResult(

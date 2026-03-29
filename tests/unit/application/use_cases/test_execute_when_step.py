@@ -2,9 +2,10 @@ import pytest
 
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus, WhenResult
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import WhenOutput
 
 pytestmark = pytest.mark.unit
 
@@ -38,8 +39,6 @@ def _build_current_step(
     default: object = "fail",
 ) -> CurrentStep:
     step: dict[str, object] = {
-        "id": "decide_score",
-        "type": "when",
         "value": value,
         "branches": branches
         if branches is not None
@@ -55,7 +54,7 @@ def _build_current_step(
         step_id="decide_score",
         step_type=StepType.WHEN,
         step=step,
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
     )
 
 
@@ -68,11 +67,9 @@ def test_when_step_moves_current_to_first_matching_branch() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "good"
-    assert result.result == WhenResult(next="good")
-    assert current_step.context.results["decide_score"] == {
-        "value": 85,
-        "next": "good",
-    }
+    assert result.execution is not None
+    assert result.execution.output == WhenOutput(text="Route selected: good.", next_step_id="good")
+    assert current_step.context.step_executions["decide_score"] == result.execution
     assert store.updated_runs == [
         {
             "run_id": "run-1",
@@ -97,11 +94,12 @@ def test_when_step_supports_single_branch_as_binary_if() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "retry_notice"
-    assert result.result == WhenResult(next="retry_notice")
-    assert current_step.context.results["decide_score"] == {
-        "value": "retry",
-        "next": "retry_notice",
-    }
+    assert result.execution is not None
+    assert result.execution.output == WhenOutput(
+        text="Route selected: retry_notice.",
+        next_step_id="retry_notice",
+    )
+    assert current_step.context.step_executions["decide_score"] == result.execution
 
 
 def test_when_step_falls_back_to_default_when_no_branch_matches() -> None:
@@ -113,11 +111,9 @@ def test_when_step_falls_back_to_default_when_no_branch_matches() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "fail"
-    assert result.result == WhenResult(next="fail")
-    assert current_step.context.results["decide_score"] == {
-        "value": 40,
-        "next": "fail",
-    }
+    assert result.execution is not None
+    assert result.execution.output == WhenOutput(text="Route selected: fail.", next_step_id="fail")
+    assert current_step.context.step_executions["decide_score"] == result.execution
     assert store.events == []
 
 
@@ -167,8 +163,6 @@ def test_when_step_validates_contract(
 ) -> None:
     _ = label
     step: dict[str, object] = {
-        "id": "decide_score",
-        "type": "when",
         "branches": [{"gt": 90, "then": "excellent"}],
         "default": "fail",
     }
@@ -184,7 +178,7 @@ def test_when_step_validates_contract(
         step_id="decide_score",
         step_type=StepType.WHEN,
         step=step,
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
     )
     store = _FakeStore()
     use_case = ExecuteWhenStepUseCase(store=store)

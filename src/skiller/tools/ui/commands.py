@@ -55,6 +55,11 @@ class LogsCommand:
 
 
 @dataclass(frozen=True)
+class BodyCommand:
+    body_ref: str
+
+
+@dataclass(frozen=True)
 class WatchCommand:
     run_id: str
 
@@ -89,6 +94,7 @@ UiCommand = (
     | RunCommand
     | StatusCommand
     | LogsCommand
+    | BodyCommand
     | WatchCommand
     | ResumeCommand
     | InputCommand
@@ -138,6 +144,11 @@ COMMAND_SPECS = (
         name="/logs",
         usage="/logs [run_id]",
         description="Show recent run logs for the selected or last run",
+    ),
+    CommandSpec(
+        name="/body",
+        usage="/body <body_ref>",
+        description="Show persisted output body for a body_ref",
     ),
     CommandSpec(
         name="/watch",
@@ -236,6 +247,10 @@ def parse_command(raw_line: str) -> UiCommand:
     if resolved_name == "/logs":
         run_id = remainder.strip()
         return LogsCommand(run_id=run_id)
+
+    if resolved_name == "/body":
+        body_ref = remainder.strip()
+        return BodyCommand(body_ref=body_ref)
 
     if resolved_name == "/watch":
         run_id = remainder.strip()

@@ -33,6 +33,8 @@ from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -59,6 +61,8 @@ def require_real_mcp_runtime() -> None:
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(skills_dir="skills")
+    execution_output_store = SqliteExecutionOutputStore(store.db_path)
+    execution_output_store.init_db()
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     fail_run_use_case = FailRunUseCase(store)
@@ -67,8 +71,18 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(store=store, llm=NullLLM())
-    execute_mcp_step_use_case = ExecuteMcpStepUseCase(store=store, mcp=mcp)
+    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        llm=NullLLM(),
+        large_result_truncator=LargeResultTruncator(),
+    )
+    execute_mcp_step_use_case = ExecuteMcpStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        mcp=mcp,
+        large_result_truncator=LargeResultTruncator(),
+    )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -89,7 +103,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     )
 
     runtime = RuntimeApplicationService(
-        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(store),
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
+            store=store,
+            execution_output_store=execution_output_store,
+            webhook_registry=webhook_registry,
+        ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
@@ -172,8 +190,8 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
             for event in events
             if event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "mcp"
         )
-        assert mcp_event["payload"]["result"]["ok"] is True
-        assert mcp_event["payload"]["result"]["data"]["tool"] == "files_action"
+        assert mcp_event["payload"]["output"]["value"]["data"]["ok"] is True
+        assert mcp_event["payload"]["output"]["value"]["data"]["tool"] == "files_action"
 
 
 def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
@@ -198,5 +216,5 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
             for event in events
             if event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "mcp"
         )
-        assert mcp_event["payload"]["result"]["ok"] is True
-        assert mcp_event["payload"]["result"]["data"]["tool"] == "ping"
+        assert mcp_event["payload"]["output"]["value"]["data"]["ok"] is True
+        assert mcp_event["payload"]["output"]["value"]["data"]["tool"] == "ping"

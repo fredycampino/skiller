@@ -3,18 +3,18 @@ from typing import Any
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
-    AssignResult,
-    StepExecutionResult,
+    StepAdvance,
     StepExecutionStatus,
 )
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import AssignOutput, StepExecution
 
 
 class ExecuteAssignStepUseCase:
     def __init__(self, store: StateStorePort) -> None:
         self.store = store
 
-    def execute(self, current_step: CurrentStep) -> StepExecutionResult:
+    def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
         step = current_step.step
         values = step.get("values")
@@ -24,8 +24,14 @@ class ExecuteAssignStepUseCase:
         if not values:
             raise ValueError(f"Step '{step_id}' requires non-empty values object")
 
-        result = self._clone(values)
-        current_step.context.results[step_id] = result
+        assigned = self._clone(values)
+        execution = StepExecution(
+            step_type=current_step.step_type,
+            input={"values": self._clone(values)},
+            evaluation={},
+            output=AssignOutput(text="Values assigned.", assigned=assigned),
+        )
+        current_step.context.step_executions[step_id] = execution
 
         raw_next = step.get("next")
         if raw_next is None:
@@ -34,9 +40,9 @@ class ExecuteAssignStepUseCase:
                 status=RunStatus.RUNNING,
                 context=current_step.context,
             )
-            return StepExecutionResult(
+            return StepAdvance(
                 status=StepExecutionStatus.COMPLETED,
-                result=AssignResult(value=result),
+                execution=execution,
             )
 
         next_step_id = str(raw_next).strip()
@@ -49,10 +55,10 @@ class ExecuteAssignStepUseCase:
             current=next_step_id,
             context=current_step.context,
         )
-        return StepExecutionResult(
+        return StepAdvance(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
-            result=AssignResult(value=result),
+            execution=execution,
         )
 
     def _clone(self, value: Any) -> Any:

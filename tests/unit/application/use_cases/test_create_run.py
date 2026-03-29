@@ -45,7 +45,9 @@ class _FakeSkillRunner:
 
 def test_create_run_generates_uuid_for_store() -> None:
     store = _FakeStore()
-    skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
+    skill_runner = _FakeSkillRunner(
+        {"start": "show_message", "steps": [{"notify": "show_message", "message": "ok"}]}
+    )
     use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
     run_id = use_case.execute("notify_test", {"message": "ok"})
@@ -55,8 +57,11 @@ def test_create_run_generates_uuid_for_store() -> None:
         {
             "skill_source": "internal",
             "skill_ref": "notify_test",
-            "skill_snapshot": {"steps": [{"id": "start", "type": "notify", "message": "ok"}]},
-            "context": RunContext(inputs={"message": "ok"}, results={}),
+            "skill_snapshot": {
+                "start": "show_message",
+                "steps": [{"notify": "show_message", "message": "ok"}],
+            },
+            "context": RunContext(inputs={"message": "ok"}, step_executions={}),
             "run_id": run_id,
         }
     ]
@@ -64,7 +69,9 @@ def test_create_run_generates_uuid_for_store() -> None:
 
 def test_create_run_generates_uuid_when_called_without_inputs() -> None:
     store = _FakeStore()
-    skill_runner = _FakeSkillRunner({"steps": [{"id": "start", "type": "notify", "message": "ok"}]})
+    skill_runner = _FakeSkillRunner(
+        {"start": "show_message", "steps": [{"notify": "show_message", "message": "ok"}]}
+    )
     use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
     run_id = use_case.execute("notify_test", {})

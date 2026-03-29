@@ -5,6 +5,7 @@ from skiller.application.ports.skill_runner_port import SkillRunnerPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import SkillSource
+from skiller.domain.skill_step_model import validate_skill_snapshot
 
 
 class CreateRunUseCase:
@@ -20,10 +21,12 @@ class CreateRunUseCase:
         skill_source: str = SkillSource.INTERNAL.value,
     ) -> str:
         run_id = str(uuid.uuid4())
-        skill_snapshot = self.skill_runner.load_skill(skill_source, skill_ref)
-        if not isinstance(skill_snapshot, dict):
-            raise ValueError(f"Invalid skill format for '{skill_ref}'. Expected an object.")
-        context = RunContext(inputs=inputs, results={})
+        raw_skill = self.skill_runner.load_skill(skill_source, skill_ref)
+        try:
+            skill_snapshot = validate_skill_snapshot(raw_skill)
+        except ValueError as exc:
+            raise ValueError(f"Invalid skill format for '{skill_ref}'. {exc}") from exc
+        context = RunContext(inputs=inputs, step_executions={})
         return self.store.create_run(
             skill_source,
             skill_ref,

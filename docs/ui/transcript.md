@@ -10,7 +10,7 @@ This behavior applies to:
 - automatic follow-up `watch` after `wait_input` replies
 - explicit `/watch`
 
-It does not define `/logs`, which stays raw and debug-oriented.
+It does not define `/logs`, which stays raw and debug-oriented under [`logs-debug.md`](logs-debug.md).
 
 ### Header
 Each execution block starts with a single run header:
@@ -43,14 +43,12 @@ Examples:
 `  [llm_prompt] answer`
 `    España tiene 50 provincias.`
 
-`  [notify] show_reply`
-`    España tiene 50 provincias.`
-
-`  [wait_input] start`
+`  [wait_input] ask_user`
 `    Write a message. Type exit, quit, or bye to stop.`
 
 ### Event Mapping
 The transcript is built from generic runtime events only.
+It must not depend on raw watch text or `stderr` parsing.
 
 Visible mappings:
 - `STEP_SUCCESS` -> visible step line
@@ -91,7 +89,7 @@ Rules:
 When a new execution block contains real execution after an older waiting marker, the stale leading `RUN_WAITING` must be omitted.
 
 Example:
-- old block ended in `[wait_input] start`
+- old block ended in `[wait_input] ask_user`
 - next block begins with resume metadata and the same old waiting event
 - the transcript must start at the first new visible step, not at the stale waiting line
 
@@ -111,8 +109,6 @@ Tracebacks and provider errors must be reduced to a concise readable message.
     answer
   [llm_prompt] answer
     España tiene 50 provincias.
-  [notify] show_reply
-    España tiene 50 provincias.
-  [wait_input] start
+  [wait_input] ask_user
     Write a message. Type exit, quit, or bye to stop.
 ```

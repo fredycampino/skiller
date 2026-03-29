@@ -44,6 +44,14 @@ class CliRuntimeAdapter:
             raise RuntimeError("logs command returned invalid payload")
         return payload
 
+    def get_execution_output(self, *, body_ref: str) -> dict[str, Any] | None:
+        payload = _run_json_command("execution-output", body_ref)
+        if payload is None:
+            return None
+        if not isinstance(payload, dict):
+            raise RuntimeError("execution-output command returned invalid payload")
+        return payload
+
     def watch(self, *, run_id: str) -> dict[str, Any]:
         return _run_watch_command(run_id)
 
@@ -83,7 +91,6 @@ def _run_watch_command(run_id: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise RuntimeError("watch command returned invalid payload")
 
-    payload["events_text"] = completed.stderr.strip()
     return payload
 
 

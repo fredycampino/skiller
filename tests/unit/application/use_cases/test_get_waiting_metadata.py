@@ -11,12 +11,11 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
     run = SimpleNamespace(
         id="run-1",
         status="WAITING",
-        current="start",
+        current="wait_signal",
         skill_snapshot={
             "steps": [
                 {
-                    "id": "start",
-                    "type": "wait_webhook",
+                    "wait_webhook": "wait_signal",
                     "webhook": "market-signal",
                     "key": "{{inputs.asset}}",
                 }
@@ -46,12 +45,11 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
     run = SimpleNamespace(
         id="run-2",
         status="WAITING",
-        current="start",
+        current="ask_user",
         skill_snapshot={
             "steps": [
                 {
-                    "id": "start",
-                    "type": "wait_input",
+                    "wait_input": "ask_user",
                     "prompt": "Write a short summary",
                 }
             ]

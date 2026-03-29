@@ -18,6 +18,7 @@ class UiRun:
     last_payload: dict[str, Any] = field(default_factory=dict)
     logs: list[dict[str, Any]] = field(default_factory=list)
     seen_event_ids: set[str] = field(default_factory=set)
+    has_rendered_create_block: bool = False
 
 
 @dataclass

@@ -1,17 +1,16 @@
 name: when_cli_e2e
 description: "CLI e2e for when"
 version: "0.1"
+start: prepare_score
 
 steps:
-  - id: start
-    type: assign
+  - assign: prepare_score
     values:
       score: 85
     next: decide_score
 
-  - id: decide_score
-    type: when
-    value: "{{results.start.score}}"
+  - when: decide_score
+    value: "{{step_executions.prepare_score.output.value.assigned.score}}"
     branches:
       - gt: 90
         then: excellent
@@ -19,14 +18,11 @@ steps:
         then: good
     default: fail
 
-  - id: excellent
-    type: notify
+  - notify: excellent
     message: "excellent chosen"
 
-  - id: good
-    type: notify
+  - notify: good
     message: "good chosen"
 
-  - id: fail
-    type: notify
+  - notify: fail
     message: "fail chosen"

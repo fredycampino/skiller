@@ -68,6 +68,9 @@ class RuntimeController:
     def logs(self, run_id: str) -> list[dict[str, Any]]:
         return self.query_service.get_logs(run_id)
 
+    def get_execution_output(self, body_ref: str) -> dict[str, Any] | None:
+        return self.query_service.get_execution_output(body_ref)
+
     def list_runs(
         self,
         *,

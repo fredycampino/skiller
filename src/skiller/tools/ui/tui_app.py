@@ -130,6 +130,26 @@ def build_post_input_commands(*, command: InputCommand) -> tuple[WatchCommand, S
     )
 
 
+def build_output_wrap_prefix(
+    *,
+    text: str,
+    line_number: int,
+    wrap_count: int,
+) -> str:
+    if wrap_count <= 0:
+        return ""
+
+    lines = text.splitlines()
+    if line_number < 0 or line_number >= len(lines):
+        return ""
+
+    line = lines[line_number]
+    indent_width = len(line) - len(line.lstrip(" "))
+    if indent_width <= 0:
+        return ""
+    return " " * indent_width
+
+
 def run_prompt_toolkit_ui(
     *,
     session_key: str | None = None,
@@ -166,6 +186,11 @@ def run_prompt_toolkit_ui(
         dont_extend_height=True,
     )
     output_area.window.right_margins = [ScrollbarMargin(display_arrows=False)]
+    output_area.window.get_line_prefix = lambda line_number, wrap_count: build_output_wrap_prefix(
+        text=output_area.text,
+        line_number=line_number,
+        wrap_count=wrap_count,
+    )
     input_area = TextArea(
         prompt="> ",
         multiline=True,

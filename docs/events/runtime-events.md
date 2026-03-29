@@ -1,11 +1,10 @@
 # Runtime Events
 
-This document defines the proposed runtime event contract for the UI transcript.
-It focuses on a small, stable set of generic events and a consistent `result` shape by `step_type`.
+This document defines the runtime event contract used by `/logs`, `watch`, the CLI, and the UI transcript.
 
 ## Event Model
 
-Every runtime event should follow this shape:
+Every runtime event follows this shape:
 
 ```json
 {
@@ -23,50 +22,57 @@ Rules:
 - `run_id` identifies the run instance.
 - `created_at` records when the event was created.
 - `payload` contains the event-specific data.
-- Event ordering is defined by the event store order.
-- The UI transcript should consume structured events, not pre-rendered text.
 
-## Generic Events
+## Output Envelope
 
-### RUN_CREATE
-Emitted when a run is created from `/run`.
+When an event exposes step output, it always uses:
 
 ```json
 {
-  "id": "f2d2f7ef-5d58-4e2a-a7dd-48a4bb0d3f18",
+  "text": "...",
+  "text_ref": "data.reply",
+  "value": {},
+  "body_ref": null
+}
+```
+
+Rules:
+- `text` is always present.
+- `text_ref` is optional and points to the field inside the full body value that can rebuild the full human text.
+- `value` is always an object or `null`.
+- `body_ref` is always present and may be `null`.
+- if `body_ref` is not `null`, `output.value` is the small observable summary
+- backend `/logs`, `watch`, and `status` keep this small payload; the UI may resolve `body_ref` separately.
+
+## Generic Events
+
+### `RUN_CREATE`
+
+```json
+{
   "type": "RUN_CREATE",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:15Z",
   "payload": {
     "skill": "chat"
   }
 }
 ```
 
-### RUN_RESUME
-Emitted when a run resumes after input, webhook, or manual resume.
+### `RUN_RESUME`
 
 ```json
 {
-  "id": "941f46b8-b93c-4d2a-b0d1-8f0d0d077758",
   "type": "RUN_RESUME",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:20Z",
   "payload": {
     "source": "manual"
   }
 }
 ```
 
-### STEP_STARTED
-Emitted immediately before a step starts execution.
+### `STEP_STARTED`
 
 ```json
 {
-  "id": "7aa84fd8-3f15-4afd-8772-a7fa9aa35d2d",
   "type": "STEP_STARTED",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:20Z",
   "payload": {
     "step": "answer",
     "step_type": "llm_prompt"
@@ -74,73 +80,68 @@ Emitted immediately before a step starts execution.
 }
 ```
 
-### STEP_SUCCESS
-Emitted when a step completes successfully.
+### `STEP_SUCCESS`
 
 ```json
 {
-  "id": "0dd94e10-0aa7-4dc3-b57e-57c3a2f9f36d",
   "type": "STEP_SUCCESS",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:21Z",
   "payload": {
     "step": "answer",
     "step_type": "llm_prompt",
-    "result": {
-      "text": "Pablito clavó un clavito, ¿qué clavito clavó Pablito?"
+    "output": {
+      "text": "hello back",
+      "value": {
+        "data": {
+          "reply": "hello back"
+        }
+      },
+      "body_ref": null
     },
-    "next": "show_reply"
+    "next": "ask_user"
   }
 }
 ```
 
-### STEP_ERROR
-Emitted when a step fails.
+### `STEP_ERROR`
 
 ```json
 {
-  "id": "76741831-baa6-4d92-85dd-a7b890482446",
   "type": "STEP_ERROR",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:21Z",
   "payload": {
     "step": "answer",
     "step_type": "llm_prompt",
-    "error": "MiniMax request failed: <urlopen error [Errno -3] Temporary failure in name resolution>"
+    "error": "LLM step 'answer' returned invalid JSON"
   }
 }
 ```
 
-### RUN_WAITING
-Emitted when a run reaches a waiting state.
+### `RUN_WAITING`
 
 ```json
 {
-  "id": "fdbb62da-0386-4208-a054-c3abf7d0f61b",
   "type": "RUN_WAITING",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:22Z",
   "payload": {
-    "step": "start",
+    "step": "ask_user",
     "step_type": "wait_input",
-    "result": {
-      "prompt": "Write a message. Type exit, quit, or bye to stop."
+    "output": {
+      "text": "Write a message. Type exit, quit, or bye to stop.",
+      "value": {
+        "prompt": "Write a message. Type exit, quit, or bye to stop.",
+        "payload": null
+      },
+      "body_ref": null
     }
   }
 }
 ```
 
-### RUN_FINISHED
-Emitted when a run reaches a terminal state.
+### `RUN_FINISHED`
 
 Succeeded:
 
 ```json
 {
-  "id": "b177ef07-ad48-4148-8d47-d3cf69fe8f2d",
   "type": "RUN_FINISHED",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:23Z",
   "payload": {
     "status": "SUCCEEDED"
   }
@@ -151,118 +152,189 @@ Failed:
 
 ```json
 {
-  "id": "5700b5a1-a89b-4497-befc-bbc929d02279",
   "type": "RUN_FINISHED",
-  "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
-  "created_at": "2026-03-28T10:30:23Z",
   "payload": {
     "status": "FAILED",
-    "error": "MiniMax request failed: <urlopen error [Errno -3] Temporary failure in name resolution>"
+    "error": "LLM step 'answer' returned invalid JSON"
   }
 }
 ```
 
-## Result By Step Type
+## Output By Step Type
 
-The `result` field in `STEP_SUCCESS` and `RUN_WAITING` should be shaped according to `step_type`.
-
-### wait_input
+### `assign`
 
 ```json
 {
-  "prompt": "Write a message. Type exit, quit, or bye to stop."
+  "text": "Values assigned.",
+  "value": {
+    "assigned": {
+      "action": "retry"
+    }
+  },
+  "body_ref": null
 }
 ```
 
-### wait_webhook
+### `notify`
 
 ```json
 {
-  "webhook": "github-pr-merged",
-  "key": "42"
+  "text": "retry chosen",
+  "value": {
+    "message": "retry chosen"
+  },
+  "body_ref": null
 }
 ```
 
-### switch
+### `switch`
 
 ```json
 {
-  "next": "answer"
+  "text": "Route selected: answer.",
+  "value": {
+    "next_step_id": "answer"
+  },
+  "body_ref": null
 }
 ```
 
-### when
+### `when`
 
 ```json
 {
-  "next": "done"
+  "text": "Route selected: good.",
+  "value": {
+    "next_step_id": "good"
+  },
+  "body_ref": null
 }
 ```
 
-### llm_prompt
+### `wait_input`
+
+Waiting:
 
 ```json
 {
-  "text": "Pablito clavó un clavito, ¿qué clavito clavó Pablito?"
+  "text": "Write a short summary",
+  "value": {
+    "prompt": "Write a short summary",
+    "payload": null
+  },
+  "body_ref": null
 }
 ```
 
-Optional structured output:
+Resolved:
 
 ```json
 {
-  "text": "Pablito clavó un clavito, ¿qué clavito clavó Pablito?",
-  "json": {
-    "reply": "Pablito clavó un clavito, ¿qué clavito clavó Pablito?"
-  }
+  "text": "Input received.",
+  "value": {
+    "prompt": "Write a short summary",
+    "payload": {
+      "text": "database timeout"
+    }
+  },
+  "body_ref": null
 }
 ```
 
-Rules:
-- `result.text` is required for `llm_prompt`.
-- `result.json` is optional.
-- The UI transcript should render `result.text`.
+### `wait_webhook`
 
-### notify
+Waiting:
 
 ```json
 {
-  "message": "Chat closed."
+  "text": "Waiting webhook: github-pr-merged:42.",
+  "value": {
+    "webhook": "github-pr-merged",
+    "key": "42",
+    "payload": null
+  },
+  "body_ref": null
 }
 ```
 
-### assign
+Resolved:
 
 ```json
 {
-  "value": "computed result"
+  "text": "Webhook received: github-pr-merged:42.",
+  "value": {
+    "webhook": "github-pr-merged",
+    "key": "42",
+    "payload": {
+      "merged": true
+    }
+  },
+  "body_ref": null
 }
 ```
 
-### mcp
+### `llm_prompt`
+
+Normal:
 
 ```json
 {
-  "ok": true,
-  "text": "Tool completed successfully."
+  "text": "hello back",
+  "value": {
+    "data": {
+      "reply": "hello back"
+    }
+  },
+  "body_ref": null
 }
 ```
+
+With `large_result: true`:
 
 ```json
 {
-  "ok": false,
-  "text": "MCP tool failed.",
-  "error": "MCP tool failed."
+  "text": "Europa es uno de los continentes más pequeños...",
+  "text_ref": "data.reply",
+  "value": {
+    "data": {
+      "reply": "Europa es uno de los continentes más pequeños...",
+      "reply_length": 980,
+      "truncated": true
+    }
+  },
+  "body_ref": "execution_output:abc123"
 }
 ```
 
-Rules:
-- `result.text` should summarize the MCP execution for the transcript.
-- `result.ok` indicates whether the execution succeeded.
-- `result.error` is optional and should be present when `ok` is `false`.
+### `mcp`
 
-## Design Notes
+```json
+{
+  "text": "local-mcp.files_action completed successfully.",
+  "value": {
+    "data": {
+      "ok": true,
+      "path": "/tmp/demo.txt"
+    }
+  },
+  "body_ref": null
+}
+```
 
-- Generic events should be the source of truth for execution observers.
-- Step-specific legacy events may still exist for debugging, but consumers should not depend on them as the primary contract.
-- The event contract should be emitted centrally by the runtime orchestration layer whenever possible.
+With `large_result: true`:
+
+```json
+{
+  "text": "local-mcp.search completed successfully.",
+  "value": {
+    "data": {
+      "ok": true,
+      "total": 248,
+      "items_count": 248,
+      "truncated": true
+    }
+  },
+  "body_ref": "execution_output:abc123"
+}
+```

@@ -38,10 +38,10 @@ def test_fail_run_marks_failed() -> None:
         id="run-1",
         skill_source="internal",
         skill_ref="demo",
-        skill_snapshot={"steps": [{"id": "done", "type": "notify"}]},
+        skill_snapshot={"start": "done", "steps": [{"notify": "done"}]},
         status=RunStatus.RUNNING.value,
         current="done",
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
         created_at="2026-03-07 10:00:00",
         updated_at="2026-03-07 10:00:00",
     )

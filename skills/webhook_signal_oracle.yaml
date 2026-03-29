@@ -1,25 +1,24 @@
 name: webhook_signal_oracle
 description: "Wait for a webhook, classify it with an LLM, and route the response"
 version: "0.1"
+start: wait_signal
 
 inputs:
   key: string
 
 steps:
-  - id: start
-    type: wait_webhook
+  - wait_webhook: wait_signal
     webhook: signal
     key: "{{inputs.key}}"
     next: analyze_signal
 
-  - id: analyze_signal
-    type: llm_prompt
+  - llm_prompt: analyze_signal
     system: |
       You are an analyst of external signals.
       Respond only with valid JSON.
     prompt: |
       This webhook has arrived:
-      {{results.start.payload}}
+      {{step_executions.wait_signal.output.value.payload}}
 
       Classify it and return a JSON object with:
       - summary: one short, clear sentence
@@ -41,27 +40,22 @@ steps:
             enum: [celebrate, investigate, ignore]
     next: route_signal
 
-  - id: route_signal
-    type: switch
-    value: "{{results.analyze_signal.next_action}}"
+  - switch: route_signal
+    value: "{{step_executions.analyze_signal.output.value.data.next_action}}"
     cases:
       celebrate: celebrate_notice
       investigate: investigate_notice
       ignore: ignore_notice
     default: unknown_notice
 
-  - id: celebrate_notice
-    type: notify
-    message: "Celebrate: {{results.analyze_signal.summary}}"
+  - notify: celebrate_notice
+    message: "Celebrate: {{step_executions.analyze_signal.output.value.data.summary}}"
 
-  - id: investigate_notice
-    type: notify
-    message: "Investigate now: {{results.analyze_signal.summary}}"
+  - notify: investigate_notice
+    message: "Investigate now: {{step_executions.analyze_signal.output.value.data.summary}}"
 
-  - id: ignore_notice
-    type: notify
-    message: "Ignore for now: {{results.analyze_signal.summary}}"
+  - notify: ignore_notice
+    message: "Ignore for now: {{step_executions.analyze_signal.output.value.data.summary}}"
 
-  - id: unknown_notice
-    type: notify
+  - notify: unknown_notice
     message: "The signal could not be routed cleanly."

@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -27,7 +27,7 @@ from skiller.application.use_cases.render_mcp_config import (
     RenderMcpConfigUseCase,
 )
 from skiller.application.use_cases.step_execution_result import (
-    StepExecutionResult,
+    StepAdvance,
     StepExecutionStatus,
 )
 
@@ -115,7 +115,7 @@ class RunWorkerService:
 
                 current_step = result.current_step
                 is_ready = status == CurrentStepStatus.READY and current_step
-                execution_result: StepExecutionResult | None = None
+                execution_result: StepAdvance | None = None
 
                 if is_ready and current_step:
                     self._append_step_started(run_id, current_step)
@@ -148,7 +148,7 @@ class RunWorkerService:
             self._append_run_finished(run_id, status=RunWorkerStatus.FAILED, error=error)
             return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.FAILED, error=error)
 
-    def _execute_ready_step(self, current_step: CurrentStep) -> StepExecutionResult:
+    def _execute_ready_step(self, current_step: CurrentStep) -> StepAdvance:
         if current_step.step_type == StepType.NOTIFY:
             return self.execute_notify_step_use_case.execute(current_step)
 
@@ -191,63 +191,44 @@ class RunWorkerService:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.STEP_STARTED,
-            payload={
-                "step": current_step.step_id,
-                "step_type": current_step.step_type.value,
-            },
+            step_id=current_step.step_id,
+            step_type=current_step.step_type,
         )
 
     def _append_step_success(
         self,
         run_id: str,
         current_step: CurrentStep,
-        execution_result: StepExecutionResult,
+        execution_result: StepAdvance,
     ) -> None:
-        payload = {
-            "step": current_step.step_id,
-            "step_type": current_step.step_type.value,
-        }
-        result_payload = self._serialize_step_result(execution_result)
-        if result_payload is not None:
-            payload["result"] = result_payload
-        if execution_result.next_step_id is not None:
-            payload["next"] = execution_result.next_step_id
-
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.STEP_SUCCESS,
-            payload=payload,
+            step_id=current_step.step_id,
+            execution=execution_result.execution,
+            next_step_id=execution_result.next_step_id,
         )
 
     def _append_run_waiting(
         self,
         run_id: str,
         current_step: CurrentStep,
-        execution_result: StepExecutionResult,
+        execution_result: StepAdvance,
     ) -> None:
-        payload = {
-            "step": current_step.step_id,
-            "step_type": current_step.step_type.value,
-        }
-        result_payload = self._serialize_step_result(execution_result)
-        if result_payload is not None:
-            payload["result"] = result_payload
-
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_WAITING,
-            payload=payload,
+            step_id=current_step.step_id,
+            execution=execution_result.execution,
         )
 
     def _append_step_error(self, run_id: str, current_step: CurrentStep, error: str) -> None:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.STEP_ERROR,
-            payload={
-                "step": current_step.step_id,
-                "step_type": current_step.step_type.value,
-                "error": error,
-            },
+            step_id=current_step.step_id,
+            step_type=current_step.step_type,
+            error=error,
         )
 
     def _append_run_finished(
@@ -265,10 +246,3 @@ class RunWorkerService:
             event_type=RuntimeEventType.RUN_FINISHED,
             payload=payload,
         )
-
-    def _serialize_step_result(
-        self, execution_result: StepExecutionResult
-    ) -> dict[str, Any] | None:
-        if execution_result.result is None:
-            return None
-        return asdict(execution_result.result)

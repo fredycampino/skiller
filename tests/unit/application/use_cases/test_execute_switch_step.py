@@ -2,9 +2,10 @@ import pytest
 
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus, SwitchResult
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import SwitchOutput
 
 pytestmark = pytest.mark.unit
 
@@ -38,8 +39,6 @@ def _build_current_step(
     default: object = "unknown_action",
 ) -> CurrentStep:
     step: dict[str, object] = {
-        "id": "decide_action",
-        "type": "switch",
         "value": value,
         "cases": cases
         if cases is not None
@@ -52,7 +51,7 @@ def _build_current_step(
         step_id="decide_action",
         step_type=StepType.SWITCH,
         step=step,
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
     )
 
 
@@ -65,11 +64,12 @@ def test_switch_step_moves_current_to_matching_case() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "retry_notice"
-    assert result.result == SwitchResult(next="retry_notice")
-    assert current_step.context.results["decide_action"] == {
-        "value": "retry",
-        "next": "retry_notice",
-    }
+    assert result.execution is not None
+    assert result.execution.output == SwitchOutput(
+        text="Route selected: retry_notice.",
+        next_step_id="retry_notice",
+    )
+    assert current_step.context.step_executions["decide_action"] == result.execution
     assert store.updated_runs == [
         {
             "run_id": "run-1",
@@ -90,11 +90,12 @@ def test_switch_step_falls_back_to_default_when_no_case_matches() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "unknown_action"
-    assert result.result == SwitchResult(next="unknown_action")
-    assert current_step.context.results["decide_action"] == {
-        "value": "done",
-        "next": "unknown_action",
-    }
+    assert result.execution is not None
+    assert result.execution.output == SwitchOutput(
+        text="Route selected: unknown_action.",
+        next_step_id="unknown_action",
+    )
+    assert current_step.context.step_executions["decide_action"] == result.execution
 
 
 @pytest.mark.parametrize(
@@ -125,16 +126,15 @@ def test_switch_step_validates_contract(
         result = use_case.execute(current_step)
 
         assert result.next_step_id == "unknown_action"
-        assert result.result == SwitchResult(next="unknown_action")
-        assert current_step.context.results["decide_action"] == {
-            "value": None,
-            "next": "unknown_action",
-        }
+        assert result.execution is not None
+        assert result.execution.output == SwitchOutput(
+            text="Route selected: unknown_action.",
+            next_step_id="unknown_action",
+        )
+        assert current_step.context.step_executions["decide_action"] == result.execution
         return
 
     step = {
-        "id": "decide_action",
-        "type": "switch",
         "cases": {"retry": "retry_notice"},
         "default": "unknown_action",
     }
@@ -148,7 +148,7 @@ def test_switch_step_validates_contract(
         step_id="decide_action",
         step_type=StepType.SWITCH,
         step=step,
-        context=RunContext(inputs={}, results={}),
+        context=RunContext(inputs={}, step_executions={}),
     )
     store = _FakeStore()
     use_case = ExecuteSwitchStepUseCase(store=store)

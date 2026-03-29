@@ -4,8 +4,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from skiller.domain.external_event_type import ExternalEventType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
@@ -23,25 +25,12 @@ class SqliteStateStore(SqliteRepository):
                   status TEXT NOT NULL,
                   current TEXT,
                   inputs_json TEXT NOT NULL DEFAULT '{}',
-                  results_json TEXT NOT NULL DEFAULT '{}',
+                  step_executions_json TEXT NOT NULL DEFAULT '{}',
                   steering_messages_json TEXT NOT NULL DEFAULT '[]',
                   cancel_reason TEXT,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   finished_at TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS waits (
-                  id TEXT PRIMARY KEY,
-                  run_id TEXT NOT NULL,
-                  step_id TEXT NOT NULL,
-                  webhook TEXT NOT NULL,
-                  key TEXT NOT NULL,
-                  status TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  expires_at TEXT,
-                  resolved_at TEXT,
-                  FOREIGN KEY(run_id) REFERENCES runs(id)
                 );
 
                 CREATE TABLE IF NOT EXISTS events (
@@ -60,59 +49,41 @@ class SqliteStateStore(SqliteRepository):
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
-                CREATE TABLE IF NOT EXISTS webhook_events (
-                  id TEXT PRIMARY KEY,
-                  webhook TEXT NOT NULL,
-                  key TEXT NOT NULL,
-                  payload_json TEXT NOT NULL,
-                  dedup_key TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS input_waits (
-                  id TEXT PRIMARY KEY,
-                  run_id TEXT NOT NULL,
-                  step_id TEXT NOT NULL,
-                  status TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  resolved_at TEXT,
-                  FOREIGN KEY(run_id) REFERENCES runs(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS input_events (
-                  id TEXT PRIMARY KEY,
-                  run_id TEXT NOT NULL,
-                  step_id TEXT NOT NULL,
-                  payload_json TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(run_id) REFERENCES runs(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS webhook_registrations (
-                  webhook TEXT PRIMARY KEY,
-                  secret TEXT NOT NULL,
-                  enabled INTEGER NOT NULL DEFAULT 1,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-
                 CREATE INDEX IF NOT EXISTS idx_runs_status_updated_at ON runs(status, updated_at);
-                CREATE INDEX IF NOT EXISTS idx_waits_run_status ON waits(run_id, status);
-                CREATE INDEX IF NOT EXISTS idx_waits_webhook_key_status
-                  ON waits(webhook, key, status);
                 CREATE INDEX IF NOT EXISTS idx_events_run_created_at
                   ON events(run_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_webhook_receipts_webhook_key_created_at
                   ON webhook_receipts(webhook, key, created_at);
-                CREATE INDEX IF NOT EXISTS idx_webhook_events_webhook_key_created_at
-                  ON webhook_events(webhook, key, created_at);
-                CREATE INDEX IF NOT EXISTS idx_input_waits_run_step_status
-                  ON input_waits(run_id, step_id, status);
-                CREATE INDEX IF NOT EXISTS idx_input_events_run_step_created_at
-                  ON input_events(run_id, step_id, created_at);
+                """
+            )
+            self._ensure_waits_table(conn)
+            self._ensure_external_events_table(conn)
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_waits_run_step_type_status
+                  ON waits(run_id, step_id, wait_type, status)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_waits_webhook_key_type_status
+                  ON waits(webhook, key, wait_type, status)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_external_events_run_step_type_created_at
+                  ON external_events(event_type, run_id, step_id, created_at)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_external_events_webhook_key_type_created_at
+                  ON external_events(event_type, webhook, key, created_at)
                 """
             )
             self._ensure_runs_current_column(conn)
-            self._ensure_runs_results_column(conn)
+            self._ensure_runs_step_executions_column(conn)
             self._ensure_runs_steering_messages_column(conn)
             self._drop_runs_current_step_column(conn)
 
@@ -137,7 +108,7 @@ class SqliteStateStore(SqliteRepository):
                       status,
                       current,
                       inputs_json,
-                      results_json,
+                      step_executions_json,
                       steering_messages_json
                     )
                     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
@@ -149,7 +120,7 @@ class SqliteStateStore(SqliteRepository):
                         json.dumps(skill_snapshot),
                         RunStatus.CREATED.value,
                         json.dumps(context.inputs),
-                        json.dumps(context.results),
+                        json.dumps(context.to_dict()["step_executions"]),
                         json.dumps(context.steering_messages),
                     ),
                 )
@@ -175,8 +146,8 @@ class SqliteStateStore(SqliteRepository):
             updates.append("current = ?")
             params.append(current)
         if context is not None:
-            updates.append("results_json = ?")
-            params.append(json.dumps(context.results))
+            updates.append("step_executions_json = ?")
+            params.append(json.dumps(context.to_dict()["step_executions"]))
             updates.append("steering_messages_json = ?")
             params.append(json.dumps(context.steering_messages))
             updates.append("cancel_reason = ?")
@@ -206,7 +177,7 @@ class SqliteStateStore(SqliteRepository):
                   status,
                   current,
                   inputs_json,
-                  results_json,
+                  step_executions_json,
                   steering_messages_json,
                   cancel_reason,
                   created_at,
@@ -235,7 +206,7 @@ class SqliteStateStore(SqliteRepository):
               status,
               current,
               inputs_json,
-              results_json,
+              step_executions_json,
               steering_messages_json,
               cancel_reason,
               created_at,
@@ -263,12 +234,12 @@ class SqliteStateStore(SqliteRepository):
             return
         conn.execute("ALTER TABLE runs ADD COLUMN current TEXT")
 
-    def _ensure_runs_results_column(self, conn: sqlite3.Connection) -> None:
+    def _ensure_runs_step_executions_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()
         column_names = {str(row["name"]) for row in rows}
-        if "results_json" in column_names:
+        if "step_executions_json" in column_names:
             return
-        conn.execute("ALTER TABLE runs ADD COLUMN results_json TEXT NOT NULL DEFAULT '{}'")
+        conn.execute("ALTER TABLE runs ADD COLUMN step_executions_json TEXT NOT NULL DEFAULT '{}'")
 
     def _ensure_runs_steering_messages_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()
@@ -286,6 +257,199 @@ class SqliteStateStore(SqliteRepository):
             return
         conn.execute("ALTER TABLE runs DROP COLUMN current_step")
 
+    def _ensure_waits_table(self, conn: sqlite3.Connection) -> None:
+        if not self._table_exists(conn, "waits"):
+            conn.execute(
+                """
+                CREATE TABLE waits (
+                  id TEXT PRIMARY KEY,
+                  run_id TEXT NOT NULL,
+                  step_id TEXT NOT NULL,
+                  wait_type TEXT NOT NULL,
+                  webhook TEXT,
+                  key TEXT,
+                  status TEXT NOT NULL,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  expires_at TEXT,
+                  resolved_at TEXT,
+                  FOREIGN KEY(run_id) REFERENCES runs(id)
+                )
+                """
+            )
+            return
+
+        rows = conn.execute("PRAGMA table_info(waits)").fetchall()
+        column_names = {str(row["name"]) for row in rows}
+        if "wait_type" in column_names:
+            conn.execute("DROP TABLE IF EXISTS input_waits")
+            return
+
+        conn.execute(
+            """
+            CREATE TABLE waits_new (
+              id TEXT PRIMARY KEY,
+              run_id TEXT NOT NULL,
+              step_id TEXT NOT NULL,
+              wait_type TEXT NOT NULL,
+              webhook TEXT,
+              key TEXT,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              expires_at TEXT,
+              resolved_at TEXT,
+              FOREIGN KEY(run_id) REFERENCES runs(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO waits_new (
+              id,
+              run_id,
+              step_id,
+              wait_type,
+              webhook,
+              key,
+              status,
+              created_at,
+              expires_at,
+              resolved_at
+            )
+            SELECT
+              id,
+              run_id,
+              step_id,
+              ?,
+              webhook,
+              key,
+              status,
+              created_at,
+              expires_at,
+              resolved_at
+            FROM waits
+            """,
+            (WaitType.WEBHOOK.value,),
+        )
+        if self._table_exists(conn, "input_waits"):
+            conn.execute(
+                """
+                INSERT INTO waits_new (
+                  id,
+                  run_id,
+                  step_id,
+                  wait_type,
+                  webhook,
+                  key,
+                  status,
+                  created_at,
+                  expires_at,
+                  resolved_at
+                )
+                SELECT
+                  id,
+                  run_id,
+                  step_id,
+                  ?,
+                  NULL,
+                  NULL,
+                  status,
+                  created_at,
+                  NULL,
+                  resolved_at
+                FROM input_waits
+                """,
+                (WaitType.INPUT.value,),
+            )
+        conn.execute("DROP TABLE waits")
+        conn.execute("ALTER TABLE waits_new RENAME TO waits")
+        conn.execute("DROP TABLE IF EXISTS input_waits")
+
+    def _ensure_external_events_table(self, conn: sqlite3.Connection) -> None:
+        if not self._table_exists(conn, "external_events"):
+            conn.execute(
+                """
+                CREATE TABLE external_events (
+                  id TEXT PRIMARY KEY,
+                  event_type TEXT NOT NULL,
+                  run_id TEXT,
+                  step_id TEXT,
+                  webhook TEXT,
+                  key TEXT,
+                  dedup_key TEXT,
+                  payload_json TEXT NOT NULL,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY(run_id) REFERENCES runs(id)
+                )
+                """
+            )
+
+        if self._table_exists(conn, "input_events"):
+            conn.execute(
+                """
+                INSERT INTO external_events (
+                  id,
+                  event_type,
+                  run_id,
+                  step_id,
+                  webhook,
+                  key,
+                  dedup_key,
+                  payload_json,
+                  created_at
+                )
+                SELECT
+                  id,
+                  ?,
+                  run_id,
+                  step_id,
+                  NULL,
+                  NULL,
+                  NULL,
+                  payload_json,
+                  created_at
+                FROM input_events
+                """,
+                (ExternalEventType.INPUT.value,),
+            )
+            conn.execute("DROP TABLE input_events")
+
+        if self._table_exists(conn, "webhook_events"):
+            conn.execute(
+                """
+                INSERT INTO external_events (
+                  id,
+                  event_type,
+                  run_id,
+                  step_id,
+                  webhook,
+                  key,
+                  dedup_key,
+                  payload_json,
+                  created_at
+                )
+                SELECT
+                  id,
+                  ?,
+                  NULL,
+                  NULL,
+                  webhook,
+                  key,
+                  dedup_key,
+                  payload_json,
+                  created_at
+                FROM webhook_events
+                """,
+                (ExternalEventType.WEBHOOK.value,),
+            )
+            conn.execute("DROP TABLE webhook_events")
+
+    def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
     def _build_run_from_row(self, row: sqlite3.Row) -> Run:
         skill_snapshot = json.loads(row["skill_snapshot_json"])
         if not isinstance(skill_snapshot, dict):
@@ -293,16 +457,16 @@ class SqliteStateStore(SqliteRepository):
         inputs_dict = json.loads(row["inputs_json"])
         if not isinstance(inputs_dict, dict):
             inputs_dict = {}
-        results_dict = json.loads(row["results_json"])
-        if not isinstance(results_dict, dict):
-            results_dict = {}
+        step_executions_dict = json.loads(row["step_executions_json"])
+        if not isinstance(step_executions_dict, dict):
+            step_executions_dict = {}
         steering_messages = json.loads(row["steering_messages_json"])
         if not isinstance(steering_messages, list):
             steering_messages = []
         run_id = str(row["id"])
         context = self._build_context(
             inputs=inputs_dict,
-            results=results_dict,
+            step_executions=step_executions_dict,
             steering_messages=steering_messages,
             cancel_reason=row["cancel_reason"],
         )
@@ -353,20 +517,21 @@ class SqliteStateStore(SqliteRepository):
     def create_wait(
         self,
         run_id: str,
-        webhook: str,
-        key: str,
         *,
-        step_id: str | None = None,
+        step_id: str,
+        wait_type: WaitType,
+        webhook: str | None = None,
+        key: str | None = None,
         expires_at: str | None = None,
     ) -> str:
         wait_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO waits (id, run_id, step_id, webhook, key, status, expires_at)
-                VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?)
+                INSERT INTO waits (id, run_id, step_id, wait_type, webhook, key, status, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
                 """,
-                (wait_id, run_id, step_id or "", webhook, key, expires_at),
+                (wait_id, run_id, step_id, wait_type.value, webhook, key, expires_at),
             )
         return wait_id
 
@@ -381,7 +546,13 @@ class SqliteStateStore(SqliteRepository):
                 (wait_id,),
             )
 
-    def get_active_wait(self, run_id: str, step_id: str) -> dict[str, Any] | None:
+    def get_active_wait(
+        self,
+        run_id: str,
+        step_id: str,
+        *,
+        wait_type: WaitType,
+    ) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -389,6 +560,7 @@ class SqliteStateStore(SqliteRepository):
                   id,
                   run_id,
                   step_id,
+                  wait_type,
                   webhook,
                   key,
                   status,
@@ -396,11 +568,11 @@ class SqliteStateStore(SqliteRepository):
                   resolved_at,
                   expires_at
                 FROM waits
-                WHERE run_id = ? AND step_id = ? AND status = 'ACTIVE'
+                WHERE run_id = ? AND step_id = ? AND wait_type = ? AND status = 'ACTIVE'
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                (run_id, step_id),
+                (run_id, step_id, wait_type.value),
             ).fetchone()
         if row is None:
             return None
@@ -408,6 +580,7 @@ class SqliteStateStore(SqliteRepository):
             "id": row["id"],
             "run_id": row["run_id"],
             "step_id": row["step_id"],
+            "wait_type": row["wait_type"],
             "webhook": row["webhook"],
             "key": row["key"],
             "status": row["status"],
@@ -424,6 +597,7 @@ class SqliteStateStore(SqliteRepository):
                   id,
                   run_id,
                   step_id,
+                  wait_type,
                   webhook,
                   key,
                   status,
@@ -431,10 +605,10 @@ class SqliteStateStore(SqliteRepository):
                   resolved_at,
                   expires_at
                 FROM waits
-                WHERE webhook = ? AND key = ? AND status = 'ACTIVE'
+                WHERE webhook = ? AND key = ? AND wait_type = ? AND status = 'ACTIVE'
                 ORDER BY created_at ASC
                 """,
-                (webhook, key),
+                (webhook, key, WaitType.WEBHOOK.value),
             ).fetchall()
 
         return [
@@ -442,6 +616,7 @@ class SqliteStateStore(SqliteRepository):
                 "id": row["id"],
                 "run_id": row["run_id"],
                 "step_id": row["step_id"],
+                "wait_type": row["wait_type"],
                 "webhook": row["webhook"],
                 "key": row["key"],
                 "status": row["status"],
@@ -452,108 +627,101 @@ class SqliteStateStore(SqliteRepository):
             for row in rows
         ]
 
-    def create_webhook_event(
-        self, webhook: str, key: str, payload: dict[str, Any], dedup_key: str
+    def create_external_event(
+        self,
+        *,
+        event_type: ExternalEventType,
+        payload: dict[str, Any],
+        run_id: str | None = None,
+        step_id: str | None = None,
+        webhook: str | None = None,
+        key: str | None = None,
+        dedup_key: str | None = None,
     ) -> str:
         event_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO webhook_events (id, webhook, key, payload_json, dedup_key)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO external_events (
+                  id,
+                  event_type,
+                  run_id,
+                  step_id,
+                  webhook,
+                  key,
+                  dedup_key,
+                  payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (event_id, webhook, key, json.dumps(payload), dedup_key),
+                (
+                    event_id,
+                    event_type.value,
+                    run_id,
+                    step_id,
+                    webhook,
+                    key,
+                    dedup_key,
+                    json.dumps(payload),
+                ),
             )
         return event_id
 
-    def create_input_wait(self, run_id: str, step_id: str) -> str:
-        wait_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO input_waits (id, run_id, step_id, status)
-                VALUES (?, ?, ?, 'ACTIVE')
-                """,
-                (wait_id, run_id, step_id),
-            )
-        return wait_id
-
-    def resolve_input_wait(self, wait_id: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                UPDATE input_waits
-                SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (wait_id,),
-            )
-
-    def get_active_input_wait(self, run_id: str, step_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT id, run_id, step_id, status, created_at, resolved_at
-                FROM input_waits
-                WHERE run_id = ? AND step_id = ? AND status = 'ACTIVE'
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                (run_id, step_id),
-            ).fetchone()
-
-        if row is None:
-            return None
-
-        return {
-            "id": row["id"],
-            "run_id": row["run_id"],
-            "step_id": row["step_id"],
-            "status": row["status"],
-            "created_at": row["created_at"],
-            "resolved_at": row["resolved_at"],
-        }
-
-    def create_input_event(self, run_id: str, step_id: str, payload: dict[str, Any]) -> str:
-        event_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO input_events (id, run_id, step_id, payload_json)
-                VALUES (?, ?, ?, ?)
-                """,
-                (event_id, run_id, step_id, json.dumps(payload)),
-            )
-        return event_id
-
-    def get_latest_input_event(
+    def get_latest_external_event(
         self,
-        run_id: str,
-        step_id: str,
         *,
+        event_type: ExternalEventType,
+        run_id: str | None = None,
+        step_id: str | None = None,
+        webhook: str | None = None,
+        key: str | None = None,
         since_created_at: str | None = None,
     ) -> dict[str, Any] | None:
-        if since_created_at:
+        if event_type == ExternalEventType.INPUT:
+            if not run_id or not step_id:
+                raise ValueError("input external events require run_id and step_id")
             query = """
-                SELECT id, run_id, step_id, payload_json, created_at
-                FROM input_events
-                WHERE run_id = ? AND step_id = ? AND created_at >= ?
-                ORDER BY created_at DESC, rowid DESC
-                LIMIT 1
+                SELECT
+                    id,
+                    event_type,
+                    run_id,
+                    step_id,
+                    webhook,
+                    key,
+                    dedup_key,
+                    payload_json,
+                    created_at
+                FROM external_events
+                WHERE event_type = ? AND run_id = ? AND step_id = ?
             """
-            params: tuple[Any, ...] = (run_id, step_id, since_created_at)
+            params: list[Any] = [event_type.value, run_id, step_id]
         else:
+            if not webhook or not key:
+                raise ValueError("webhook external events require webhook and key")
             query = """
-                SELECT id, run_id, step_id, payload_json, created_at
-                FROM input_events
-                WHERE run_id = ? AND step_id = ?
-                ORDER BY created_at DESC, rowid DESC
-                LIMIT 1
+                SELECT
+                    id,
+                    event_type,
+                    run_id,
+                    step_id,
+                    webhook,
+                    key,
+                    dedup_key,
+                    payload_json,
+                    created_at
+                FROM external_events
+                WHERE event_type = ? AND webhook = ? AND key = ?
             """
-            params = (run_id, step_id)
+            params = [event_type.value, webhook, key]
+
+        if since_created_at:
+            query += " AND created_at >= ?"
+            params.append(since_created_at)
+
+        query += " ORDER BY created_at DESC, rowid DESC LIMIT 1"
 
         with self._connect() as conn:
-            row = conn.execute(query, params).fetchone()
+            row = conn.execute(query, tuple(params)).fetchone()
 
         if row is None:
             return None
@@ -564,54 +732,13 @@ class SqliteStateStore(SqliteRepository):
 
         return {
             "id": row["id"],
+            "event_type": row["event_type"],
             "run_id": row["run_id"],
             "step_id": row["step_id"],
-            "payload": payload,
-            "created_at": row["created_at"],
-        }
-
-    def get_latest_webhook_event(
-        self,
-        webhook: str,
-        key: str,
-        *,
-        since_created_at: str | None = None,
-    ) -> dict[str, Any] | None:
-        if since_created_at:
-            query = """
-                SELECT id, webhook, key, payload_json, dedup_key, created_at
-                FROM webhook_events
-                WHERE webhook = ? AND key = ? AND created_at >= ?
-                ORDER BY created_at DESC, rowid DESC
-                LIMIT 1
-            """
-            params: tuple[Any, ...] = (webhook, key, since_created_at)
-        else:
-            query = """
-                SELECT id, webhook, key, payload_json, dedup_key, created_at
-                FROM webhook_events
-                WHERE webhook = ? AND key = ?
-                ORDER BY created_at DESC, rowid DESC
-                LIMIT 1
-            """
-            params = (webhook, key)
-
-        with self._connect() as conn:
-            row = conn.execute(query, params).fetchone()
-
-        if row is None:
-            return None
-
-        payload = json.loads(row["payload_json"])
-        if not isinstance(payload, dict):
-            payload = {}
-
-        return {
-            "id": row["id"],
             "webhook": row["webhook"],
             "key": row["key"],
-            "payload": payload,
             "dedup_key": row["dedup_key"],
+            "payload": payload,
             "created_at": row["created_at"],
         }
 
@@ -633,7 +760,7 @@ class SqliteStateStore(SqliteRepository):
 
     def expire_active_waits_for_run(self, run_id: str) -> int:
         with self._connect() as conn:
-            webhook_result = conn.execute(
+            result = conn.execute(
                 """
                 UPDATE waits
                 SET status = 'EXPIRED', resolved_at = CURRENT_TIMESTAMP
@@ -641,27 +768,26 @@ class SqliteStateStore(SqliteRepository):
                 """,
                 (run_id,),
             )
-            input_result = conn.execute(
-                """
-                UPDATE input_waits
-                SET status = 'EXPIRED', resolved_at = CURRENT_TIMESTAMP
-                WHERE run_id = ? AND status = 'ACTIVE'
-                """,
-                (run_id,),
-            )
-            return webhook_result.rowcount + input_result.rowcount
+            return result.rowcount
 
     def _build_context(
         self,
         *,
         inputs: dict[str, Any],
-        results: dict[str, Any],
+        step_executions: dict[str, Any],
         steering_messages: list[str],
         cancel_reason: str | None,
     ) -> RunContext:
         context = RunContext(
             inputs=inputs,
-            results=results if isinstance(results, dict) else {},
+            step_executions=RunContext.from_dict(
+                {
+                    "inputs": {},
+                    "step_executions": (
+                        step_executions if isinstance(step_executions, dict) else {}
+                    ),
+                }
+            ).step_executions,
             steering_messages=steering_messages if isinstance(steering_messages, list) else [],
         )
         if isinstance(cancel_reason, str) and cancel_reason.strip():

@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import textwrap
 import time
 from codecs import decode as codecs_decode
 from dataclasses import dataclass
 
 from skiller.tools.ui.actions import ActionResult
 from skiller.tools.ui.commands import (
+    BodyCommand,
     ClearCommand,
     EchoCommand,
     ExitCommand,
@@ -38,9 +40,7 @@ _SPINNER_FRAMES = ("◐", "◓", "◑", "◒")
 _EXCEPTION_LINE_RE = re.compile(
     r"^(?P<kind>[A-Za-z_][\w.]*(?:Error|Exception|Warning)?):\s*(?P<message>.+)$"
 )
-_WATCH_EVENT_RE = re.compile(r"^\[(?P<run>[^\]]+)\]\s+(?P<event>[A-Z_]+)(?:\s+(?P<fields>.*))?$")
-
-
+_DETAIL_WRAP_WIDTH = 72
 def build_initial_output(*, session: UiSession) -> str:
     _ = session
     return ""
@@ -80,6 +80,8 @@ def build_pending_status_text(*, command: UiCommand) -> str:
         return "Watching"
     if isinstance(command, LogsCommand):
         return "Loading logs"
+    if isinstance(command, BodyCommand):
+        return "Loading body"
     if isinstance(command, RunsCommand):
         return "Loading runs"
     if isinstance(command, StatusCommand):
@@ -124,6 +126,10 @@ def build_result_status_text(*, result: ActionResult) -> str:
         if result.run is not None and (result.run.error or result.run.status.upper() == "FAILED"):
             return "Error"
         return f"Loaded logs {_build_run_ref(result.run)}"
+    if result.kind == "body":
+        if result.run is not None and (result.run.error or result.run.status.upper() == "FAILED"):
+            return "Error"
+        return "Loaded body"
     if result.kind == "input":
         payload = result.payload or {}
         error = str(payload.get("error", "")).strip()
@@ -161,9 +167,9 @@ def _build_run_status_label(run: UiRun | None, *, waiting_label: str = "waiting"
         waiting_metadata = _get_waiting_metadata(run.last_payload)
         if waiting_metadata is not None:
             if waiting_metadata["wait_type"] == "input":
-                return f"Waiting → {waiting_metadata['prompt']}"
+                return "Waiting → input"
             if waiting_metadata["wait_type"] == "webhook":
-                return f"Waiting {waiting_metadata['webhook']}"
+                return "Waiting → webhook"
         return f"{waiting_label.title()} {_build_run_label(run)}"
     if status == "RUNNING":
         return f"Running {_build_run_label(run)}"
@@ -213,36 +219,7 @@ def _build_run_error_message(run: UiRun) -> str:
         if extracted:
             return extracted
 
-    events_text = str(payload.get("events_text", "")).strip()
-    if events_text:
-        extracted = _extract_error_field(events_text) or _extract_run_failed_error(events_text)
-        if extracted:
-            return extracted
-
     return _build_run_label(run)
-
-
-def _extract_run_failed_error(events_text: str) -> str | None:
-    for line in reversed(events_text.splitlines()):
-        normalized = line.strip()
-        if "error=" not in normalized:
-            continue
-        if "RUN_FINISHED" not in normalized:
-            continue
-        if "RUN_FINISHED" in normalized and 'status="FAILED"' not in normalized:
-            continue
-        raw_error = normalized.split("error=", 1)[1].strip()
-        if not raw_error:
-            continue
-        try:
-            parsed_error = json.loads(raw_error)
-        except json.JSONDecodeError:
-            extracted = _extract_concise_error_message(raw_error)
-            return extracted or raw_error
-        parsed = str(parsed_error).strip()
-        extracted = _extract_concise_error_message(parsed)
-        return extracted or parsed or None
-    return None
 
 
 def _extract_error_field(raw_text: str) -> str | None:
@@ -344,6 +321,8 @@ def _render_action_result(*, session: UiSession, result: ActionResult) -> str:
         return _render_input_result(result=result)
     if result.kind == "logs":
         return _render_logs_result(result=result)
+    if result.kind == "body":
+        return _render_body_result(result=result)
     if result.kind == "exit":
         return "bye\n"
     raise RuntimeError(f"Unsupported action result kind '{result.kind}'")
@@ -426,7 +405,7 @@ def _render_selected_run_detail(*, session: UiSession) -> list[str]:
     if run.logs:
         lines.append("recent_logs:\n")
         for index, event in enumerate(run.logs[-3:], start=1):
-            lines.append(f"  [{index}] {_render_log_event(event)}\n")
+            lines.append(f"  [{index}] {_render_pretty_json(event)}\n")
     if run.status == "WAITING" and run.run_id:
         lines.extend(_render_waiting_hints(run=run))
     return lines
@@ -499,8 +478,18 @@ def _render_logs_result(*, result: ActionResult) -> str:
     lines: list[str] = [_build_run_block_header(run), "  ↳ logs"]
     lines.append(f"    count: {len(logs)}")
     for index, event in enumerate(logs[-5:], start=1):
-        lines.append(f"    [{index}] {_render_log_event(event)}")
+        lines.extend(_render_log_event_block(index=index, event=event))
     return _join_output_block(lines)
+
+
+def _render_body_result(*, result: ActionResult) -> str:
+    if result.run is not None and result.run.error:
+        return _join_output_block(_build_error_block(run=result.run))
+
+    lines = [f"body_ref: {result.body_ref or '-'}"]
+    if result.payload is not None:
+        lines.append(_render_pretty_json(result.payload))
+    return "".join(f"{line}\n" for line in lines)
 
 
 def _render_global_runs(*, result: ActionResult) -> str:
@@ -536,95 +525,19 @@ def _display_run_id(run: UiRun) -> str:
     return run.run_id
 
 
-def _render_log_event(event: dict[str, object]) -> str:
-    event_type = str(event.get("type", "UNKNOWN"))
-    payload = event.get("payload")
-    if isinstance(payload, dict) and payload:
-        return f"{event_type} payload={_render_json(payload)}"
-    return event_type
+def _render_log_event_block(*, index: int, event: dict[str, object]) -> list[str]:
+    lines = [f"    [{index}]"]
+    rendered_event = _render_pretty_json(event)
+    lines.extend(f"      {line}" for line in rendered_event.splitlines())
+    return lines
 
 
 def _render_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=True)
 
 
-def _build_watch_blocks(*, run: UiRun, events_text: str) -> list[str]:
-    lines: list[str] = [_build_run_block_header(run)]
-    rendered_error_messages: set[str] = set()
-    for raw_line in events_text.splitlines():
-        normalized = raw_line.strip()
-        if not normalized:
-            continue
-        event = _parse_watch_event_line(normalized)
-        if event is None:
-            continue
-
-        event_name = event["event"]
-        fields = event["fields"]
-
-        if event_name == "STEP_SUCCESS":
-            step_id = _extract_watch_field(fields, "step")
-            step_type = _extract_watch_field(fields, "step_type") or "step"
-            if step_type in {"wait_input", "wait_webhook"}:
-                continue
-            result_detail = _extract_watch_step_detail(
-                step_type=step_type,
-                fields_text=fields,
-            )
-            lines.extend(
-                _build_watch_step_block(
-                    step_id=step_id,
-                    step_type=step_type,
-                    detail=result_detail,
-                )
-            )
-            continue
-
-        if event_name == "RUN_WAITING":
-            step_id = _extract_watch_field(fields, "step")
-            step_type = _extract_watch_field(fields, "step_type") or "wait"
-            result_detail = _extract_watch_step_detail(
-                step_type=step_type,
-                fields_text=fields,
-            )
-            lines.extend(
-                _build_watch_step_block(
-                    step_id=step_id,
-                    step_type=step_type,
-                    detail=result_detail,
-                )
-            )
-            continue
-
-        if event_name == "STEP_ERROR":
-            message = _extract_watch_field(fields, "error")
-            normalized_message = message.strip()
-            if normalized_message and normalized_message in rendered_error_messages:
-                continue
-            error_lines = _build_error_block(run=run)
-            if message:
-                error_lines[-1] = f"    {message}"
-                rendered_error_messages.add(normalized_message)
-            lines.extend(error_lines[1:])
-            continue
-
-        is_run_finished_error = (
-            event_name == "RUN_FINISHED"
-            and _extract_watch_field(fields, "status").upper() == "FAILED"
-        )
-        if is_run_finished_error:
-            message = _extract_watch_field(fields, "error")
-            normalized_message = message.strip()
-            if normalized_message and normalized_message in rendered_error_messages:
-                continue
-            error_lines = _build_error_block(run=run)
-            if message:
-                error_lines[-1] = f"    {message}"
-                rendered_error_messages.add(normalized_message)
-            lines.extend(error_lines[1:])
-            continue
-
-    return lines
+def _render_pretty_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2)
 
 
 def _build_watch_blocks_from_events(*, run: UiRun, events: list[object]) -> list[str]:
@@ -650,7 +563,7 @@ def _build_watch_blocks_from_events(*, run: UiRun, events: list[object]) -> list
                 continue
             result_detail = _extract_step_result_detail(
                 step_type=step_type,
-                result=payload.get("result"),
+                result=payload.get("output"),
             )
             lines.extend(
                 _build_watch_step_block(
@@ -666,7 +579,7 @@ def _build_watch_blocks_from_events(*, run: UiRun, events: list[object]) -> list
             step_type = str(payload.get("step_type", "")).strip() or "wait"
             result_detail = _extract_step_result_detail(
                 step_type=step_type,
-                result=payload.get("result"),
+                result=payload.get("output"),
             )
             lines.extend(
                 _build_watch_step_block(
@@ -756,40 +669,6 @@ def _trim_stale_leading_waiting_events(events: list[object]) -> list[object]:
     return list(events[first_non_waiting_index:])
 
 
-def _parse_watch_event_line(raw_line: str) -> dict[str, str] | None:
-    match = _WATCH_EVENT_RE.match(raw_line)
-    if match is None:
-        return None
-    return {
-        "run": match.group("run").strip(),
-        "event": match.group("event").strip(),
-        "fields": (match.group("fields") or "").strip(),
-    }
-
-
-def _extract_watch_field(fields_text: str, field_name: str) -> str:
-    pattern = rf'{re.escape(field_name)}=(?P<quote>"?)(?P<value>.*?)(?P=quote)(?:\s+\w+=|$)'
-    match = re.search(pattern, fields_text)
-    if match is None:
-        return ""
-    quote = match.group("quote")
-    value = match.group("value").strip()
-    if quote:
-        try:
-            return str(json.loads(f'{quote}{value}{quote}'))
-        except json.JSONDecodeError:
-            return value
-    if value.startswith("{") or value.startswith("["):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return value
-        if field_name == "message":
-            return str(parsed)
-        return _render_json(parsed)
-    return value
-
-
 def _normalize_output_text(value: str) -> str:
     normalized = value.strip()
     if not normalized:
@@ -814,68 +693,20 @@ def _normalize_output_text(value: str) -> str:
     return decoded.strip()
 
 
-def _extract_watch_result_object(fields_text: str) -> dict[str, object] | None:
-    raw_result = _extract_watch_field(fields_text, "result").strip()
-    if not raw_result or not raw_result.startswith("{"):
-        return None
-    try:
-        parsed = json.loads(raw_result)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return parsed
-
-
-def _extract_watch_step_detail(*, step_type: str, fields_text: str) -> str:
-    result = _extract_watch_result_object(fields_text)
-    return _extract_step_result_detail(step_type=step_type, result=result)
-
-
 def _extract_step_result_detail(*, step_type: str, result: object) -> str:
     if result is None:
         return ""
     if not isinstance(result, dict):
         return _normalize_output_text(_render_json(result))
 
-    if step_type == "wait_input":
-        return str(result.get("prompt", "")).strip()
+    text = str(result.get("text", "")).strip()
+    if text:
+        return _normalize_output_text(text)
 
-    if step_type == "wait_webhook":
-        webhook = str(result.get("webhook", "")).strip()
-        key = str(result.get("key", "")).strip()
-        if webhook and key:
-            return f"{webhook}:{key}"
-        return webhook
-
-    if step_type in {"switch", "when"}:
-        return str(result.get("next", "")).strip()
-
-    if step_type == "notify":
-        return _normalize_output_text(str(result.get("message", "")))
-
-    if step_type == "assign":
-        value = result.get("value")
-        if value is None:
-            return ""
-        return _normalize_output_text(_render_json(value))
-
-    if step_type == "llm_prompt":
-        text = str(result.get("text", "")).strip()
-        if text:
-            return _normalize_output_text(text)
-        json_value = result.get("json")
-        if json_value is None:
-            return ""
-        return _normalize_output_text(_render_json(json_value))
-
-    if step_type == "mcp":
-        text = str(result.get("text", "")).strip()
-        if text:
-            return _normalize_output_text(text)
+    value = result.get("value")
+    if value is None:
         return ""
-
-    return _normalize_output_text(_render_json(result))
+    return _normalize_output_text(_render_json(value))
 
 
 def _render_waiting_hints(*, run: UiRun) -> list[str]:
@@ -917,6 +748,29 @@ def _join_output_block(lines: list[str]) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
+def _wrap_detail_lines(*, detail: str, indent: str = "    ") -> list[str]:
+    normalized = detail.strip()
+    if not normalized:
+        return []
+
+    wrapper = textwrap.TextWrapper(
+        width=_DETAIL_WRAP_WIDTH,
+        initial_indent=indent,
+        subsequent_indent=indent,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+    wrapped_lines: list[str] = []
+    for paragraph in normalized.splitlines():
+        stripped = paragraph.strip()
+        if not stripped:
+            wrapped_lines.append(indent.rstrip())
+            continue
+        wrapped_lines.extend(wrapper.fill(stripped).splitlines())
+    return wrapped_lines
+
+
 def _build_waiting_block(
     *,
     run: UiRun,
@@ -926,10 +780,10 @@ def _build_waiting_block(
     wait_type = metadata["wait_type"]
     lines = [header or _build_run_block_header(run), f"  ↳ waiting {wait_type}"]
     if wait_type == "input":
-        lines.append(f"    {metadata['prompt']}")
+        lines.extend(_wrap_detail_lines(detail=metadata["prompt"]))
     elif wait_type == "webhook":
-        lines.append(f"    {metadata['webhook']}")
-        lines.append(f"    key: {metadata['key']}")
+        lines.extend(_wrap_detail_lines(detail=metadata["webhook"]))
+        lines.extend(_wrap_detail_lines(detail=f"key: {metadata['key']}"))
     return lines
 
 
@@ -938,7 +792,7 @@ def _build_watch_step_block(*, step_id: str, step_type: str, detail: str = "") -
     lines = [f"  [{step_type}] {header_step_id}"]
     normalized_detail = detail.strip()
     if normalized_detail:
-        lines.append(f"    {normalized_detail}")
+        lines.extend(_wrap_detail_lines(detail=normalized_detail))
     return lines
 
 
@@ -948,7 +802,7 @@ def _build_success_block(*, run: UiRun, header: str | None = None) -> list[str]:
 
 def _build_error_block(*, run: UiRun, header: str | None = None) -> list[str]:
     lines = [header or _build_run_block_header(run), "  ↳ error"]
-    lines.append(f"    {_build_run_error_message(run)}")
+    lines.extend(_wrap_detail_lines(detail=_build_run_error_message(run)))
     return lines
 
 
@@ -958,15 +812,15 @@ def _build_run_summary_block(*, run: UiRun, label: str, header: str | None = Non
 
 def _build_run_create_block(*, run: UiRun, metadata: dict[str, str]) -> list[str]:
     header = _build_execution_block_header(run, kind="run-create")
-    step_id = str(run.last_payload.get("current", "")).strip() or "start"
+    step_id = str(run.last_payload.get("current", "")).strip() or "step"
     wait_type = metadata["wait_type"]
     lines = [header, f"  [wait_{wait_type}] {step_id}"]
     if wait_type == "input":
-        lines.append(f"    {metadata['prompt']}")
+        lines.extend(_wrap_detail_lines(detail=metadata["prompt"]))
     elif wait_type == "webhook":
         webhook = metadata["webhook"]
         key = metadata["key"]
-        lines.append(f"    {webhook}:{key}")
+        lines.extend(_wrap_detail_lines(detail=f"{webhook}:{key}"))
     return lines
 
 

@@ -22,15 +22,11 @@ When a run is in progress, the status bar shows:
 
 `◐ Running [run-label]`
 
-### Waiting Input
-When a run enters `wait_input`, the status bar shows:
+### Waiting
+When a run enters a wait, the status bar shows:
 
-`◌ Waiting → [prompt]`
-
-### Waiting Webhook
-When a run enters `wait_webhook`, the status bar shows:
-
-`◌ Waiting [webhook]`
+`◌ Waiting → input`
+`◌ Waiting → webhook`
 
 ### Success
 When a run completes successfully, the status bar shows:

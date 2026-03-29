@@ -2,6 +2,10 @@
 
 This guide documents the current `skiller` CLI commands and how they fit into the runtime flow.
 
+Terminology used in this guide:
+- transcript = the user-facing execution view rendered by the TUI
+- `/logs` = the raw debug event stream
+
 ## Command Overview
 
 ### Run lifecycle
@@ -113,6 +117,10 @@ skiller watch <run_id>
 - prints progress to `stderr`
 - returns final JSON to `stdout`
 - stops on `WAITING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`
+
+Rule of thumb:
+- use `watch` to follow a run as it evolves
+- use `logs` when you need the raw event payloads
 
 ## Resume a waiting run with text
 
@@ -239,6 +247,10 @@ Best used for:
 - inspecting runtime event order
 - understanding failures or branching decisions
 
+Notes:
+- `/logs` is a debug/raw surface, not the user-facing transcript
+- it should expose exact event payloads rather than transcript-style formatting
+
 ### `watch`
 
 Best used for:
@@ -251,6 +263,11 @@ Examples:
 ```bash
 skiller watch <run_id>
 ```
+
+Notes:
+- `watch` returns structured JSON on `stdout`
+- `watch` may print compact progress lines to `stderr` for direct CLI usage
+- the TUI transcript should render from structured `events`, not from `stderr` text
 
 ### `input receive`
 

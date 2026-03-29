@@ -113,9 +113,9 @@ notify -> mcp -> when -> wait_input -> notify
 `mcp` is the main extension point for external tools.
 
 Minimal examples already in the repo:
-- [`skills/stdio_mcp_test.yaml`](/home/fede/develop/py/skiller/skills/stdio_mcp_test.yaml)
-- [`skills/http_mcp_test.yaml`](/home/fede/develop/py/skiller/skills/http_mcp_test.yaml)
-- [`skills/pull_request.yaml`](/home/fede/develop/py/skiller/skills/pull_request.yaml)
+- [`skills/stdio_mcp_test.yaml`](skills/stdio_mcp_test.yaml)
+- [`skills/http_mcp_test.yaml`](skills/http_mcp_test.yaml)
+- [`skills/pull_request.yaml`](skills/pull_request.yaml)
 
 The source of truth for MCP connection settings lives in the skill YAML under `mcp:`.
 
@@ -152,18 +152,22 @@ skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --sta
 ## Documentation
 
 Core guides:
-- [`docs/cli/command-guide.md`](/home/fede/develop/py/skiller/docs/cli/command-guide.md)
-- [`docs/guia_creacion_skills.md`](/home/fede/develop/py/skiller/docs/guia_creacion_skills.md)
-- [`docs/steps/mcp.md`](/home/fede/develop/py/skiller/docs/steps/mcp.md)
-- [`docs/steps/wait_input.md`](/home/fede/develop/py/skiller/docs/steps/wait_input.md)
-- [`docs/steps/wait_webhook.md`](/home/fede/develop/py/skiller/docs/steps/wait_webhook.md)
+- [`docs/README.md`](docs/README.md)
+- [`docs/cli/command-guide.md`](docs/cli/command-guide.md)
+- [`docs/skills/skill-schema.md`](docs/skills/skill-schema.md)
+- [`docs/db/schema.md`](docs/db/schema.md)
+- [`docs/runtime/execution-model.md`](docs/runtime/execution-model.md)
+- [`docs/ui/transcript.md`](docs/ui/transcript.md)
+- [`docs/steps/mcp.md`](docs/steps/mcp.md)
+- [`docs/steps/wait_input.md`](docs/steps/wait_input.md)
+- [`docs/steps/wait_webhook.md`](docs/steps/wait_webhook.md)
 
 Step references:
-- [`docs/steps/assign.md`](/home/fede/develop/py/skiller/docs/steps/assign.md)
-- [`docs/steps/llm_prompt.md`](/home/fede/develop/py/skiller/docs/steps/llm_prompt.md)
-- [`docs/steps/notify.md`](/home/fede/develop/py/skiller/docs/steps/notify.md)
-- [`docs/steps/switch.md`](/home/fede/develop/py/skiller/docs/steps/switch.md)
-- [`docs/steps/when.md`](/home/fede/develop/py/skiller/docs/steps/when.md)
+- [`docs/steps/assign.md`](docs/steps/assign.md)
+- [`docs/steps/llm_prompt.md`](docs/steps/llm_prompt.md)
+- [`docs/steps/notify.md`](docs/steps/notify.md)
+- [`docs/steps/switch.md`](docs/steps/switch.md)
+- [`docs/steps/when.md`](docs/steps/when.md)
 
 ## Development
 
@@ -179,7 +183,7 @@ Manual CLI E2E flows live in `tests/e2e/cli_*.sh`. Use them when you need to exe
 
 ## License
 
-Apache-2.0. See [`LICENSE`](/home/fede/develop/py/skiller/LICENSE).
+Apache-2.0. See [`LICENSE`](LICENSE).
 
 ## Disclaimer
 

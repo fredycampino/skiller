@@ -1,14 +1,14 @@
 name: story_router
 description: "Mini branching adventure with switch and when"
 version: "0.1"
+start: bootstrap
 
 inputs:
   path: string
   mood: string
 
 steps:
-  - id: start
-    type: assign
+  - assign: bootstrap
     values:
       hero:
         title: "Archivist of the Forking Paths"
@@ -16,18 +16,16 @@ steps:
         mood: "{{inputs.mood}}"
     next: choose_path
 
-  - id: choose_path
-    type: switch
-    value: "{{results.start.hero.path}}"
+  - switch: choose_path
+    value: "{{step_executions.bootstrap.output.value.assigned.hero.path}}"
     cases:
       cave: cave_mood
       market: market_scene
       tower: tower_mood
     default: lost_scene
 
-  - id: cave_mood
-    type: when
-    value: "{{results.start.hero.mood}}"
+  - when: cave_mood
+    value: "{{step_executions.bootstrap.output.value.assigned.hero.mood}}"
     branches:
       - eq: brave
         then: cave_treasure
@@ -35,9 +33,8 @@ steps:
         then: cave_riddle
     default: cave_escape
 
-  - id: tower_mood
-    type: when
-    value: "{{results.start.hero.mood}}"
+  - when: tower_mood
+    value: "{{step_executions.bootstrap.output.value.assigned.hero.mood}}"
     branches:
       - eq: brave
         then: tower_storm
@@ -45,34 +42,26 @@ steps:
         then: tower_library
     default: tower_echo
 
-  - id: market_scene
-    type: notify
+  - notify: market_scene
     message: "The market erupts in lantern light. A masked merchant slips you a map drawn on silver skin."
 
-  - id: lost_scene
-    type: notify
+  - notify: lost_scene
     message: "You miss every obvious turn and end up crowned by goats as the accidental king of a very small hill."
 
-  - id: cave_treasure
-    type: notify
+  - notify: cave_treasure
     message: "You walk straight into the cave, stare down the guardian, and leave with a clockwork star in your pocket."
 
-  - id: cave_riddle
-    type: notify
+  - notify: cave_riddle
     message: "A stone door asks your true name. You answer with a question and it opens, delighted."
 
-  - id: cave_escape
-    type: notify
+  - notify: cave_escape
     message: "A chorus of bats judges your lack of commitment. You retreat with dignity, mostly."
 
-  - id: tower_storm
-    type: notify
+  - notify: tower_storm
     message: "At the top of the tower you ring the bronze bell, and the storm bows as if it knows you."
 
-  - id: tower_library
-    type: notify
+  - notify: tower_library
     message: "Behind a patient silence you find a hidden library where every book is about a future you almost chose."
 
-  - id: tower_echo
-    type: notify
+  - notify: tower_echo
     message: "The tower answers each step with your own voice, but wiser and slightly more annoying."

@@ -1,15 +1,14 @@
 name: wait_input_test
 description: "Minimal internal skill for wait_input testing"
 version: "0.1"
+start: ask_user
 
 inputs: {}
 
 steps:
-  - id: start
-    type: wait_input
+  - wait_input: ask_user
     prompt: "Write a short summary"
     next: done
 
-  - id: done
-    type: notify
-    message: "{{results.start.payload.text}}"
+  - notify: done
+    message: "{{step_executions.ask_user.output.value.payload.text}}"

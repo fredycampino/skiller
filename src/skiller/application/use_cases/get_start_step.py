@@ -1,4 +1,5 @@
 from skiller.application.ports.state_store_port import StateStorePort
+from skiller.domain.skill_step_model import find_skill_step
 
 
 class GetStartStepUseCase:
@@ -15,21 +16,17 @@ class GetStartStepUseCase:
             raise ValueError(f"Run '{run_id}' has invalid skill snapshot")
 
         raw_steps = skill.get("steps", [])
-        if not isinstance(raw_steps, list):
-            raise ValueError(f"Run '{run_id}' has invalid steps list")
 
-        start_matches: list[str] = []
-        for raw_step in raw_steps:
-            if not isinstance(raw_step, dict):
-                raise ValueError(f"Run '{run_id}' has invalid step entry")
-            step_id = str(raw_step.get("id", "")).strip()
-            if step_id == "start":
-                start_matches.append(step_id)
+        start_step_id = str(skill.get("start", "")).strip()
+        if not start_step_id:
+            raise ValueError(f"Run '{run_id}' requires a non-empty root 'start'")
 
-        if not start_matches:
-            raise ValueError(f"Run '{run_id}' requires exactly one step with id 'start'")
-        if len(start_matches) > 1:
-            raise ValueError(f"Run '{run_id}' requires exactly one step with id 'start'")
+        try:
+            find_skill_step(raw_steps, start_step_id)
+        except ValueError as exc:
+            raise ValueError(
+                f"Run '{run_id}' requires exactly one step with id '{start_step_id}'"
+            ) from exc
 
-        self.store.update_run(run_id, current="start")
-        return "start"
+        self.store.update_run(run_id, current=start_step_id)
+        return start_step_id

@@ -1,26 +1,24 @@
 name: chat
 description: "Direct chat loop with the LLM until the user types exit, quit, or bye"
 version: "0.1"
+start: ask_user
 
 inputs: {}
 
 steps:
-  - id: start
-    type: wait_input
+  - wait_input: ask_user
     prompt: "Write a message. Type exit, quit, or bye to stop."
     next: decide_exit
 
-  - id: decide_exit
-    type: switch
-    value: "{{results.start.payload.text}}"
+  - switch: decide_exit
+    value: "{{step_executions.ask_user.output.value.payload.text}}"
     cases:
       exit: done
       quit: done
       bye: done
     default: answer
 
-  - id: answer
-    type: llm_prompt
+  - llm_prompt: answer
     system: |
       You are a helpful assistant in a terminal chat.
       Be concise, clear, and direct.
@@ -32,7 +30,7 @@ steps:
       The value of "reply" must always be a string.
     prompt: |
       User message:
-      {{results.start.payload.text}}
+      {{step_executions.ask_user.output.value.payload.text}}
       
       Return JSON with exactly one field:
       {"reply":"<your response>"}
@@ -45,13 +43,8 @@ steps:
           reply:
             type: string
         additionalProperties: false
-    next: show_reply
+    large_result: true
+    next: ask_user
 
-  - id: show_reply
-    type: notify
-    message: "{{results.answer.reply}}"
-    next: start
-
-  - id: done
-    type: notify
+  - notify: done
     message: "Chat closed."

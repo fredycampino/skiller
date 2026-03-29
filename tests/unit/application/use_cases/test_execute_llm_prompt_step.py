@@ -2,9 +2,11 @@ import pytest
 
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import LlmPromptResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import LlmPromptOutput
 
 pytestmark = pytest.mark.unit
 
@@ -43,11 +45,50 @@ class _FakeLLM:
         return self.response
 
 
+class _FakeExecutionOutputStore:
+    def __init__(self) -> None:
+        self.stored: list[dict[str, object]] = []
+
+    def store_execution_output(
+        self,
+        *,
+        run_id: str,
+        step_id: str,
+        output_body: dict[str, object],
+    ) -> str:
+        self.stored.append(
+            {
+                "run_id": run_id,
+                "step_id": step_id,
+                "output_body": output_body,
+            }
+        )
+        return "execution_output:1"
+
+    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
+        _ = body_ref
+        return None
+
+
+def _build_use_case(
+    *,
+    store: _FakeStore | None = None,
+    llm: _FakeLLM | None = None,
+    execution_output_store: _FakeExecutionOutputStore | None = None,
+) -> ExecuteLlmPromptStepUseCase:
+    return ExecuteLlmPromptStepUseCase(
+        store=store or _FakeStore(),
+        execution_output_store=execution_output_store or _FakeExecutionOutputStore(),
+        llm=llm or _FakeLLM(),
+        large_result_truncator=LargeResultTruncator(),
+    )
+
+
 def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
     store = _FakeStore()
     llm = _FakeLLM()
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={"stderr": "boom"}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={"stderr": "boom"}, step_executions={})
 
     result = use_case.execute(
         CurrentStep(
@@ -56,7 +97,6 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
             step_id="analyze_issue",
             step_type=StepType.LLM_PROMPT,
             step={
-                "type": "llm_prompt",
                 "system": "Return JSON.",
                 "prompt": "Analyze {{inputs.stderr}}",
                 "next": "done",
@@ -78,9 +118,10 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
-    assert result.result == LlmPromptResult(
+    assert result.execution is not None
+    assert result.execution.output == LlmPromptOutput(
         text='{"severity": "low", "summary": "ok"}',
-        json={"summary": "ok", "severity": "low"},
+        data={"summary": "ok", "severity": "low"},
     )
     assert llm.calls == [
         {
@@ -104,7 +145,8 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
             },
         }
     ]
-    assert context.results["analyze_issue"] == {"summary": "ok", "severity": "low"}
+    assert context.step_executions["analyze_issue"] == result.execution
+    assert result.execution.evaluation == {"model": None}
     assert store.updated[0]["status"] == RunStatus.RUNNING
     assert store.updated[0]["current"] == "done"
     assert store.events == []
@@ -113,8 +155,8 @@ def test_execute_llm_prompt_step_moves_current_to_explicit_next() -> None:
 def test_execute_llm_prompt_step_preserves_prompt_whitespace() -> None:
     store = _FakeStore()
     llm = _FakeLLM(response={"ok": True, "content": '{"summary":"ok","severity":"low"}'})
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={}, step_executions={})
 
     use_case.execute(
         CurrentStep(
@@ -123,7 +165,6 @@ def test_execute_llm_prompt_step_preserves_prompt_whitespace() -> None:
             step_id="analyze_issue",
             step_type=StepType.LLM_PROMPT,
             step={
-                "type": "llm_prompt",
                 "system": "Return JSON.\n",
                 "prompt": "Analyze this.\n\n",
                 "output": {
@@ -157,8 +198,8 @@ def test_execute_llm_prompt_step_accepts_json_inside_markdown_fence() -> None:
             "model": "fake-llm",
         }
     )
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={}, step_executions={})
 
     result = use_case.execute(
         CurrentStep(
@@ -167,7 +208,6 @@ def test_execute_llm_prompt_step_accepts_json_inside_markdown_fence() -> None:
             step_id="analyze_issue",
             step_type=StepType.LLM_PROMPT,
             step={
-                "type": "llm_prompt",
                 "prompt": "Analyze",
                 "next": "done",
                 "output": {
@@ -188,20 +228,21 @@ def test_execute_llm_prompt_step_accepts_json_inside_markdown_fence() -> None:
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
-    assert result.result == LlmPromptResult(
+    assert result.execution is not None
+    assert result.execution.output == LlmPromptOutput(
         text='{"severity": "low", "summary": "ok"}',
-        json={"summary": "ok", "severity": "low"},
-        model="fake-llm",
+        data={"summary": "ok", "severity": "low"},
     )
-    assert context.results["analyze_issue"] == {"summary": "ok", "severity": "low"}
+    assert context.step_executions["analyze_issue"] == result.execution
+    assert result.execution.evaluation == {"model": "fake-llm"}
     assert store.events == []
 
 
 def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
     store = _FakeStore()
     llm = _FakeLLM()
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={"stderr": "boom"}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={"stderr": "boom"}, step_executions={})
 
     result = use_case.execute(
         CurrentStep(
@@ -210,7 +251,6 @@ def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
             step_id="analyze_issue",
             step_type=StepType.LLM_PROMPT,
             step={
-                "type": "llm_prompt",
                 "prompt": "Analyze {{inputs.stderr}}",
                 "output": {
                     "format": "json",
@@ -230,9 +270,10 @@ def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
-    assert result.result == LlmPromptResult(
+    assert result.execution is not None
+    assert result.execution.output == LlmPromptOutput(
         text='{"severity": "low", "summary": "ok"}',
-        json={"summary": "ok", "severity": "low"},
+        data={"summary": "ok", "severity": "low"},
     )
     assert store.updated[0]["current"] is None
 
@@ -240,8 +281,8 @@ def test_execute_llm_prompt_step_marks_completed_when_next_is_missing() -> None:
 def test_execute_llm_prompt_step_rejects_empty_next_when_declared() -> None:
     store = _FakeStore()
     llm = _FakeLLM()
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={"stderr": "boom"}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={"stderr": "boom"}, step_executions={})
 
     with pytest.raises(ValueError, match="requires non-empty next"):
         use_case.execute(
@@ -251,7 +292,6 @@ def test_execute_llm_prompt_step_rejects_empty_next_when_declared() -> None:
                 step_id="analyze_issue",
                 step_type=StepType.LLM_PROMPT,
                 step={
-                    "type": "llm_prompt",
                     "prompt": "Analyze {{inputs.stderr}}",
                     "next": "   ",
                     "output": {
@@ -274,8 +314,8 @@ def test_execute_llm_prompt_step_rejects_empty_next_when_declared() -> None:
 def test_execute_llm_prompt_step_raises_invalid_json_error_without_legacy_event() -> None:
     store = _FakeStore()
     llm = _FakeLLM(response={"ok": True, "content": "not-json", "model": "fake-llm"})
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={}, step_executions={})
 
     with pytest.raises(ValueError, match="returned invalid JSON"):
         use_case.execute(
@@ -285,7 +325,6 @@ def test_execute_llm_prompt_step_raises_invalid_json_error_without_legacy_event(
                 step_id="analyze_issue",
                 step_type=StepType.LLM_PROMPT,
                 step={
-                    "type": "llm_prompt",
                     "prompt": "Analyze",
                     "output": {
                         "format": "json",
@@ -328,8 +367,8 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
 ) -> None:
     store = _FakeStore()
     llm = _FakeLLM(response=response)
-    use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    context = RunContext(inputs={}, results={})
+    use_case = _build_use_case(store=store, llm=llm)
+    context = RunContext(inputs={}, step_executions={})
 
     with pytest.raises(ValueError, match=expected_error):
         use_case.execute(
@@ -339,7 +378,6 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
                 step_id="analyze_issue",
                 step_type=StepType.LLM_PROMPT,
                 step={
-                    "type": "llm_prompt",
                     "prompt": "Analyze",
                     "output": {
                         "format": "json",
@@ -364,23 +402,22 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
     ("step", "expected_error"),
     [
         (
-            {"type": "llm_prompt", "output": {"format": "json", "schema": {"type": "object"}}},
+            {"output": {"format": "json", "schema": {"type": "object"}}},
             "requires prompt",
         ),
         (
-            {"type": "llm_prompt", "prompt": "Analyze"},
+            {"prompt": "Analyze"},
             "requires output object",
         ),
         (
             {
-                "type": "llm_prompt",
                 "prompt": "Analyze",
                 "output": {"format": "text", "schema": {"type": "object"}},
             },
             "requires output.format 'json'",
         ),
         (
-            {"type": "llm_prompt", "prompt": "Analyze", "output": {"format": "json"}},
+            {"prompt": "Analyze", "output": {"format": "json"}},
             "requires output.schema object",
         ),
     ],
@@ -388,8 +425,8 @@ def test_execute_llm_prompt_step_fails_on_invalid_provider_output(
 def test_execute_llm_prompt_step_validation_errors(
     step: dict[str, object], expected_error: str
 ) -> None:
-    use_case = ExecuteLlmPromptStepUseCase(store=_FakeStore(), llm=_FakeLLM())
-    context = RunContext(inputs={}, results={})
+    use_case = _build_use_case()
+    context = RunContext(inputs={}, step_executions={})
 
     with pytest.raises(ValueError, match=expected_error):
         use_case.execute(
@@ -402,3 +439,85 @@ def test_execute_llm_prompt_step_validation_errors(
                 context=context,
             )
         )
+
+
+def test_execute_llm_prompt_step_persists_large_result_body_and_truncates_output_value() -> None:
+    store = _FakeStore()
+    execution_output_store = _FakeExecutionOutputStore()
+    llm = _FakeLLM(
+        response={
+            "ok": True,
+            "json": {
+                "summary": "tests failing on auth",
+                "details": "x" * 260,
+                "items": [{"id": "a1"}, {"id": "a2"}],
+            },
+        }
+    )
+    use_case = _build_use_case(
+        store=store,
+        llm=llm,
+        execution_output_store=execution_output_store,
+    )
+    context = RunContext(inputs={}, step_executions={})
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="analyze_issue",
+            step_type=StepType.LLM_PROMPT,
+            step={
+                "prompt": "Analyze",
+                "large_result": True,
+                "next": "done",
+                "output": {
+                    "format": "json",
+                    "schema": {
+                        "type": "object",
+                        "required": ["summary", "details", "items"],
+                        "properties": {
+                            "summary": {"type": "string"},
+                            "details": {"type": "string"},
+                            "items": {"type": "array"},
+                        },
+                    },
+                },
+            },
+            context=context,
+        )
+    )
+
+    assert result.execution is not None
+    assert execution_output_store.stored == [
+        {
+            "run_id": "run-1",
+            "step_id": "analyze_issue",
+            "output_body": {
+                "value": {
+                    "data": {
+                        "summary": "tests failing on auth",
+                        "details": "x" * 260,
+                        "items": [{"id": "a1"}, {"id": "a2"}],
+                    }
+                },
+            },
+        }
+    ]
+    assert result.execution.output == LlmPromptOutput(
+        text='{"details": "'
+        + ("x" * 197)
+        + (
+            '...", "details_length": 260, "items_count": 2, '
+            '"summary": "tests failing on auth", "truncated": true}'
+        ),
+        text_ref=None,
+        data={
+            "truncated": True,
+            "summary": "tests failing on auth",
+            "details": ("x" * 197) + "...",
+            "details_length": 260,
+            "items_count": 2,
+        },
+        body_ref="execution_output:1",
+    )

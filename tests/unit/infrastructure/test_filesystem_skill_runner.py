@@ -12,7 +12,9 @@ pytestmark = pytest.mark.unit
 def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
-    (skills_dir / "demo.yaml").write_text("name: demo\nsteps: []\n", encoding="utf-8")
+    (skills_dir / "demo.yaml").write_text(
+        "name: demo\nstart: demo_start\nsteps: []\n", encoding="utf-8"
+    )
 
     runner = FilesystemSkillRunner(skills_dir=str(skills_dir))
 
@@ -24,7 +26,7 @@ def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
 
 def test_load_skill_file_from_yaml(tmp_path) -> None:  # noqa: ANN001
     skill_file = tmp_path / "external.yaml"
-    skill_file.write_text("name: external\nsteps: []\n", encoding="utf-8")
+    skill_file.write_text("name: external\nstart: external_start\nsteps: []\n", encoding="utf-8")
 
     runner = FilesystemSkillRunner(skills_dir="skills")
 
@@ -36,7 +38,10 @@ def test_load_skill_file_from_yaml(tmp_path) -> None:  # noqa: ANN001
 
 def test_load_skill_file_from_json(tmp_path) -> None:  # noqa: ANN001
     skill_file = tmp_path / "external.json"
-    skill_file.write_text(json.dumps({"name": "external-json", "steps": []}), encoding="utf-8")
+    skill_file.write_text(
+        json.dumps({"name": "external-json", "start": "external_start", "steps": []}),
+        encoding="utf-8",
+    )
 
     runner = FilesystemSkillRunner(skills_dir="skills")
 
@@ -59,19 +64,28 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
 
     rendered = runner.render_step(
         {
-            "id": "prepare",
-            "type": "assign",
             "values": {
-                "copied_object": "{{results.analysis}}",
-                "copied_list": "{{results.analysis.tags}}",
-                "text": "severity={{results.analysis.severity}}",
+                "copied_object": "{{step_executions.analysis.output.value.data}}",
+                "copied_list": "{{step_executions.analysis.output.value.data.tags}}",
+                "text": "severity={{step_executions.analysis.output.value.data.severity}}",
             },
         },
         {
-            "results": {
+            "step_executions": {
                 "analysis": {
-                    "severity": "low",
-                    "tags": ["triage", "retry"],
+                    "step_type": "llm_prompt",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "ok",
+                        "value": {
+                            "data": {
+                                "severity": "low",
+                                "tags": ["triage", "retry"],
+                            }
+                        },
+                        "body_ref": None,
+                    },
                 }
             }
         },
@@ -103,7 +117,7 @@ def test_render_step_can_resolve_env_values(monkeypatch: pytest.MonkeyPatch) -> 
                 }
             ]
         },
-        {"inputs": {}, "results": {}},
+        {"inputs": {}, "step_executions": {}},
     )
 
     assert rendered["mcp"][0]["url"] == "https://api.github.example/mcp"

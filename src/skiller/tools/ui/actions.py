@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from skiller.tools.ui.commands import (
+    BodyCommand,
     ClearCommand,
     EchoCommand,
     ExitCommand,
@@ -28,6 +29,7 @@ class RuntimeAdapter(Protocol):
     def webhooks(self) -> list[dict[str, object]]: ...
     def status(self, *, run_id: str) -> dict[str, object]: ...
     def logs(self, *, run_id: str) -> list[dict[str, object]]: ...
+    def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None: ...
     def watch(self, *, run_id: str) -> dict[str, object]: ...
     def input_receive(self, *, run_id: str, text: str) -> dict[str, object]: ...
     def resume(self, *, run_id: str) -> dict[str, object]: ...
@@ -42,6 +44,7 @@ class ActionResult:
     webhooks: list[dict[str, object]] | None = None
     payload: dict[str, object] | None = None
     logs: list[dict[str, object]] | None = None
+    body_ref: str | None = None
 
 
 def handle_command(
@@ -83,6 +86,9 @@ def handle_command(
     if isinstance(command, LogsCommand):
         return _handle_logs_command(session=session, command=command, runtime=runtime)
 
+    if isinstance(command, BodyCommand):
+        return _handle_body_command(command=command, runtime=runtime)
+
     if isinstance(command, WatchCommand):
         return _handle_watch_command(session=session, command=command, runtime=runtime)
 
@@ -114,6 +120,7 @@ def _handle_run_command(
         run.run_id = run_id
         run.status = str(payload.get("status", "UNKNOWN"))
         run.last_payload = dict(payload)
+        run.has_rendered_create_block = True
         session.remember_run(run)
     except RuntimeError as exc:
         run.status = "FAILED"
@@ -129,7 +136,7 @@ def _handle_status_command(
     runtime: RuntimeAdapter,
 ) -> ActionResult:
     payload = runtime.status(run_id=command.run_id)
-    payload_dict = dict(payload)
+    payload_dict = _resolve_status_body_refs(payload=dict(payload), runtime=runtime)
     run_id = str(payload_dict.get("id", command.run_id)).strip() or command.run_id
     raw_args = str(payload_dict.get("skill_ref", "<external>"))
     run = session.ensure_run(run_id, raw_args=raw_args)
@@ -181,11 +188,42 @@ def _handle_logs_command(
             logs=[],
         )
 
-    logs = runtime.logs(run_id=run_id)
+    logs = _resolve_log_body_refs(logs=runtime.logs(run_id=run_id), runtime=runtime)
     run = session.ensure_run(run_id)
     run.logs = list(logs)
     session.remember_run(run)
     return ActionResult(kind="logs", logs=logs, run=run)
+
+
+def _handle_body_command(
+    *,
+    command: BodyCommand,
+    runtime: RuntimeAdapter,
+) -> ActionResult:
+    body_ref = command.body_ref.strip()
+    if not body_ref:
+        return ActionResult(
+            kind="body",
+            run=UiRun(raw_args="body", status="FAILED", error="body_ref is required for /body"),
+        )
+
+    payload = runtime.get_execution_output(body_ref=body_ref)
+    if payload is None:
+        return ActionResult(
+            kind="body",
+            run=UiRun(
+                raw_args="body",
+                status="FAILED",
+                error=f"Execution output not found for {body_ref}",
+            ),
+            body_ref=body_ref,
+        )
+
+    return ActionResult(
+        kind="body",
+        payload=dict(payload),
+        body_ref=body_ref,
+    )
 
 
 def _handle_watch_command(
@@ -195,7 +233,7 @@ def _handle_watch_command(
     runtime: RuntimeAdapter,
 ) -> ActionResult:
     payload = runtime.watch(run_id=command.run_id)
-    payload_dict = dict(payload)
+    payload_dict = _resolve_watch_body_refs(payload=dict(payload), runtime=runtime)
     run_id = str(payload_dict.get("run_id", command.run_id)).strip() or command.run_id
     run = session.ensure_run(run_id)
     events = payload_dict.get("events")
@@ -205,6 +243,12 @@ def _handle_watch_command(
             if not isinstance(item, dict):
                 continue
             event_dict = dict(item)
+            event_name = str(event_dict.get("type", "")).strip().upper()
+            if event_name == "RUN_CREATE" and run.has_rendered_create_block:
+                event_id = str(event_dict.get("id", "")).strip()
+                if event_id:
+                    run.seen_event_ids.add(event_id)
+                continue
             event_id = str(event_dict.get("id", "")).strip()
             if event_id:
                 if event_id in run.seen_event_ids:
@@ -245,6 +289,170 @@ def _handle_input_command(
     run.last_payload = payload_dict
     session.remember_run(run)
     return ActionResult(kind="input", payload=payload_dict, run=run)
+
+
+def _resolve_status_body_refs(
+    *,
+    payload: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    context = payload.get("context")
+    if not isinstance(context, dict):
+        return payload
+
+    step_executions = context.get("step_executions")
+    if not isinstance(step_executions, dict):
+        return payload
+
+    resolved_step_executions: dict[str, object] = {}
+    for step_id, execution in step_executions.items():
+        if not isinstance(step_id, str) or not isinstance(execution, dict):
+            resolved_step_executions[step_id] = execution
+            continue
+        resolved_step_executions[step_id] = _resolve_execution_output_body(
+            execution=execution,
+            runtime=runtime,
+        )
+
+    resolved_context = dict(context)
+    resolved_context["step_executions"] = resolved_step_executions
+    resolved_payload = dict(payload)
+    resolved_payload["context"] = resolved_context
+    return resolved_payload
+
+
+def _resolve_log_body_refs(
+    *,
+    logs: list[dict[str, object]],
+    runtime: RuntimeAdapter,
+) -> list[dict[str, object]]:
+    return [_resolve_event_body_refs(event=event, runtime=runtime) for event in logs]
+
+
+def _resolve_watch_body_refs(
+    *,
+    payload: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    events = payload.get("events")
+    if not isinstance(events, list):
+        return payload
+
+    resolved_payload = dict(payload)
+    resolved_payload["events"] = [
+        _resolve_event_body_refs(event=event, runtime=runtime)
+        for event in events
+        if isinstance(event, dict)
+    ]
+    return resolved_payload
+
+
+def _resolve_event_body_refs(
+    *,
+    event: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        return dict(event)
+
+    resolved_payload = _resolve_event_payload_output(payload=payload, runtime=runtime)
+    resolved_event = dict(event)
+    resolved_event["payload"] = resolved_payload
+    return resolved_event
+
+
+def _resolve_event_payload_output(
+    *,
+    payload: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    step_type = str(payload.get("step_type", "")).strip().lower()
+    if step_type != "llm_prompt":
+        return dict(payload)
+
+    output = payload.get("output")
+    if not isinstance(output, dict):
+        return dict(payload)
+
+    resolved_output = _resolve_output_body(output=output, runtime=runtime)
+    resolved_payload = dict(payload)
+    resolved_payload["output"] = resolved_output
+    return resolved_payload
+
+
+def _resolve_execution_output_body(
+    *,
+    execution: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    step_type = str(execution.get("step_type", "")).strip().lower()
+    if step_type != "llm_prompt":
+        return dict(execution)
+
+    output = execution.get("output")
+    if not isinstance(output, dict):
+        return dict(execution)
+
+    resolved_execution = dict(execution)
+    resolved_execution["output"] = _resolve_output_body(output=output, runtime=runtime)
+    return resolved_execution
+
+
+def _resolve_output_body(
+    *,
+    output: dict[str, object],
+    runtime: RuntimeAdapter,
+) -> dict[str, object]:
+    text_ref = str(output.get("text_ref", "")).strip()
+    body_ref = str(output.get("body_ref", "")).strip()
+    if not body_ref:
+        return dict(output)
+
+    output_body = _get_execution_output_body(runtime=runtime, body_ref=body_ref)
+    if not isinstance(output_body, dict):
+        return dict(output)
+
+    resolved_output = dict(output)
+    body_value = output_body.get("value")
+    if isinstance(body_value, dict):
+        resolved_output["value"] = body_value
+        resolved_text = _resolve_text_ref(value=body_value, text_ref=text_ref)
+        if resolved_text is not None:
+            resolved_output["text"] = resolved_text
+    return resolved_output
+
+
+def _get_execution_output_body(
+    *,
+    runtime: RuntimeAdapter,
+    body_ref: str,
+) -> dict[str, Any] | None:
+    getter = getattr(runtime, "get_execution_output", None)
+    if getter is None:
+        return None
+    payload = getter(body_ref=body_ref)
+    return payload if isinstance(payload, dict) else None
+
+
+def _resolve_text_ref(*, value: dict[str, object], text_ref: str) -> str | None:
+    if not text_ref:
+        return None
+
+    current: object = value
+    for part in text_ref.split("."):
+        key = part.strip()
+        if not key:
+            return None
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+
+    if isinstance(current, str):
+        return current
+    if isinstance(current, (int, float, bool)) or current is None:
+        return str(current)
+    return None
 
 
 def _resolve_optional_run_id(

@@ -5,6 +5,7 @@ import pytest
 import skiller.tools.ui.app as ui_app
 from skiller.tools.ui.app import run_ui
 from skiller.tools.ui.commands import (
+    BodyCommand,
     ClearCommand,
     EchoCommand,
     ExitCommand,
@@ -108,6 +109,12 @@ def test_parse_command_returns_logs_command_without_run_id() -> None:
     command = parse_command("/logs\n")
 
     assert command == LogsCommand(run_id="")
+
+
+def test_parse_command_returns_body_command() -> None:
+    command = parse_command("/body execution_output:1\n")
+
+    assert command == BodyCommand(body_ref="execution_output:1")
 
 
 def test_parse_command_returns_watch_command() -> None:

@@ -1,33 +1,29 @@
 name: switch_cli_e2e
 description: "CLI e2e for switch"
 version: "0.1"
+start: prepare_action
 
 inputs:
   action: string
 
 steps:
-  - id: start
-    type: assign
+  - assign: prepare_action
     values:
       action: "{{inputs.action}}"
     next: decide_action
 
-  - id: decide_action
-    type: switch
-    value: "{{results.start.action}}"
+  - switch: decide_action
+    value: "{{step_executions.prepare_action.output.value.assigned.action}}"
     cases:
       retry: retry_notice
       ask_human: human_notice
     default: unknown_action
 
-  - id: retry_notice
-    type: notify
+  - notify: retry_notice
     message: "retry chosen"
 
-  - id: human_notice
-    type: notify
+  - notify: human_notice
     message: "human chosen"
 
-  - id: unknown_action
-    type: notify
+  - notify: unknown_action
     message: "unknown chosen"

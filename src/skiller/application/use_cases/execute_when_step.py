@@ -3,11 +3,11 @@ from typing import Any
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
-    StepExecutionResult,
+    StepAdvance,
     StepExecutionStatus,
-    WhenResult,
 )
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import StepExecution, WhenOutput
 
 _SUPPORTED_WHEN_OPERATORS = {"eq", "ne", "gt", "gte", "lt", "lte"}
 
@@ -16,7 +16,7 @@ class ExecuteWhenStepUseCase:
     def __init__(self, store: StateStorePort) -> None:
         self.store = store
 
-    def execute(self, current_step: CurrentStep) -> StepExecutionResult:
+    def execute(self, current_step: CurrentStep) -> StepAdvance:
         step = current_step.step
         step_id = current_step.step_id
 
@@ -41,21 +41,35 @@ class ExecuteWhenStepUseCase:
             raw_default=raw_default,
         )
 
-        result = {
-            "value": self._clone(value),
-            "next": next_step_id,
-        }
-        current_step.context.results[step_id] = result
+        execution = StepExecution(
+            step_type=current_step.step_type,
+            input={
+                "value": self._clone(value),
+                "branches": self._clone(raw_branches),
+                "default": self._clone(raw_default),
+            },
+            evaluation={
+                "next_step_id": next_step_id,
+                "matched_branch": decision["branch"],
+                "operator": decision["op"],
+                "right": decision["right"],
+            },
+            output=WhenOutput(
+                text=f"Route selected: {next_step_id}.",
+                next_step_id=next_step_id,
+            ),
+        )
+        current_step.context.step_executions[step_id] = execution
         self.store.update_run(
             current_step.run_id,
             status=RunStatus.RUNNING,
             current=next_step_id,
             context=current_step.context,
         )
-        return StepExecutionResult(
+        return StepAdvance(
             status=StepExecutionStatus.NEXT,
             next_step_id=next_step_id,
-            result=WhenResult(next=next_step_id),
+            execution=execution,
         )
 
     def _resolve_next_step_id(

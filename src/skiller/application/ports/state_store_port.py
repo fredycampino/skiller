@@ -1,7 +1,9 @@
 from typing import Protocol
 
+from skiller.domain.external_event_type import ExternalEventType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.wait_type import WaitType
 
 
 class StateStorePort(Protocol):
@@ -39,53 +41,46 @@ class StateStorePort(Protocol):
     def create_wait(
         self,
         run_id: str,
-        webhook: str,
-        key: str,
         *,
-        step_id: str | None = None,
+        step_id: str,
+        wait_type: WaitType,
+        webhook: str | None = None,
+        key: str | None = None,
         expires_at: str | None = None,
     ) -> str: ...
 
     def resolve_wait(self, wait_id: str) -> None: ...
 
-    def get_active_wait(self, run_id: str, step_id: str) -> dict[str, object] | None: ...
+    def get_active_wait(
+        self,
+        run_id: str,
+        step_id: str,
+        *,
+        wait_type: WaitType,
+    ) -> dict[str, object] | None: ...
 
     def find_matching_waits(self, webhook: str, key: str) -> list[dict[str, object]]: ...
 
-    def create_webhook_event(
+    def create_external_event(
         self,
-        webhook: str,
-        key: str,
+        *,
+        event_type: ExternalEventType,
         payload: dict[str, object],
-        dedup_key: str,
+        run_id: str | None = None,
+        step_id: str | None = None,
+        webhook: str | None = None,
+        key: str | None = None,
+        dedup_key: str | None = None,
     ) -> str: ...
 
-    def create_input_wait(self, run_id: str, step_id: str) -> str: ...
-
-    def resolve_input_wait(self, wait_id: str) -> None: ...
-
-    def get_active_input_wait(self, run_id: str, step_id: str) -> dict[str, object] | None: ...
-
-    def create_input_event(
+    def get_latest_external_event(
         self,
-        run_id: str,
-        step_id: str,
-        payload: dict[str, object],
-    ) -> str: ...
-
-    def get_latest_input_event(
-        self,
-        run_id: str,
-        step_id: str,
         *,
-        since_created_at: str | None = None,
-    ) -> dict[str, object] | None: ...
-
-    def get_latest_webhook_event(
-        self,
-        webhook: str,
-        key: str,
-        *,
+        event_type: ExternalEventType,
+        run_id: str | None = None,
+        step_id: str | None = None,
+        webhook: str | None = None,
+        key: str | None = None,
         since_created_at: str | None = None,
     ) -> dict[str, object] | None: ...
 

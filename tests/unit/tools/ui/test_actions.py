@@ -4,6 +4,7 @@ import pytest
 
 from skiller.tools.ui.actions import handle_command
 from skiller.tools.ui.commands import (
+    BodyCommand,
     InputCommand,
     LogsCommand,
     RunCommand,
@@ -239,6 +240,247 @@ def test_logs_command_uses_last_run_when_selected_run_is_missing() -> None:
     assert result.logs == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
 
 
+def test_logs_command_resolves_llm_prompt_body_ref_for_ui() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            assert run_id == "run-1"
+            return [
+                {
+                    "id": "evt-1",
+                    "type": "STEP_SUCCESS",
+                    "payload": {
+                        "step": "answer",
+                        "step_type": "llm_prompt",
+                        "output": {
+                            "text": "preview...",
+                            "text_ref": "data.reply",
+                            "value": {"data": {"truncated": True, "reply": "preview..."}},
+                            "body_ref": "execution_output:1",
+                        },
+                    },
+                }
+            ]
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            assert body_ref == "execution_output:1"
+            return {
+                "value": {"data": {"reply": "respuesta completa"}},
+            }
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=LogsCommand(run_id="run-1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "logs"
+    assert result.logs == [
+        {
+            "id": "evt-1",
+            "type": "STEP_SUCCESS",
+            "payload": {
+                "step": "answer",
+                "step_type": "llm_prompt",
+                "output": {
+                    "text": "respuesta completa",
+                    "text_ref": "data.reply",
+                    "value": {"data": {"reply": "respuesta completa"}},
+                    "body_ref": "execution_output:1",
+                },
+            },
+        }
+    ]
+
+
+def test_body_command_returns_output_body_payload() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            assert body_ref == "execution_output:1"
+            return {"data": {"reply": "hola"}}
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=BodyCommand(body_ref="execution_output:1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "body"
+    assert result.body_ref == "execution_output:1"
+    assert result.payload == {"data": {"reply": "hola"}}
+
+
+def test_status_command_resolves_llm_prompt_body_ref_in_context() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            assert run_id == "run-1"
+            return {
+                "id": "run-1",
+                "status": "WAITING",
+                "skill_ref": "chat",
+                "context": {
+                    "inputs": {},
+                    "step_executions": {
+                        "answer": {
+                            "step_type": "llm_prompt",
+                            "input": {},
+                            "evaluation": {},
+                            "output": {
+                                "text": "preview...",
+                                "text_ref": "data.reply",
+                                "value": {"data": {"truncated": True, "reply": "preview..."}},
+                                "body_ref": "execution_output:1",
+                            },
+                        }
+                    },
+                },
+            }
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            assert body_ref == "execution_output:1"
+            return {
+                "value": {"data": {"reply": "respuesta completa"}},
+            }
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=StatusCommand(run_id="run-1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "status"
+    assert result.payload == {
+        "id": "run-1",
+        "status": "WAITING",
+        "skill_ref": "chat",
+        "context": {
+            "inputs": {},
+            "step_executions": {
+                "answer": {
+                    "step_type": "llm_prompt",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "respuesta completa",
+                        "text_ref": "data.reply",
+                        "value": {"data": {"reply": "respuesta completa"}},
+                        "body_ref": "execution_output:1",
+                    },
+                }
+            },
+        },
+    }
+
+
+def test_body_command_returns_error_when_body_ref_is_missing() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            raise AssertionError("not expected")
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=BodyCommand(body_ref=""),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "body"
+    assert result.run is not None
+    assert result.run.error == "body_ref is required for /body"
+
+
 def test_logs_command_returns_error_when_no_selected_or_last_run_exists() -> None:
     class _FakeRuntimeAdapter:
         def run(self, *, raw_args: str) -> dict[str, object]:
@@ -341,14 +583,14 @@ def test_watch_command_updates_existing_run_to_succeeded() -> None:
                         "payload": {
                             "step": "done",
                             "step_type": "notify",
-                            "result": {"message": "done"},
+                            "output": {
+                                "text": "done",
+                                "value": {"message": "done"},
+                                "body_ref": None,
+                            },
                         },
                     }
                 ],
-                "events_text": (
-                    '[1234] STEP_SUCCESS step="done" step_type="notify" '
-                    'result={"message":"done"}'
-                ),
             }
 
         def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
@@ -378,14 +620,14 @@ def test_watch_command_updates_existing_run_to_succeeded() -> None:
                 "payload": {
                     "step": "done",
                     "step_type": "notify",
-                    "result": {"message": "done"},
+                    "output": {
+                        "text": "done",
+                        "value": {"message": "done"},
+                        "body_ref": None,
+                    },
                 },
             }
         ],
-        "events_text": (
-            '[1234] STEP_SUCCESS step="done" step_type="notify" '
-            'result={"message":"done"}'
-        ),
     }
     assert result.run is run
     assert run.status == "SUCCEEDED"
@@ -399,14 +641,14 @@ def test_watch_command_updates_existing_run_to_succeeded() -> None:
                 "payload": {
                     "step": "done",
                     "step_type": "notify",
-                    "result": {"message": "done"},
+                    "output": {
+                        "text": "done",
+                        "value": {"message": "done"},
+                        "body_ref": None,
+                    },
                 },
             }
         ],
-        "events_text": (
-            '[1234] STEP_SUCCESS step="done" step_type="notify" '
-            'result={"message":"done"}'
-        ),
     }
     assert session.selected_run_id == "run-1"
     assert session.last_run_id == "run-1"
@@ -438,9 +680,9 @@ def test_watch_command_filters_events_already_seen_in_run() -> None:
                         "id": "evt-1",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {"prompt": "old"},
+                            "output": {"text": "old", "value": {"prompt": "old"}, "body_ref": None},
                         },
                     },
                     {
@@ -449,11 +691,14 @@ def test_watch_command_filters_events_already_seen_in_run() -> None:
                         "payload": {
                             "step": "done",
                             "step_type": "notify",
-                            "result": {"message": "new"},
+                            "output": {
+                                "text": "new",
+                                "value": {"message": "new"},
+                                "body_ref": None,
+                            },
                         },
                     },
                 ],
-                "events_text": "",
             }
 
         def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
@@ -482,11 +727,90 @@ def test_watch_command_filters_events_already_seen_in_run() -> None:
                 "payload": {
                     "step": "done",
                     "step_type": "notify",
-                    "result": {"message": "new"},
+                    "output": {"text": "new", "value": {"message": "new"}, "body_ref": None},
                 },
             }
         ],
-        "events_text": "",
+    }
+    assert run.seen_event_ids == {"evt-1", "evt-2"}
+
+
+def test_watch_command_skips_run_create_when_create_block_was_already_rendered() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            assert run_id == "run-1"
+            return {
+                "run_id": "run-1",
+                "status": "WAITING",
+                "events": [
+                    {
+                        "id": "evt-1",
+                        "type": "RUN_CREATE",
+                        "payload": {"skill": "chat", "skill_source": "internal"},
+                    },
+                    {
+                        "id": "evt-2",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "decide_exit",
+                            "step_type": "switch",
+                            "output": {
+                                "text": "answer",
+                                "value": {"next_step_id": "answer"},
+                                "body_ref": None,
+                            },
+                        },
+                    },
+                ],
+            }
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    session = UiSession(session_key="a1b2c3d4")
+    run = session.ensure_run("run-1", raw_args="chat")
+    run.has_rendered_create_block = True
+
+    result = handle_command(
+        session=session,
+        command=WatchCommand(run_id="run-1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.payload == {
+        "run_id": "run-1",
+        "status": "WAITING",
+        "events": [
+            {
+                "id": "evt-2",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "decide_exit",
+                    "step_type": "switch",
+                    "output": {
+                        "text": "answer",
+                        "value": {"next_step_id": "answer"},
+                        "body_ref": None,
+                    },
+                },
+            }
+        ],
     }
     assert run.seen_event_ids == {"evt-1", "evt-2"}
 
@@ -503,7 +827,7 @@ def test_runs_command_updates_session_with_global_runs() -> None:
                     "id": "run-1",
                     "status": "WAITING",
                     "skill_ref": "webhook_signal_oracle",
-                    "current": "start",
+                    "current": "wait_signal",
                 },
                 {
                     "id": "run-2",

@@ -16,6 +16,7 @@ from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInp
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
+from skiller.application.use_cases.get_execution_output import GetExecutionOutputUseCase
 from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_runs import GetRunsUseCase
@@ -29,7 +30,9 @@ from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings, get_settings
+from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
@@ -53,12 +56,18 @@ def build_runtime_container(
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     store = SqliteStateStore(cfg.db_path)
+    execution_output_store = SqliteExecutionOutputStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
     skill_runner = FilesystemSkillRunner(skills_dir=skills_dir)
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
+    large_result_truncator = LargeResultTruncator()
 
-    bootstrap_runtime_use_case = BootstrapRuntimeUseCase(store)
+    bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        webhook_registry=webhook_registry,
+    )
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
@@ -74,8 +83,18 @@ def build_runtime_container(
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(store=store, llm=llm)
-    execute_mcp_step_use_case = ExecuteMcpStepUseCase(store=store, mcp=mcp)
+    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        llm=llm,
+        large_result_truncator=large_result_truncator,
+    )
+    execute_mcp_step_use_case = ExecuteMcpStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        mcp=mcp,
+        large_result_truncator=large_result_truncator,
+    )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -85,6 +104,7 @@ def build_runtime_container(
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(store)
     get_runs_use_case = GetRunsUseCase(store)
+    get_execution_output_use_case = GetExecutionOutputUseCase(execution_output_store)
     get_waiting_metadata_use_case = GetWaitingMetadataUseCase(
         store=store,
         skill_runner=skill_runner,
@@ -105,6 +125,7 @@ def build_runtime_container(
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
     query_service = RunQueryService(
+        get_execution_output_use_case=get_execution_output_use_case,
         get_run_status_use_case=get_run_status_use_case,
         get_run_logs_use_case=get_run_logs_use_case,
         get_runs_use_case=get_runs_use_case,

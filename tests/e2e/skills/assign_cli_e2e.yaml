@@ -1,13 +1,13 @@
 name: assign_cli_e2e
 description: "CLI e2e for assign"
 version: "0.1"
+start: prepare_action
 
 inputs:
   issue: string
 
 steps:
-  - id: start
-    type: assign
+  - assign: prepare_action
     values:
       action: retry
       summary: "{{inputs.issue}}"
@@ -15,6 +15,5 @@ steps:
         source: assign
     next: done
 
-  - id: done
-    type: notify
-    message: "{{results.start.action}}"
+  - notify: done
+    message: "{{step_executions.prepare_action.output.value.assigned.action}}"

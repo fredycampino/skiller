@@ -182,7 +182,7 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
         parts = [
             _format_field("step", payload.get("step")),
             _format_field("step_type", payload.get("step_type")),
-            _format_field("result", payload.get("result")),
+            _format_field("output", payload.get("output")),
             _format_field("next", payload.get("next")),
         ]
     elif event_type == "STEP_ERROR":
@@ -195,7 +195,7 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
         parts = [
             _format_field("step", payload.get("step")),
             _format_field("step_type", payload.get("step_type")),
-            _format_field("result", payload.get("result")),
+            _format_field("output", payload.get("output")),
         ]
     elif event_type == "RUN_FINISHED":
         status = str(payload.get("status", "")).upper()
@@ -293,6 +293,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     logs_parser = sub.add_parser("logs", help="List run events")
     logs_parser.add_argument("run_id")
+
+    execution_output_parser = sub.add_parser(
+        "execution-output",
+        help="Get persisted output body by body_ref",
+    )
+    execution_output_parser.add_argument("body_ref")
 
     watch_parser = sub.add_parser("watch", help="Watch a run until it finishes or waits")
     watch_parser.add_argument("run_id")
@@ -463,6 +469,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "logs":
         events = controller.logs(args.run_id)
         print(json.dumps(events, indent=2))
+        return 0
+
+    if args.command == "execution-output":
+        try:
+            output_body = controller.get_execution_output(args.body_ref)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if output_body is None:
+            print("Execution output not found", file=sys.stderr)
+            return 1
+        print(json.dumps(output_body, indent=2))
         return 0
 
     if args.command == "watch":

@@ -6,6 +6,7 @@ from skiller.application.ports.skill_runner_port import SkillRunnerPort
 from skiller.application.ports.state_store_port import StateStorePort
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.skill_step_model import find_skill_step
 from skiller.domain.step_type import StepType
 
 
@@ -64,26 +65,18 @@ class RenderCurrentStepUseCase:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
         raw_steps = skill.get("steps", [])
-        if not isinstance(raw_steps, list):
-            return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
         current = run.current
         if current is None:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
-        step_index, raw_step = self._find_step(raw_steps, current)
-        if raw_step is None:
+        try:
+            step_index, parsed_step = find_skill_step(raw_steps, current)
+        except ValueError:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
-        step = self.skill_runner.render_step(raw_step, run.context.to_dict())
+        step = self.skill_runner.render_step(parsed_step.body, run.context.to_dict())
         if not isinstance(step, dict):
-            return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_STEP)
-
-        step_id = str(step.get("id", f"step_{step_index}"))
-        raw_step_type = str(step.get("type", "")).strip()
-        try:
-            step_type = StepType(raw_step_type)
-        except ValueError:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_STEP)
 
         return RenderCurrentStepResult(
@@ -91,31 +84,9 @@ class RenderCurrentStepUseCase:
             current_step=CurrentStep(
                 run_id=run_id,
                 step_index=step_index,
-                step_id=step_id,
-                step_type=step_type,
+                step_id=parsed_step.step_id,
+                step_type=parsed_step.step_type,
                 step=step,
                 context=run.context,
             ),
         )
-
-    def _find_step(
-        self, raw_steps: list[object], step_id: str
-    ) -> tuple[int, dict[str, Any] | None]:
-        match_index = -1
-        match_step: dict[str, Any] | None = None
-
-        for index, raw_step in enumerate(raw_steps):
-            if not isinstance(raw_step, dict):
-                return -1, None
-
-            candidate_id = str(raw_step.get("id", "")).strip()
-            if candidate_id != step_id:
-                continue
-
-            if match_step is not None:
-                return -1, None
-
-            match_index = index
-            match_step = raw_step
-
-        return match_index, match_step

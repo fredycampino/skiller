@@ -1,19 +1,24 @@
-# Output Blocks
+# UI Output
 
 ### Trigger
 The UI appends a new command result to the output transcript.
 
 ### Structure
 Each result is rendered as a readable block instead of a single dense line.
-Run execution blocks follow [`run_transcript.md`](/home/fede/develop/py/skiller/src/skiller/tools/ui/docs/behaviors/run_transcript.md).
+Run execution blocks follow [`transcript.md`](transcript.md).
+`/logs` follows [`logs-debug.md`](logs-debug.md).
 
 ### Block Title
-Most blocks start with a run header:
+Run transcript blocks start with an execution header:
 
 Examples:
 
+`[run-create] notify_test:30bc`
+`[run-resume] chat:d0e9`
+
+Other result kinds may still use simple run headers such as:
+
 `run-30bc: notify_test`
-`run-dfd9: chat`
 `run: story_route`
 
 ### Block Content
@@ -21,7 +26,7 @@ Content depends on the result kind.
 
 Examples:
 
-`  step_id [step_type]`
+`  [step_type] [step_id]`
 `    [result]`
 
 `  ↳ error`

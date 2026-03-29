@@ -12,13 +12,17 @@ from skiller.application.use_cases.render_current_step import (
 )
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigStatus
 from skiller.application.use_cases.step_execution_result import (
-    NotifyResult,
-    StepExecutionResult,
+    StepAdvance,
     StepExecutionStatus,
-    WaitInputResult,
-    WaitWebhookResult,
 )
 from skiller.domain.run_context_model import RunContext
+from skiller.domain.step_execution_model import (
+    NotifyOutput,
+    StepExecution,
+    WaitInputOutput,
+    WaitWebhookOutput,
+)
+from skiller.domain.step_type import StepType as DomainStepType
 
 pytestmark = pytest.mark.unit
 
@@ -60,13 +64,30 @@ class _FakeAppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, object],
+        payload: dict[str, object] | None = None,
+        step_id: str | None = None,
+        step_type: DomainStepType | None = None,
+        execution: StepExecution | None = None,
+        next_step_id: str | None = None,
+        error: str | None = None,
     ) -> None:
+        event_payload = dict(payload or {})
+        if step_id is not None:
+            event_payload["step"] = step_id
+        if step_type is not None:
+            event_payload["step_type"] = step_type.value
+        if execution is not None:
+            event_payload["step_type"] = execution.step_type.value
+            event_payload["output"] = execution.to_public_output_dict()
+        if next_step_id is not None:
+            event_payload["next"] = next_step_id
+        if error is not None:
+            event_payload["error"] = error
         self.calls.append(
             {
                 "run_id": run_id,
                 "event_type": event_type,
-                "payload": payload,
+                "payload": event_payload,
             }
         )
 
@@ -74,7 +95,7 @@ class _FakeAppendRuntimeEventUseCase:
 class _FakeStepUseCase:
     def __init__(
         self,
-        results: list[StepExecutionResult] | None = None,
+        results: list[StepAdvance] | None = None,
         *,
         error: Exception | None = None,
     ) -> None:
@@ -82,7 +103,7 @@ class _FakeStepUseCase:
         self.error = error
         self.calls: list[CurrentStep] = []
 
-    def execute(self, current_step: CurrentStep) -> StepExecutionResult:
+    def execute(self, current_step: CurrentStep) -> StepAdvance:
         self.calls.append(current_step)
         if self.error is not None:
             raise self.error
@@ -92,11 +113,11 @@ class _FakeStepUseCase:
 
 
 class _FakeMcpStepUseCase:
-    def __init__(self, result: StepExecutionResult) -> None:
+    def __init__(self, result: StepAdvance) -> None:
         self.result = result
         self.calls: list[dict[str, object]] = []
 
-    def execute(self, current_step: CurrentStep, mcp_config: object) -> StepExecutionResult:
+    def execute(self, current_step: CurrentStep, mcp_config: object) -> StepAdvance:
         self.calls.append({"current_step": current_step, "mcp_config": mcp_config})
         return self.result
 
@@ -134,17 +155,17 @@ def _build_current_step(
         step_index=0,
         step_id=step_id,
         step_type=step_type,  # type: ignore[arg-type]
-        step={"id": step_id, "type": getattr(step_type, "value", str(step_type))},
-        context=RunContext(inputs={}, results={}),
+        step={},
+        context=RunContext(inputs={}, step_executions={}),
     )
 
 
 def _build_service(
     *,
     render_results: list[RenderCurrentStepResult],
-    notify_results: list[StepExecutionResult] | None = None,
-    input_wait_results: list[StepExecutionResult] | None = None,
-    wait_results: list[StepExecutionResult] | None = None,
+    notify_results: list[StepAdvance] | None = None,
+    input_wait_results: list[StepAdvance] | None = None,
+    wait_results: list[StepAdvance] | None = None,
     mcp_render_result: _FakeRenderMcpConfigResult | None = None,
     notify_error: Exception | None = None,
 ) -> tuple[RunWorkerService, _FakeCompleteRunUseCase, _FakeFailRunUseCase]:
@@ -160,7 +181,7 @@ def _build_service(
         execute_assign_step_use_case=_FakeStepUseCase(),
         execute_llm_prompt_step_use_case=_FakeStepUseCase(),
         execute_mcp_step_use_case=_FakeMcpStepUseCase(
-            StepExecutionResult(status=StepExecutionStatus.COMPLETED)
+            StepAdvance(status=StepExecutionStatus.COMPLETED)
         ),
         execute_notify_step_use_case=_FakeStepUseCase(notify_results, error=notify_error),
         execute_switch_step_use_case=_FakeStepUseCase(),
@@ -212,9 +233,16 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
             )
         ],
         wait_results=[
-            StepExecutionResult(
+            StepAdvance(
                 status=StepExecutionStatus.WAITING,
-                result=WaitWebhookResult(webhook="github", key="pr-1"),
+                execution=StepExecution(
+                    step_type=StepType.WAIT_WEBHOOK,
+                    output=WaitWebhookOutput(
+                        text="Waiting webhook: github:pr-1.",
+                        webhook="github",
+                        key="pr-1",
+                    ),
+                ),
             )
         ],
     )
@@ -236,7 +264,11 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
             "payload": {
                 "step": "start",
                 "step_type": "wait_webhook",
-                "result": {"webhook": "github", "key": "pr-1", "payload": None},
+                "output": {
+                    "text": "Waiting webhook: github:pr-1.",
+                    "value": {"webhook": "github", "key": "pr-1", "payload": None},
+                    "body_ref": None,
+                },
             },
         },
     ]
@@ -251,9 +283,15 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
             )
         ],
         input_wait_results=[
-            StepExecutionResult(
+            StepAdvance(
                 status=StepExecutionStatus.WAITING,
-                result=WaitInputResult(prompt="Write a message."),
+                execution=StepExecution(
+                    step_type=StepType.WAIT_INPUT,
+                    output=WaitInputOutput(
+                        text="Write a message.",
+                        prompt="Write a message.",
+                    ),
+                ),
             )
         ],
     )
@@ -275,10 +313,13 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
             "payload": {
                 "step": "start",
                 "step_type": "wait_input",
-                "result": {
-                    "prompt": "Write a message.",
-                    "payload": None,
-                    "input_event_id": None,
+                "output": {
+                    "text": "Write a message.",
+                    "value": {
+                        "prompt": "Write a message.",
+                        "payload": None,
+                    },
+                    "body_ref": None,
                 },
             },
         },
@@ -298,14 +339,20 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             ),
         ],
         notify_results=[
-            StepExecutionResult(
+            StepAdvance(
                 status=StepExecutionStatus.NEXT,
                 next_step_id="done",
-                result=NotifyResult(message="first"),
+                execution=StepExecution(
+                    step_type=StepType.NOTIFY,
+                    output=NotifyOutput(text="first", message="first"),
+                ),
             ),
-            StepExecutionResult(
+            StepAdvance(
                 status=StepExecutionStatus.COMPLETED,
-                result=NotifyResult(message="done"),
+                execution=StepExecution(
+                    step_type=StepType.NOTIFY,
+                    output=NotifyOutput(text="done", message="done"),
+                ),
             ),
         ],
     )
@@ -327,7 +374,11 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "payload": {
                 "step": "start",
                 "step_type": "notify",
-                "result": {"message": "first"},
+                "output": {
+                    "text": "first",
+                    "value": {"message": "first"},
+                    "body_ref": None,
+                },
                 "next": "done",
             },
         },
@@ -342,7 +393,11 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "payload": {
                 "step": "done",
                 "step_type": "notify",
-                "result": {"message": "done"},
+                "output": {
+                    "text": "done",
+                    "value": {"message": "done"},
+                    "body_ref": None,
+                },
             },
         },
         {

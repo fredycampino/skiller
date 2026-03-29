@@ -2,92 +2,28 @@
 
 ## Goal
 
-`notify` is the simplest operational step in the runtime.
+`notify` emits a message into the transcript and stores that message as the step output.
 
-It does not call external services or transform complex data.
-It only emits a message, stores its result in the context, and decides whether the run continues or ends.
-
-## Minimal Shape
+## Shape
 
 ```yaml
-- id: start
-  type: notify
-  message: "notify smoke ok"
-```
-
-## Shape with `next`
-
-```yaml
-- id: start
-  type: notify
-  message: "first"
-  next: done
-
-- id: done
-  type: notify
-  message: "second"
-```
-
-## Rendering
-
-`notify` follows the normal runtime pattern:
-
-- `RenderCurrentStepUseCase` renders the full step
-- `message` is renderable
-
-Supported placeholders:
-
-- `{{inputs...}}`
-- `{{results...}}`
-
-Example:
-
-```yaml
-- id: done
-  type: notify
-  message: "{{results.start.next_action}}"
-```
-
-## Result
-
-`notify` stores the result in:
-
-```yaml
-results.<step_id>
-```
-
-With this shape:
-
-```json
-{
-  "ok": true,
-  "message": "retry"
-}
+- notify: show_reply
+  message: "{{step_executions.answer.output.value.data.reply}}"
+  next: ask_user
 ```
 
 ## Persistence
 
-In addition to the result in `context.results[step_id]`, `notify` emits:
-
-```text
-NOTIFY
+```json
+{
+  "output": {
+    "text": "hello back",
+    "value": {
+      "message": "hello back"
+    },
+    "body_ref": null
+  }
+}
 ```
 
-with:
-
-- `step`
-- `message`
-
-## Transition
-
-In the new loop:
-
-- if the step has `next`, the runtime moves `current` to that `step_id`
-- if the step has no `next`, the run completes
-
-## Restrictions
-
-In this version:
-
-- `message` is treated as a string
-- `next`, if present, must be a non-empty `step_id`
+If `next` is missing, the run completes after the step.

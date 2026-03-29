@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
 from skiller.application.ports.state_store_port import StateStorePort
+from skiller.domain.external_event_type import ExternalEventType
 from skiller.domain.run_model import RunStatus
+from skiller.domain.skill_step_model import find_skill_step
 from skiller.domain.step_type import StepType
 
 
@@ -40,30 +42,16 @@ class HandleInputUseCase:
             )
 
         raw_steps = run.skill_snapshot.get("steps", [])
-        if not isinstance(raw_steps, list):
-            return HandleInputResult(
-                accepted=False,
-                run_ids=[],
-                error=f"Run '{run_id}' has invalid skill steps",
-            )
-
-        current_step = next(
-            (
-                raw_step
-                for raw_step in raw_steps
-                if isinstance(raw_step, dict) and str(raw_step.get("id", "")).strip() == run.current
-            ),
-            None,
-        )
-        if current_step is None:
+        try:
+            _, current_step = find_skill_step(raw_steps, run.current)
+        except ValueError:
             return HandleInputResult(
                 accepted=False,
                 run_ids=[],
                 error=f"Run '{run_id}' current step '{run.current}' was not found",
             )
 
-        raw_step_type = str(current_step.get("type", "")).strip()
-        if raw_step_type != StepType.WAIT_INPUT.value:
+        if current_step.step_type != StepType.WAIT_INPUT:
             return HandleInputResult(
                 accepted=False,
                 run_ids=[],
@@ -71,7 +59,12 @@ class HandleInputUseCase:
             )
 
         payload = {"text": text}
-        event_id = self.store.create_input_event(run_id, run.current, payload)
+        event_id = self.store.create_external_event(
+            event_type=ExternalEventType.INPUT,
+            run_id=run_id,
+            step_id=run.current,
+            payload=payload,
+        )
         self.store.append_event(
             "INPUT_RECEIVED",
             {"step": run.current, "payload": payload},

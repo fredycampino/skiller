@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from skiller.tools.ui.actions import ActionResult
-from skiller.tools.ui.commands import LogsCommand, RunCommand, WatchCommand
+from skiller.tools.ui.commands import BodyCommand, LogsCommand, RunCommand, WatchCommand
 from skiller.tools.ui.session import UiRun, build_session
 from skiller.tools.ui.tui_render import (
     build_footer_line,
@@ -49,6 +49,45 @@ def test_render_result_for_buffer_uses_existing_renderer_for_echo() -> None:
     assert result.replace is False
 
 
+def test_render_result_for_buffer_renders_body_payload() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="body",
+            body_ref="execution_output:1",
+            payload={"data": {"reply": "hola"}},
+        ),
+    )
+
+    assert result.text == (
+        "body_ref: execution_output:1\n"
+        "{\n"
+        '  "data": {\n'
+        '    "reply": "hola"\n'
+        "  }\n"
+        "}\n"
+    )
+    assert result.replace is False
+
+
+def test_build_pending_status_text_renders_loading_body() -> None:
+    assert build_pending_status_text(command=BodyCommand(body_ref="execution_output:1")) == (
+        "Loading body"
+    )
+
+
+def test_build_result_status_text_renders_loaded_body() -> None:
+    assert build_result_status_text(
+        result=ActionResult(
+            kind="body",
+            body_ref="execution_output:1",
+            payload={"data": {"reply": "hola"}},
+        )
+    ) == "Loaded body"
+
+
 def test_render_result_for_buffer_renders_waiting_run_metadata() -> None:
     session = build_session("a1b2c3d4")
 
@@ -61,6 +100,7 @@ def test_render_result_for_buffer_renders_waiting_run_metadata() -> None:
                 run_id="run-1",
                 status="WAITING",
                 last_payload={
+                    "current": "ask_user",
                     "wait_type": "input",
                     "prompt": "Write a short summary",
                 },
@@ -70,7 +110,7 @@ def test_render_result_for_buffer_renders_waiting_run_metadata() -> None:
 
     assert result.text == (
         "[run-create] wait_input_test:un-1\n"
-        "  [wait_input] start\n"
+        "  [wait_input] ask_user\n"
         "    Write a short summary\n"
     )
     assert result.replace is False
@@ -262,7 +302,14 @@ def test_render_result_for_buffer_renders_logs_for_failed_run() -> None:
         "run-un-1: chat\n"
         "  ↳ logs\n"
         "    count: 1\n"
-        '    [1] RUN_FINISHED payload={"error": "network down", "status": "FAILED"}\n'
+        "    [1]\n"
+        "      {\n"
+        '        "payload": {\n'
+        '          "error": "network down",\n'
+        '          "status": "FAILED"\n'
+        "        },\n"
+        '        "type": "RUN_FINISHED"\n'
+        "      }\n"
     )
     assert result.replace is False
 
@@ -285,10 +332,14 @@ def test_render_result_for_buffer_renders_semantic_watch_blocks() -> None:
                         "id": "evt-1",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {
-                                "prompt": "Write a message. Type exit, quit, or bye to stop."
+                            "output": {
+                                "text": "Write a message. Type exit, quit, or bye to stop.",
+                                "value": {
+                                    "prompt": "Write a message. Type exit, quit, or bye to stop."
+                                },
+                                "body_ref": None,
                             },
                         },
                     },
@@ -298,10 +349,10 @@ def test_render_result_for_buffer_renders_semantic_watch_blocks() -> None:
                         "payload": {
                             "step": "answer",
                             "step_type": "llm_prompt",
-                            "result": {
+                            "output": {
                                 "text": "hola",
-                                "json": {"reply": "hola"},
-                                "model": "MiniMax-M2.5",
+                                "value": {"data": {"reply": "hola"}},
+                                "body_ref": None,
                             },
                             "next": "show_reply",
                         },
@@ -312,21 +363,15 @@ def test_render_result_for_buffer_renders_semantic_watch_blocks() -> None:
                         "payload": {
                             "step": "show_reply",
                             "step_type": "notify",
-                            "result": {"message": "hola"},
-                            "next": "start",
+                            "output": {
+                                "text": "hola",
+                                "value": {"message": "hola"},
+                                "body_ref": None,
+                            },
+                            "next": "ask_user",
                         },
                     },
                 ],
-                "events_text": (
-                    '[aa95] RUN_WAITING step="start" step_type="wait_input" '
-                    'result={"prompt":"Write a message. Type exit, quit, or bye to stop."}\n'
-                    '[aa95] STEP_SUCCESS step="answer" step_type="llm_prompt" '
-                    'result={"text":"hola","json":{"reply":"hola"},'
-                    '"model":"MiniMax-M2.5"} next="show_reply"\n'
-                    '[aa95] STEP_SUCCESS step="show_reply" step_type="notify" '
-                    'result={"message":"hola"} next="start"\n'
-                    '[aa95] RUN_FINISHED status="WAITING"\n'
-                )
             },
         ),
     )
@@ -359,21 +404,28 @@ def test_render_result_for_buffer_skips_resolved_wait_input_step_success() -> No
                         "id": "evt-0",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {"prompt": "Write a message."},
+                            "output": {
+                                "text": "Write a message.",
+                                "value": {"prompt": "Write a message."},
+                                "body_ref": None,
+                            },
                         },
                     },
                     {
                         "id": "evt-1",
                         "type": "STEP_SUCCESS",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {
-                                "prompt": "Write a message.",
-                                "payload": {"text": "hola"},
-                                "input_event_id": "evt-1",
+                            "output": {
+                                "text": "Input received.",
+                                "value": {
+                                    "prompt": "Write a message.",
+                                    "payload": {"text": "hola"},
+                                },
+                                "body_ref": None,
                             },
                             "next": "decide_exit",
                         },
@@ -384,7 +436,11 @@ def test_render_result_for_buffer_skips_resolved_wait_input_step_success() -> No
                         "payload": {
                             "step": "decide_exit",
                             "step_type": "switch",
-                            "result": {"next": "answer"},
+                            "output": {
+                                "text": "answer",
+                                "value": {"next_step_id": "answer"},
+                                "body_ref": None,
+                            },
                             "next": "answer",
                         },
                     },
@@ -394,10 +450,10 @@ def test_render_result_for_buffer_skips_resolved_wait_input_step_success() -> No
                         "payload": {
                             "step": "answer",
                             "step_type": "llm_prompt",
-                            "result": {
+                            "output": {
                                 "text": "hola",
-                                "json": {"reply": "hola"},
-                                "model": "MiniMax-M2.5",
+                                "value": {"data": {"reply": "hola"}},
+                                "body_ref": None,
                             },
                             "next": "show_reply",
                         },
@@ -408,35 +464,28 @@ def test_render_result_for_buffer_skips_resolved_wait_input_step_success() -> No
                         "payload": {
                             "step": "show_reply",
                             "step_type": "notify",
-                            "result": {"message": "hola"},
-                            "next": "start",
+                            "output": {
+                                "text": "hola",
+                                "value": {"message": "hola"},
+                                "body_ref": None,
+                            },
+                            "next": "ask_user",
                         },
                     },
                     {
                         "id": "evt-5",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {"prompt": "Write a message."},
+                            "output": {
+                                "text": "Write a message.",
+                                "value": {"prompt": "Write a message."},
+                                "body_ref": None,
+                            },
                         },
                     },
                 ],
-                "events_text": (
-                    '[15a0] STEP_SUCCESS step="start" step_type="wait_input" '
-                    'result={"prompt":"Write a message.","payload":{"text":"hola"},'
-                    '"input_event_id":"evt-1"} next="decide_exit"\n'
-                    '[15a0] STEP_SUCCESS step="decide_exit" step_type="switch" '
-                    'result={"next":"answer"} next="answer"\n'
-                    '[15a0] STEP_SUCCESS step="answer" step_type="llm_prompt" '
-                    'result={"text":"hola","json":{"reply":"hola"},'
-                    '"model":"MiniMax-M2.5"} next="show_reply"\n'
-                    '[15a0] STEP_SUCCESS step="show_reply" step_type="notify" '
-                    'result={"message":"hola"} next="start"\n'
-                    '[15a0] RUN_WAITING step="start" step_type="wait_input" '
-                    'result={"prompt":"Write a message."}\n'
-                    '[15a0] RUN_FINISHED status="WAITING"\n'
-                )
             },
         ),
     )
@@ -449,7 +498,7 @@ def test_render_result_for_buffer_skips_resolved_wait_input_step_success() -> No
         "    hola\n"
         "  [notify] show_reply\n"
         "    hola\n"
-        "  [wait_input] start\n"
+        "  [wait_input] ask_user\n"
         "    Write a message.\n"
     )
     assert result.replace is False
@@ -477,16 +526,20 @@ def test_render_result_for_buffer_skips_initial_waiting_after_resume_markers() -
                     {
                         "id": "evt-1",
                         "type": "STEP_STARTED",
-                        "payload": {"step": "start", "step_type": "wait_input"},
+                        "payload": {"step": "ask_user", "step_type": "wait_input"},
                     },
                     {
                         "id": "evt-2",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {
-                                "prompt": "Write a message. Type exit, quit, or bye to stop."
+                            "output": {
+                                "text": "Write a message. Type exit, quit, or bye to stop.",
+                                "value": {
+                                    "prompt": "Write a message. Type exit, quit, or bye to stop."
+                                },
+                                "body_ref": None,
                             },
                         },
                     },
@@ -496,7 +549,11 @@ def test_render_result_for_buffer_skips_initial_waiting_after_resume_markers() -
                         "payload": {
                             "step": "decide_exit",
                             "step_type": "switch",
-                            "result": {"next": "answer"},
+                            "output": {
+                                "text": "answer",
+                                "value": {"next_step_id": "answer"},
+                                "body_ref": None,
+                            },
                         },
                     },
                     {
@@ -505,7 +562,11 @@ def test_render_result_for_buffer_skips_initial_waiting_after_resume_markers() -
                         "payload": {
                             "step": "answer",
                             "step_type": "llm_prompt",
-                            "result": {"text": "España tiene 50 provincias."},
+                            "output": {
+                                "text": "España tiene 50 provincias.",
+                                "value": None,
+                                "body_ref": None,
+                            },
                         },
                     },
                     {
@@ -514,17 +575,25 @@ def test_render_result_for_buffer_skips_initial_waiting_after_resume_markers() -
                         "payload": {
                             "step": "show_reply",
                             "step_type": "notify",
-                            "result": {"message": "España tiene 50 provincias."},
+                            "output": {
+                                "text": "España tiene 50 provincias.",
+                                "value": {"message": "España tiene 50 provincias."},
+                                "body_ref": None,
+                            },
                         },
                     },
                     {
                         "id": "evt-6",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {
-                                "prompt": "Write a message. Type exit, quit, or bye to stop."
+                            "output": {
+                                "text": "Write a message. Type exit, quit, or bye to stop.",
+                                "value": {
+                                    "prompt": "Write a message. Type exit, quit, or bye to stop."
+                                },
+                                "body_ref": None,
                             },
                         },
                     },
@@ -541,7 +610,7 @@ def test_render_result_for_buffer_skips_initial_waiting_after_resume_markers() -
         "    España tiene 50 provincias.\n"
         "  [notify] show_reply\n"
         "    España tiene 50 provincias.\n"
-        "  [wait_input] start\n"
+        "  [wait_input] ask_user\n"
         "    Write a message. Type exit, quit, or bye to stop.\n"
     )
     assert result.replace is False
@@ -567,33 +636,36 @@ def test_render_result_for_buffer_decodes_unicode_in_watch_notify_message() -> N
                         "payload": {
                             "step": "show_reply",
                             "step_type": "notify",
-                            "result": {
-                                "message": (
+                            "output": {
+                                "text": (
                                     "Según los datos más recientes, "
                                     "España tiene 48 millones."
-                                )
+                                ),
+                                "value": {
+                                    "message": (
+                                        "Según los datos más recientes, "
+                                        "España tiene 48 millones."
+                                    )
+                                },
+                                "body_ref": None,
                             },
-                            "next": "start",
+                            "next": "ask_user",
                         },
                     },
                     {
                         "id": "evt-2",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {"prompt": "Write a message."},
+                            "output": {
+                                "text": "Write a message.",
+                                "value": {"prompt": "Write a message."},
+                                "body_ref": None,
+                            },
                         },
                     },
                 ],
-                "events_text": (
-                    '[f28a] STEP_SUCCESS step="show_reply" step_type="notify" '
-                    'result={"message":"Seg\\u00fan los datos m\\u00e1s recientes, '
-                    'Espa\\u00f1a tiene 48 millones."} next="start"\n'
-                    '[f28a] RUN_WAITING step="start" step_type="wait_input" '
-                    'result={"prompt":"Write a message."}\n'
-                    '[f28a] RUN_FINISHED status="WAITING"\n'
-                )
             },
         ),
     )
@@ -602,7 +674,7 @@ def test_render_result_for_buffer_decodes_unicode_in_watch_notify_message() -> N
         "[run-resume] chat:f28a\n"
         "  [notify] show_reply\n"
         "    Según los datos más recientes, España tiene 48 millones.\n"
-        "  [wait_input] start\n"
+        "  [wait_input] ask_user\n"
         "    Write a message.\n"
     )
     assert result.replace is False
@@ -628,31 +700,32 @@ def test_render_result_for_buffer_decodes_double_escaped_unicode_in_watch_notify
                         "payload": {
                             "step": "show_reply",
                             "step_type": "notify",
-                            "result": {
-                                "message": '"Seg\\u00fan los datos m\\u00e1s recientes, '
-                                'Espa\\u00f1a tiene 48 millones."'
+                            "output": {
+                                "text": '"Seg\\u00fan los datos m\\u00e1s recientes, '
+                                'Espa\\u00f1a tiene 48 millones."',
+                                "value": {
+                                    "message": '"Seg\\u00fan los datos m\\u00e1s recientes, '
+                                    'Espa\\u00f1a tiene 48 millones."'
+                                },
+                                "body_ref": None,
                             },
-                            "next": "start",
+                            "next": "ask_user",
                         },
                     },
                     {
                         "id": "evt-2",
                         "type": "RUN_WAITING",
                         "payload": {
-                            "step": "start",
+                            "step": "ask_user",
                             "step_type": "wait_input",
-                            "result": {"prompt": "Write a message."},
+                            "output": {
+                                "text": "Write a message.",
+                                "value": {"prompt": "Write a message."},
+                                "body_ref": None,
+                            },
                         },
                     },
                 ],
-                "events_text": (
-                    '[5e13] STEP_SUCCESS step="show_reply" step_type="notify" '
-                    'result={"message":"\\"Seg\\\\u00fan los datos m\\\\u00e1s recientes, '
-                    'Espa\\\\u00f1a tiene 48 millones.\\""} next="start"\n'
-                    '[5e13] RUN_WAITING step="start" step_type="wait_input" '
-                    'result={"prompt":"Write a message."}\n'
-                    '[5e13] RUN_FINISHED status="WAITING"\n'
-                )
             },
         ),
     )
@@ -661,10 +734,61 @@ def test_render_result_for_buffer_decodes_double_escaped_unicode_in_watch_notify
         "[run-resume] chat:5e13\n"
         "  [notify] show_reply\n"
         "    Según los datos más recientes, España tiene 48 millones.\n"
-        "  [wait_input] start\n"
+        "  [wait_input] ask_user\n"
         "    Write a message.\n"
     )
     assert result.replace is False
+
+
+def test_render_result_for_buffer_wraps_long_notify_detail_without_breaking_words() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="watch",
+            run=UiRun(
+                raw_args="chat",
+                run_id="12345678-1234-1234-1234-123456785e13",
+                status="WAITING",
+            ),
+            payload={
+                "events": [
+                    {
+                        "id": "evt-1",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "show_reply",
+                            "step_type": "notify",
+                            "output": {
+                                "text": (
+                                    "En la naturaleza, un leon vive entre 10 y 14 anos. "
+                                    "En cautiverio, pueden vivir hasta 20 anos o mas "
+                                    "gracias a los cuidados veterinarios y la alimentacion "
+                                    "constante."
+                                ),
+                                "value": {
+                                    "message": (
+                                        "En la naturaleza, un leon vive entre 10 y 14 anos. "
+                                        "En cautiverio, pueden vivir hasta 20 anos o mas "
+                                        "gracias a los cuidados veterinarios y la alimentacion "
+                                        "constante."
+                                    )
+                                },
+                                "body_ref": None,
+                            },
+                            "next": "start",
+                        },
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert "    En la naturaleza, un leon vive entre 10 y 14 anos." in result.text
+    assert "    pueden vivir hasta 20 anos o mas gracias a los cuidados veterinarios" in result.text
+    assert "    y la alimentacion constante." in result.text
+    assert " ano\n" not in result.text
 
 
 def test_build_header_title_line_exposes_brand_and_session() -> None:
@@ -701,7 +825,7 @@ def test_build_pending_input_status_text_uses_run_label() -> None:
     assert result == "Running chat"
 
 
-def test_build_result_status_text_uses_waiting_input_prompt() -> None:
+def test_build_result_status_text_uses_waiting_input_label() -> None:
     result = build_result_status_text(
         result=ActionResult(
             kind="run",
@@ -714,10 +838,10 @@ def test_build_result_status_text_uses_waiting_input_prompt() -> None:
         )
     )
 
-    assert result == "Waiting → Write a short summary"
+    assert result == "Waiting → input"
 
 
-def test_build_result_status_text_uses_waiting_webhook_name() -> None:
+def test_build_result_status_text_uses_waiting_webhook_label() -> None:
     result = build_result_status_text(
         result=ActionResult(
             kind="status",
@@ -730,7 +854,7 @@ def test_build_result_status_text_uses_waiting_webhook_name() -> None:
         )
     )
 
-    assert result == "Waiting github-pr-merged"
+    assert result == "Waiting → webhook"
 
 
 def test_build_result_status_text_uses_running_run_label() -> None:
@@ -763,12 +887,7 @@ def test_build_result_status_text_uses_error_message() -> None:
                 raw_args="notify_test",
                 run_id="run-1",
                 status="FAILED",
-                last_payload={
-                    "events_text": (
-                        '[1234] RUN_FINISHED status="FAILED" '
-                        'error="database timeout"'
-                    )
-                },
+                last_payload={"error": "database timeout"},
             ),
         )
     )
@@ -803,14 +922,7 @@ def test_build_result_status_text_prefers_error_field_over_failed_watch_line() -
                 raw_args="chat",
                 run_id="12345678-1234-1234-1234-1234567883b6",
                 status="FAILED",
-                last_payload={
-                    "events_text": (
-                        '[83b6] STEP_ERROR step="answer" step_type="llm_prompt" '
-                        'error="LLM is not configured for llm_prompt steps"\n'
-                        '[83b6] RUN_FINISHED status="FAILED" '
-                        'error="LLM is not configured for llm_prompt steps"'
-                    )
-                },
+                last_payload={"error": "LLM is not configured for llm_prompt steps"},
             ),
         )
     )
@@ -853,11 +965,11 @@ def test_build_status_line_formats_waiting_status() -> None:
 
     result = build_status_line(
         session=session,
-        status_text="Waiting → Write a short summary",
+        status_text="Waiting → input",
         now=0.0,
     )
 
-    assert result == "◌ Waiting → Write a short summary"
+    assert result == "◌ Waiting → input"
 
 
 def test_build_status_line_formats_success_status() -> None:

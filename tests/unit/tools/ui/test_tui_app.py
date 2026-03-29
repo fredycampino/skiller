@@ -11,6 +11,7 @@ from skiller.tools.ui.session import UiRun, UiSession
 from skiller.tools.ui.tui_app import (
     accept_completion,
     build_empty_reply_result,
+    build_output_wrap_prefix,
     build_post_input_commands,
     build_status_fragments,
     build_submit_command,
@@ -172,3 +173,23 @@ def test_build_post_input_commands_use_watch_and_status_for_same_run() -> None:
         WatchCommand(run_id="run-1"),
         StatusCommand(run_id="run-1"),
     )
+
+
+def test_build_output_wrap_prefix_preserves_line_indentation_on_wrapped_lines() -> None:
+    result = build_output_wrap_prefix(
+        text="[run-resume] chat:7f1f\n    España tiene 48 millones.",
+        line_number=1,
+        wrap_count=1,
+    )
+
+    assert result == "    "
+
+
+def test_build_output_wrap_prefix_returns_empty_prefix_for_unindented_lines() -> None:
+    result = build_output_wrap_prefix(
+        text="[run-resume] chat:7f1f",
+        line_number=0,
+        wrap_count=1,
+    )
+
+    assert result == ""

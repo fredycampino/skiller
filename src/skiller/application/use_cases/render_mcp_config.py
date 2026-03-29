@@ -29,10 +29,10 @@ class RenderMcpConfigUseCase:
         if next_step.step_type != StepType.MCP:
             return self._invalid(f"Step '{next_step.step_id}' is not an mcp step")
 
-        server_name = str(next_step.step.get("mcp", "")).strip()
+        server_name = str(next_step.step.get("server", "")).strip()
         if not server_name:
             return self._invalid(
-                f"Step '{next_step.step_id}' requires mcp server name in field 'mcp'"
+                f"Step '{next_step.step_id}' requires mcp server name in field 'server'"
             )
 
         run = self.store.get_run(next_step.run_id)

@@ -1,9 +1,9 @@
 name: llm_prompt_cli_real_e2e
+start: analyze_issue
 inputs:
   issue: string
 steps:
-  - id: start
-    type: llm_prompt
+  - llm_prompt: analyze_issue
     system: |
       You are a technical analyst.
       Respond only with valid JSON.
@@ -30,6 +30,5 @@ steps:
             type: string
             enum: [retry]
     next: done
-  - id: done
-    type: notify
-    message: "{{results.start.next_action}}"
+  - notify: done
+    message: "{{step_executions.analyze_issue.output.value.data.next_action}}"

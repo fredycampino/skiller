@@ -1,6 +1,7 @@
 name: pull_request
 description: "Open a GitHub pull request for a branch workflow"
 version: "0.1"
+start: create_pr
 
 inputs:
   owner: string
@@ -18,9 +19,8 @@ mcp:
       Authorization: "Bearer {{env.AGENT_GITHUB_MCP_TOKEN}}"
 
 steps:
-  - id: start
-    type: mcp
-    mcp: github
+  - mcp: create_pr
+    server: github
     tool: create_pull_request
     args:
       owner: "{{inputs.owner}}"
@@ -31,6 +31,5 @@ steps:
       body: "{{inputs.body}}"
     next: done
 
-  - id: done
-    type: notify
+  - notify: done
     message: "pull request created for {{inputs.owner}}/{{inputs.repo}} {{inputs.head}} -> {{inputs.base}}"

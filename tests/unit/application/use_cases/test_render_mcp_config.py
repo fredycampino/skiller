@@ -73,7 +73,7 @@ def _build_run(skill_snapshot: dict[str, object] | None = None) -> Run:
         },
         status="CREATED",
         current="start",
-        context=RunContext(inputs={"root": "/tmp/work"}, results={}),
+        context=RunContext(inputs={"root": "/tmp/work"}, step_executions={}),
         created_at="2026-03-07 10:00:00",
         updated_at="2026-03-07 10:00:00",
     )
@@ -98,7 +98,7 @@ def _build_run_with_inputs(
         },
         status="CREATED",
         current="start",
-        context=RunContext(inputs=inputs, results={}),
+        context=RunContext(inputs=inputs, step_executions={}),
         created_at="2026-03-07 10:00:00",
         updated_at="2026-03-07 10:00:00",
     )
@@ -141,7 +141,7 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
             step_index=0,
             step_id="create_file",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "local-mcp", "tool": "files_action", "args": {}},
+            step={"server": "local-mcp", "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )
@@ -172,7 +172,7 @@ def test_render_mcp_config_rejects_non_mcp_step() -> None:
             step_index=0,
             step_id="done",
             step_type=StepType.NOTIFY,
-            step={"type": "notify", "message": "ok"},
+            step={"message": "ok"},
             context=_build_run().context,
         )
     )
@@ -197,7 +197,7 @@ def test_render_mcp_config_rejects_missing_declared_server() -> None:
             step_index=0,
             step_id="create_file",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "local-mcp", "tool": "files_action", "args": {}},
+            step={"server": "local-mcp", "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )
@@ -240,7 +240,7 @@ def test_render_mcp_config_returns_rendered_http_config() -> None:
             step_index=0,
             step_id="open",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "chrome-mcp", "tool": "navigate_page", "args": {}},
+            step={"server": "chrome-mcp", "tool": "navigate_page", "args": {}},
             context=_build_run().context,
         )
     )
@@ -293,7 +293,7 @@ def test_render_mcp_config_returns_rendered_http_config_with_headers() -> None:
             step_index=0,
             step_id="verify_repo",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "github", "tool": "get_repository", "args": {}},
+            step={"server": "github", "tool": "get_repository", "args": {}},
             context=run.context,
         )
     )
@@ -342,7 +342,7 @@ def test_render_mcp_config_renders_http_url_template() -> None:
             step_index=0,
             step_id="ping_server",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "test-mcp", "tool": "ping", "args": {}},
+            step={"server": "test-mcp", "tool": "ping", "args": {}},
             context=run.context,
         )
     )
@@ -386,7 +386,7 @@ def test_render_mcp_config_requires_explicit_transport() -> None:
             step_index=0,
             step_id="create_file",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "local-mcp", "tool": "files_action", "args": {}},
+            step={"server": "local-mcp", "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )
@@ -456,7 +456,7 @@ def test_render_mcp_config_rejects_invalid_mcp_shapes(
             step_index=0,
             step_id="bad_config",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": server_name, "tool": "files_action", "args": {}},
+            step={"server": server_name, "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )
@@ -478,7 +478,7 @@ def test_render_mcp_config_rejects_non_list_mcp_block() -> None:
             step_index=0,
             step_id="create_file",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "local-mcp", "tool": "files_action", "args": {}},
+            step={"server": "local-mcp", "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )
@@ -520,7 +520,7 @@ def test_render_mcp_config_rejects_unresolved_template() -> None:
             step_index=0,
             step_id="create_file",
             step_type=StepType.MCP,
-            step={"type": "mcp", "mcp": "local-mcp", "tool": "files_action", "args": {}},
+            step={"server": "local-mcp", "tool": "files_action", "args": {}},
             context=_build_run().context,
         )
     )

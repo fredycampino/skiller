@@ -1,6 +1,7 @@
 name: http_mcp_test
 description: "Minimal MCP test over streamable-http"
 version: "0.1"
+start: ping_server
 
 inputs:
   mcp_url: string
@@ -11,8 +12,7 @@ mcp:
     url: "{{inputs.mcp_url}}"
 
 steps:
-  - id: start
-    type: mcp
-    mcp: test-mcp
+  - mcp: ping_server
+    server: test-mcp
     tool: ping
     args: {}

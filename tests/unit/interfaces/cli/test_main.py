@@ -15,6 +15,7 @@ class _FakeController:
         self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
         self.logs_calls: list[str] = []
+        self.execution_output_calls: list[str] = []
         self.status_calls: list[str] = []
         self.list_runs_calls: list[tuple[int, list[str] | None]] = []
         self.run_result = {"run_id": "run-1", "status": "CREATED"}
@@ -32,7 +33,7 @@ class _FakeController:
                 "payload": {
                     "step": "done",
                     "step_type": "notify",
-                    "result": {"message": "done"},
+                    "output": {"text": "done", "value": {"message": "done"}, "body_ref": None},
                 },
             }
         ]
@@ -45,7 +46,7 @@ class _FakeController:
                 "id": "run-1",
                 "status": "WAITING",
                 "skill_ref": "webhook_signal_oracle",
-                "current": "start",
+                "current": "wait_signal",
                 "updated_at": "2026-03-18 11:42:10",
             }
         ]
@@ -88,6 +89,10 @@ class _FakeController:
     def logs(self, run_id: str) -> list[dict[str, object]]:
         self.logs_calls.append(run_id)
         return list(self.logs_result)
+
+    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
+        self.execution_output_calls.append(body_ref)
+        return {"data": {"reply": "hola"}}
 
     def status(self, run_id: str) -> dict[str, object] | None:
         self.status_calls.append(run_id)
@@ -288,7 +293,7 @@ def test_run_waiting_result_includes_waiting_metadata(
         {
             "id": "run-1",
             "status": "WAITING",
-            "current": "start",
+            "current": "ask_user",
             "wait_type": "input",
             "prompt": "Write a short summary",
         }
@@ -474,9 +479,13 @@ def test_watch_prints_progress_and_final_status(
             "id": "evt-1",
             "type": "RUN_WAITING",
             "payload": {
-                "step": "start",
+                "step": "wait_signal",
                 "step_type": "wait_webhook",
-                "result": {"webhook": "test", "key": "42"},
+                "output": {
+                    "text": "Waiting webhook: test:42.",
+                    "value": {"webhook": "test", "key": "42"},
+                    "body_ref": None,
+                },
             },
         }
     ]
@@ -494,8 +503,9 @@ def test_watch_prints_progress_and_final_status(
     assert '"events": [' in captured.out
     assert "[123] RUNNING" in captured.err
     assert (
-        '[123] RUN_WAITING step="start" step_type="wait_webhook" '
-        'result={"key":"42","webhook":"test"}'
+        '[123] RUN_WAITING step="wait_signal" step_type="wait_webhook" '
+        'output={"body_ref":null,"text":"Waiting webhook: test:42.",'
+        '"value":{"key":"42","webhook":"test"}}'
     ) in captured.err
 
 
@@ -510,7 +520,7 @@ def test_status_can_include_waiting_metadata(
             "id": "run-1",
             "skill_ref": "webhook_signal_oracle",
             "status": "WAITING",
-            "current": "start",
+            "current": "wait_signal",
             "wait_type": "webhook",
             "webhook": "market-signal",
             "key": "btc-usd",
@@ -527,6 +537,24 @@ def test_status_can_include_waiting_metadata(
     assert '"wait_type": "webhook"' in captured.out
     assert '"webhook": "market-signal"' in captured.out
     assert '"key": "btc-usd"' in captured.out
+
+
+def test_execution_output_returns_persisted_body(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["execution-output", "execution_output:1"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.execution_output_calls == ["execution_output:1"]
+    assert '"reply": "hola"' in captured.out
 
 
 def test_runs_lists_recent_runs(

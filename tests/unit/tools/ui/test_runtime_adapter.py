@@ -128,7 +128,7 @@ def test_cli_runtime_adapter_runs_invokes_cli(monkeypatch: pytest.MonkeyPatch) -
                         "id": "run-1",
                         "status": "WAITING",
                         "skill_ref": "notify_test",
-                        "current": "start",
+                        "current": "show_message",
                     }
                 ]
             ),
@@ -145,7 +145,7 @@ def test_cli_runtime_adapter_runs_invokes_cli(monkeypatch: pytest.MonkeyPatch) -
             "id": "run-1",
             "status": "WAITING",
             "skill_ref": "notify_test",
-            "current": "start",
+            "current": "show_message",
         }
     ]
     assert recorded["cmd"] == [
@@ -227,7 +227,7 @@ def test_cli_runtime_adapter_logs_invokes_cli(monkeypatch: pytest.MonkeyPatch) -
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=json.dumps([{"id": "evt-1", "type": "NOTIFY", "payload": {}}]),
+            stdout=json.dumps([{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]),
             stderr="",
         )
 
@@ -236,10 +236,41 @@ def test_cli_runtime_adapter_logs_invokes_cli(monkeypatch: pytest.MonkeyPatch) -
     adapter = runtime_adapter.CliRuntimeAdapter()
     result = adapter.logs(run_id="run-1")
 
-    assert result == [{"id": "evt-1", "type": "NOTIFY", "payload": {}}]
+    assert result == [{"id": "evt-1", "type": "STEP_SUCCESS", "payload": {}}]
 
 
-def test_cli_runtime_adapter_watch_captures_events_text(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_runtime_adapter_get_execution_output_invokes_cli(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        recorded["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps({"data": {"reply": "hola"}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
+
+    adapter = runtime_adapter.CliRuntimeAdapter()
+    result = adapter.get_execution_output(body_ref="execution_output:1")
+
+    assert result == {"data": {"reply": "hola"}}
+    assert recorded["cmd"] == [
+        runtime_adapter.sys.executable,
+        "-m",
+        "skiller",
+        "execution-output",
+        "execution_output:1",
+    ]
+
+
+def test_cli_runtime_adapter_watch_returns_structured_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_run(cmd, **kwargs):  # noqa: ANN001
         return subprocess.CompletedProcess(
             cmd,
@@ -253,17 +284,22 @@ def test_cli_runtime_adapter_watch_captures_events_text(monkeypatch: pytest.Monk
                             "id": "evt-1",
                             "type": "RUN_WAITING",
                             "payload": {
-                                "step": "start",
+                                "step": "ask_user",
                                 "step_type": "wait_input",
-                                "result": {"prompt": "Write a message."},
+                                "output": {
+                                    "text": "Write a message.",
+                                    "value": {"prompt": "Write a message."},
+                                    "body_ref": None,
+                                },
                             },
                         }
                     ],
                 }
             ),
             stderr=(
-                '[1234] RUN_WAITING step="start" step_type="wait_input" '
-                'result={"prompt":"Write a message."}'
+                '[1234] RUN_WAITING step="ask_user" step_type="wait_input" '
+                'output={"body_ref":null,"text":"Write a message.",'
+                '"value":{"prompt":"Write a message."}}'
             ),
         )
 
@@ -280,16 +316,16 @@ def test_cli_runtime_adapter_watch_captures_events_text(monkeypatch: pytest.Monk
                 "id": "evt-1",
                 "type": "RUN_WAITING",
                 "payload": {
-                    "step": "start",
+                    "step": "ask_user",
                     "step_type": "wait_input",
-                    "result": {"prompt": "Write a message."},
+                    "output": {
+                        "text": "Write a message.",
+                        "value": {"prompt": "Write a message."},
+                        "body_ref": None,
+                    },
                 },
             }
         ],
-        "events_text": (
-            '[1234] RUN_WAITING step="start" step_type="wait_input" '
-            'result={"prompt":"Write a message."}'
-        ),
     }
 
 
@@ -339,7 +375,6 @@ def test_cli_runtime_adapter_watch_accepts_failed_terminal_payload(
                 },
             }
         ],
-        "events_text": '[1234] RUN_FINISHED status="FAILED" error="network down"',
     }
 
 

@@ -1,6 +1,7 @@
 name: stdio_mcp_test
 description: "Minimal MCP test over stdio"
 version: "0.1"
+start: create_file
 
 inputs:
   file_path: string
@@ -17,9 +18,8 @@ mcp:
       FILES_ALLOWED_ROOTS: /tmp
 
 steps:
-  - id: start
-    type: mcp
-    mcp: local-mcp
+  - mcp: create_file
+    server: local-mcp
     tool: files_action
     args:
       action: create

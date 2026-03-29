@@ -2,9 +2,10 @@ import pytest
 
 from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import AssignResult, StepExecutionStatus
+from skiller.application.use_cases.step_execution_result import StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.step_execution_model import AssignOutput
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +33,7 @@ class _FakeStore:
 
 
 def _build_current_step(values: object, *, next_step_id: object = "done") -> CurrentStep:
-    step: dict[str, object] = {"id": "prepare", "type": "assign", "values": values}
+    step: dict[str, object] = {"values": values}
     if next_step_id is not None:
         step["next"] = next_step_id
 
@@ -43,7 +44,7 @@ def _build_current_step(values: object, *, next_step_id: object = "done") -> Cur
         step_type=StepType.ASSIGN,
         step=step,
         context=RunContext(
-            inputs={"issue": "boom"}, results={"analyze_issue": {"next_action": "retry"}}
+            inputs={"issue": "boom"}, step_executions={}
         ),
     )
 
@@ -64,20 +65,17 @@ def test_assign_step_persists_values_and_moves_current_to_explicit_next() -> Non
 
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "done"
-    assert result.result == AssignResult(
-        value={
+    assert result.execution is not None
+    assert result.execution.output == AssignOutput(
+        text="Values assigned.",
+        assigned={
             "action": "retry",
             "summary": "boom",
             "meta": {"source": "assign"},
             "tags": ["triage", "retry"],
-        }
+        },
     )
-    assert current_step.context.results["prepare"] == {
-        "action": "retry",
-        "summary": "boom",
-        "meta": {"source": "assign"},
-        "tags": ["triage", "retry"],
-    }
+    assert current_step.context.step_executions["prepare"] == result.execution
     assert store.updated_runs == [
         {
             "run_id": "run-1",
@@ -98,7 +96,11 @@ def test_assign_step_marks_completed_when_next_is_missing() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.next_step_id is None
-    assert result.result == AssignResult(value={"action": "retry"})
+    assert result.execution is not None
+    assert result.execution.output == AssignOutput(
+        text="Values assigned.",
+        assigned={"action": "retry"},
+    )
     assert store.updated_runs == [
         {
             "run_id": "run-1",

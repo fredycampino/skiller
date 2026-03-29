@@ -1,10 +1,26 @@
+from pathlib import Path
 from typing import Any
 
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteWebhookRegistry(SqliteRepository):
+    def init_db(self) -> None:
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS webhook_registrations (
+                  webhook TEXT PRIMARY KEY,
+                  secret TEXT NOT NULL,
+                  enabled INTEGER NOT NULL DEFAULT 1,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
     def register_webhook(self, webhook: str, secret: str) -> None:
+        self.init_db()
         with self._connect() as conn:
             conn.execute(
                 """
@@ -15,6 +31,7 @@ class SqliteWebhookRegistry(SqliteRepository):
             )
 
     def get_webhook_registration(self, webhook: str) -> dict[str, Any] | None:
+        self.init_db()
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -34,6 +51,7 @@ class SqliteWebhookRegistry(SqliteRepository):
         }
 
     def list_webhook_registrations(self) -> list[dict[str, Any]]:
+        self.init_db()
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -53,6 +71,7 @@ class SqliteWebhookRegistry(SqliteRepository):
         ]
 
     def remove_webhook(self, webhook: str) -> bool:
+        self.init_db()
         with self._connect() as conn:
             cursor = conn.execute("DELETE FROM webhook_registrations WHERE webhook = ?", (webhook,))
         return cursor.rowcount > 0

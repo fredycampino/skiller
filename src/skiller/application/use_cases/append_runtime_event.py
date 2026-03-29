@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Any
 
 from skiller.application.ports.state_store_port import StateStorePort
+from skiller.domain.step_execution_model import StepExecution
+from skiller.domain.step_type import StepType
 
 
 class RuntimeEventType(str, Enum):
@@ -29,7 +31,24 @@ class AppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, Any],
+        payload: dict[str, Any] | None = None,
+        step_id: str | None = None,
+        step_type: StepType | None = None,
+        execution: StepExecution | None = None,
+        next_step_id: str | None = None,
+        error: str | None = None,
     ) -> AppendRuntimeEventResult:
-        event_id = self.store.append_event(event_type.value, payload, run_id=run_id)
+        event_payload = dict(payload or {})
+        if step_id is not None:
+            event_payload["step"] = step_id
+        if step_type is not None:
+            event_payload["step_type"] = step_type.value
+        if execution is not None:
+            event_payload["step_type"] = execution.step_type.value
+            event_payload["output"] = execution.to_public_output_dict()
+        if next_step_id is not None:
+            event_payload["next"] = next_step_id
+        if error is not None:
+            event_payload["error"] = error
+        event_id = self.store.append_event(event_type.value, event_payload, run_id=run_id)
         return AppendRuntimeEventResult(event_id=event_id)

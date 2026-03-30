@@ -19,6 +19,27 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-alpha.6 - 2026-03-30
+
+### Added
+- Added the new `shell` step with support for `command`, `cwd`, `env`, `timeout`, `check`, and `large_result`.
+- Added the default shell runner and runtime wiring needed to execute shell commands and scripts from skills.
+- Added the `repo_checks` internal skill as a practical example that runs `ruff`, `pytest`, and `build` through the new `shell` step.
+- Added unit, integration, and shell-based E2E coverage for the new `shell` feature.
+
+### Changed
+- Changed the TUI `/run` flow so synchronous successful runs render their completed step transcript instead of only the final success line.
+- Changed the docs, README, and skill schema references to include the new `shell` step and the updated examples.
+
+### Fixed
+- Fixed the TUI output for completed runs so users can see the executed steps immediately after `/run`.
+
+### Removed
+- Nothing notable.
+
+### Notes
+- This release extends the runtime with shell execution while keeping large-output handling, transcript rendering, and CLI examples aligned.
+
 ## 1.0.0-alpha.5 - 2026-03-17
 
 ### Added

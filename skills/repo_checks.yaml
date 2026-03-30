@@ -1,0 +1,38 @@
+name: repo_checks
+description: "Run local repo validation checks with shell and summarize the results"
+version: "0.1"
+start: run_ruff
+
+inputs: {}
+
+steps:
+  - shell: run_ruff
+    command: ./.venv/bin/ruff check .
+    cwd: .
+    timeout: 120
+    check: false
+    large_result: true
+    next: run_pytest
+
+  - shell: run_pytest
+    command: ./.venv/bin/pytest tests/unit tests/integration/runtime -q
+    cwd: .
+    timeout: 600
+    check: false
+    large_result: true
+    next: run_build
+
+  - shell: run_build
+    command: ./.venv/bin/python -m build
+    cwd: .
+    timeout: 300
+    check: false
+    large_result: true
+    next: summarize
+
+  - notify: summarize
+    message: |
+      repo_checks
+      ruff ok={{step_executions.run_ruff.output.value.ok}} exit={{step_executions.run_ruff.output.value.exit_code}} body={{step_executions.run_ruff.output.body_ref}}
+      pytest ok={{step_executions.run_pytest.output.value.ok}} exit={{step_executions.run_pytest.output.value.exit_code}} body={{step_executions.run_pytest.output.body_ref}}
+      build ok={{step_executions.run_build.output.value.ok}} exit={{step_executions.run_build.output.value.exit_code}} body={{step_executions.run_build.output.body_ref}}

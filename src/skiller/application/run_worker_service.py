@@ -11,6 +11,7 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
@@ -63,6 +64,7 @@ class RunWorkerService:
         execute_when_step_use_case: ExecuteWhenStepUseCase,
         execute_wait_webhook_step_use_case: ExecuteWaitWebhookStepUseCase,
         execute_wait_input_step_use_case: ExecuteWaitInputStepUseCase | None = None,
+        execute_shell_step_use_case: ExecuteShellStepUseCase | None = None,
     ) -> None:
         self.complete_run_use_case = complete_run_use_case
         self.fail_run_use_case = fail_run_use_case
@@ -73,6 +75,7 @@ class RunWorkerService:
         self.execute_llm_prompt_step_use_case = execute_llm_prompt_step_use_case
         self.execute_mcp_step_use_case = execute_mcp_step_use_case
         self.execute_notify_step_use_case = execute_notify_step_use_case
+        self.execute_shell_step_use_case = execute_shell_step_use_case
         self.execute_switch_step_use_case = execute_switch_step_use_case
         self.execute_when_step_use_case = execute_when_step_use_case
         self.execute_wait_input_step_use_case = execute_wait_input_step_use_case
@@ -155,6 +158,11 @@ class RunWorkerService:
         if current_step.step_type == StepType.ASSIGN:
             return self.execute_assign_step_use_case.execute(current_step)
 
+        if current_step.step_type == StepType.SHELL:
+            if self.execute_shell_step_use_case is None:
+                raise ValueError("shell step executor is not configured")
+            return self.execute_shell_step_use_case.execute(current_step)
+
         if current_step.step_type == StepType.LLM_PROMPT:
             return self.execute_llm_prompt_step_use_case.execute(current_step)
 
@@ -183,7 +191,7 @@ class RunWorkerService:
 
         raise ValueError(
             f"Unsupported step type '{current_step.step_type.value}' in step "
-            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', 'notify', "
+            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', 'notify', 'shell', "
             "'switch', 'wait_input', 'wait_webhook' and 'when' are enabled in run loop"
         )
 

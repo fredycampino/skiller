@@ -18,6 +18,7 @@ from skiller.application.use_cases.step_execution_result import (
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.step_execution_model import (
     NotifyOutput,
+    ShellOutput,
     StepExecution,
     WaitInputOutput,
     WaitWebhookOutput,
@@ -164,6 +165,7 @@ def _build_service(
     *,
     render_results: list[RenderCurrentStepResult],
     notify_results: list[StepAdvance] | None = None,
+    shell_results: list[StepAdvance] | None = None,
     input_wait_results: list[StepAdvance] | None = None,
     wait_results: list[StepAdvance] | None = None,
     mcp_render_result: _FakeRenderMcpConfigResult | None = None,
@@ -184,6 +186,7 @@ def _build_service(
             StepAdvance(status=StepExecutionStatus.COMPLETED)
         ),
         execute_notify_step_use_case=_FakeStepUseCase(notify_results, error=notify_error),
+        execute_shell_step_use_case=_FakeStepUseCase(shell_results),
         execute_switch_step_use_case=_FakeStepUseCase(),
         execute_when_step_use_case=_FakeStepUseCase(),
         execute_wait_input_step_use_case=_FakeStepUseCase(input_wait_results),
@@ -203,6 +206,66 @@ def test_worker_returns_run_not_found() -> None:
     assert result.status == RunWorkerStatus.RUN_NOT_FOUND
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
+
+
+def test_worker_executes_shell_step() -> None:
+    service, complete_run_use_case, fail_run_use_case = _build_service(
+        render_results=[
+            RenderCurrentStepResult(
+                status=CurrentStepStatus.READY,
+                current_step=_build_current_step(StepType.SHELL),
+            ),
+            RenderCurrentStepResult(status=CurrentStepStatus.DONE),
+        ],
+        shell_results=[
+            StepAdvance(
+                status=StepExecutionStatus.NEXT,
+                next_step_id="done",
+                execution=StepExecution(
+                    step_type=StepType.SHELL,
+                    output=ShellOutput(
+                        text="hello",
+                        ok=True,
+                        exit_code=0,
+                        stdout="hello\n",
+                        stderr="",
+                    ),
+                ),
+            )
+        ],
+    )
+
+    result = service.run("run-1")
+
+    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert complete_run_use_case.calls == ["run-1"]
+    assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls[:2] == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "shell"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_SUCCESS,
+            "payload": {
+                "step": "start",
+                "step_type": "shell",
+                "output": {
+                    "text": "hello",
+                    "value": {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "hello\n",
+                        "stderr": "",
+                    },
+                    "body_ref": None,
+                },
+                "next": "done",
+            },
+        },
+    ]
 
 
 def test_worker_completes_run_when_renderer_reports_done() -> None:

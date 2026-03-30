@@ -11,6 +11,7 @@
 - [`steps/llm_prompt.md`](steps/llm_prompt.md)
 - [`steps/mcp.md`](steps/mcp.md)
 - [`steps/notify.md`](steps/notify.md)
+- [`steps/shell.md`](steps/shell.md)
 - [`steps/switch.md`](steps/switch.md)
 - [`steps/wait_input.md`](steps/wait_input.md)
 - [`steps/wait_webhook.md`](steps/wait_webhook.md)
@@ -31,6 +32,7 @@
 
 ## Events
 
+- [`events/context-model.md`](events/context-model.md)
 - [`events/runtime-events.md`](events/runtime-events.md)
 
 ## DB

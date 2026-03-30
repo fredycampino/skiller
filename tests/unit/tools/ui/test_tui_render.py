@@ -116,6 +116,60 @@ def test_render_result_for_buffer_renders_waiting_run_metadata() -> None:
     assert result.replace is False
 
 
+def test_render_result_for_buffer_renders_run_logs_for_succeeded_run() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="run",
+            run=UiRun(
+                raw_args="repo_checks",
+                run_id="12345678-1234-1234-1234-12345678ed0a",
+                status="SUCCEEDED",
+                logs=[
+                    {"id": "evt-1", "type": "RUN_CREATE", "payload": {"skill_ref": "repo_checks"}},
+                    {
+                        "id": "evt-2",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "run_ruff",
+                            "step_type": "shell",
+                            "output": {
+                                "text": "All checks passed!",
+                                "value": {"ok": True, "exit_code": 0},
+                                "body_ref": None,
+                            },
+                        },
+                    },
+                    {
+                        "id": "evt-3",
+                        "type": "STEP_SUCCESS",
+                        "payload": {
+                            "step": "run_pytest",
+                            "step_type": "shell",
+                            "output": {
+                                "text": "363 passed, 2 skipped",
+                                "value": {"ok": True, "exit_code": 0},
+                                "body_ref": None,
+                            },
+                        },
+                    },
+                ],
+            ),
+        ),
+    )
+
+    assert result.text == (
+        "[run-create] repo_checks:ed0a\n"
+        "  [shell] run_ruff\n"
+        "    All checks passed!\n"
+        "  [shell] run_pytest\n"
+        "    363 passed, 2 skipped\n"
+    )
+    assert result.replace is False
+
+
 def test_render_result_for_buffer_summarizes_traceback_error() -> None:
     session = build_session("a1b2c3d4")
 

@@ -15,6 +15,7 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
@@ -40,6 +41,7 @@ from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegis
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
+from skiller.infrastructure.tools.shell.default_shell import DefaultShellRunner
 
 pytestmark = [
     pytest.mark.integration,
@@ -52,6 +54,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execution_output_store.init_db()
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
+    shell = DefaultShellRunner()
     fail_run_use_case = FailRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
@@ -71,6 +74,12 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         large_result_truncator=LargeResultTruncator(),
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_shell_step_use_case = ExecuteShellStepUseCase(
+        store=store,
+        execution_output_store=execution_output_store,
+        shell=shell,
+        large_result_truncator=LargeResultTruncator(),
+    )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
     execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
@@ -85,6 +94,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_shell_step_use_case=execute_shell_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
         execute_wait_input_step_use_case=execute_wait_input_step_use_case,
@@ -148,6 +158,59 @@ def test_run_external_skill_file_succeeds() -> None:
             if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "show_message"
         )
         assert notify_event["payload"]["output"]["value"]["message"] == "external ok"
+
+
+def test_external_shell_step_persists_large_result_body() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_shell.yaml"
+        skill_path.write_text(
+            (
+                "name: external_shell\n"
+                "start: run_command\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - shell: run_command\n"
+                "    command: python3 -c \"print('x' * 400)\"\n"
+                "    large_result: true\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+
+        run = store.get_run(run_result["run_id"])
+        assert run_result["status"] == "SUCCEEDED"
+        assert run is not None
+        output = run.context.step_executions["run_command"].output.to_public_dict()
+        body_ref = output["body_ref"]
+        assert isinstance(body_ref, str)
+        assert body_ref.startswith("execution_output:")
+        assert output == {
+            "text": ("x" * 197) + "...",
+            "value": {
+                "ok": True,
+                "exit_code": 0,
+                "stdout": ("x" * 197) + "...",
+                "stderr": "",
+            },
+            "body_ref": body_ref,
+        }
+
+        execution_output_store = SqliteExecutionOutputStore(db_path)
+        execution_output_store.init_db()
+        assert execution_output_store.get_execution_output(body_ref) == {
+            "value": {
+                "ok": True,
+                "exit_code": 0,
+                "stdout": ("x" * 400) + "\n",
+                "stderr": "",
+            }
+        }
 
 
 def test_external_skill_file_is_snapshotted_at_run_creation() -> None:

@@ -6,71 +6,34 @@
 
 - Consider whether `RUN_CREATE` and `RUN_RESUME` should eventually be rendered in a more explicit way in the transcript beyond the block header alone.
 
+- Update the PR workflow instructions so agents must push the branch to `origin` before calling `skiller run pull_request`.
+
+- Study how the UI should present step results more clearly for UX:
+  - compact vs expanded result rendering
+  - how to signal truncated outputs and `body_ref`
+  - when to show structured `value` vs human `text`
+  - whether some step types deserve custom rendering instead of the generic output block
+
 ## Logs And Debug
 
 - Consider whether `/logs` needs future flags such as `--tail`, filtering by event type, or JSON-only formatting.
 
-## Large Results
+## `shell` Follow-Up
 
-- Study a dedicated storage model for large step results.
+- Consider whether `shell` should stay shell-only or later split into:
+  - `command` with structured `argv`
+  - explicit interpreter selection
 
-- Prefer `event.payload.output.body_ref` over copying large payloads into runtime events.
-
-- Evaluate whether large result bodies should remain in `run.context.step_executions` or move to a separate table such as `step_output_refs`.
-
-- Define:
-  - reference format
-  - ownership
-  - lifecycle and cleanup
-  - interaction with transcript and `/logs`
-  - relation to future steps such as `bash` and `agent.yml`
-
-## New Step: `bash`
-
-- Design and implement a `bash` step for local shell command execution.
-
-- Define the YAML contract:
-  - whether it uses `command`
-  - or a safer structured `argv`
-  - optional `cwd`
-  - optional `env`
-  - optional `timeout`
-  - optional `check`
-
-- Define the runtime result contract:
-  - `ok`
-  - `exit_code`
-  - `stdout`
-  - `stderr`
-  - a short human-readable `text` for transcript/events
-
-- Define the event contract for `bash`:
-  - `STEP_STARTED`
-  - `STEP_SUCCESS`
-  - `STEP_ERROR`
-  - shape of `event.payload.output`
-
-- Define persistence expectations:
-  - what goes into `run.context.step_executions`
-  - what goes into `event.payload.output`
-
-- Define safety boundaries:
-  - shell vs no-shell execution
+- Revisit safety boundaries for `shell`:
   - quoting rules
   - environment inheritance
   - timeouts
   - large output truncation policy
 
-- Add documentation:
-  - step reference in `docs/steps/bash.md`
-  - examples in skills
-  - mention in CLI/runtime docs if needed
-
-- Add tests:
-  - unit tests for step execution
-  - integration tests with successful command
-  - integration tests with non-zero exit
-  - transcript/log rendering expectations
+- Decide whether `shell` should eventually add:
+  - explicit interpreter override
+  - no-shell execution mode
+  - stronger policy/sandbox integration
 
 ## `agent.yml` Exploration
 
@@ -95,7 +58,7 @@
 - Identify missing prerequisites:
   - conversation/history accumulation strategy
   - state model for repeated turns
-  - interaction with future `bash` step
+  - interaction with future `shell` step
   - boundaries between “skill” and “agent runtime”
 
 - If viable, define:
@@ -145,6 +108,19 @@
   - `StepExecution`
   - typed `*Output` objects per step
   - normalized public `event.payload.output`
+
+- `shell` step added in v1:
+  - `command`, `cwd`, `env`, `timeout`, `check`, `large_result`
+  - runtime shell resolution via `$SHELL`, `/bin/bash`, `/bin/sh`
+  - `ShellOutput` with `ok`, `exit_code`, `stdout`, `stderr`
+  - unit, integration, and CLI e2e coverage
+
+- Large results support added:
+  - persisted `execution_outputs`
+  - `event.payload.output.body_ref`
+  - optional `text_ref` for rebuilding full human text from stored bodies
+  - `large_result: true` support in `mcp` and `llm_prompt`
+  - UI body resolution via `/body` and transcript/status/log body loading
 
 - Legacy runtime result contract removed:
   - no `run.context.results`

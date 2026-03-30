@@ -188,6 +188,21 @@ Failed:
 }
 ```
 
+### `shell`
+
+```json
+{
+  "text": "hello",
+  "value": {
+    "ok": true,
+    "exit_code": 0,
+    "stdout": "hello\n",
+    "stderr": ""
+  },
+  "body_ref": null
+}
+```
+
 ### `switch`
 
 ```json

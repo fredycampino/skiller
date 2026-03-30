@@ -1,0 +1,14 @@
+name: shell_cli_e2e
+description: "CLI e2e for shell"
+version: "0.1"
+start: run_script
+
+inputs:
+  script_path: string
+  output_path: string
+  content: string
+
+steps:
+  - shell: run_script
+    command: 'sh "{{inputs.script_path}}" "{{inputs.output_path}}" "{{inputs.content}}"'
+    large_result: true

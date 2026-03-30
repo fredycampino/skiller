@@ -64,6 +64,17 @@ Rules:
 - the primary value is the `step_id`
 - `step_id` must be unique within the skill
 
+Supported `step_type` values:
+- `assign`
+- `notify`
+- `shell`
+- `llm_prompt`
+- `mcp`
+- `switch`
+- `when`
+- `wait_input`
+- `wait_webhook`
+
 ## Example
 
 ```yaml
@@ -126,6 +137,21 @@ mcp:
     args:
       - /opt/local-mcp/local_mcp.py
     cwd: /opt/local-mcp
+```
+
+## `shell` Example
+
+```yaml
+steps:
+  - shell: run_tests
+    command: ./.venv/bin/pytest tests/unit -q
+    cwd: .
+    env:
+      FOO: bar
+    timeout: 60
+    check: true
+    large_result: true
+    next: done
 ```
 
 ## Validation Rules

@@ -56,6 +56,7 @@ In memory, the runtime uses typed outputs:
 
 - `AssignOutput`
 - `NotifyOutput`
+- `ShellOutput`
 - `SwitchOutput`
 - `WhenOutput`
 - `WaitInputOutput`
@@ -102,6 +103,21 @@ Rules:
   "text": "message body",
   "value": {
     "message": "message body"
+  },
+  "body_ref": null
+}
+```
+
+### `shell`
+
+```json
+{
+  "text": "hello",
+  "value": {
+    "ok": true,
+    "exit_code": 0,
+    "stdout": "hello\n",
+    "stderr": ""
   },
   "body_ref": null
 }

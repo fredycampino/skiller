@@ -7,6 +7,7 @@ Declarative runtime for small operational workflows.
 Current step types:
 - `assign`
 - `notify`
+- `shell`
 - `llm_prompt`
 - `mcp`
 - `switch`
@@ -68,12 +69,12 @@ skiller run --file skills/notify_test.yaml
 name: notify_test
 description: "Minimal single-step notify test"
 version: "0.1"
+start: show_message
 
 inputs: {}
 
 steps:
-  - id: start
-    type: notify
+  - notify: show_message
     message: "notify smoke ok"
 ```
 
@@ -94,6 +95,7 @@ skiller run notify_test
 
 ### External execution
 
+- `shell`
 - `llm_prompt`
 - `mcp`
 
@@ -105,7 +107,7 @@ skiller run notify_test
 This makes it possible to build flows such as:
 
 ```text
-notify -> mcp -> when -> wait_input -> notify
+notify -> shell -> when -> wait_input -> notify
 ```
 
 ## MCP
@@ -165,6 +167,7 @@ Core guides:
 Step references:
 - [`docs/steps/assign.md`](docs/steps/assign.md)
 - [`docs/steps/llm_prompt.md`](docs/steps/llm_prompt.md)
+- [`docs/steps/shell.md`](docs/steps/shell.md)
 - [`docs/steps/notify.md`](docs/steps/notify.md)
 - [`docs/steps/switch.md`](docs/steps/switch.md)
 - [`docs/steps/when.md`](docs/steps/when.md)

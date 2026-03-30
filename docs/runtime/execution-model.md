@@ -18,5 +18,6 @@ Main flow:
 
 Related docs:
 - [`../skills/skill-schema.md`](../skills/skill-schema.md)
+- [`../events/context-model.md`](../events/context-model.md)
 - [`../events/runtime-events.md`](../events/runtime-events.md)
 - [`../db/schema.md`](../db/schema.md)

@@ -36,6 +36,14 @@ class NotifyOutput(OutputBase):
 
 
 @dataclass(frozen=True)
+class ShellOutput(OutputBase):
+    ok: bool = False
+    exit_code: int = 0
+    stdout: str = ""
+    stderr: str = ""
+
+
+@dataclass(frozen=True)
 class SwitchOutput(OutputBase):
     next_step_id: str = ""
 
@@ -71,6 +79,7 @@ class McpOutput(OutputBase):
 _OUTPUT_TYPES: dict[StepType, Type[OutputBase]] = {
     StepType.ASSIGN: AssignOutput,
     StepType.NOTIFY: NotifyOutput,
+    StepType.SHELL: ShellOutput,
     StepType.SWITCH: SwitchOutput,
     StepType.WHEN: WhenOutput,
     StepType.WAIT_INPUT: WaitInputOutput,

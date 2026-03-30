@@ -71,6 +71,64 @@ def test_failed_run_does_not_update_selected_or_last_run() -> None:
     assert session.last_run_id is None
 
 
+def test_succeeded_run_command_loads_logs_for_transcript_rendering() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            assert raw_args == "repo_checks"
+            return {
+                "run_id": "run-1",
+                "status": "SUCCEEDED",
+            }
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            assert run_id == "run-1"
+            return [
+                {"id": "evt-1", "type": "RUN_CREATE", "payload": {"skill_ref": "repo_checks"}},
+                {
+                    "id": "evt-2",
+                    "type": "STEP_SUCCESS",
+                    "payload": {
+                        "step": "run_ruff",
+                        "step_type": "shell",
+                        "output": {
+                            "text": "All checks passed!",
+                            "value": {"ok": True, "exit_code": 0},
+                            "body_ref": None,
+                        },
+                    },
+                },
+            ]
+
+    session = UiSession(session_key="a1b2c3d4")
+
+    result = handle_command(
+        session=session,
+        command=RunCommand(raw_args="repo_checks"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "run"
+    assert result.run is not None
+    assert result.run.run_id == "run-1"
+    assert result.run.status == "SUCCEEDED"
+    assert result.run.logs == [
+        {"id": "evt-1", "type": "RUN_CREATE", "payload": {"skill_ref": "repo_checks"}},
+        {
+            "id": "evt-2",
+            "type": "STEP_SUCCESS",
+            "payload": {
+                "step": "run_ruff",
+                "step_type": "shell",
+                "output": {
+                    "text": "All checks passed!",
+                    "value": {"ok": True, "exit_code": 0},
+                    "body_ref": None,
+                },
+            },
+        },
+    ]
+
+
 def test_status_command_returns_payload() -> None:
     class _FakeRuntimeAdapter:
         def run(self, *, raw_args: str) -> dict[str, object]:

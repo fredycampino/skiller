@@ -310,7 +310,7 @@ def _render_action_result(*, session: UiSession, result: ActionResult) -> str:
     if result.kind == "run":
         if result.run is None:
             raise RuntimeError("render_action_result requires run for kind 'run'")
-        return _render_run_result(run=result.run)
+        return _render_run_result(result=result)
     if result.kind == "status":
         return _render_status_result(result=result)
     if result.kind == "watch":
@@ -346,7 +346,10 @@ def _render_session(*, session: UiSession) -> str:
     return "".join(lines)
 
 
-def _render_run_result(*, run: UiRun) -> str:
+def _render_run_result(*, result: ActionResult) -> str:
+    run = result.run
+    if run is None:
+        raise RuntimeError("run result requires run")
     waiting_metadata = _get_waiting_metadata(run.last_payload) if run.status == "WAITING" else None
     lines: list[str] = []
     if waiting_metadata is not None:
@@ -354,6 +357,16 @@ def _render_run_result(*, run: UiRun) -> str:
         return _join_output_block(lines)
 
     create_header = _build_execution_block_header(run, kind="run-create")
+    if run.logs:
+        lines.extend(
+            _build_watch_blocks_from_events(
+                run=run,
+                events=run.logs,
+                block_kind="run-create",
+            )
+        )
+        return _join_output_block(lines)
+
     if run.error or run.status.upper() == "FAILED":
         lines.extend(_build_error_block(run=run, header=create_header))
         return _join_output_block(lines)
@@ -540,10 +553,15 @@ def _render_pretty_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2)
 
 
-def _build_watch_blocks_from_events(*, run: UiRun, events: list[object]) -> list[str]:
+def _build_watch_blocks_from_events(
+    *,
+    run: UiRun,
+    events: list[object],
+    block_kind: str | None = None,
+) -> list[str]:
     normalized_events = _trim_stale_leading_waiting_events(events)
-    block_kind = _infer_execution_block_kind(events)
-    header = _build_execution_block_header(run, kind=block_kind)
+    header_kind = block_kind or _infer_execution_block_kind(events)
+    header = _build_execution_block_header(run, kind=header_kind)
     lines: list[str] = [header]
     rendered_error_messages: set[str] = set()
 

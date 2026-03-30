@@ -81,3 +81,5 @@ echo
 run_cli "cli_llm_prompt.sh" ./cli_llm_prompt.sh
 echo
 run_cli "cli_mcp_stdio.sh" ./cli_mcp_stdio.sh "hola-e2e"
+echo
+run_cli "cli_shell.sh" ./cli_shell.sh "hola-shell-e2e"

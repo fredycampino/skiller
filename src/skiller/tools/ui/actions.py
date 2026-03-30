@@ -121,6 +121,8 @@ def _handle_run_command(
         run.status = str(payload.get("status", "UNKNOWN"))
         run.last_payload = dict(payload)
         run.has_rendered_create_block = True
+        if run.status.upper() in {"SUCCEEDED", "FAILED"}:
+            run.logs = _resolve_log_body_refs(logs=runtime.logs(run_id=run_id), runtime=runtime)
         session.remember_run(run)
     except RuntimeError as exc:
         run.status = "FAILED"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skiller"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "Skiller runtime: CLI + Webhooks + MCP + Skills"
 readme = "README.md"
 requires-python = ">=3.11"

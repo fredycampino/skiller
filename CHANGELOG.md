@@ -19,6 +19,31 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-alpha.7 - 2026-04-03
+
+### Added
+- Added skill validation with dedicated error codes, built-in skill coverage, and operator-facing docs for the skill checker.
+- Added a dedicated run query read side and `/runs` support for compact waiting views in the CLI and TUI.
+- Added local `cloudflared` tooling with `login`, `ensure`, `start`, `status`, and `stop`, plus dedicated operator docs.
+- Added local server lifecycle tooling with explicit Skiller ownership tracking and dedicated operator docs.
+
+### Changed
+- Changed the TUI `/run` flow to follow runs incrementally instead of staying on the initial snapshot.
+- Changed the `cloudflared ensure` flow to generate a tunnel config and publish the public hostname through tunnel ingress.
+- Changed CLI operator output to use explicit ownership reporting via `managed_by_skiller`.
+- Changed docs and backlog structure to reflect the current CLI/tooling surfaces and progress status.
+
+### Fixed
+- Fixed stale or reused PID handling for local server management so Skiller does not stop unrelated processes.
+- Fixed public tunnel publication so `skillerwh.<domain>` resolves through the generated tunnel config instead of DNS routing alone.
+- Fixed pytest collection conflicts between tool test modules that shared the same basename.
+
+### Removed
+- Removed the legacy `cloudflared` skill path in favor of CLI/tooling flow.
+
+### Notes
+- This release closes the current operator tooling pass around run inspection, local server lifecycle, and Cloudflare tunnel management.
+
 ## 1.0.0-alpha.6 - 2026-03-30
 
 ### Added

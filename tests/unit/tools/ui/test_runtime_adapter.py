@@ -36,10 +36,11 @@ def test_execute_run_invokes_cli(monkeypatch: pytest.MonkeyPatch) -> None:
         "notify_test",
         "--arg",
         "foo=bar",
+        "--detach",
     ]
 
 
-def test_execute_run_preserves_start_webhooks_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_run_preserves_start_server_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: dict[str, object] = {}
 
     def fake_run(cmd, **kwargs):  # noqa: ANN001
@@ -55,7 +56,7 @@ def test_execute_run_preserves_start_webhooks_flag(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
 
     result = runtime_adapter.execute_run(
-        raw_args="--file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-webhooks",
+        raw_args="--file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-server",
     )
 
     assert result == {"run_id": "run-2", "status": "WAITING"}
@@ -68,7 +69,35 @@ def test_execute_run_preserves_start_webhooks_flag(monkeypatch: pytest.MonkeyPat
         "tests/e2e/skills/wait_webhook_cli_e2e.yaml",
         "--arg",
         "key=42",
-        "--start-webhooks",
+        "--start-server",
+        "--detach",
+    ]
+
+
+def test_cli_runtime_adapter_server_status_invokes_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        recorded["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps({"running": True, "managed": True}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
+
+    adapter = runtime_adapter.CliRuntimeAdapter()
+    result = adapter.server_status()
+
+    assert result == {"running": True, "managed": True}
+    assert recorded["cmd"] == [
+        runtime_adapter.sys.executable,
+        "-m",
+        "skiller",
+        "server",
+        "status",
     ]
 
 

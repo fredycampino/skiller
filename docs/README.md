@@ -3,6 +3,8 @@
 ## CLI
 
 - [`cli/command-guide.md`](cli/command-guide.md)
+- [`cli/tool-server.md`](cli/tool-server.md)
+- [`cli/tool-cloudflared.md`](cli/tool-cloudflared.md)
 
 ## Skills
 

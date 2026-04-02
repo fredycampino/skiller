@@ -33,6 +33,6 @@ steps:
   - notify: summarize
     message: |
       repo_checks
-      ruff ok={{step_executions.run_ruff.output.value.ok}} exit={{step_executions.run_ruff.output.value.exit_code}} body={{step_executions.run_ruff.output.body_ref}}
-      pytest ok={{step_executions.run_pytest.output.value.ok}} exit={{step_executions.run_pytest.output.value.exit_code}} body={{step_executions.run_pytest.output.body_ref}}
-      build ok={{step_executions.run_build.output.value.ok}} exit={{step_executions.run_build.output.value.exit_code}} body={{step_executions.run_build.output.body_ref}}
+      ruff ok={{output_value("run_ruff").ok}} exit={{output_value("run_ruff").exit_code}}
+      pytest ok={{output_value("run_pytest").ok}} exit={{output_value("run_pytest").exit_code}}
+      build ok={{output_value("run_build").ok}} exit={{output_value("run_build").exit_code}}

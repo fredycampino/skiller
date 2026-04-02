@@ -16,6 +16,7 @@ from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
 from skiller.application.use_cases.resume_run import ResumeRunStatus, ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase, SkillCheckStatus
 from skiller.domain.run_model import RunStatus, SkillSource
 
 
@@ -27,6 +28,7 @@ class RuntimeApplicationService:
         create_run_use_case: CreateRunUseCase,
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
+        skill_checker_use_case: SkillCheckerUseCase,
         handle_webhook_use_case: HandleWebhookUseCase,
         list_webhooks_use_case: ListWebhooksUseCase,
         register_webhook_use_case: RegisterWebhookUseCase,
@@ -41,6 +43,7 @@ class RuntimeApplicationService:
         self.create_run_use_case = create_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
+        self.skill_checker_use_case = skill_checker_use_case
         self.handle_input_use_case = handle_input_use_case
         self.handle_webhook_use_case = handle_webhook_use_case
         self.list_webhooks_use_case = list_webhooks_use_case
@@ -107,11 +110,11 @@ class RuntimeApplicationService:
         *,
         skill_source: str = SkillSource.INTERNAL.value,
     ) -> dict[str, str]:
-        run_id = self.create_run_use_case.execute(
-            skill_ref,
-            inputs,
-            skill_source=skill_source,
-        )
+        check_result = self.skill_checker_use_case.execute(skill_ref, skill_source=skill_source)
+        if check_result.status == SkillCheckStatus.INVALID:
+            messages = [item.message for item in check_result.errors]
+            raise ValueError("\n".join(messages))
+        run_id = self.create_run_use_case.execute(skill_ref, inputs, skill_source=skill_source)
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_CREATE,

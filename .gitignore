@@ -48,4 +48,6 @@ htmlcov/
 *.db
 *.sqlite3
 logs/
+.tmp/
 docs-legacy/
+docs/spikes/

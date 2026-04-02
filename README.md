@@ -138,10 +138,22 @@ skiller webhook receive github-ci 42 --json '{"ok": true}' --dedup-key demo-1
 skiller resume <run_id>
 ```
 
-You can also start webhooks automatically when a run ends in `WAITING`:
+You can also start the local server automatically when a run ends in `WAITING`:
 
 ```bash
-skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-webhooks
+skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-server
+```
+
+Operational tooling:
+
+```bash
+skiller server start
+skiller server status
+skiller server stop
+
+skiller cloudflared login start
+skiller cloudflared ensure --domain <domain>
+skiller cloudflared start
 ```
 
 ## Project Layout
@@ -156,6 +168,8 @@ skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --sta
 Core guides:
 - [`docs/README.md`](docs/README.md)
 - [`docs/cli/command-guide.md`](docs/cli/command-guide.md)
+- [`docs/cli/tool-server.md`](docs/cli/tool-server.md)
+- [`docs/cli/tool-cloudflared.md`](docs/cli/tool-cloudflared.md)
 - [`docs/skills/skill-schema.md`](docs/skills/skill-schema.md)
 - [`docs/db/schema.md`](docs/db/schema.md)
 - [`docs/runtime/execution-model.md`](docs/runtime/execution-model.md)

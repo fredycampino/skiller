@@ -1,0 +1,44 @@
+name: ui_progress_test
+description: "Multi-step delayed shell skill to verify incremental UI transcript updates"
+version: "0.1"
+start: first_delay
+
+inputs: {}
+
+steps:
+  - shell: first_delay
+    command: |
+      echo "first_delay"
+      sleep 2
+      echo "first_delay done"
+    cwd: .
+    timeout: 15
+    check: true
+    next: second_delay
+
+  - shell: second_delay
+    command: |
+      echo "second_delay"
+      sleep 2
+      echo "second_delay done"
+    cwd: .
+    timeout: 15
+    check: true
+    next: third_delay
+
+  - shell: third_delay
+    command: |
+      echo "third_delay"
+      sleep 2
+      echo "third_delay done"
+    cwd: .
+    timeout: 15
+    check: true
+    next: done
+
+  - notify: done
+    message: |
+      ui_progress_test finished
+      first={{output_value("first_delay").exit_code}}
+      second={{output_value("second_delay").exit_code}}
+      third={{output_value("third_delay").exit_code}}

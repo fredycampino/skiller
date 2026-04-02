@@ -27,6 +27,7 @@ from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -40,9 +41,12 @@ pytestmark = pytest.mark.integration
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
-    skill_runner = FilesystemSkillRunner(skills_dir="skills")
     execution_output_store = SqliteExecutionOutputStore(store.db_path)
     execution_output_store.init_db()
+    skill_runner = FilesystemSkillRunner(
+        skills_dir="skills",
+        execution_output_store=execution_output_store,
+    )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
@@ -100,6 +104,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
+        skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
@@ -170,7 +175,7 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
                 "        source: assign\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                "    message: '{{step_executions.prepare_action.output.value.assigned.action}}'\n"
+                '    message: \'{{output_value("prepare_action").assigned.action}}\'\n'
             ),
             encoding="utf-8",
         )
@@ -243,7 +248,7 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
                 "      action: retry\n"
                 "    next: decide_action\n"
                 "  - switch: decide_action\n"
-                '    value: "{{step_executions.prepare_action.output.value.assigned.action}}"\n'
+                '    value: \'{{output_value("prepare_action").assigned.action}}\'\n'
                 "    cases:\n"
                 "      retry: retry_notice\n"
                 "      ask_human: human_notice\n"
@@ -312,7 +317,7 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
                 "      score: 85\n"
                 "    next: decide_score\n"
                 "  - when: decide_score\n"
-                '    value: "{{step_executions.prepare_score.output.value.assigned.score}}"\n'
+                '    value: \'{{output_value("prepare_score").assigned.score}}\'\n'
                 "    branches:\n"
                 "      - gt: 90\n"
                 "        then: excellent\n"

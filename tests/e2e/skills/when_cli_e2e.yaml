@@ -10,7 +10,7 @@ steps:
     next: decide_score
 
   - when: decide_score
-    value: "{{step_executions.prepare_score.output.value.assigned.score}}"
+    value: '{{output_value("prepare_score").assigned.score}}'
     branches:
       - gt: 90
         then: excellent

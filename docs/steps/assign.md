@@ -9,8 +9,8 @@
 ```yaml
 - assign: prepare_issue
   values:
-    action: "{{step_executions.analyze_issue.output.value.data.next_action}}"
-    summary: "{{step_executions.analyze_issue.output.value.data.summary}}"
+    action: '{{output_value("analyze_issue").data.next_action}}'
+    summary: '{{output_value("analyze_issue").data.summary}}'
 ```
 
 ## Persistence
@@ -47,6 +47,6 @@
 Template access:
 
 ```text
-{{step_executions.prepare_issue.output.value.assigned.action}}
-{{step_executions.prepare_issue.output.value.assigned.summary}}
+{{output_value("prepare_issue").assigned.action}}
+{{output_value("prepare_issue").assigned.summary}}
 ```

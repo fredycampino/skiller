@@ -9,7 +9,7 @@
 ```yaml
 - wait_webhook: wait_merge
   webhook: github-pr-merged
-  key: "{{step_executions.create_pr.output.value.data.pr}}"
+  key: '{{output_value("create_pr").data.pr}}'
   next: done
 ```
 
@@ -50,5 +50,5 @@
 Template access:
 
 ```text
-{{step_executions.wait_merge.output.value.payload.merged}}
+{{output_value("wait_merge").payload.merged}}
 ```

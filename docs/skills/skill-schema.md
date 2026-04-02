@@ -92,7 +92,7 @@ steps:
     next: decide_exit
 
   - switch: decide_exit
-    value: "{{step_executions.ask_user.output.value.payload.text}}"
+    value: '{{output_value("ask_user").payload.text}}'
     cases:
       exit: done
       quit: done
@@ -100,7 +100,7 @@ steps:
     default: answer
 
   - llm_prompt: answer
-    prompt: "{{step_executions.ask_user.output.value.payload.text}}"
+    prompt: '{{output_value("ask_user").payload.text}}'
     output:
       format: json
       schema:
@@ -123,9 +123,14 @@ Templates may read:
 ```text
 {{inputs.<name>}}
 {{step_executions.<step_id>.output.text}}
-{{step_executions.<step_id>.output.value}}
+{{output_value("<step_id>")}}
 {{step_executions.<step_id>.evaluation}}
 ```
+
+Notes:
+- use `output_value("<step_id>")` to read another step's canonical `output.value`
+- do not read `step_executions.<step_id>.output.value...` directly in templates
+- do not read `output.body_ref` directly in templates
 
 ## Root `mcp`
 

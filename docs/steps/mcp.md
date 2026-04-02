@@ -58,7 +58,9 @@ With `large_result: true`, the runtime stores the full `output_body` in `executi
 Template access:
 
 ```text
-{{step_executions.create_file.output.value.data.path}}
+{{output_value("create_file").data.path}}
 ```
+
+Use `output_value(...)` instead of reading `step_executions.<step_id>.output.value...` directly.
 
 The transport outcome is also kept in `evaluation.ok`.

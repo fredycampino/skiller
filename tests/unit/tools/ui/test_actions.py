@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from skiller.tools.ui.actions import handle_command
+from skiller.tools.ui.actions import handle_command, poll_run_progress
 from skiller.tools.ui.commands import (
     BodyCommand,
     InputCommand,
     LogsCommand,
     RunCommand,
     RunsCommand,
+    ServerStatusCommand,
     StatusCommand,
     WatchCommand,
     WebhooksCommand,
@@ -25,7 +26,7 @@ def test_run_command_updates_session_selection_and_payload() -> None:
             return {
                 "run_id": "run-1",
                 "status": "WAITING",
-                "webhooks_started": False,
+                "server_started": False,
             }
 
     session = UiSession(session_key="a1b2c3d4")
@@ -43,7 +44,7 @@ def test_run_command_updates_session_selection_and_payload() -> None:
     assert result.run.last_payload == {
         "run_id": "run-1",
         "status": "WAITING",
-        "webhooks_started": False,
+        "server_started": False,
     }
     assert result.run.logs == []
     assert session.selected_run_id == "run-1"
@@ -127,6 +128,7 @@ def test_succeeded_run_command_loads_logs_for_transcript_rendering() -> None:
             },
         },
     ]
+    assert result.run.seen_event_ids == {"evt-1", "evt-2"}
 
 
 def test_status_command_returns_payload() -> None:
@@ -176,6 +178,53 @@ def test_status_command_returns_payload() -> None:
         "skill_ref": "wait_input_test",
     }
     assert result.run.logs == []
+
+
+def test_server_status_command_returns_payload() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def server_status(self) -> dict[str, object]:
+            return {"running": True, "managed": True, "endpoint": "http://127.0.0.1:8001/health"}
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            raise AssertionError("not expected")
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=ServerStatusCommand(),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "server"
+    assert result.payload == {
+        "running": True,
+        "managed": True,
+        "endpoint": "http://127.0.0.1:8001/health",
+    }
 
 
 def test_logs_command_returns_log_list() -> None:
@@ -870,7 +919,139 @@ def test_watch_command_skips_run_create_when_create_block_was_already_rendered()
             }
         ],
     }
-    assert run.seen_event_ids == {"evt-1", "evt-2"}
+
+
+def test_poll_run_progress_uses_status_plus_logs_and_keeps_only_unseen_events() -> None:
+    class _FakeRuntimeAdapter:
+        def status(self, *, run_id: str) -> dict[str, object]:
+            assert run_id == "run-1"
+            return {
+                "id": "run-1",
+                "status": "WAITING",
+                "skill_ref": "chat",
+                "wait_type": "input",
+                "prompt": "Write a message.",
+            }
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            assert run_id == "run-1"
+            return [
+                {
+                    "id": "evt-1",
+                    "type": "RUN_CREATE",
+                    "payload": {"skill_ref": "chat"},
+                },
+                {
+                    "id": "evt-2",
+                    "type": "STEP_SUCCESS",
+                    "payload": {
+                        "step": "answer",
+                        "step_type": "notify",
+                        "output": {
+                            "text": "Hola",
+                            "value": {"message": "Hola"},
+                            "body_ref": None,
+                        },
+                    },
+                },
+                {
+                    "id": "evt-3",
+                    "type": "RUN_WAITING",
+                    "payload": {
+                        "step": "ask_user",
+                        "step_type": "wait_input",
+                        "output": {
+                            "text": "Write a message.",
+                            "value": {"prompt": "Write a message."},
+                            "body_ref": None,
+                        },
+                    },
+                },
+            ]
+
+    session = UiSession(session_key="a1b2c3d4")
+    run = session.ensure_run("run-1", raw_args="chat")
+    run.has_rendered_create_block = True
+
+    result = poll_run_progress(
+        session=session,
+        run_id="run-1",
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "watch"
+    assert result.payload == {
+        "id": "run-1",
+        "run_id": "run-1",
+        "status": "WAITING",
+        "skill_ref": "chat",
+        "wait_type": "input",
+        "prompt": "Write a message.",
+        "events": [
+            {
+                "id": "evt-2",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "answer",
+                    "step_type": "notify",
+                    "output": {
+                        "text": "Hola",
+                        "value": {"message": "Hola"},
+                        "body_ref": None,
+                    },
+                },
+            },
+            {
+                "id": "evt-3",
+                "type": "RUN_WAITING",
+                "payload": {
+                    "step": "ask_user",
+                    "step_type": "wait_input",
+                    "output": {
+                        "text": "Write a message.",
+                        "value": {"prompt": "Write a message."},
+                        "body_ref": None,
+                    },
+                },
+            },
+        ],
+    }
+    assert result.run is run
+    assert run.status == "WAITING"
+    assert run.logs == [
+        {
+            "id": "evt-1",
+            "type": "RUN_CREATE",
+            "payload": {"skill_ref": "chat"},
+        },
+        {
+            "id": "evt-2",
+            "type": "STEP_SUCCESS",
+            "payload": {
+                "step": "answer",
+                "step_type": "notify",
+                "output": {
+                    "text": "Hola",
+                    "value": {"message": "Hola"},
+                    "body_ref": None,
+                },
+            },
+        },
+        {
+            "id": "evt-3",
+            "type": "RUN_WAITING",
+            "payload": {
+                "step": "ask_user",
+                "step_type": "wait_input",
+                "output": {
+                    "text": "Write a message.",
+                    "value": {"prompt": "Write a message."},
+                    "body_ref": None,
+                },
+            },
+        },
+    ]
+    assert run.seen_event_ids == {"evt-1", "evt-2", "evt-3"}
 
 
 def test_runs_command_updates_session_with_global_runs() -> None:

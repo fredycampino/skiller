@@ -9,6 +9,14 @@ from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkil
 pytestmark = pytest.mark.unit
 
 
+class _FakeExecutionOutputStore:
+    def __init__(self, payloads: dict[str, dict[str, object]] | None = None) -> None:
+        self.payloads = payloads or {}
+
+    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
+        return self.payloads.get(body_ref)
+
+
 def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
@@ -65,9 +73,9 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
     rendered = runner.render_step(
         {
             "values": {
-                "copied_object": "{{step_executions.analysis.output.value.data}}",
-                "copied_list": "{{step_executions.analysis.output.value.data.tags}}",
-                "text": "severity={{step_executions.analysis.output.value.data.severity}}",
+                "copied_object": '{{output_value("analysis").data}}',
+                "copied_list": '{{output_value("analysis").data.tags}}',
+                "text": 'severity={{output_value("analysis").data.severity}}',
             },
         },
         {
@@ -122,3 +130,129 @@ def test_render_step_can_resolve_env_values(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert rendered["mcp"][0]["url"] == "https://api.github.example/mcp"
     assert rendered["mcp"][0]["headers"]["Authorization"] == "Bearer secret-token"
+
+
+def test_render_step_can_resolve_output_value_from_persisted_output() -> None:
+    runner = FilesystemSkillRunner(skills_dir="skills")
+
+    rendered = runner.render_step(
+        {
+            "message": 'existing_tunnels={{output_value("inspect_cloudflared").stderr}}',
+            "stderr": '{{output_value("inspect_cloudflared").stderr}}',
+        },
+        {
+            "step_executions": {
+                "inspect_cloudflared": {
+                    "step_type": "shell",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "ready",
+                        "value": {
+                            "ok": True,
+                            "exit_code": 0,
+                            "stdout": "",
+                            "stderr": "tunnel-a\ntunnel-b",
+                        },
+                        "body_ref": None,
+                    },
+                }
+            }
+        },
+    )
+
+    assert rendered["message"] == "existing_tunnels=tunnel-a\ntunnel-b"
+    assert rendered["stderr"] == "tunnel-a\ntunnel-b"
+
+
+def test_render_step_can_resolve_output_value_from_body_ref() -> None:
+    runner = FilesystemSkillRunner(
+        skills_dir="skills",
+        execution_output_store=_FakeExecutionOutputStore(
+            {
+                "execution_output:1": {
+                    "value": {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": "full-tunnel-list",
+                    }
+                }
+            }
+        ),
+    )
+
+    rendered = runner.render_step(
+        {
+            "message": '{{output_value("inspect_cloudflared").stderr}}',
+        },
+        {
+            "step_executions": {
+                "inspect_cloudflared": {
+                    "step_type": "shell",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "ready",
+                        "value": {
+                            "truncated": True,
+                            "stderr": "preview...",
+                        },
+                        "body_ref": "execution_output:1",
+                    },
+                }
+            }
+        },
+    )
+
+    assert rendered["message"] == "full-tunnel-list"
+
+
+def test_render_step_raises_clear_error_when_output_value_path_is_missing() -> None:
+    runner = FilesystemSkillRunner(skills_dir="skills")
+
+    with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):
+        runner.render_step(
+            {
+                "message": '{{output_value("inspect_cloudflared").missing_field}}',
+            },
+            {
+                "step_executions": {
+                    "inspect_cloudflared": {
+                        "step_type": "shell",
+                        "input": {},
+                        "evaluation": {},
+                        "output": {
+                            "text": "ready",
+                            "value": {"stderr": "ok"},
+                            "body_ref": None,
+                        },
+                    }
+                }
+            },
+        )
+
+
+def test_render_step_rejects_direct_output_value_access() -> None:
+    runner = FilesystemSkillRunner(skills_dir="skills")
+
+    with pytest.raises(ValueError, match="SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"):
+        runner.render_step(
+            {
+                "message": "{{step_executions.inspect_cloudflared.output.value.stderr}}",
+            },
+            {
+                "step_executions": {
+                    "inspect_cloudflared": {
+                        "step_type": "shell",
+                        "input": {},
+                        "evaluation": {},
+                        "output": {
+                            "text": "ready",
+                            "value": {"stderr": "ok"},
+                            "body_ref": None,
+                        },
+                    }
+                }
+            },
+        )

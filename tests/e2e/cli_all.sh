@@ -78,6 +78,10 @@ run_cli "cli_wait_input.sh" ./cli_wait_input.sh
 echo
 run_cli "cli_wait_webhook.sh" ./cli_wait_webhook.sh
 echo
+run_cli "cli_runs.sh" ./cli_runs.sh
+echo
+run_cli "cli_server.sh" ./cli_server.sh
+echo
 run_cli "cli_llm_prompt.sh" ./cli_llm_prompt.sh
 echo
 run_cli "cli_mcp_stdio.sh" ./cli_mcp_stdio.sh "hola-e2e"

@@ -31,4 +31,4 @@ steps:
             enum: [retry]
     next: done
   - notify: done
-    message: "{{step_executions.analyze_issue.output.value.data.next_action}}"
+    message: '{{output_value("analyze_issue").data.next_action}}'

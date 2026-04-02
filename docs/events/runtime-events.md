@@ -42,7 +42,9 @@ Rules:
 - `value` is always an object or `null`.
 - `body_ref` is always present and may be `null`.
 - if `body_ref` is not `null`, `output.value` is the small observable summary
-- backend `/logs`, `watch`, and `status` keep this small payload; the UI may resolve `body_ref` separately.
+- backend `/logs`, `watch`, and `status` keep this small payload.
+- the UI may resolve `body_ref` separately for display.
+- templates do not read `body_ref` directly; they use `output_value("<step_id>")`, which resolves the canonical `output.value` lazily when needed.
 
 ## Generic Events
 

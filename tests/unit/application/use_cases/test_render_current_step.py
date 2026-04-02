@@ -165,7 +165,7 @@ def test_returns_ready_with_switch_step_type() -> None:
         "steps": [
             {
                 "switch": "decide",
-                "value": "{{step_executions.prepare_action.output.value.assigned.action}}",
+                "value": '{{output_value("prepare_action").assigned.action}}',
                 "cases": {"retry": "retry_notice"},
                 "default": "unknown_action",
             }
@@ -189,7 +189,7 @@ def test_returns_ready_with_when_step_type() -> None:
         "steps": [
             {
                 "when": "decide",
-                "value": "{{step_executions.score.output.value}}",
+                "value": '{{output_value("score")}}',
                 "branches": [{"gt": 90, "then": "excellent"}],
                 "default": "fail",
             }

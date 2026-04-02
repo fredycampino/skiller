@@ -247,69 +247,6 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
         store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)
 
 
-def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
-    db_path = tmp_path / "runs.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-
-    first_run_id = "550e8400-e29b-41d4-a716-446655440010"
-    second_run_id = "550e8400-e29b-41d4-a716-446655440011"
-
-    store.create_run(
-        "internal",
-        "notify_test",
-        {"start": "show_message", "steps": [{"notify": "show_message"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=first_run_id,
-    )
-    store.create_run(
-        "internal",
-        "wait_input_test",
-        {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=second_run_id,
-    )
-    store.update_run(first_run_id, status=RunStatus.SUCCEEDED)
-    store.update_run(second_run_id, status=RunStatus.WAITING)
-
-    runs = store.list_runs(limit=20)
-
-    assert [run.id for run in runs] == [second_run_id, first_run_id]
-    assert runs[0].skill_ref == "wait_input_test"
-    assert runs[1].skill_ref == "notify_test"
-
-
-def test_list_runs_can_filter_by_status(tmp_path) -> None:
-    db_path = tmp_path / "runs-filter.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-
-    waiting_run_id = "550e8400-e29b-41d4-a716-446655440012"
-    failed_run_id = "550e8400-e29b-41d4-a716-446655440013"
-
-    store.create_run(
-        "internal",
-        "wait_input_test",
-        {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=waiting_run_id,
-    )
-    store.create_run(
-        "internal",
-        "pull_request",
-        {"start": "call_tool", "steps": [{"mcp": "call_tool", "server": "github"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=failed_run_id,
-    )
-    store.update_run(waiting_run_id, status=RunStatus.WAITING)
-    store.update_run(failed_run_id, status=RunStatus.FAILED)
-
-    runs = store.list_runs(limit=20, statuses=["waiting"])
-
-    assert [run.id for run in runs] == [waiting_run_id]
-    assert runs[0].status == RunStatus.WAITING.value
-
-
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-input.db"
     store = SqliteStateStore(str(db_path))

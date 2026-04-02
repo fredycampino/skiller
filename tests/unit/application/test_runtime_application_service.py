@@ -8,6 +8,11 @@ from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseC
 from skiller.application.use_cases.list_webhooks import ListWebhooksResult
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus
 from skiller.application.use_cases.resume_run import ResumeRunResult, ResumeRunStatus
+from skiller.application.use_cases.skill_checker import (
+    SkillCheckError,
+    SkillCheckResult,
+    SkillCheckStatus,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -51,6 +56,16 @@ class _FakeAppendRuntimeEventUseCase:
                 "payload": payload,
             }
         )
+
+
+class _FakeSkillCheckerUseCase:
+    def __init__(self, result: SkillCheckResult | None = None) -> None:
+        self.result = result or SkillCheckResult(status=SkillCheckStatus.VALID, errors=[])
+        self.calls: list[dict[str, object]] = []
+
+    def execute(self, skill_ref: str, *, skill_source: str) -> SkillCheckResult:
+        self.calls.append({"skill_ref": skill_ref, "skill_source": skill_source})
+        return self.result
 
 
 class _FakeFailRunUseCase:
@@ -173,6 +188,7 @@ def _build_service(
     get_run_status_use_case: _FakeGetRunStatusUseCase | None = None,
     handle_input_use_case: _FakeHandleInputUseCase | None = None,
     handle_webhook_use_case: _FakeHandleWebhookUseCase | None = None,
+    skill_checker_use_case: _FakeSkillCheckerUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RuntimeApplicationService,
@@ -180,9 +196,11 @@ def _build_service(
     _FakeCreateRunUseCase,
     _FakeGetStartStepUseCase,
     _FakeRunWorkerService,
+    _FakeSkillCheckerUseCase,
 ]:
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     create_run_use_case = _FakeCreateRunUseCase()
+    final_skill_checker_use_case = skill_checker_use_case or _FakeSkillCheckerUseCase()
     status_use_case = get_run_status_use_case or _FakeGetRunStatusUseCase()
     get_start_step_use_case = _FakeGetStartStepUseCase(run_status_use_case=status_use_case)
     run_worker_service = _FakeRunWorkerService(
@@ -199,6 +217,7 @@ def _build_service(
         create_run_use_case=create_run_use_case,
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
+        skill_checker_use_case=final_skill_checker_use_case,
         handle_input_use_case=handle_input_use_case or _FakeHandleInputUseCase(),
         handle_webhook_use_case=handle_webhook_use_case or _FakeHandleWebhookUseCase(),
         list_webhooks_use_case=_FakeListWebhooksUseCase(),
@@ -214,6 +233,7 @@ def _build_service(
         create_run_use_case,
         get_start_step_use_case,
         run_worker_service,
+        final_skill_checker_use_case,
     )
 
 
@@ -224,6 +244,7 @@ def test_create_run_only_creates_run() -> None:
         create_run_use_case,
         get_start_step_use_case,
         run_worker_service,
+        skill_checker_use_case,
     ) = _build_service()
 
     result = service.create_run("notify_test", {"message": "ok"}, skill_source="internal")
@@ -238,6 +259,9 @@ def test_create_run_only_creates_run() -> None:
     ]
     assert get_start_step_use_case.calls == []
     assert run_worker_service.calls == []
+    assert skill_checker_use_case.calls == [
+        {"skill_ref": "notify_test", "skill_source": "internal"}
+    ]
     assert append_runtime_event_use_case.calls == [
         {
             "run_id": "run-1",
@@ -255,6 +279,7 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
         _create_run_use_case,
         get_start_step_use_case,
         run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service(
         get_run_status_use_case=get_run_status_use_case,
         worker_final_status="WAITING",
@@ -275,6 +300,7 @@ def test_start_worker_prepares_created_run() -> None:
         _create_run_use_case,
         get_start_step_use_case,
         run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service()
 
     result = service.start_worker("run-1")
@@ -292,6 +318,7 @@ def test_run_worker_dispatches_prepared_run() -> None:
         _create_run_use_case,
         _get_start_step_use_case,
         run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service(
         get_run_status_use_case=get_run_status_use_case,
     )
@@ -310,6 +337,7 @@ def test_handle_webhook_only_returns_matched_runs() -> None:
         _create_run_use_case,
         _get_start_step_use_case,
         run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service(
         handle_webhook_use_case=_FakeHandleWebhookUseCase(run_ids=["run-1", "run-2"]),
     )
@@ -333,6 +361,7 @@ def test_handle_input_only_returns_matched_runs() -> None:
         _create_run_use_case,
         _get_start_step_use_case,
         run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service(
         handle_input_use_case=_FakeHandleInputUseCase(run_ids=["run-1"]),
     )
@@ -354,6 +383,7 @@ def test_list_webhooks_returns_registered_channels() -> None:
         _create_run_use_case,
         _get_start_step_use_case,
         _run_worker_service,
+        _skill_checker_use_case,
     ) = _build_service()
 
     result = service.list_webhooks()
@@ -389,6 +419,7 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         get_start_step_use_case=_FakeGetStartStepUseCase(
             run_status_use_case=get_run_status_use_case
         ),
+        skill_checker_use_case=_FakeSkillCheckerUseCase(),
         handle_input_use_case=_FakeHandleInputUseCase(),
         handle_webhook_use_case=_FakeHandleWebhookUseCase(),
         list_webhooks_use_case=_FakeListWebhooksUseCase(),
@@ -415,3 +446,38 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         }
     ]
     assert run_worker_service.calls == ["run-1"]
+
+
+def test_create_run_fails_when_skill_checker_reports_errors() -> None:
+    checker = _FakeSkillCheckerUseCase(
+        result=SkillCheckResult(
+            status=SkillCheckStatus.INVALID,
+            errors=[
+                SkillCheckError(
+                    code="SKILL_NOTIFY_MESSAGE_MISSING",
+                    message=(
+                        "SKILL_NOTIFY_MESSAGE_MISSING: notify step requires "
+                        "message (step=show_message)"
+                    ),
+                )
+            ],
+        )
+    )
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+    ) = _build_service(skill_checker_use_case=checker)
+
+    with pytest.raises(
+        ValueError,
+        match="SKILL_NOTIFY_MESSAGE_MISSING: notify step requires message",
+    ):
+        service.create_run("notify_test", {}, skill_source="internal")
+
+    assert checker.calls == [{"skill_ref": "notify_test", "skill_source": "internal"}]
+    assert create_run_use_case.calls == []
+    assert append_runtime_event_use_case.calls == []

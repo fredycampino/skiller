@@ -62,6 +62,8 @@ With `large_result: true`, the runtime stores the full output body in `execution
 Template access:
 
 ```text
-{{step_executions.run_tests.output.value.stdout}}
-{{step_executions.run_tests.output.value.exit_code}}
+{{output_value("run_tests").stdout}}
+{{output_value("run_tests").exit_code}}
 ```
+
+Use `output_value(...)` instead of reading `step_executions.<step_id>.output.value...` directly.

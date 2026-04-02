@@ -2,7 +2,7 @@ from typing import Any
 
 from skiller.application.ports.skill_runner_port import SkillRunnerPort
 from skiller.application.ports.state_store_port import StateStorePort
-from skiller.domain.run_model import RunStatus
+from skiller.domain.run_model import Run, RunStatus
 from skiller.domain.skill_step_model import find_skill_step
 from skiller.domain.step_type import StepType
 
@@ -16,6 +16,9 @@ class GetWaitingMetadataUseCase:
         run = self.store.get_run(run_id)
         if run is None:
             return None
+        return self.execute_for_run(run)
+
+    def execute_for_run(self, run: Run) -> dict[str, Any] | None:
         if run.status != RunStatus.WAITING.value:
             return None
         if run.current is None:

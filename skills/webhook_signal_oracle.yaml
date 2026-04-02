@@ -18,7 +18,7 @@ steps:
       Respond only with valid JSON.
     prompt: |
       This webhook has arrived:
-      {{step_executions.wait_signal.output.value.payload}}
+      {{output_value("wait_signal").payload}}
 
       Classify it and return a JSON object with:
       - summary: one short, clear sentence
@@ -41,7 +41,7 @@ steps:
     next: route_signal
 
   - switch: route_signal
-    value: "{{step_executions.analyze_signal.output.value.data.next_action}}"
+    value: '{{output_value("analyze_signal").data.next_action}}'
     cases:
       celebrate: celebrate_notice
       investigate: investigate_notice
@@ -49,13 +49,13 @@ steps:
     default: unknown_notice
 
   - notify: celebrate_notice
-    message: "Celebrate: {{step_executions.analyze_signal.output.value.data.summary}}"
+    message: 'Celebrate: {{output_value("analyze_signal").data.summary}}'
 
   - notify: investigate_notice
-    message: "Investigate now: {{step_executions.analyze_signal.output.value.data.summary}}"
+    message: 'Investigate now: {{output_value("analyze_signal").data.summary}}'
 
   - notify: ignore_notice
-    message: "Ignore for now: {{step_executions.analyze_signal.output.value.data.summary}}"
+    message: 'Ignore for now: {{output_value("analyze_signal").data.summary}}'
 
   - notify: unknown_notice
     message: "The signal could not be routed cleanly."

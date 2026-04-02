@@ -69,6 +69,12 @@ def test_parse_command_returns_runs_with_status_filter() -> None:
     assert command == RunsCommand(statuses=["WAITING"])
 
 
+def test_parse_command_returns_runs_with_waiting_shortcut() -> None:
+    command = parse_command("/runs waiting\n")
+
+    assert command == RunsCommand(statuses=["waiting"])
+
+
 def test_parse_command_returns_webhooks_command() -> None:
     command = parse_command("/webhooks\n")
 

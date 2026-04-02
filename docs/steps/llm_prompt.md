@@ -13,7 +13,7 @@
     Respond only with valid JSON.
   prompt: |
     Analyze this error:
-    {{step_executions.test_run.output.value.data.stderr}}
+    {{output_value("test_run").data.stderr}}
   output:
     format: json
     schema:
@@ -71,8 +71,8 @@ Template access:
 
 ```text
 {{step_executions.analyze_issue.output.text}}
-{{step_executions.analyze_issue.output.value.data.summary}}
-{{step_executions.analyze_issue.output.value.data.next_action}}
+{{output_value("analyze_issue").data.summary}}
+{{output_value("analyze_issue").data.next_action}}
 ```
 
 The selected model is stored in `evaluation.model`.
@@ -82,3 +82,4 @@ Notes:
 - with `large_result: true`, `output.text` and `output.value` are reduced to a small observable summary.
 - the full body is stored behind `output.body_ref`.
 - `text_ref` tells the UI how to rebuild the full human text from the persisted body.
+- templates should read the canonical value through `output_value("analyze_issue")`, which resolves `body_ref` lazily when needed.

@@ -8,7 +8,7 @@
 
 ```yaml
 - notify: show_reply
-  message: "{{step_executions.answer.output.value.data.reply}}"
+  message: '{{output_value("answer").data.reply}}'
   next: ask_user
 ```
 

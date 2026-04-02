@@ -55,6 +55,18 @@ skiller worker resume <run_id>
 skiller init-db
 ```
 
+### Cloudflared
+
+```bash
+skiller cloudflared login start
+skiller cloudflared login status
+skiller cloudflared login stop
+skiller cloudflared ensure --domain <domain>
+skiller cloudflared start
+skiller cloudflared status
+skiller cloudflared stop
+```
+
 ## Typical Flows
 
 ## Run a skill
@@ -204,15 +216,55 @@ In normal usage, `skiller run` already starts the worker, so most users should n
 Options:
 
 ```bash
-skiller run <skill> [--arg key=value] [--logs] [--start-webhooks]
-skiller run --file <path> [--arg key=value] [--logs] [--start-webhooks]
+skiller run <skill> [--arg key=value] [--logs] [--start-server]
+skiller run --file <path> [--arg key=value] [--logs] [--start-server]
 ```
 
 Notes:
 - use `<skill>` for internal skills
 - use `--file` for external YAML files
 - `--logs` includes current logs in the JSON response
-- `--start-webhooks` starts the webhook process before dispatching the run
+- `--start-server` starts the local webhook server before dispatching the run
+
+### `server`
+
+Operational commands for the local webhook server:
+
+```bash
+skiller server start
+skiller server status
+skiller server stop
+```
+
+Notes:
+- the managed server state is stored under `~/.skiller/webhooks/managed-<port>.json`
+- if `SKILLER_DEBUG_HOME` is set, that directory is used as the effective `HOME`
+- `server start` reports whether the running server is managed by Skiller or just already reachable on the local endpoint
+
+Detailed guide:
+- [`tool-server.md`](tool-server.md)
+
+### `cloudflared`
+
+Operational commands for the Cloudflare tunnel workflow:
+
+```bash
+skiller cloudflared login start
+skiller cloudflared login status
+skiller cloudflared login stop
+skiller cloudflared ensure --domain <domain>
+skiller cloudflared start
+skiller cloudflared status
+skiller cloudflared stop
+```
+
+Use cases:
+- authenticate `cloudflared` in the effective `HOME`
+- ensure the remote tunnel, DNS route, and local tunnel config exist
+- manage the local connector process with explicit Skiller ownership state
+
+Detailed guide:
+- [`tool-cloudflared.md`](tool-cloudflared.md)
 
 ### `status`
 

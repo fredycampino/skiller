@@ -11,7 +11,7 @@ steps:
     next: decide_exit
 
   - switch: decide_exit
-    value: "{{step_executions.ask_user.output.value.payload.text}}"
+    value: '{{output_value("ask_user").payload.text}}'
     cases:
       exit: done
       quit: done
@@ -30,7 +30,7 @@ steps:
       The value of "reply" must always be a string.
     prompt: |
       User message:
-      {{step_executions.ask_user.output.value.payload.text}}
+      {{output_value("ask_user").payload.text}}
       
       Return JSON with exactly one field:
       {"reply":"<your response>"}

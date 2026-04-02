@@ -14,6 +14,7 @@ from skiller.tools.ui.commands import (
     ResumeCommand,
     RunCommand,
     RunsCommand,
+    ServerStatusCommand,
     SessionCommand,
     StatusCommand,
     UiCommand,
@@ -25,6 +26,7 @@ from skiller.tools.ui.session import UiRun, UiSession
 
 class RuntimeAdapter(Protocol):
     def run(self, *, raw_args: str) -> dict[str, object]: ...
+    def server_status(self) -> dict[str, object]: ...
     def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]: ...
     def webhooks(self) -> list[dict[str, object]]: ...
     def status(self, *, run_id: str) -> dict[str, object]: ...
@@ -41,6 +43,7 @@ class ActionResult:
     message: str | None = None
     run: UiRun | None = None
     runs: list[dict[str, object]] | None = None
+    statuses: list[str] | None = None
     webhooks: list[dict[str, object]] | None = None
     payload: dict[str, object] | None = None
     logs: list[dict[str, object]] | None = None
@@ -64,6 +67,9 @@ def handle_command(
 
     if isinstance(command, SessionCommand):
         return ActionResult(kind="session")
+
+    if isinstance(command, ServerStatusCommand):
+        return ActionResult(kind="server", payload=runtime.server_status())
 
     if isinstance(command, RunsCommand):
         return _handle_runs_command(session=session, command=command, runtime=runtime)
@@ -123,6 +129,7 @@ def _handle_run_command(
         run.has_rendered_create_block = True
         if run.status.upper() in {"SUCCEEDED", "FAILED"}:
             run.logs = _resolve_log_body_refs(logs=runtime.logs(run_id=run_id), runtime=runtime)
+            _remember_seen_event_ids(run=run, events=run.logs)
         session.remember_run(run)
     except RuntimeError as exc:
         run.status = "FAILED"
@@ -166,7 +173,7 @@ def _handle_runs_command(
         run.raw_args = raw_args or run.raw_args
         run.status = str(item.get("status", run.status))
         run.last_payload = dict(item)
-    return ActionResult(kind="runs", runs=payload)
+    return ActionResult(kind="runs", runs=payload, statuses=normalized_statuses)
 
 
 def _handle_logs_command(
@@ -236,32 +243,34 @@ def _handle_watch_command(
 ) -> ActionResult:
     payload = runtime.watch(run_id=command.run_id)
     payload_dict = _resolve_watch_body_refs(payload=dict(payload), runtime=runtime)
-    run_id = str(payload_dict.get("run_id", command.run_id)).strip() or command.run_id
-    run = session.ensure_run(run_id)
-    events = payload_dict.get("events")
-    if isinstance(events, list):
-        fresh_events: list[dict[str, object]] = []
-        for item in events:
-            if not isinstance(item, dict):
-                continue
-            event_dict = dict(item)
-            event_name = str(event_dict.get("type", "")).strip().upper()
-            if event_name == "RUN_CREATE" and run.has_rendered_create_block:
-                event_id = str(event_dict.get("id", "")).strip()
-                if event_id:
-                    run.seen_event_ids.add(event_id)
-                continue
-            event_id = str(event_dict.get("id", "")).strip()
-            if event_id:
-                if event_id in run.seen_event_ids:
-                    continue
-                run.seen_event_ids.add(event_id)
-            fresh_events.append(event_dict)
-        payload_dict["events"] = fresh_events
-    run.status = str(payload_dict.get("status", run.status))
-    run.last_payload = payload_dict
-    session.remember_run(run)
-    return ActionResult(kind="watch", payload=payload_dict, run=run)
+    return _build_watch_action_result(
+        session=session,
+        run_id=command.run_id,
+        payload_dict=payload_dict,
+    )
+
+
+def poll_run_progress(
+    *,
+    session: UiSession,
+    run_id: str,
+    runtime: RuntimeAdapter,
+) -> ActionResult:
+    status_payload = runtime.status(run_id=run_id)
+    payload_dict = _resolve_status_body_refs(payload=dict(status_payload), runtime=runtime)
+    resolved_run_id = str(payload_dict.get("id", run_id)).strip() or run_id
+    payload_dict["run_id"] = resolved_run_id
+    payload_dict["events"] = _resolve_log_body_refs(
+        logs=runtime.logs(run_id=resolved_run_id),
+        runtime=runtime,
+    )
+    raw_args = str(payload_dict.get("skill_ref", "")).strip() or None
+    return _build_watch_action_result(
+        session=session,
+        run_id=resolved_run_id,
+        payload_dict=payload_dict,
+        raw_args=raw_args,
+    )
 
 
 def _handle_resume_command(
@@ -321,6 +330,63 @@ def _resolve_status_body_refs(
     resolved_payload = dict(payload)
     resolved_payload["context"] = resolved_context
     return resolved_payload
+
+
+def _build_watch_action_result(
+    *,
+    session: UiSession,
+    run_id: str,
+    payload_dict: dict[str, object],
+    raw_args: str | None = None,
+) -> ActionResult:
+    resolved_run_id = str(payload_dict.get("run_id", run_id)).strip() or run_id
+    run = session.ensure_run(resolved_run_id, raw_args=raw_args or "<external>")
+    if raw_args:
+        run.raw_args = raw_args
+
+    events = payload_dict.get("events")
+    normalized_payload = dict(payload_dict)
+    if isinstance(events, list):
+        run.logs = [dict(item) for item in events if isinstance(item, dict)]
+        normalized_payload["events"] = _filter_fresh_watch_events(run=run, events=events)
+
+    run.status = str(normalized_payload.get("status", run.status))
+    run.last_payload = normalized_payload
+    session.remember_run(run)
+    return ActionResult(kind="watch", payload=normalized_payload, run=run)
+
+
+def _filter_fresh_watch_events(
+    *,
+    run: UiRun,
+    events: list[object],
+) -> list[dict[str, object]]:
+    fresh_events: list[dict[str, object]] = []
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        event_dict = dict(item)
+        event_name = str(event_dict.get("type", "")).strip().upper()
+        if event_name == "RUN_CREATE" and run.has_rendered_create_block:
+            _remember_seen_event_ids(run=run, events=[event_dict])
+            continue
+
+        event_id = str(event_dict.get("id", "")).strip()
+        if event_id:
+            if event_id in run.seen_event_ids:
+                continue
+            run.seen_event_ids.add(event_id)
+        fresh_events.append(event_dict)
+    return fresh_events
+
+
+def _remember_seen_event_ids(*, run: UiRun, events: list[object]) -> None:
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        event_id = str(item.get("id", "")).strip()
+        if event_id:
+            run.seen_event_ids.add(event_id)
 
 
 def _resolve_log_body_refs(

@@ -227,18 +227,21 @@ With `large_result: true`:
 
 ## Template Access
 
-Templates read persisted step data through `step_executions`.
+Templates read step data through two channels:
 
 Examples:
 
 ```text
-{{step_executions.ask_user.output.value.payload.text}}
-{{step_executions.answer.output.value.data.reply}}
-{{step_executions.decide_exit.output.value.next_step_id}}
+{{output_value("ask_user").payload.text}}
+{{output_value("answer").data.reply}}
+{{output_value("decide_exit").next_step_id}}
 {{step_executions.answer.output.text}}
 ```
 
 Notes:
-- `step_executions` always stores the small persisted output envelope.
-- if `output.body_ref` is present, the full output body is stored in `execution_outputs`.
-- templates still read the persisted small value; they do not auto-resolve `body_ref`.
+- `step_executions` stores the persisted output envelope.
+- `step_executions.<step_id>.output.text` and `step_executions.<step_id>.evaluation` remain directly readable.
+- `output_value("<step_id>")` returns the canonical `output.value` for that step.
+- if `output.body_ref` is present, `output_value(...)` resolves the persisted body lazily from `execution_outputs`.
+- direct template access to `step_executions.<step_id>.output.value...` is not allowed.
+- direct template access to `output.body_ref` is not allowed.

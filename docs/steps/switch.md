@@ -8,7 +8,7 @@
 
 ```yaml
 - switch: decide_action
-  value: "{{step_executions.prepare_action.output.value.assigned.action}}"
+  value: '{{output_value("prepare_action").assigned.action}}'
   cases:
     retry: retry_notice
     ask_human: human_notice

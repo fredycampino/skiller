@@ -34,6 +34,7 @@ from skiller.application.use_cases.render_current_step import (
 )
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -49,9 +50,12 @@ pytestmark = [
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
-    skill_runner = FilesystemSkillRunner(skills_dir="skills")
     execution_output_store = SqliteExecutionOutputStore(store.db_path)
     execution_output_store.init_db()
+    skill_runner = FilesystemSkillRunner(
+        skills_dir="skills",
+        execution_output_store=execution_output_store,
+    )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
@@ -111,6 +115,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
+        skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
         handle_input_use_case=HandleInputUseCase(store=store),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
@@ -211,6 +216,39 @@ def test_external_shell_step_persists_large_result_body() -> None:
                 "stderr": "",
             }
         }
+
+
+def test_external_notify_can_read_large_result_output_value() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_shell_notify.yaml"
+        skill_path.write_text(
+            (
+                "name: external_shell_notify\n"
+                "start: inspect_cloudflared\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - shell: inspect_cloudflared\n"
+                "    command: python3 -c \"print('x' * 400)\"\n"
+                "    large_result: true\n"
+                "    next: summarize_tunnels\n"
+                "  - notify: summarize_tunnels\n"
+                "    message: '{{output_value(\"inspect_cloudflared\").stdout}}'\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+
+        run = store.get_run(run_result["run_id"])
+        assert run_result["status"] == "SUCCEEDED"
+        assert run is not None
+        notify_output = run.context.step_executions["summarize_tunnels"].output.to_public_dict()
+        assert notify_output["value"]["message"] == ("x" * 400) + "\n"
 
 
 def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
@@ -406,7 +444,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
                 "    prompt: Write a short summary\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                '    message: "{{step_executions.ask_user.output.value.payload.text}}"\n'
+                '    message: \'{{output_value("ask_user").payload.text}}\'\n'
             ),
             encoding="utf-8",
         )
@@ -492,7 +530,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
                 "    prompt: Write a short summary\n"
                 "    next: echo\n"
                 "  - notify: echo\n"
-                '    message: "{{step_executions.ask_user.output.value.payload.text}}"\n'
+                '    message: \'{{output_value("ask_user").payload.text}}\'\n'
                 "    next: ask_user\n"
             ),
             encoding="utf-8",

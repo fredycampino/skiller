@@ -13,12 +13,15 @@ def execute_run(*, raw_args: str) -> dict[str, Any]:
     if not normalized_args:
         raise RuntimeError("run command requires skill args, for example: /run notify_test")
 
-    return _run_json_command("run", *shlex.split(normalized_args))
+    return _run_json_command("run", *shlex.split(normalized_args), "--detach")
 
 
 class CliRuntimeAdapter:
     def run(self, *, raw_args: str) -> dict[str, Any]:
         return execute_run(raw_args=raw_args)
+
+    def server_status(self) -> dict[str, Any]:
+        return _run_json_command("server", "status")
 
     def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, Any]]:
         args = ["runs"]

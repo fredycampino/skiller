@@ -6,18 +6,19 @@ from prompt_toolkit.completion import Completion
 from prompt_toolkit.document import Document
 
 from skiller.tools.ui.actions import ActionResult
-from skiller.tools.ui.commands import InputCommand, StatusCommand, WatchCommand
+from skiller.tools.ui.commands import InputCommand, StatusCommand
 from skiller.tools.ui.session import UiRun, UiSession
 from skiller.tools.ui.tui_app import (
     accept_completion,
     build_empty_reply_result,
     build_output_wrap_prefix,
-    build_post_input_commands,
+    build_progress_render_result,
     build_status_fragments,
     build_submit_command,
     get_selected_waiting_input_run,
     has_active_completion,
     should_refresh_after_input,
+    should_refresh_after_run,
     should_submit_on_enter,
 )
 
@@ -166,12 +167,50 @@ def test_should_refresh_after_input_rejects_input_error_result() -> None:
     assert should_refresh_after_input(result) is False
 
 
-def test_build_post_input_commands_use_watch_and_status_for_same_run() -> None:
-    result = build_post_input_commands(command=InputCommand(run_id="run-1", text="hola"))
+def test_should_refresh_after_run_accepts_running_result() -> None:
+    result = ActionResult(
+        kind="run",
+        run=UiRun(raw_args="notify_test", run_id="run-1", status="RUNNING"),
+    )
 
-    assert result == (
-        WatchCommand(run_id="run-1"),
-        StatusCommand(run_id="run-1"),
+    assert should_refresh_after_run(result) is True
+
+
+def test_should_refresh_after_run_rejects_waiting_result() -> None:
+    result = ActionResult(
+        kind="run",
+        run=UiRun(raw_args="wait_input_test", run_id="run-1", status="WAITING"),
+    )
+
+    assert should_refresh_after_run(result) is False
+
+
+def test_build_progress_render_result_prefers_watch_when_new_events_exist() -> None:
+    run = UiRun(raw_args="chat", run_id="run-1", status="WAITING")
+    result = ActionResult(
+        kind="watch",
+        run=run,
+        payload={
+            "status": "WAITING",
+            "events": [{"id": "evt-1", "type": "RUN_WAITING", "payload": {}}],
+        },
+    )
+
+    assert build_progress_render_result(result=result, previous_status="RUNNING") is result
+
+
+def test_build_progress_render_result_uses_status_for_terminal_transition_without_events() -> None:
+    run = UiRun(raw_args="notify_test", run_id="run-1", status="SUCCEEDED")
+    result = ActionResult(
+        kind="watch",
+        run=run,
+        payload={"status": "SUCCEEDED", "events": []},
+    )
+
+    assert build_progress_render_result(result=result, previous_status="RUNNING") == ActionResult(
+        kind="status",
+        run=run,
+        payload={"status": "SUCCEEDED", "events": []},
     )
 
 

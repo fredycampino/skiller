@@ -29,11 +29,13 @@ from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -62,9 +64,12 @@ def require_real_mcp_runtime() -> None:
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
-    skill_runner = FilesystemSkillRunner(skills_dir="skills")
     execution_output_store = SqliteExecutionOutputStore(store.db_path)
     execution_output_store.init_db()
+    skill_runner = FilesystemSkillRunner(
+        skills_dir="skills",
+        execution_output_store=execution_output_store,
+    )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
@@ -122,7 +127,9 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
+        skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
+        list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),

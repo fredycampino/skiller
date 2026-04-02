@@ -7,6 +7,7 @@ import textwrap
 import time
 from codecs import decode as codecs_decode
 from dataclasses import dataclass
+from pathlib import Path
 
 from skiller.tools.ui.actions import ActionResult
 from skiller.tools.ui.commands import (
@@ -20,6 +21,7 @@ from skiller.tools.ui.commands import (
     ResumeCommand,
     RunCommand,
     RunsCommand,
+    ServerStatusCommand,
     SessionCommand,
     StatusCommand,
     UiCommand,
@@ -28,6 +30,7 @@ from skiller.tools.ui.commands import (
     iter_help_lines,
 )
 from skiller.tools.ui.session import UiRun, UiSession
+from skiller.tools.ui.theme import theme
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,8 @@ _EXCEPTION_LINE_RE = re.compile(
     r"^(?P<kind>[A-Za-z_][\w.]*(?:Error|Exception|Warning)?):\s*(?P<message>.+)$"
 )
 _DETAIL_WRAP_WIDTH = 72
+
+
 def build_initial_output(*, session: UiSession) -> str:
     _ = session
     return ""
@@ -76,6 +81,8 @@ def build_pending_status_text(*, command: UiCommand) -> str:
         return "Idle"
     if isinstance(command, RunCommand):
         return f"Running {_build_run_label_from_raw_args(command.raw_args)}"
+    if isinstance(command, ServerStatusCommand):
+        return "Loading server"
     if isinstance(command, WatchCommand):
         return "Watching"
     if isinstance(command, LogsCommand):
@@ -120,6 +127,8 @@ def build_result_status_text(*, result: ActionResult) -> str:
         return "Ready"
     if result.kind == "runs":
         return _build_loaded_label("run", len(result.runs or []))
+    if result.kind == "server":
+        return "Loaded server"
     if result.kind == "webhooks":
         return _build_loaded_label("webhook", len(result.webhooks or []))
     if result.kind == "logs":
@@ -303,6 +312,8 @@ def _render_action_result(*, session: UiSession, result: ActionResult) -> str:
         return _render_help()
     if result.kind == "session":
         return _render_session(session=session)
+    if result.kind == "server":
+        return _render_server_result(result=result)
     if result.kind == "runs":
         return _render_global_runs(result=result)
     if result.kind == "webhooks":
@@ -509,26 +520,59 @@ def _render_global_runs(*, result: ActionResult) -> str:
     runs = result.runs or []
     if not runs:
         return "runs: []\n"
-    lines = ["runs:\n"]
+    statuses = [status.strip().upper() for status in result.statuses or [] if status.strip()]
+    header = "runs"
+    if statuses == ["WAITING"]:
+        header = "runs [waiting]"
+    lines = [f"{header}\n"]
     for item in runs:
         run_id = str(item.get("id", "-"))
         status = str(item.get("status", "UNKNOWN"))
-        skill_ref = str(item.get("skill_ref", "<external>"))
+        skill_ref = _display_skill_ref(str(item.get("skill_ref", "<external>")))
         current = str(item.get("current", "-") or "-")
-        lines.append(f"  {run_id}  {status}  {skill_ref}  {current}\n")
+        status_icon = _build_run_status_icon(status)
+        wait_suffix = _build_runs_wait_suffix(item)
+        if statuses == ["WAITING"]:
+            lines.append(f"  {status_icon} {run_id}  {skill_ref}  {current}  {wait_suffix}\n")
+            continue
+        if wait_suffix:
+            lines.append(f"  {status_icon} {run_id}  {skill_ref}  {current}  {wait_suffix}\n")
+            continue
+        lines.append(f"  {status_icon} {run_id}  {skill_ref}  {current}\n")
     return "".join(lines)
+
+
+def _render_server_result(*, result: ActionResult) -> str:
+    payload = result.payload or {}
+    if not payload:
+        return "server\n  × url: -\n"
+    running = bool(payload.get("running", False))
+    endpoint = str(payload.get("endpoint", "")).strip() or "-"
+    pid = payload.get("pid")
+    managed = bool(payload.get("managed", False))
+
+    lines = [
+        "server",
+        f"  {theme.icon_success if running else theme.icon_error} url: {endpoint}",
+    ]
+    if pid is not None:
+        lines.append(f"    pid: {pid}")
+    if managed:
+        lines.append("    managed by skiller")
+    return "".join(f"{line}\n" for line in lines)
 
 
 def _render_webhooks(*, result: ActionResult) -> str:
     webhooks = result.webhooks or []
     if not webhooks:
-        return "webhooks: []\n"
-    lines = ["webhooks:\n"]
+        return "webhooks\n  (none)\n"
+    lines = ["webhooks\n"]
     for item in webhooks:
         webhook = str(item.get("webhook", "-"))
         enabled = bool(item.get("enabled", False))
         created_at = str(item.get("created_at", "-"))
-        lines.append(f"  {webhook}  enabled={str(enabled).lower()}  created_at={created_at}\n")
+        icon = theme.icon_success if enabled else theme.icon_error
+        lines.append(f"  {icon} {webhook:<12} {created_at}\n")
     return "".join(lines)
 
 
@@ -536,6 +580,47 @@ def _display_run_id(run: UiRun) -> str:
     if run.run_id is None:
         return "-"
     return run.run_id
+
+
+def _build_runs_wait_suffix(item: dict[str, object]) -> str:
+    wait_type = str(item.get("wait_type", "")).strip().lower()
+    wait_detail = str(item.get("wait_detail", "")).strip()
+    if not wait_type:
+        return ""
+    if not wait_detail:
+        return wait_type
+    return f"{wait_type}:[{_truncate_wait_detail(wait_detail)}]"
+
+
+def _display_skill_ref(skill_ref: str) -> str:
+    normalized = skill_ref.strip()
+    if not normalized:
+        return "<external>"
+    if "/" not in normalized and "\\" not in normalized:
+        return normalized
+    return Path(normalized).name or normalized
+
+
+def _build_run_status_icon(status: str) -> str:
+    normalized = status.strip().upper()
+    if normalized == "SUCCEEDED":
+        return theme.icon_success
+    if normalized == "FAILED":
+        return theme.icon_error
+    if normalized == "WAITING":
+        return theme.icon_waiting
+    if normalized == "RUNNING":
+        return theme.icon_running
+    if normalized == "CREATED":
+        return theme.icon_created
+    return "?"
+
+
+def _truncate_wait_detail(detail: str, *, max_chars: int = 24) -> str:
+    normalized = detail.strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 3].rstrip() + "..."
 
 
 def _render_log_event_block(*, index: int, event: dict[str, object]) -> list[str]:

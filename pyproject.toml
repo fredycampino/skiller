@@ -3,7 +3,7 @@ requires = ["hatchling>=1.24.2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-runtime-poc"
+name = "skiller"
 version = "1.0.0-alpha.6"
 description = "Skiller runtime: CLI + Webhooks + MCP + Skills"
 readme = "README.md"

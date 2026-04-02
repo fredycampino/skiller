@@ -182,6 +182,36 @@ class _FakeWorkerProcessService:
         return SimpleNamespace(command="resume", pid=303, run_id=run_id)
 
 
+def test_main_without_args_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"run_ui": False}
+
+    def fake_run_ui() -> str:
+        called["run_ui"] = True
+        return "session-key"
+
+    monkeypatch.setattr("skiller.tools.ui.app.run_ui", fake_run_ui)
+
+    exit_code = cli_main.main([])
+
+    assert exit_code == 0
+    assert called["run_ui"] is True
+
+
+def test_ui_subcommand_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"run_ui": False}
+
+    def fake_run_ui() -> str:
+        called["run_ui"] = True
+        return "session-key"
+
+    monkeypatch.setattr("skiller.tools.ui.app.run_ui", fake_run_ui)
+
+    exit_code = cli_main.main(["ui"])
+
+    assert exit_code == 0
+    assert called["run_ui"] is True
+
+
 def test_run_internal_skill_by_name(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -253,7 +283,34 @@ def test_run_can_include_logs_in_response(
     assert '"type": "STEP_SUCCESS"' in captured.out
 
 
-def test_run_can_start_webhooks_when_waiting(
+def test_run_detach_returns_after_dispatch_without_watching(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    worker_process_service = _FakeWorkerProcessService()
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
+
+    exit_code = cli_main.main(["run", "notify_test", "--detach"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.create_run_calls == [("notify_test", {}, "internal")]
+    assert worker_process_service.calls == [("start", "run-1")]
+    assert controller.status_calls == []
+    assert controller.logs_calls == []
+    assert '"run_id": "run-1"' in captured.out
+    assert '"worker_pid": 101' in captured.out
+    assert '"status": "CREATED"' in captured.out
+    assert captured.err == ""
+
+
+def test_run_can_start_server_when_waiting(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
@@ -266,7 +323,13 @@ def test_run_can_start_webhooks_when_waiting(
             self.settings = settings
 
         def start(self):
-            return SimpleNamespace(endpoint="http://127.0.0.1:8001/health", pid=1234, started=True)
+            return SimpleNamespace(
+                endpoint="http://127.0.0.1:8001/health",
+                pid=1234,
+                started=True,
+                running=True,
+                managed=True,
+            )
 
     monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
     monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
@@ -274,13 +337,13 @@ def test_run_can_start_webhooks_when_waiting(
     monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
     monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
 
-    exit_code = cli_main.main(["run", "notify_test", "--start-webhooks"])
+    exit_code = cli_main.main(["run", "notify_test", "--start-server"])
 
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '"status": "SUCCEEDED"' in captured.out
-    assert '"webhooks_started": true' in captured.out
-    assert '"webhooks_pid": 1234' in captured.out
+    assert '"server_started": true' in captured.out
+    assert '"server_pid": 1234' in captured.out
 
 
 def test_run_waiting_result_includes_waiting_metadata(
@@ -327,23 +390,23 @@ def test_run_fails_when_webhooks_requested_but_process_does_not_start(
             self.settings = settings
 
         def start(self):
-            raise RuntimeError("webhooks process did not become ready")
+            raise RuntimeError("server process did not become ready")
 
     monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
     monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
     monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
     monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
 
-    exit_code = cli_main.main(["run", "notify_test", "--start-webhooks"])
+    exit_code = cli_main.main(["run", "notify_test", "--start-server"])
 
     captured = capsys.readouterr()
     assert exit_code == 1
     assert '"status": "CREATED"' in captured.out
-    assert '"webhooks_started": false' in captured.out
-    assert "webhooks process did not become ready" in captured.out
+    assert '"server_started": false' in captured.out
+    assert "server process did not become ready" in captured.out
 
 
-def test_run_failure_with_start_webhooks_can_include_logs(
+def test_run_failure_with_start_server_can_include_logs(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
@@ -356,19 +419,412 @@ def test_run_failure_with_start_webhooks_can_include_logs(
             self.settings = settings
 
         def start(self):
-            raise RuntimeError("webhooks process did not become ready")
+            raise RuntimeError("server process did not become ready")
 
     monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
     monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
     monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
     monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
 
-    exit_code = cli_main.main(["run", "notify_test", "--start-webhooks", "--logs"])
+    exit_code = cli_main.main(["run", "notify_test", "--start-server", "--logs"])
 
     captured = capsys.readouterr()
     assert exit_code == 1
     assert controller.logs_calls == ["run-1"]
     assert '"logs": [' in captured.out
+
+
+def test_server_start_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWebhookProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def start(self):
+            return SimpleNamespace(
+                endpoint="http://127.0.0.1:8001/health",
+                pid=1234,
+                started=True,
+                running=True,
+                managed=True,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
+
+    exit_code = cli_main.main(["server", "start"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"started": true' in captured.out
+    assert '"running": true' in captured.out
+    assert '"managed_by_skiller": true' in captured.out
+    assert '"pid": 1234' in captured.out
+
+
+def test_server_status_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWebhookProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def status(self):
+            return SimpleNamespace(
+                endpoint="http://127.0.0.1:8001/health",
+                pid=1234,
+                running=True,
+                managed=True,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
+
+    exit_code = cli_main.main(["server", "status"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"running": true' in captured.out
+    assert '"managed_by_skiller": true' in captured.out
+
+
+def test_server_stop_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWebhookProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                endpoint="http://127.0.0.1:8001/health",
+                pid=1234,
+                running=False,
+                stopped=True,
+                managed=True,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
+
+    exit_code = cli_main.main(["server", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": true' in captured.out
+
+
+def test_cloudflared_start_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def start(self):
+            return SimpleNamespace(
+                origin_url="http://127.0.0.1:8001",
+                pid=2233,
+                started=True,
+                running=True,
+                managed=True,
+                tunnel_name="skillerwh",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
+
+    exit_code = cli_main.main(["cloudflared", "start"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"started": true' in captured.out
+    assert '"managed_by_skiller": true' in captured.out
+    assert '"tunnel_name": "skillerwh"' in captured.out
+
+
+def test_cloudflared_status_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def status(self):
+            return SimpleNamespace(
+                origin_url="http://127.0.0.1:8001",
+                pid=2233,
+                running=True,
+                managed=False,
+                tunnel_name="skillerwh",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
+
+    exit_code = cli_main.main(["cloudflared", "status"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"running": true' in captured.out
+    assert '"managed_by_skiller": false' in captured.out
+
+
+def test_cloudflared_stop_command_for_managed_process(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                origin_url="http://127.0.0.1:8001",
+                pid=2233,
+                running=False,
+                stopped=True,
+                managed=True,
+                tunnel_name="skillerwh",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
+
+    exit_code = cli_main.main(["cloudflared", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": true' in captured.out
+    assert '"managed_by_skiller": true' in captured.out
+
+
+def test_cloudflared_stop_command_does_not_fail_for_external_process(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                origin_url="http://127.0.0.1:8001",
+                pid=2233,
+                running=True,
+                stopped=False,
+                managed=False,
+                tunnel_name="skillerwh",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
+
+    exit_code = cli_main.main(["cloudflared", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": false' in captured.out
+    assert '"managed_by_skiller": false' in captured.out
+
+
+def test_cloudflared_ensure_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredEnsureService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def ensure(self, *, domain: str):
+            assert domain == "campino.me"
+            return SimpleNamespace(
+                authenticated=True,
+                tunnel_name="skillerwh",
+                tunnel_id="11111111-1111-1111-1111-111111111111",
+                hostname="skillerwh.campino.me",
+                created=True,
+                dns_status="created",
+                config_path="/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml",
+                home="/tmp/cloudflared-home",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredEnsureService", _FakeCloudflaredEnsureService)
+
+    exit_code = cli_main.main(["cloudflared", "ensure", "--domain", "campino.me"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"tunnel_name": "skillerwh"' in captured.out
+    assert '"hostname": "skillerwh.campino.me"' in captured.out
+    assert '"dns_status": "created"' in captured.out
+    assert (
+        '"config_path": "/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml"'
+        in captured.out
+    )
+
+
+def test_cloudflared_login_start_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredLoginService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def start(self):
+            return SimpleNamespace(
+                authenticated=False,
+                started=True,
+                running=True,
+                pid=8899,
+                home="/tmp/cloudflared-home",
+                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
+                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
+
+    exit_code = cli_main.main(["cloudflared", "login", "start"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"started": true' in captured.out
+    assert '"pid": 8899' in captured.out
+    assert '"cert_path": "/tmp/cloudflared-home/.cloudflared/cert.pem"' in captured.out
+
+
+def test_cloudflared_login_status_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredLoginService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def status(self):
+            return SimpleNamespace(
+                authenticated=True,
+                running=False,
+                pid=None,
+                home="/tmp/cloudflared-home",
+                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
+                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
+
+    exit_code = cli_main.main(["cloudflared", "login", "status"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"authenticated": true' in captured.out
+    assert '"running": false' in captured.out
+
+
+def test_cloudflared_login_stop_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeCloudflaredLoginService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                authenticated=False,
+                stopped=True,
+                running=False,
+                pid=8899,
+                home="/tmp/cloudflared-home",
+                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
+                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
+
+    exit_code = cli_main.main(["cloudflared", "login", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": true' in captured.out
+    assert '"log_path": "/tmp/cloudflared-home/.skiller/cloudflared/login.log"' in captured.out
 
 
 def test_run_rejects_missing_or_duplicated_skill_selection(

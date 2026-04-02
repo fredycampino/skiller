@@ -25,6 +25,11 @@ class SessionCommand:
 
 
 @dataclass(frozen=True)
+class ServerStatusCommand:
+    pass
+
+
+@dataclass(frozen=True)
 class RunsCommand:
     statuses: list[str]
 
@@ -88,6 +93,7 @@ UiCommand = (
     | ExitCommand
     | HelpCommand
     | SessionCommand
+    | ServerStatusCommand
     | RunsCommand
     | WebhooksCommand
     | ClearCommand
@@ -108,6 +114,11 @@ COMMAND_SPECS = (
         name="/session",
         usage="/session",
         description="Show known runs and current selection",
+    ),
+    CommandSpec(
+        name="/server",
+        usage="/server status",
+        description="Show local webhooks server status",
     ),
     CommandSpec(
         name="/runs",
@@ -212,6 +223,9 @@ def parse_command(raw_line: str) -> UiCommand:
     if resolved_name == "/session":
         return SessionCommand()
 
+    if resolved_name == "/server":
+        return ServerStatusCommand()
+
     if resolved_name == "/runs":
         remainder = remainder.strip()
         statuses: list[str] = []
@@ -224,6 +238,7 @@ def parse_command(raw_line: str) -> UiCommand:
                     statuses.append(parts[index + 1])
                     index += 2
                     continue
+                statuses.append(part)
                 index += 1
         return RunsCommand(statuses=statuses)
 

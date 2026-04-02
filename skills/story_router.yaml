@@ -17,7 +17,7 @@ steps:
     next: choose_path
 
   - switch: choose_path
-    value: "{{step_executions.bootstrap.output.value.assigned.hero.path}}"
+    value: '{{output_value("bootstrap").assigned.hero.path}}'
     cases:
       cave: cave_mood
       market: market_scene
@@ -25,7 +25,7 @@ steps:
     default: lost_scene
 
   - when: cave_mood
-    value: "{{step_executions.bootstrap.output.value.assigned.hero.mood}}"
+    value: '{{output_value("bootstrap").assigned.hero.mood}}'
     branches:
       - eq: brave
         then: cave_treasure
@@ -34,7 +34,7 @@ steps:
     default: cave_escape
 
   - when: tower_mood
-    value: "{{step_executions.bootstrap.output.value.assigned.hero.mood}}"
+    value: '{{output_value("bootstrap").assigned.hero.mood}}'
     branches:
       - eq: brave
         then: tower_storm

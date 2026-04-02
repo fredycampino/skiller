@@ -9,6 +9,11 @@ class UiTheme:
     color_text_primary: str
     color_text_muted: str
     color_error: str
+    icon_success: str
+    icon_error: str
+    icon_waiting: str
+    icon_running: str
+    icon_created: str
     color_completion_text: str
     color_completion_meta: str
     color_completion_selected_bg: str
@@ -22,6 +27,11 @@ theme = UiTheme(
     color_text_primary="#f5f5f5",
     color_text_muted="#6b7280",
     color_error="#ef4444",
+    icon_success="✓",
+    icon_error="×",
+    icon_waiting="◌",
+    icon_running="•",
+    icon_created="·",
     color_completion_text="#e5e7eb",
     color_completion_meta="#94a3b8",
     color_completion_selected_bg="#2563eb",

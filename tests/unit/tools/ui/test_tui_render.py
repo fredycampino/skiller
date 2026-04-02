@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 
 from skiller.tools.ui.actions import ActionResult
-from skiller.tools.ui.commands import BodyCommand, LogsCommand, RunCommand, WatchCommand
+from skiller.tools.ui.commands import (
+    BodyCommand,
+    LogsCommand,
+    RunCommand,
+    ServerStatusCommand,
+    WatchCommand,
+)
 from skiller.tools.ui.session import UiRun, build_session
 from skiller.tools.ui.tui_render import (
     build_footer_line,
@@ -72,10 +78,133 @@ def test_render_result_for_buffer_renders_body_payload() -> None:
     assert result.replace is False
 
 
+def test_render_result_for_buffer_renders_server_payload() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="server",
+            payload={
+                "running": True,
+                "managed": True,
+                "endpoint": "http://127.0.0.1:8001/health",
+                "pid": 12345,
+            },
+        ),
+    )
+
+    assert result.text == (
+        "server\n"
+        "  ✓ url: http://127.0.0.1:8001/health\n"
+        "    pid: 12345\n"
+        "    managed by skiller\n"
+    )
+    assert result.replace is False
+
+
+def test_render_result_for_buffer_renders_webhooks_compact_list() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="webhooks",
+            webhooks=[
+                {
+                    "webhook": "signal",
+                    "enabled": True,
+                    "created_at": "2026-03-12 01:02:52",
+                },
+                {
+                    "webhook": "test-token",
+                    "enabled": True,
+                    "created_at": "2026-03-08 23:28:33",
+                },
+            ],
+        ),
+    )
+
+    assert result.text == (
+        "webhooks\n"
+        "  ✓ signal       2026-03-12 01:02:52\n"
+        "  ✓ test-token   2026-03-08 23:28:33\n"
+    )
+    assert result.replace is False
+
+
+def test_render_result_for_buffer_renders_runs_waiting_compact_list() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="runs",
+            statuses=["WAITING"],
+            runs=[
+                {
+                    "id": "f25d21cc-95ea-4dc1-9305-c18f4ddceaca",
+                    "status": "WAITING",
+                    "skill_ref": "chat",
+                    "current": "ask_user",
+                    "wait_type": "input",
+                },
+                {
+                    "id": "abcd1234-1111-2222-3333-444444444444",
+                    "status": "WAITING",
+                    "skill_ref": "deploy",
+                    "current": "wait_signal",
+                    "wait_type": "webhook",
+                    "wait_detail": "github-ci:42",
+                },
+            ],
+        ),
+    )
+
+    assert result.text == (
+        "runs [waiting]\n"
+        "  ◌ f25d21cc-95ea-4dc1-9305-c18f4ddceaca  chat  ask_user  input\n"
+        "  ◌ abcd1234-1111-2222-3333-444444444444  deploy  wait_signal  webhook:[github-ci:42]\n"
+    )
+    assert result.replace is False
+
+
+def test_render_result_for_buffer_renders_runs_with_file_skill_basename() -> None:
+    session = build_session("a1b2c3d4")
+
+    result = render_result_for_buffer(
+        session=session,
+        result=ActionResult(
+            kind="runs",
+            runs=[
+                {
+                    "id": "023aa725-b4e8-4d02-a898-2422c16cdfaa",
+                    "status": "WAITING",
+                    "skill_ref": "tests/e2e/skills/wait_webhook_cli_e2e.yaml",
+                    "current": "wait_signal",
+                    "wait_type": "webhook",
+                    "wait_detail": "test:demo-webhook-runs",
+                }
+            ],
+        ),
+    )
+
+    assert result.text == (
+        "runs\n"
+        "  ◌ 023aa725-b4e8-4d02-a898-2422c16cdfaa  wait_webhook_cli_e2e.yaml  wait_signal  "
+        "webhook:[test:demo-webhook-runs]\n"
+    )
+    assert result.replace is False
+
+
 def test_build_pending_status_text_renders_loading_body() -> None:
     assert build_pending_status_text(command=BodyCommand(body_ref="execution_output:1")) == (
         "Loading body"
     )
+
+
+def test_build_pending_status_text_renders_loading_server() -> None:
+    assert build_pending_status_text(command=ServerStatusCommand()) == "Loading server"
 
 
 def test_build_result_status_text_renders_loaded_body() -> None:
@@ -86,6 +215,12 @@ def test_build_result_status_text_renders_loaded_body() -> None:
             payload={"data": {"reply": "hola"}},
         )
     ) == "Loaded body"
+
+
+def test_build_result_status_text_renders_loaded_server() -> None:
+    assert build_result_status_text(
+        result=ActionResult(kind="server", payload={"running": True})
+    ) == "Loaded server"
 
 
 def test_render_result_for_buffer_renders_waiting_run_metadata() -> None:

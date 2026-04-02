@@ -11,4 +11,4 @@ steps:
     next: done
 
   - notify: done
-    message: "{{step_executions.ask_user.output.value.payload.text}}"
+    message: '{{output_value("ask_user").payload.text}}'

@@ -31,9 +31,11 @@ from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
+from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
@@ -58,9 +60,13 @@ def build_runtime_container(
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     store = SqliteStateStore(cfg.db_path)
+    run_query = SqliteRunQueryStore(cfg.db_path)
     execution_output_store = SqliteExecutionOutputStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
-    skill_runner = FilesystemSkillRunner(skills_dir=skills_dir)
+    skill_runner = FilesystemSkillRunner(
+        skills_dir=skills_dir,
+        execution_output_store=execution_output_store,
+    )
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
@@ -82,6 +88,7 @@ def build_runtime_container(
     list_webhooks_use_case = ListWebhooksUseCase(registry=webhook_registry)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
+    skill_checker_use_case = SkillCheckerUseCase(skill_runner=skill_runner)
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -110,14 +117,14 @@ def build_runtime_container(
     execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
     resume_run_use_case = ResumeRunUseCase(store=store)
-    get_run_status_use_case = GetRunStatusUseCase(store)
-    get_run_logs_use_case = GetRunLogsUseCase(store)
-    get_runs_use_case = GetRunsUseCase(store)
-    get_execution_output_use_case = GetExecutionOutputUseCase(execution_output_store)
     get_waiting_metadata_use_case = GetWaitingMetadataUseCase(
         store=store,
         skill_runner=skill_runner,
     )
+    get_run_status_use_case = GetRunStatusUseCase(store)
+    get_run_logs_use_case = GetRunLogsUseCase(store)
+    get_runs_use_case = GetRunsUseCase(run_query)
+    get_execution_output_use_case = GetExecutionOutputUseCase(execution_output_store)
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
@@ -148,6 +155,7 @@ def build_runtime_container(
         create_run_use_case=create_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,
+        skill_checker_use_case=skill_checker_use_case,
         handle_input_use_case=handle_input_use_case,
         handle_webhook_use_case=handle_webhook_use_case,
         list_webhooks_use_case=list_webhooks_use_case,

@@ -53,7 +53,7 @@ After input is consumed:
 Template access:
 
 ```text
-{{step_executions.ask_user.output.value.payload.text}}
+{{output_value("ask_user").payload.text}}
 ```
 
 The consumed external event id is stored in `evaluation.input_event_id`.

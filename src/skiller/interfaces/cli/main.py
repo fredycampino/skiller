@@ -8,6 +8,9 @@ from typing import Any
 from skiller.di.container import build_runtime_container
 from skiller.domain.run_model import RunStatus, SkillSource
 from skiller.interfaces.controllers import RuntimeController
+from skiller.tools.cloudflared.ensure_service import CloudflaredEnsureService
+from skiller.tools.cloudflared.login_service import CloudflaredLoginService
+from skiller.tools.cloudflared.process_service import CloudflaredProcessService
 from skiller.tools.webhooks.process_service import WebhookProcessService
 from skiller.tools.workers.process_service import WorkerProcessService
 
@@ -80,24 +83,24 @@ def _resolve_run_target(
     return args.skill, SkillSource.INTERNAL.value
 
 
-def _maybe_start_webhooks(
+def _maybe_start_server(
     args: argparse.Namespace,
     controller: RuntimeController,
     container_settings: Any,
     run_result: dict[str, Any],
 ) -> tuple[dict[str, Any], int]:
-    if not args.start_webhooks:
+    if not args.start_server:
         return run_result, 0
 
     try:
-        webhooks_result = WebhookProcessService(container_settings).start()
-        run_result["webhooks_started"] = webhooks_result.started
-        run_result["webhooks_endpoint"] = webhooks_result.endpoint
-        if webhooks_result.pid is not None:
-            run_result["webhooks_pid"] = webhooks_result.pid
+        server_result = WebhookProcessService(container_settings).start()
+        run_result["server_started"] = server_result.started
+        run_result["server_endpoint"] = server_result.endpoint
+        if server_result.pid is not None:
+            run_result["server_pid"] = server_result.pid
         return run_result, 0
     except RuntimeError as exc:
-        run_result["webhooks_started"] = False
+        run_result["server_started"] = False
         run_result["error"] = str(exc)
         if args.logs:
             run_result["logs"] = controller.logs(run_result["run_id"])
@@ -249,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="skiller", description="Skiller Runtime CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("ui", help="Open the interactive TUI")
     sub.add_parser("init-db", help="Initialize SQLite schema")
 
     run_parser = sub.add_parser("run", help="Start a run with a skill")
@@ -261,9 +265,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include current run logs in the run response payload",
     )
     run_parser.add_argument(
-        "--start-webhooks",
+        "--start-server",
         action="store_true",
-        help="Start the webhooks process before dispatching the run",
+        help="Start the local webhooks server before dispatching the run",
+    )
+    run_parser.add_argument(
+        "--detach",
+        action="store_true",
+        help="Return after dispatching the worker without waiting for terminal status",
     )
 
     resume_parser = sub.add_parser("resume", help="Resume a waiting run")
@@ -316,6 +325,37 @@ def build_parser() -> argparse.ArgumentParser:
     webhook_parser = sub.add_parser("webhook", help="Webhook operations")
     webhook_sub = webhook_parser.add_subparsers(dest="webhook_command", required=True)
 
+    server_parser = sub.add_parser("server", help="Server operations")
+    server_sub = server_parser.add_subparsers(dest="server_command", required=True)
+    server_sub.add_parser("start", help="Start the local webhooks server")
+    server_sub.add_parser("status", help="Show local webhooks server status")
+    server_sub.add_parser("stop", help="Stop the local webhooks server")
+
+    cloudflared_parser = sub.add_parser("cloudflared", help="Cloudflared tunnel operations")
+    cloudflared_sub = cloudflared_parser.add_subparsers(
+        dest="cloudflared_command",
+        required=True,
+    )
+    cloudflared_sub.add_parser("start", help="Start the local cloudflared connector")
+    cloudflared_sub.add_parser("status", help="Show local cloudflared connector status")
+    cloudflared_sub.add_parser("stop", help="Stop the local cloudflared connector")
+    cloudflared_ensure_parser = cloudflared_sub.add_parser(
+        "ensure",
+        help="Ensure the remote cloudflared tunnel and DNS route exist",
+    )
+    cloudflared_ensure_parser.add_argument("--domain", required=True, help="Base domain")
+    cloudflared_login_parser = cloudflared_sub.add_parser(
+        "login",
+        help="Cloudflared login operations",
+    )
+    cloudflared_login_sub = cloudflared_login_parser.add_subparsers(
+        dest="cloudflared_login_command",
+        required=True,
+    )
+    cloudflared_login_sub.add_parser("start", help="Start cloudflared tunnel login")
+    cloudflared_login_sub.add_parser("status", help="Show cloudflared login status")
+    cloudflared_login_sub.add_parser("stop", help="Stop a managed cloudflared login attempt")
+
     register_parser = webhook_sub.add_parser(
         "register",
         help="Register a webhook channel and generate its secret",
@@ -344,8 +384,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    if not effective_argv:
+        from skiller.tools.ui.app import run_ui
+
+        run_ui()
+        return 0
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(effective_argv)
+    if args.command == "ui":
+        from skiller.tools.ui.app import run_ui
+
+        run_ui()
+        return 0
+
     container = build_runtime_container()
     controller = RuntimeController(
         runtime_service=container.runtime_service,
@@ -370,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 1
 
-        run_result, exit_code = _maybe_start_webhooks(
+        run_result, exit_code = _maybe_start_server(
             args,
             controller,
             container.settings,
@@ -383,21 +436,22 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
-            try:
-                watched = _watch_run(
-                    controller,
-                    run_result["run_id"],
-                    initial_status=run_result["status"],
-                )
-            except RuntimeError as exc:
-                print(str(exc), file=sys.stderr)
-                return 1
-            run_result["status"] = watched["status"]
-            if watched["status"] == RunStatus.WAITING.value:
-                run_result = _merge_waiting_metadata(
-                    run_result,
-                    controller.status(run_result["run_id"]),
-                )
+            if not args.detach:
+                try:
+                    watched = _watch_run(
+                        controller,
+                        run_result["run_id"],
+                        initial_status=run_result["status"],
+                    )
+                except RuntimeError as exc:
+                    print(str(exc), file=sys.stderr)
+                    return 1
+                run_result["status"] = watched["status"]
+                if watched["status"] == RunStatus.WAITING.value:
+                    run_result = _merge_waiting_metadata(
+                        run_result,
+                        controller.status(run_result["run_id"]),
+                    )
         if args.logs and "logs" not in run_result:
             run_result["logs"] = controller.logs(run_result["run_id"])
         print(json.dumps(run_result, indent=2))
@@ -418,6 +472,204 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(result, indent=2))
         return 0
+
+    if args.command == "server" and args.server_command == "start":
+        try:
+            result = WebhookProcessService(container.settings).start()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "started": result.started,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "endpoint": result.endpoint,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "server" and args.server_command == "status":
+        result = WebhookProcessService(container.settings).status()
+        print(
+            json.dumps(
+                {
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "endpoint": result.endpoint,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "server" and args.server_command == "stop":
+        try:
+            result = WebhookProcessService(container.settings).stop()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "stopped": result.stopped,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "endpoint": result.endpoint,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0 if result.stopped or not result.running else 1
+
+    if args.command == "cloudflared" and args.cloudflared_command == "start":
+        try:
+            result = CloudflaredProcessService(container.settings).start()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "started": result.started,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "origin_url": result.origin_url,
+                    "tunnel_name": result.tunnel_name,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "cloudflared" and args.cloudflared_command == "status":
+        result = CloudflaredProcessService(container.settings).status()
+        print(
+            json.dumps(
+                {
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "origin_url": result.origin_url,
+                    "tunnel_name": result.tunnel_name,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "cloudflared" and args.cloudflared_command == "stop":
+        try:
+            result = CloudflaredProcessService(container.settings).stop()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "stopped": result.stopped,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "origin_url": result.origin_url,
+                    "tunnel_name": result.tunnel_name,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0 if result.stopped or not result.managed else 1
+
+    if args.command == "cloudflared" and args.cloudflared_command == "ensure":
+        try:
+            result = CloudflaredEnsureService(container.settings).ensure(domain=args.domain)
+        except (RuntimeError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "authenticated": result.authenticated,
+                    "tunnel_name": result.tunnel_name,
+                    "tunnel_id": result.tunnel_id,
+                    "hostname": result.hostname,
+                    "created": result.created,
+                    "dns_status": result.dns_status,
+                    "config_path": result.config_path,
+                    "home": result.home,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "cloudflared" and args.cloudflared_command == "login":
+        if args.cloudflared_login_command == "start":
+            try:
+                result = CloudflaredLoginService(container.settings).start()
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "authenticated": result.authenticated,
+                        "started": result.started,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "home": result.home,
+                        "cert_path": result.cert_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+
+        if args.cloudflared_login_command == "status":
+            result = CloudflaredLoginService(container.settings).status()
+            print(
+                json.dumps(
+                    {
+                        "authenticated": result.authenticated,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "home": result.home,
+                        "cert_path": result.cert_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+
+        if args.cloudflared_login_command == "stop":
+            try:
+                result = CloudflaredLoginService(container.settings).stop()
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "authenticated": result.authenticated,
+                        "stopped": result.stopped,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "home": result.home,
+                        "cert_path": result.cert_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0 if result.stopped or not result.running else 1
 
     if args.command == "worker" and args.worker_command == "start":
         try:

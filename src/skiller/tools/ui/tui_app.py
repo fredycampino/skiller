@@ -3,12 +3,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from skiller.tools.ui.actions import ActionResult, handle_command
+from skiller.tools.ui.actions import ActionResult, handle_command, poll_run_progress
 from skiller.tools.ui.commands import (
     InputCommand,
-    StatusCommand,
     UiCommand,
-    WatchCommand,
     parse_command,
 )
 from skiller.tools.ui.runtime_adapter import CliRuntimeAdapter
@@ -29,6 +27,10 @@ from skiller.tools.ui.tui_render import (
     build_status_line,
     render_result_for_buffer,
 )
+
+_RUN_PROGRESS_ACTIVE_STATUSES = {"CREATED", "RUNNING"}
+_RUN_PROGRESS_STOP_STATUSES = {"WAITING", "SUCCEEDED", "FAILED"}
+_RUN_PROGRESS_POLL_INTERVAL_SECONDS = 0.1
 
 
 def get_selected_waiting_input_run(session: UiSession) -> UiRun | None:
@@ -123,11 +125,28 @@ def should_refresh_after_input(result: ActionResult) -> bool:
     )
 
 
-def build_post_input_commands(*, command: InputCommand) -> tuple[WatchCommand, StatusCommand]:
-    return (
-        WatchCommand(run_id=command.run_id),
-        StatusCommand(run_id=command.run_id),
-    )
+def should_refresh_after_run(result: ActionResult) -> bool:
+    run = result.run
+    if result.kind != "run" or run is None or run.error or run.run_id is None:
+        return False
+    return run.status.upper() in _RUN_PROGRESS_ACTIVE_STATUSES
+def build_progress_render_result(
+    *,
+    result: ActionResult,
+    previous_status: str = "",
+) -> ActionResult | None:
+    run = result.run
+    if result.kind != "watch" or run is None:
+        return None
+
+    events = result.payload.get("events") if isinstance(result.payload, dict) else None
+    if isinstance(events, list) and events:
+        return result
+
+    current_status = run.status.upper()
+    if current_status in _RUN_PROGRESS_STOP_STATUSES and current_status != previous_status:
+        return ActionResult(kind="status", run=run, payload=result.payload)
+    return None
 
 
 def build_output_wrap_prefix(
@@ -214,6 +233,37 @@ def run_prompt_toolkit_ui(
             output_text = f"{output_text}{rendered.text}"
         set_output_text(output_text)
 
+    async def follow_run_progress(
+        *,
+        run_id: str,
+        previous_status: str = "",
+    ) -> ActionResult:
+        nonlocal status_text
+        while True:
+            progress_result = await asyncio.to_thread(
+                poll_run_progress,
+                session=session,
+                run_id=run_id,
+                runtime=runtime,
+            )
+            render_result = build_progress_render_result(
+                result=progress_result,
+                previous_status=previous_status,
+            )
+            if render_result is not None:
+                apply_result(render_result)
+            status_text = build_result_status_text(result=progress_result)
+            app.invalidate()
+
+            current_status = ""
+            if progress_result.run is not None:
+                current_status = progress_result.run.status.upper()
+            if current_status in _RUN_PROGRESS_STOP_STATUSES:
+                return progress_result
+
+            previous_status = current_status
+            await asyncio.sleep(_RUN_PROGRESS_POLL_INTERVAL_SECONDS)
+
     async def process_submit_command(
         *,
         command: UiCommand,
@@ -227,22 +277,21 @@ def run_prompt_toolkit_ui(
                 runtime=runtime,
             )
             final_result = result
-            output_result = final_result
-            if should_refresh_after_input(result) and isinstance(command, InputCommand):
-                watch_command, status_command = build_post_input_commands(command=command)
-                output_result = await asyncio.to_thread(
-                    handle_command,
-                    session=session,
-                    command=watch_command,
-                    runtime=runtime,
+            render_initial_result = True
+
+            if should_refresh_after_run(result):
+                apply_result(result)
+                render_initial_result = False
+                final_result = await follow_run_progress(
+                    run_id=result.run.run_id or "",
+                    previous_status=result.run.status.upper(),
                 )
-                final_result = await asyncio.to_thread(
-                    handle_command,
-                    session=session,
-                    command=status_command,
-                    runtime=runtime,
-                )
-            apply_result(output_result)
+            elif should_refresh_after_input(result) and isinstance(command, InputCommand):
+                render_initial_result = False
+                final_result = await follow_run_progress(run_id=command.run_id)
+
+            if render_initial_result:
+                apply_result(result)
             status_text = build_result_status_text(result=final_result)
             if final_result.kind == "exit":
                 app.exit(result=session.session_key)

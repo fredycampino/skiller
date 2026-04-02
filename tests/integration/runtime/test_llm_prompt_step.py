@@ -29,6 +29,7 @@ from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
 from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
 from skiller.di.container import build_runtime_container
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings
@@ -64,9 +65,12 @@ class _FakeLLM:
 
 
 def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplicationService:
-    skill_runner = FilesystemSkillRunner(skills_dir="skills")
     execution_output_store = SqliteExecutionOutputStore(store.db_path)
     execution_output_store.init_db()
+    skill_runner = FilesystemSkillRunner(
+        skills_dir="skills",
+        execution_output_store=execution_output_store,
+    )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
@@ -124,6 +128,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
         create_run_use_case=CreateRunUseCase(store, skill_runner),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
+        skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
         handle_webhook_use_case=HandleWebhookUseCase(store=store),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
@@ -171,7 +176,7 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
                 "            enum: [retry, ask_human, fail]\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                '    message: "{{step_executions.analyze_issue.output.value.data.next_action}}"\n'
+                '    message: \'{{output_value("analyze_issue").data.next_action}}\'\n'
             ),
             encoding="utf-8",
         )
@@ -250,7 +255,7 @@ def test_llm_prompt_step_persists_large_result_body_and_truncates_output_value()
                 "            type: string\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                '    message: "{{step_executions.analyze_issue.output.value.data.summary}}"\n'
+                '    message: \'{{output_value("analyze_issue").data.summary}}\'\n'
             ),
             encoding="utf-8",
         )
@@ -326,7 +331,7 @@ def test_llm_prompt_step_succeeds_with_fake_llm_provider_from_container() -> Non
                 "            enum: [retry, ask_human, fail]\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                "    message: '{{step_executions.analyze_issue.output.value.data.next_action}}'\n"
+                '    message: \'{{output_value("analyze_issue").data.next_action}}\'\n'
             ),
             encoding="utf-8",
         )
@@ -469,7 +474,7 @@ def test_llm_prompt_step_accepts_markdown_fenced_json_from_provider() -> None:
                 "            enum: [retry]\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                "    message: '{{step_executions.analyze_issue.output.value.data.next_action}}'\n"
+                '    message: \'{{output_value("analyze_issue").data.next_action}}\'\n'
             ),
             encoding="utf-8",
         )

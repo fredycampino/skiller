@@ -10,6 +10,14 @@ skiller server status
 skiller server stop
 ```
 
+The same server also hosts the internal local-only channel ingress used by providers such as WhatsApp:
+- external webhook ingress: `POST /webhooks/{webhook}/{key}`
+- local channel ingress: `POST /channels/{channel}/{key}`
+
+For the current WhatsApp integration:
+- `channel = whatsapp`
+- `key = WhatsApp chat id`
+
 ## State
 
 - Managed state lives under `~/.skiller/webhooks/managed-<port>.json`.
@@ -38,3 +46,4 @@ Meaning:
 - `running: true` means the endpoint responds.
 - `managed_by_skiller: true` means Skiller owns the local process.
 - `stop` only stops a process owned by Skiller.
+- channel ingress stays internal to localhost and is not the public webhook surface.

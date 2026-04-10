@@ -67,6 +67,18 @@ skiller cloudflared status
 skiller cloudflared stop
 ```
 
+### WhatsApp
+
+```bash
+skiller whatsapp pair start
+skiller whatsapp pair status
+skiller whatsapp pair stop
+
+skiller whatsapp start
+skiller whatsapp status
+skiller whatsapp stop
+```
+
 ## Typical Flows
 
 ## Run a skill

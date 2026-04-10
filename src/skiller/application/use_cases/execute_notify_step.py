@@ -1,4 +1,4 @@
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepAdvance,
@@ -9,7 +9,7 @@ from skiller.domain.step_execution_model import NotifyOutput, StepExecution
 
 
 class ExecuteNotifyStepUseCase:
-    def __init__(self, store: StateStorePort) -> None:
+    def __init__(self, store: RunStorePort) -> None:
         self.store = store
 
     def execute(self, next_step: CurrentStep) -> StepAdvance:

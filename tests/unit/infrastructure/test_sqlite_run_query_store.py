@@ -1,7 +1,9 @@
 import pytest
 
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.source_type import SourceType
 from skiller.domain.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -102,13 +104,19 @@ def test_list_runs_includes_wait_type_and_webhook_detail(tmp_path) -> None:
         webhook_run_id,
         step_id="wait_signal",
         wait_type=WaitType.WEBHOOK,
-        webhook="github-ci",
-        key="42",
+        source_type=SourceType.WEBHOOK,
+        source_name="github-ci",
+        match_type=MatchType.SIGNAL,
+        match_key="42",
     )
     state_store.create_wait(
         input_run_id,
         step_id="ask_user",
         wait_type=WaitType.INPUT,
+        source_type=SourceType.INPUT,
+        source_name="manual",
+        match_type=MatchType.RUN,
+        match_key=input_run_id,
     )
     state_store.update_run(webhook_run_id, status=RunStatus.WAITING, current="wait_signal")
     state_store.update_run(input_run_id, status=RunStatus.WAITING, current="ask_user")

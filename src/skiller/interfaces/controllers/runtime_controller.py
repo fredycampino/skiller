@@ -50,6 +50,23 @@ class RuntimeController:
     def receive_input(self, run_id: str, *, text: str) -> dict[str, Any]:
         return self.runtime_service.handle_input(run_id.strip(), text=text.strip())
 
+    def receive_channel(
+        self,
+        channel: str,
+        key: str,
+        payload: dict[str, Any],
+        *,
+        external_id: str | None = None,
+        dedup_key: str | None = None,
+    ) -> dict[str, Any]:
+        return self.runtime_service.handle_channel(
+            channel.strip(),
+            key.strip(),
+            payload,
+            external_id=external_id,
+            dedup_key=dedup_key,
+        )
+
     def resume(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.resume_run(run_id)
 

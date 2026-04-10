@@ -4,15 +4,23 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.source_type import SourceType
 from skiller.domain.wait_type import WaitType
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
+from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 
 
 class SqliteStateStore(SqliteRepository):
+    def __init__(self, db_path: str) -> None:
+        super().__init__(db_path)
+        self.wait_store = SqliteWaitStore(db_path)
+        self.external_event_store = SqliteExternalEventStore(db_path)
+
     def init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
@@ -42,10 +50,12 @@ class SqliteStateStore(SqliteRepository):
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
-                CREATE TABLE IF NOT EXISTS webhook_receipts (
+                CREATE TABLE IF NOT EXISTS external_receipts (
                   dedup_key TEXT PRIMARY KEY,
-                  webhook TEXT NOT NULL,
-                  key TEXT NOT NULL,
+                  source_type TEXT NOT NULL,
+                  source_name TEXT NOT NULL,
+                  match_type TEXT NOT NULL,
+                  match_key TEXT NOT NULL,
                   payload_json TEXT NOT NULL,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
@@ -53,8 +63,8 @@ class SqliteStateStore(SqliteRepository):
                 CREATE INDEX IF NOT EXISTS idx_runs_status_updated_at ON runs(status, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_events_run_created_at
                   ON events(run_id, created_at);
-                CREATE INDEX IF NOT EXISTS idx_webhook_receipts_webhook_key_created_at
-                  ON webhook_receipts(webhook, key, created_at);
+                CREATE INDEX IF NOT EXISTS idx_external_receipts_source_match_created_at
+                  ON external_receipts(source_type, source_name, match_type, match_key, created_at);
                 """
             )
             self._ensure_waits_table(conn)
@@ -67,20 +77,27 @@ class SqliteStateStore(SqliteRepository):
             )
             conn.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_waits_webhook_key_type_status
-                  ON waits(webhook, key, wait_type, status)
+                CREATE INDEX IF NOT EXISTS idx_waits_source_match_type_status
+                  ON waits(source_type, source_name, match_type, match_key, wait_type, status)
                 """
             )
             conn.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_external_events_run_step_type_created_at
-                  ON external_events(event_type, run_id, step_id, created_at)
+                CREATE INDEX IF NOT EXISTS idx_external_events_source_run_step_created_at
+                  ON external_events(source_type, run_id, step_id, status, created_at)
                 """
             )
             conn.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_external_events_webhook_key_type_created_at
-                  ON external_events(event_type, webhook, key, created_at)
+                CREATE INDEX IF NOT EXISTS idx_external_events_source_match_created_at
+                  ON external_events(
+                    source_type,
+                    source_name,
+                    match_type,
+                    match_key,
+                    status,
+                    created_at
+                  )
                 """
             )
             self._ensure_runs_current_column(conn)
@@ -230,8 +247,10 @@ class SqliteStateStore(SqliteRepository):
                   run_id TEXT NOT NULL,
                   step_id TEXT NOT NULL,
                   wait_type TEXT NOT NULL,
-                  webhook TEXT,
-                  key TEXT,
+                  source_type TEXT NOT NULL,
+                  source_name TEXT NOT NULL,
+                  match_type TEXT NOT NULL,
+                  match_key TEXT NOT NULL,
                   status TEXT NOT NULL,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   expires_at TEXT,
@@ -240,93 +259,6 @@ class SqliteStateStore(SqliteRepository):
                 )
                 """
             )
-            return
-
-        rows = conn.execute("PRAGMA table_info(waits)").fetchall()
-        column_names = {str(row["name"]) for row in rows}
-        if "wait_type" in column_names:
-            conn.execute("DROP TABLE IF EXISTS input_waits")
-            return
-
-        conn.execute(
-            """
-            CREATE TABLE waits_new (
-              id TEXT PRIMARY KEY,
-              run_id TEXT NOT NULL,
-              step_id TEXT NOT NULL,
-              wait_type TEXT NOT NULL,
-              webhook TEXT,
-              key TEXT,
-              status TEXT NOT NULL,
-              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              expires_at TEXT,
-              resolved_at TEXT,
-              FOREIGN KEY(run_id) REFERENCES runs(id)
-            )
-            """
-        )
-        conn.execute(
-            """
-            INSERT INTO waits_new (
-              id,
-              run_id,
-              step_id,
-              wait_type,
-              webhook,
-              key,
-              status,
-              created_at,
-              expires_at,
-              resolved_at
-            )
-            SELECT
-              id,
-              run_id,
-              step_id,
-              ?,
-              webhook,
-              key,
-              status,
-              created_at,
-              expires_at,
-              resolved_at
-            FROM waits
-            """,
-            (WaitType.WEBHOOK.value,),
-        )
-        if self._table_exists(conn, "input_waits"):
-            conn.execute(
-                """
-                INSERT INTO waits_new (
-                  id,
-                  run_id,
-                  step_id,
-                  wait_type,
-                  webhook,
-                  key,
-                  status,
-                  created_at,
-                  expires_at,
-                  resolved_at
-                )
-                SELECT
-                  id,
-                  run_id,
-                  step_id,
-                  ?,
-                  NULL,
-                  NULL,
-                  status,
-                  created_at,
-                  NULL,
-                  resolved_at
-                FROM input_waits
-                """,
-                (WaitType.INPUT.value,),
-            )
-        conn.execute("DROP TABLE waits")
-        conn.execute("ALTER TABLE waits_new RENAME TO waits")
-        conn.execute("DROP TABLE IF EXISTS input_waits")
 
     def _ensure_external_events_table(self, conn: sqlite3.Connection) -> None:
         if not self._table_exists(conn, "external_events"):
@@ -334,78 +266,24 @@ class SqliteStateStore(SqliteRepository):
                 """
                 CREATE TABLE external_events (
                   id TEXT PRIMARY KEY,
-                  event_type TEXT NOT NULL,
+                  source_type TEXT NOT NULL,
+                  source_name TEXT NOT NULL,
+                  match_type TEXT NOT NULL,
+                  match_key TEXT NOT NULL,
                   run_id TEXT,
                   step_id TEXT,
-                  webhook TEXT,
-                  key TEXT,
+                  external_id TEXT,
                   dedup_key TEXT,
+                  status TEXT NOT NULL,
+                  consumed_by_run_id TEXT,
+                  consumed_at TEXT,
                   payload_json TEXT NOT NULL,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(run_id) REFERENCES runs(id)
+                  FOREIGN KEY(run_id) REFERENCES runs(id),
+                  FOREIGN KEY(consumed_by_run_id) REFERENCES runs(id)
                 )
                 """
             )
-
-        if self._table_exists(conn, "input_events"):
-            conn.execute(
-                """
-                INSERT INTO external_events (
-                  id,
-                  event_type,
-                  run_id,
-                  step_id,
-                  webhook,
-                  key,
-                  dedup_key,
-                  payload_json,
-                  created_at
-                )
-                SELECT
-                  id,
-                  ?,
-                  run_id,
-                  step_id,
-                  NULL,
-                  NULL,
-                  NULL,
-                  payload_json,
-                  created_at
-                FROM input_events
-                """,
-                (ExternalEventType.INPUT.value,),
-            )
-            conn.execute("DROP TABLE input_events")
-
-        if self._table_exists(conn, "webhook_events"):
-            conn.execute(
-                """
-                INSERT INTO external_events (
-                  id,
-                  event_type,
-                  run_id,
-                  step_id,
-                  webhook,
-                  key,
-                  dedup_key,
-                  payload_json,
-                  created_at
-                )
-                SELECT
-                  id,
-                  ?,
-                  NULL,
-                  NULL,
-                  webhook,
-                  key,
-                  dedup_key,
-                  payload_json,
-                  created_at
-                FROM webhook_events
-                """,
-                (ExternalEventType.WEBHOOK.value,),
-            )
-            conn.execute("DROP TABLE webhook_events")
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
         row = conn.execute(
@@ -451,31 +329,25 @@ class SqliteStateStore(SqliteRepository):
         *,
         step_id: str,
         wait_type: WaitType,
-        webhook: str | None = None,
-        key: str | None = None,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         expires_at: str | None = None,
     ) -> str:
-        wait_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO waits (id, run_id, step_id, wait_type, webhook, key, status, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
-                """,
-                (wait_id, run_id, step_id, wait_type.value, webhook, key, expires_at),
-            )
-        return wait_id
+        return self.wait_store.create_wait(
+            run_id,
+            step_id=step_id,
+            wait_type=wait_type,
+            source_type=source_type,
+            source_name=source_name,
+            match_type=match_type,
+            match_key=match_key,
+            expires_at=expires_at,
+        )
 
     def resolve_wait(self, wait_id: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                UPDATE waits
-                SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (wait_id,),
-            )
+        self.wait_store.resolve_wait(wait_id)
 
     def get_active_wait(
         self,
@@ -484,219 +356,89 @@ class SqliteStateStore(SqliteRepository):
         *,
         wait_type: WaitType,
     ) -> dict[str, Any] | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT
-                  id,
-                  run_id,
-                  step_id,
-                  wait_type,
-                  webhook,
-                  key,
-                  status,
-                  created_at,
-                  resolved_at,
-                  expires_at
-                FROM waits
-                WHERE run_id = ? AND step_id = ? AND wait_type = ? AND status = 'ACTIVE'
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                (run_id, step_id, wait_type.value),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "id": row["id"],
-            "run_id": row["run_id"],
-            "step_id": row["step_id"],
-            "wait_type": row["wait_type"],
-            "webhook": row["webhook"],
-            "key": row["key"],
-            "status": row["status"],
-            "created_at": row["created_at"],
-            "resolved_at": row["resolved_at"],
-            "expires_at": row["expires_at"],
-        }
+        return self.wait_store.get_active_wait(run_id, step_id, wait_type=wait_type)
 
-    def find_matching_waits(self, webhook: str, key: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT
-                  id,
-                  run_id,
-                  step_id,
-                  wait_type,
-                  webhook,
-                  key,
-                  status,
-                  created_at,
-                  resolved_at,
-                  expires_at
-                FROM waits
-                WHERE webhook = ? AND key = ? AND wait_type = ? AND status = 'ACTIVE'
-                ORDER BY created_at ASC
-                """,
-                (webhook, key, WaitType.WEBHOOK.value),
-            ).fetchall()
-
-        return [
-            {
-                "id": row["id"],
-                "run_id": row["run_id"],
-                "step_id": row["step_id"],
-                "wait_type": row["wait_type"],
-                "webhook": row["webhook"],
-                "key": row["key"],
-                "status": row["status"],
-                "created_at": row["created_at"],
-                "resolved_at": row["resolved_at"],
-                "expires_at": row["expires_at"],
-            }
-            for row in rows
-        ]
+    def find_matching_waits(
+        self,
+        *,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
+    ) -> list[dict[str, Any]]:
+        return self.wait_store.find_matching_waits(
+            source_type=source_type,
+            source_name=source_name,
+            match_type=match_type,
+            match_key=match_key,
+        )
 
     def create_external_event(
         self,
         *,
-        event_type: ExternalEventType,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         payload: dict[str, Any],
         run_id: str | None = None,
         step_id: str | None = None,
-        webhook: str | None = None,
-        key: str | None = None,
+        external_id: str | None = None,
         dedup_key: str | None = None,
     ) -> str:
-        event_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO external_events (
-                  id,
-                  event_type,
-                  run_id,
-                  step_id,
-                  webhook,
-                  key,
-                  dedup_key,
-                  payload_json
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event_id,
-                    event_type.value,
-                    run_id,
-                    step_id,
-                    webhook,
-                    key,
-                    dedup_key,
-                    json.dumps(payload),
-                ),
-            )
-        return event_id
+        return self.external_event_store.create_external_event(
+            source_type=source_type,
+            source_name=source_name,
+            match_type=match_type,
+            match_key=match_key,
+            payload=payload,
+            run_id=run_id,
+            step_id=step_id,
+            external_id=external_id,
+            dedup_key=dedup_key,
+        )
 
     def get_latest_external_event(
         self,
         *,
-        event_type: ExternalEventType,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         run_id: str | None = None,
         step_id: str | None = None,
-        webhook: str | None = None,
-        key: str | None = None,
         since_created_at: str | None = None,
     ) -> dict[str, Any] | None:
-        if event_type == ExternalEventType.INPUT:
-            if not run_id or not step_id:
-                raise ValueError("input external events require run_id and step_id")
-            query = """
-                SELECT
-                    id,
-                    event_type,
-                    run_id,
-                    step_id,
-                    webhook,
-                    key,
-                    dedup_key,
-                    payload_json,
-                    created_at
-                FROM external_events
-                WHERE event_type = ? AND run_id = ? AND step_id = ?
-            """
-            params: list[Any] = [event_type.value, run_id, step_id]
-        else:
-            if not webhook or not key:
-                raise ValueError("webhook external events require webhook and key")
-            query = """
-                SELECT
-                    id,
-                    event_type,
-                    run_id,
-                    step_id,
-                    webhook,
-                    key,
-                    dedup_key,
-                    payload_json,
-                    created_at
-                FROM external_events
-                WHERE event_type = ? AND webhook = ? AND key = ?
-            """
-            params = [event_type.value, webhook, key]
+        return self.external_event_store.get_latest_external_event(
+            source_type=source_type,
+            source_name=source_name,
+            match_type=match_type,
+            match_key=match_key,
+            run_id=run_id,
+            step_id=step_id,
+            since_created_at=since_created_at,
+        )
 
-        if since_created_at:
-            query += " AND created_at >= ?"
-            params.append(since_created_at)
-
-        query += " ORDER BY created_at DESC, rowid DESC LIMIT 1"
-
-        with self._connect() as conn:
-            row = conn.execute(query, tuple(params)).fetchone()
-
-        if row is None:
-            return None
-
-        payload = json.loads(row["payload_json"])
-        if not isinstance(payload, dict):
-            payload = {}
-
-        return {
-            "id": row["id"],
-            "event_type": row["event_type"],
-            "run_id": row["run_id"],
-            "step_id": row["step_id"],
-            "webhook": row["webhook"],
-            "key": row["key"],
-            "dedup_key": row["dedup_key"],
-            "payload": payload,
-            "created_at": row["created_at"],
-        }
-
-    def register_webhook_receipt(
-        self, dedup_key: str, webhook: str, key: str, payload: dict[str, Any]
+    def register_external_receipt(
+        self,
+        dedup_key: str,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
+        payload: dict[str, Any],
     ) -> bool:
-        try:
-            with self._connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO webhook_receipts (dedup_key, webhook, key, payload_json)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (dedup_key, webhook, key, json.dumps(payload)),
-                )
-            return True
-        except sqlite3.IntegrityError:
-            return False
+        return self.external_event_store.register_external_receipt(
+            dedup_key,
+            source_type,
+            source_name,
+            match_type,
+            match_key,
+            payload,
+        )
+
+    def consume_external_event(self, event_id: str, *, run_id: str) -> bool:
+        return self.external_event_store.consume_external_event(event_id, run_id=run_id)
 
     def expire_active_waits_for_run(self, run_id: str) -> int:
-        with self._connect() as conn:
-            result = conn.execute(
-                """
-                UPDATE waits
-                SET status = 'EXPIRED', resolved_at = CURRENT_TIMESTAMP
-                WHERE run_id = ? AND status = 'ACTIVE'
-                """,
-                (run_id,),
-            )
-            return result.rowcount
+        return self.wait_store.expire_active_waits_for_run(run_id)

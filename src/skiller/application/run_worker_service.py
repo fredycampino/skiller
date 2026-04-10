@@ -11,8 +11,10 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_wait_channel_step import ExecuteWaitChannelStepUseCase
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
@@ -63,6 +65,8 @@ class RunWorkerService:
         execute_switch_step_use_case: ExecuteSwitchStepUseCase,
         execute_when_step_use_case: ExecuteWhenStepUseCase,
         execute_wait_webhook_step_use_case: ExecuteWaitWebhookStepUseCase,
+        execute_send_step_use_case: ExecuteSendStepUseCase | None = None,
+        execute_wait_channel_step_use_case: ExecuteWaitChannelStepUseCase | None = None,
         execute_wait_input_step_use_case: ExecuteWaitInputStepUseCase | None = None,
         execute_shell_step_use_case: ExecuteShellStepUseCase | None = None,
     ) -> None:
@@ -75,11 +79,13 @@ class RunWorkerService:
         self.execute_llm_prompt_step_use_case = execute_llm_prompt_step_use_case
         self.execute_mcp_step_use_case = execute_mcp_step_use_case
         self.execute_notify_step_use_case = execute_notify_step_use_case
+        self.execute_send_step_use_case = execute_send_step_use_case
         self.execute_shell_step_use_case = execute_shell_step_use_case
         self.execute_switch_step_use_case = execute_switch_step_use_case
         self.execute_when_step_use_case = execute_when_step_use_case
         self.execute_wait_input_step_use_case = execute_wait_input_step_use_case
         self.execute_wait_webhook_step_use_case = execute_wait_webhook_step_use_case
+        self.execute_wait_channel_step_use_case = execute_wait_channel_step_use_case
 
     def run(self, run_id: str) -> RunWorkerResult:
         current_step: CurrentStep | None = None
@@ -155,6 +161,11 @@ class RunWorkerService:
         if current_step.step_type == StepType.NOTIFY:
             return self.execute_notify_step_use_case.execute(current_step)
 
+        if current_step.step_type == StepType.SEND:
+            if self.execute_send_step_use_case is None:
+                raise ValueError("send step executor is not configured")
+            return self.execute_send_step_use_case.execute(current_step)
+
         if current_step.step_type == StepType.ASSIGN:
             return self.execute_assign_step_use_case.execute(current_step)
 
@@ -183,6 +194,11 @@ class RunWorkerService:
         if current_step.step_type == StepType.WAIT_WEBHOOK:
             return self.execute_wait_webhook_step_use_case.execute(current_step)
 
+        if current_step.step_type == StepType.WAIT_CHANNEL:
+            if self.execute_wait_channel_step_use_case is None:
+                raise ValueError("wait_channel step executor is not configured")
+            return self.execute_wait_channel_step_use_case.execute(current_step)
+
         if current_step.step_type == StepType.SWITCH:
             return self.execute_switch_step_use_case.execute(current_step)
 
@@ -191,8 +207,10 @@ class RunWorkerService:
 
         raise ValueError(
             f"Unsupported step type '{current_step.step_type.value}' in step "
-            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', 'notify', 'shell', "
-            "'switch', 'wait_input', 'wait_webhook' and 'when' are enabled in run loop"
+            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', "
+            "'notify', 'send', 'shell', "
+            "'switch', 'wait_channel', 'wait_input', 'wait_webhook' and 'when' are enabled "
+            "in run loop"
         )
 
     def _append_step_started(self, run_id: str, current_step: CurrentStep) -> None:

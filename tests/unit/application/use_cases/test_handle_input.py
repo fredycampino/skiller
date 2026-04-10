@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.use_cases.handle_input import HandleInputUseCase
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.domain.match_type import MatchType
+from skiller.domain.source_type import SourceType
 
 pytestmark = pytest.mark.unit
 
@@ -21,21 +22,25 @@ class _FakeStore:
     def create_external_event(
         self,
         *,
-        event_type: ExternalEventType,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         payload: dict[str, object],
         run_id: str | None = None,
         step_id: str | None = None,
-        webhook: str | None = None,
-        key: str | None = None,
+        external_id: str | None = None,
         dedup_key: str | None = None,
     ) -> str:
         self.created_external_events.append(
             {
-                "event_type": event_type,
+                "source_type": source_type,
+                "source_name": source_name,
+                "match_type": match_type,
+                "match_key": match_key,
                 "run_id": run_id,
                 "step_id": step_id,
-                "webhook": webhook,
-                "key": key,
+                "external_id": external_id,
                 "dedup_key": dedup_key,
                 "payload": payload,
             }
@@ -50,7 +55,12 @@ class _FakeStore:
 
 
 def test_handle_input_rejects_missing_text() -> None:
-    use_case = HandleInputUseCase(store=_FakeStore(run=None))
+    store = _FakeStore(run=None)
+    use_case = HandleInputUseCase(
+        run_store=store,
+        external_event_store=store,
+        runtime_event_store=store,
+    )
 
     result = use_case.execute("run-1", text="")
 
@@ -64,7 +74,12 @@ def test_handle_input_rejects_when_current_step_is_not_wait_input() -> None:
         current="show_message",
         skill_snapshot={"steps": [{"notify": "show_message"}]},
     )
-    use_case = HandleInputUseCase(store=_FakeStore(run=run))
+    store = _FakeStore(run=run)
+    use_case = HandleInputUseCase(
+        run_store=store,
+        external_event_store=store,
+        runtime_event_store=store,
+    )
 
     result = use_case.execute("run-1", text="hello")
 
@@ -79,7 +94,11 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
         skill_snapshot={"steps": [{"wait_input": "ask_user"}]},
     )
     store = _FakeStore(run=run)
-    use_case = HandleInputUseCase(store=store)
+    use_case = HandleInputUseCase(
+        run_store=store,
+        external_event_store=store,
+        runtime_event_store=store,
+    )
 
     result = use_case.execute("run-1", text="database timeout")
 
@@ -88,11 +107,13 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
     assert result.event_id == "input-1"
     assert store.created_external_events == [
         {
-            "event_type": ExternalEventType.INPUT,
+            "source_type": SourceType.INPUT,
+            "source_name": "manual",
+            "match_type": MatchType.RUN,
+            "match_key": "run-1",
             "run_id": "run-1",
             "step_id": "ask_user",
-            "webhook": None,
-            "key": None,
+            "external_id": None,
             "dedup_key": None,
             "payload": {"text": "database timeout"},
         }

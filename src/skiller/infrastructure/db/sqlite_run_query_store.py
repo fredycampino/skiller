@@ -25,8 +25,8 @@ class SqliteRunQueryStore(SqliteRepository):
               runs.created_at,
               runs.updated_at,
               waits.wait_type,
-              waits.webhook,
-              waits.key
+              waits.source_name,
+              waits.match_key
             FROM runs
             LEFT JOIN waits
               ON waits.run_id = runs.id
@@ -49,11 +49,11 @@ class SqliteRunQueryStore(SqliteRepository):
 
     def _build_item(self, row: Any) -> RunListItem:
         wait_type = self._normalize_wait_type(row["wait_type"])
-        webhook = str(row["webhook"] or "").strip()
-        key = str(row["key"] or "").strip()
+        source_name = str(row["source_name"] or "").strip()
+        match_key = str(row["match_key"] or "").strip()
         wait_detail: str | None = None
-        if wait_type == "webhook" and webhook and key:
-            wait_detail = f"{webhook}:{key}"
+        if wait_type in {"webhook", "channel"} and source_name and match_key:
+            wait_detail = f"{source_name}:{match_key}"
         return RunListItem(
             id=str(row["id"]),
             skill_source=str(row["skill_source"]),
@@ -72,4 +72,6 @@ class SqliteRunQueryStore(SqliteRepository):
             return "input"
         if value == "webhook" or value == "wait_webhook":
             return "webhook"
+        if value == "channel" or value == "wait_channel":
+            return "channel"
         return None

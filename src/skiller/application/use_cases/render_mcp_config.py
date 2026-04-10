@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.ports.skill_runner_port import SkillRunnerPort
-from skiller.application.ports.state_store_port import StateStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
 from skiller.domain.mcp_config_model import RenderedMcpConfig
 
@@ -21,7 +21,7 @@ class RenderMcpConfigResult:
 
 
 class RenderMcpConfigUseCase:
-    def __init__(self, store: StateStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 

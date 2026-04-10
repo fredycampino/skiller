@@ -49,3 +49,44 @@ def test_receive_webhook_raises_when_command_fails(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(RuntimeError, match="boom"):
         launcher.receive_webhook("test", "42", {"ok": True})
+
+
+def test_receive_channel_invokes_runtime_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        recorded["cmd"] = cmd
+        recorded["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps({"accepted": True, "duplicate": False, "matched_runs": ["run-1"]}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+
+    result = launcher.receive_channel(
+        "whatsapp",
+        "172584771580071@lid",
+        {"text": "hola"},
+        external_id="msg-1",
+        dedup_key="msg-1",
+    )
+
+    assert result["matched_runs"] == ["run-1"]
+    assert recorded["cmd"] == [
+        launcher.sys.executable,
+        "-m",
+        "skiller",
+        "channel",
+        "receive",
+        "whatsapp",
+        "172584771580071@lid",
+        "--json",
+        '{"text":"hola"}',
+        "--external-id",
+        "msg-1",
+        "--dedup-key",
+        "msg-1",
+    ]

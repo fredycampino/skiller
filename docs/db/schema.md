@@ -43,30 +43,33 @@ idx_runs_status_updated_at(status, updated_at)
 
 Represents:
 - active or resolved waits owned by a run step
-- one unified model for `wait_input` and `wait_webhook`
+- one unified model for `wait_channel`, `wait_input`, and `wait_webhook`
+- normalized matching around `source_*` and `match_*`
 
 ```text
-+------------+-------+--------------------------------------+
-| column     | type  | notes                                |
-+------------+-------+--------------------------------------+
-| id         | TEXT  | PK                                   |
-| run_id     | TEXT  | NOT NULL, FK -> runs(id)             |
-| step_id    | TEXT  | NOT NULL                             |
-| wait_type  | TEXT  | NOT NULL (`wait_input`/`wait_webhook`)|
-| webhook    | TEXT  | nullable, used by `wait_webhook`     |
-| key        | TEXT  | nullable, used by `wait_webhook`     |
-| status     | TEXT  | NOT NULL                             |
-| created_at | TEXT  | NOT NULL, default CURRENT_TIMESTAMP  |
-| expires_at | TEXT  | nullable                             |
-| resolved_at| TEXT  | nullable                             |
-+------------+-------+--------------------------------------+
++------------------+-------+---------------------------------------------------+
+| column           | type  | notes                                             |
++------------------+-------+---------------------------------------------------+
+| id               | TEXT  | PK                                                |
+| run_id           | TEXT  | NOT NULL, FK -> runs(id)                          |
+| step_id          | TEXT  | NOT NULL                                          |
+| wait_type        | TEXT  | NOT NULL (`wait_channel`/`wait_input`/`wait_webhook`) |
+| source_type      | TEXT  | NOT NULL (`input`/`webhook`/`channel`)            |
+| source_name      | TEXT  | NOT NULL (`manual`, webhook name, channel name)   |
+| match_type       | TEXT  | NOT NULL (`run`/`signal`/`channel_key`)           |
+| match_key        | TEXT  | NOT NULL (run id, signal key, channel key)        |
+| status           | TEXT  | NOT NULL                                          |
+| created_at       | TEXT  | NOT NULL, default CURRENT_TIMESTAMP               |
+| expires_at       | TEXT  | nullable                                          |
+| resolved_at      | TEXT  | nullable                                          |
++------------------+-------+---------------------------------------------------+
 ```
 
 Indexes:
 
 ```text
 idx_waits_run_step_type_status(run_id, step_id, wait_type, status)
-idx_waits_webhook_key_type_status(webhook, key, wait_type, status)
+idx_waits_source_match_type_status(source_type, source_name, match_type, match_key, wait_type, status)
 ```
 
 ## `events`
@@ -117,57 +120,64 @@ Indexes:
 idx_execution_outputs_run_step_created_at(run_id, step_id, created_at)
 ```
 
-## `webhook_receipts`
+## `external_receipts`
 
 Represents:
-- accepted webhook deliveries used only for deduplication
+- accepted external deliveries used only for deduplication
 - idempotency guard before creating a new `external_event`
 
 ```text
-+--------------+-------+--------------------------------------+
-| column       | type  | notes                                |
-+--------------+-------+--------------------------------------+
-| dedup_key    | TEXT  | PK                                   |
-| webhook      | TEXT  | NOT NULL                             |
-| key          | TEXT  | NOT NULL                             |
-| payload_json | TEXT  | NOT NULL                             |
-| created_at   | TEXT  | NOT NULL, default CURRENT_TIMESTAMP  |
-+--------------+-------+--------------------------------------+
++--------------+-------+---------------------------------------------------+
+| column       | type  | notes                                             |
++--------------+-------+---------------------------------------------------+
+| dedup_key    | TEXT  | PK                                                |
+| source_type  | TEXT  | NOT NULL                                          |
+| source_name  | TEXT  | NOT NULL                                          |
+| match_type   | TEXT  | NOT NULL                                          |
+| match_key    | TEXT  | NOT NULL                                          |
+| payload_json | TEXT  | NOT NULL                                          |
+| created_at   | TEXT  | NOT NULL, default CURRENT_TIMESTAMP               |
++--------------+-------+---------------------------------------------------+
 ```
 
 Indexes:
 
 ```text
-idx_webhook_receipts_webhook_key_created_at(webhook, key, created_at)
+idx_external_receipts_source_match_created_at(source_type, source_name, match_type, match_key, created_at)
 ```
 
 ## `external_events`
 
 Represents:
 - raw external payloads that may resume a waiting step
-- unified storage for inbound `input` and `webhook` events
+- normalized around `source_*` and `match_*`
 
 ```text
-+--------------+-------+--------------------------------------+
-| column       | type  | notes                                |
-+--------------+-------+--------------------------------------+
-| id           | TEXT  | PK                                   |
-| event_type   | TEXT  | NOT NULL (`input`/`webhook`)         |
-| run_id       | TEXT  | nullable, FK -> runs(id)             |
-| step_id      | TEXT  | nullable                             |
-| webhook      | TEXT  | nullable                             |
-| key          | TEXT  | nullable                             |
-| dedup_key    | TEXT  | nullable, used by webhook events     |
-| payload_json | TEXT  | NOT NULL                             |
-| created_at   | TEXT  | NOT NULL, default CURRENT_TIMESTAMP  |
-+--------------+-------+--------------------------------------+
++------------------+-------+---------------------------------------------------+
+| column           | type  | notes                                             |
++------------------+-------+---------------------------------------------------+
+| id               | TEXT  | PK                                                |
+| source_type      | TEXT  | NOT NULL (`input`/`webhook`/`channel`)            |
+| source_name      | TEXT  | NOT NULL                                          |
+| match_type       | TEXT  | NOT NULL (`run`/`signal`/`channel_key`)           |
+| match_key        | TEXT  | NOT NULL                                          |
+| run_id           | TEXT  | nullable, FK -> runs(id)                          |
+| step_id          | TEXT  | nullable                                          |
+| external_id      | TEXT  | nullable (message id, delivery id, etc.)          |
+| dedup_key        | TEXT  | nullable                                          |
+| status             | TEXT  | NOT NULL (`pending`/`consumed`)                 |
+| consumed_by_run_id | TEXT  | nullable, FK -> runs(id)                        |
+| consumed_at        | TEXT  | nullable                                        |
+| payload_json     | TEXT  | NOT NULL                                          |
+| created_at       | TEXT  | NOT NULL, default CURRENT_TIMESTAMP               |
++------------------+-------+---------------------------------------------------+
 ```
 
 Indexes:
 
 ```text
-idx_external_events_run_step_type_created_at(event_type, run_id, step_id, created_at)
-idx_external_events_webhook_key_type_created_at(event_type, webhook, key, created_at)
+idx_external_events_source_run_step_created_at(source_type, run_id, step_id, status, created_at)
+idx_external_events_source_match_created_at(source_type, source_name, match_type, match_key, status, created_at)
 ```
 
 ## `webhook_registrations`
@@ -193,7 +203,12 @@ Represents:
 - `events.payload_json` is the observability stream used by `/logs`, `watch`, and the UI transcript.
 - `execution_outputs.output_body_json` stores the full output body behind `output.body_ref`.
 - for `llm_prompt`, that body currently stores the full `value` used to rebuild the final text through `text_ref`.
-- `waits` is the unified wait table for `wait_input` and `wait_webhook`.
-- `wait_type` is the discriminator for wait semantics.
-- `external_events` is the unified storage for raw `input` and `webhook` payloads used to resume waits.
+- `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
+- `wait_type` remains the step-level discriminator for wait semantics.
+- `source_*` models where an external event came from.
+- `match_*` models how a wait or event is correlated.
+- `external_events` is the unified storage for raw external payloads used to resume waits.
+- `external_events.status` tracks whether an event is still pending or already consumed by a run.
+- external-event lookup is scoped to `run.created_at`, not `wait.created_at`.
+- matching is FIFO: oldest active wait, then oldest pending matching event.
 - `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteStateStore`.

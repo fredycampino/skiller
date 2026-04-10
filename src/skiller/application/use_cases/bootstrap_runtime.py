@@ -1,12 +1,12 @@
 from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.runtime_bootstrap_port import RuntimeBootstrapPort
 from skiller.application.ports.webhook_registry_port import WebhookRegistryPort
 
 
 class BootstrapRuntimeUseCase:
     def __init__(
         self,
-        store: StateStorePort,
+        store: RuntimeBootstrapPort,
         execution_output_store: ExecutionOutputStorePort,
         webhook_registry: WebhookRegistryPort,
     ) -> None:

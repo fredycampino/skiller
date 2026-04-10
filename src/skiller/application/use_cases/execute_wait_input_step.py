@@ -1,18 +1,28 @@
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.wait_store_port import WaitStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_model import RunStatus
+from skiller.domain.source_type import SourceType
 from skiller.domain.step_execution_model import StepExecution, WaitInputOutput
 from skiller.domain.wait_type import WaitType
 
 
 class ExecuteWaitInputStepUseCase:
-    def __init__(self, store: StateStorePort) -> None:
-        self.store = store
+    def __init__(
+        self,
+        run_store: RunStorePort,
+        wait_store: WaitStorePort,
+        external_event_store: ExternalEventStorePort,
+    ) -> None:
+        self.run_store = run_store
+        self.wait_store = wait_store
+        self.external_event_store = external_event_store
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step = current_step.step
@@ -22,17 +32,19 @@ class ExecuteWaitInputStepUseCase:
         if not prompt:
             raise ValueError(f"Step '{step_id}' requires prompt")
 
-        active_wait = self.store.get_active_wait(
+        active_wait = self.wait_store.get_active_wait(
             current_step.run_id,
             step_id,
             wait_type=WaitType.INPUT,
         )
-        since_created_at = str(active_wait["created_at"]) if active_wait is not None else None
-        input_event = self.store.get_latest_external_event(
-            event_type=ExternalEventType.INPUT,
+        input_event = self.external_event_store.get_latest_external_event(
+            source_type=SourceType.INPUT,
+            source_name="manual",
+            match_type=MatchType.RUN,
+            match_key=current_step.run_id,
             run_id=current_step.run_id,
             step_id=step_id,
-            since_created_at=since_created_at,
+            since_created_at=current_step.run_created_at,
         )
         if input_event is not None and self._is_already_consumed(
             current_step=current_step,
@@ -40,6 +52,16 @@ class ExecuteWaitInputStepUseCase:
             input_event_id=str(input_event.get("id", "")).strip(),
         ):
             input_event = None
+
+        if input_event is not None:
+            input_event_id = str(input_event.get("id", "")).strip()
+            if not input_event_id:
+                input_event = None
+            elif not self.external_event_store.consume_external_event(
+                input_event_id,
+                run_id=current_step.run_id,
+            ):
+                input_event = None
 
         if input_event is not None:
             payload = input_event.get("payload", {})
@@ -59,11 +81,11 @@ class ExecuteWaitInputStepUseCase:
             )
             current_step.context.step_executions[step_id] = execution
             if active_wait is not None:
-                self.store.resolve_wait(str(active_wait["id"]))
+                self.wait_store.resolve_wait(str(active_wait["id"]))
 
             raw_next = step.get("next")
             if raw_next is None:
-                self.store.update_run(
+                self.run_store.update_run(
                     current_step.run_id,
                     status=RunStatus.RUNNING,
                     context=current_step.context,
@@ -77,7 +99,7 @@ class ExecuteWaitInputStepUseCase:
             if not next_step_id:
                 raise ValueError(f"Step '{step_id}' requires non-empty next")
 
-            self.store.update_run(
+            self.run_store.update_run(
                 current_step.run_id,
                 status=RunStatus.RUNNING,
                 current=next_step_id,
@@ -90,12 +112,16 @@ class ExecuteWaitInputStepUseCase:
             )
 
         if active_wait is None:
-            self.store.create_wait(
+            self.wait_store.create_wait(
                 current_step.run_id,
                 step_id=step_id,
                 wait_type=WaitType.INPUT,
+                source_type=SourceType.INPUT,
+                source_name="manual",
+                match_type=MatchType.RUN,
+                match_key=current_step.run_id,
             )
-        self.store.update_run(
+        self.run_store.update_run(
             current_step.run_id,
             status=RunStatus.WAITING,
             current=step_id,

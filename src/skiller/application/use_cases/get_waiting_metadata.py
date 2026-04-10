@@ -1,14 +1,14 @@
 from typing import Any
 
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.ports.skill_runner_port import SkillRunnerPort
-from skiller.application.ports.state_store_port import StateStorePort
 from skiller.domain.run_model import Run, RunStatus
 from skiller.domain.skill_step_model import find_skill_step
 from skiller.domain.step_type import StepType
 
 
 class GetWaitingMetadataUseCase:
-    def __init__(self, store: StateStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 
@@ -47,6 +47,17 @@ class GetWaitingMetadataUseCase:
             return {
                 "wait_type": "webhook",
                 "webhook": webhook,
+                "key": key,
+            }
+
+        if parsed_step.step_type == StepType.WAIT_CHANNEL:
+            channel = str(step.get("channel", "")).strip()
+            key = str(step.get("key", "")).strip()
+            if not channel or not key:
+                return None
+            return {
+                "wait_type": "channel",
+                "channel": channel,
                 "key": key,
             }
 

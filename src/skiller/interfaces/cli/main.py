@@ -12,6 +12,8 @@ from skiller.tools.cloudflared.ensure_service import CloudflaredEnsureService
 from skiller.tools.cloudflared.login_service import CloudflaredLoginService
 from skiller.tools.cloudflared.process_service import CloudflaredProcessService
 from skiller.tools.webhooks.process_service import WebhookProcessService
+from skiller.tools.whatsapp.pair_service import WhatsAppPairService
+from skiller.tools.whatsapp.process_service import WhatsAppProcessService
 from skiller.tools.workers.process_service import WorkerProcessService
 
 _WATCH_TERMINAL_STATUSES = {
@@ -64,7 +66,7 @@ def _merge_waiting_metadata(
     if status_payload is None:
         return run_result
 
-    for field in ("current", "wait_type", "webhook", "key", "prompt"):
+    for field in ("current", "wait_type", "webhook", "key", "prompt", "channel"):
         if field in status_payload:
             run_result[field] = status_payload[field]
     return run_result
@@ -322,6 +324,23 @@ def build_parser() -> argparse.ArgumentParser:
     input_receive_parser.add_argument("run_id", help="Run id")
     input_receive_parser.add_argument("--text", required=True, help="Input text")
 
+    channel_parser = sub.add_parser("channel", help="Channel ingress operations")
+    channel_sub = channel_parser.add_subparsers(dest="channel_command", required=True)
+
+    channel_receive_parser = channel_sub.add_parser(
+        "receive",
+        help="Receive a channel message into the runtime",
+    )
+    channel_receive_parser.add_argument("channel", help="Channel name (e.g. whatsapp)")
+    channel_receive_parser.add_argument("key", help="Channel correlation key")
+    channel_receive_parser.add_argument("--json", dest="json_inline", help="JSON payload string")
+    channel_receive_parser.add_argument("--json-file", help="Path to JSON payload file")
+    channel_receive_parser.add_argument("--external-id", help="External message id")
+    channel_receive_parser.add_argument(
+        "--dedup-key",
+        help="Stable deduplication key for idempotent channel delivery",
+    )
+
     webhook_parser = sub.add_parser("webhook", help="Webhook operations")
     webhook_sub = webhook_parser.add_subparsers(dest="webhook_command", required=True)
 
@@ -355,6 +374,20 @@ def build_parser() -> argparse.ArgumentParser:
     cloudflared_login_sub.add_parser("start", help="Start cloudflared tunnel login")
     cloudflared_login_sub.add_parser("status", help="Show cloudflared login status")
     cloudflared_login_sub.add_parser("stop", help="Stop a managed cloudflared login attempt")
+
+    whatsapp_parser = sub.add_parser("whatsapp", help="WhatsApp operations")
+    whatsapp_sub = whatsapp_parser.add_subparsers(dest="whatsapp_command", required=True)
+    whatsapp_sub.add_parser("start", help="Start the local WhatsApp bridge")
+    whatsapp_sub.add_parser("status", help="Show local WhatsApp bridge status")
+    whatsapp_sub.add_parser("stop", help="Stop the local WhatsApp bridge")
+    whatsapp_pair_parser = whatsapp_sub.add_parser("pair", help="WhatsApp pairing operations")
+    whatsapp_pair_sub = whatsapp_pair_parser.add_subparsers(
+        dest="whatsapp_pair_command",
+        required=True,
+    )
+    whatsapp_pair_sub.add_parser("start", help="Start WhatsApp pairing")
+    whatsapp_pair_sub.add_parser("status", help="Show WhatsApp pairing status")
+    whatsapp_pair_sub.add_parser("stop", help="Stop a managed WhatsApp pairing attempt")
 
     register_parser = webhook_sub.add_parser(
         "register",
@@ -671,6 +704,144 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if result.stopped or not result.running else 1
 
+    if args.command == "whatsapp" and args.whatsapp_command == "start":
+        try:
+            result = WhatsAppProcessService(container.settings).start()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "started": result.started,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "paired": result.paired,
+                    "state": result.state,
+                    "qr_count": result.qr_count,
+                    "queue_length": result.queue_length,
+                    "endpoint": result.endpoint,
+                    "session_path": result.session_path,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "whatsapp" and args.whatsapp_command == "status":
+        result = WhatsAppProcessService(container.settings).status()
+        print(
+            json.dumps(
+                {
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "paired": result.paired,
+                    "state": result.state,
+                    "qr_count": result.qr_count,
+                    "queue_length": result.queue_length,
+                    "endpoint": result.endpoint,
+                    "session_path": result.session_path,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "whatsapp" and args.whatsapp_command == "stop":
+        try:
+            result = WhatsAppProcessService(container.settings).stop()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(
+            json.dumps(
+                {
+                    "stopped": result.stopped,
+                    "running": result.running,
+                    "managed_by_skiller": result.managed,
+                    "paired": result.paired,
+                    "state": result.state,
+                    "qr_count": result.qr_count,
+                    "queue_length": result.queue_length,
+                    "endpoint": result.endpoint,
+                    "session_path": result.session_path,
+                    "pid": result.pid,
+                },
+                indent=2,
+            )
+        )
+        return 0 if result.stopped or not result.running else 1
+
+    if args.command == "whatsapp" and args.whatsapp_command == "pair":
+        if args.whatsapp_pair_command == "start":
+            try:
+                result = WhatsAppPairService(container.settings).start()
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "paired": result.paired,
+                        "started": result.started,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "state": result.state,
+                        "qr_count": result.qr_count,
+                        "home": result.home,
+                        "session_path": result.session_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+
+        if args.whatsapp_pair_command == "status":
+            result = WhatsAppPairService(container.settings).status()
+            print(
+                json.dumps(
+                    {
+                        "paired": result.paired,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "state": result.state,
+                        "qr_count": result.qr_count,
+                        "home": result.home,
+                        "session_path": result.session_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+
+        if args.whatsapp_pair_command == "stop":
+            try:
+                result = WhatsAppPairService(container.settings).stop()
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "paired": result.paired,
+                        "stopped": result.stopped,
+                        "running": result.running,
+                        "pid": result.pid,
+                        "state": result.state,
+                        "qr_count": result.qr_count,
+                        "home": result.home,
+                        "session_path": result.session_path,
+                        "log_path": result.log_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0 if result.stopped or not result.running else 1
+
     if args.command == "worker" and args.worker_command == "start":
         try:
             result = controller.start_worker(args.run_id)
@@ -746,6 +917,27 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "input" and args.input_command == "receive":
         result = controller.receive_input(args.run_id, text=args.text)
+        resumed_runs: list[str] = []
+        for run_id in result["matched_runs"]:
+            try:
+                WorkerProcessService().resume(run_id)
+            except OSError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            resumed_runs.append(run_id)
+        result["resumed_runs"] = resumed_runs
+        print(json.dumps(result, indent=2))
+        return 0 if result["accepted"] else 1
+
+    if args.command == "channel" and args.channel_command == "receive":
+        payload = _load_json_payload(args.json_inline, args.json_file)
+        result = controller.receive_channel(
+            args.channel,
+            args.key,
+            payload,
+            external_id=args.external_id,
+            dedup_key=args.dedup_key,
+        )
         resumed_runs: list[str] = []
         for run_id in result["matched_runs"]:
             try:

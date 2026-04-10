@@ -1,9 +1,9 @@
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.domain.skill_step_model import find_skill_step
 
 
 class GetStartStepUseCase:
-    def __init__(self, store: StateStorePort) -> None:
+    def __init__(self, store: RunStorePort) -> None:
         self.store = store
 
     def execute(self, run_id: str) -> str:

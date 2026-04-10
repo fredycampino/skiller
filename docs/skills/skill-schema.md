@@ -66,12 +66,14 @@ Rules:
 
 Supported `step_type` values:
 - `assign`
+- `send`
 - `notify`
 - `shell`
 - `llm_prompt`
 - `mcp`
 - `switch`
 - `when`
+- `wait_channel`
 - `wait_input`
 - `wait_webhook`
 

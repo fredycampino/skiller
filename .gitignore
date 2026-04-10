@@ -51,3 +51,7 @@ logs/
 .tmp/
 docs-legacy/
 docs/spikes/
+
+# Local JS bridge artifacts
+src/skiller/tools/whatsapp/bridge/node_modules/
+src/skiller/tools/whatsapp/bridge/package-lock.json

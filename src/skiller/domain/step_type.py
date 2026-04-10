@@ -3,6 +3,7 @@ from enum import Enum
 
 class StepType(str, Enum):
     ASSIGN = "assign"
+    SEND = "send"
     NOTIFY = "notify"
     SHELL = "shell"
     MCP = "mcp"
@@ -11,3 +12,4 @@ class StepType(str, Enum):
     WHEN = "when"
     WAIT_INPUT = "wait_input"
     WAIT_WEBHOOK = "wait_webhook"
+    WAIT_CHANNEL = "wait_channel"

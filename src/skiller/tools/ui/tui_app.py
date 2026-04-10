@@ -6,6 +6,7 @@ from typing import Any
 from skiller.tools.ui.actions import ActionResult, handle_command, poll_run_progress
 from skiller.tools.ui.commands import (
     InputCommand,
+    RunCommand,
     UiCommand,
     parse_command,
 )
@@ -29,7 +30,7 @@ from skiller.tools.ui.tui_render import (
 )
 
 _RUN_PROGRESS_ACTIVE_STATUSES = {"CREATED", "RUNNING"}
-_RUN_PROGRESS_STOP_STATUSES = {"WAITING", "SUCCEEDED", "FAILED"}
+_RUN_PROGRESS_TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED"}
 _RUN_PROGRESS_POLL_INTERVAL_SECONDS = 0.1
 
 
@@ -130,6 +131,8 @@ def should_refresh_after_run(result: ActionResult) -> bool:
     if result.kind != "run" or run is None or run.error or run.run_id is None:
         return False
     return run.status.upper() in _RUN_PROGRESS_ACTIVE_STATUSES
+
+
 def build_progress_render_result(
     *,
     result: ActionResult,
@@ -144,7 +147,7 @@ def build_progress_render_result(
         return result
 
     current_status = run.status.upper()
-    if current_status in _RUN_PROGRESS_STOP_STATUSES and current_status != previous_status:
+    if current_status in _RUN_PROGRESS_TERMINAL_STATUSES and current_status != previous_status:
         return ActionResult(kind="status", run=run, payload=result.payload)
     return None
 
@@ -195,6 +198,8 @@ def run_prompt_toolkit_ui(
     output_text = build_initial_output(session=session)
     status_text = "Idle"
     status_busy = False
+    active_follow_task: asyncio.Task[None] | None = None
+    active_follow_run_id: str | None = None
 
     output_area = TextArea(
         text=output_text,
@@ -233,6 +238,13 @@ def run_prompt_toolkit_ui(
             output_text = f"{output_text}{rendered.text}"
         set_output_text(output_text)
 
+    def cancel_active_follow() -> None:
+        nonlocal active_follow_task, active_follow_run_id
+        if active_follow_task is not None:
+            active_follow_task.cancel()
+        active_follow_task = None
+        active_follow_run_id = None
+
     async def follow_run_progress(
         *,
         run_id: str,
@@ -258,11 +270,49 @@ def run_prompt_toolkit_ui(
             current_status = ""
             if progress_result.run is not None:
                 current_status = progress_result.run.status.upper()
-            if current_status in _RUN_PROGRESS_STOP_STATUSES:
+            if current_status in _RUN_PROGRESS_TERMINAL_STATUSES:
                 return progress_result
 
             previous_status = current_status
             await asyncio.sleep(_RUN_PROGRESS_POLL_INTERVAL_SECONDS)
+
+    def start_follow_task(
+        *,
+        run_id: str,
+        previous_status: str = "",
+    ) -> None:
+        nonlocal active_follow_task, active_follow_run_id, status_text
+        if not run_id:
+            return
+
+        if active_follow_run_id == run_id and active_follow_task is not None:
+            if not active_follow_task.done():
+                return
+
+        cancel_active_follow()
+
+        async def _runner() -> None:
+            nonlocal active_follow_task, active_follow_run_id, status_text
+            try:
+                final_result = await follow_run_progress(
+                    run_id=run_id,
+                    previous_status=previous_status,
+                )
+                status_text = build_result_status_text(result=final_result)
+            except asyncio.CancelledError:
+                return
+            finally:
+                if active_follow_task is asyncio.current_task():
+                    active_follow_task = None
+                    active_follow_run_id = None
+                app.invalidate()
+
+        active_follow_run_id = run_id
+        create_background_task = getattr(app, "create_background_task", None)
+        if callable(create_background_task):
+            active_follow_task = create_background_task(_runner())
+            return
+        active_follow_task = asyncio.create_task(_runner())
 
     async def process_submit_command(
         *,
@@ -282,13 +332,13 @@ def run_prompt_toolkit_ui(
             if should_refresh_after_run(result):
                 apply_result(result)
                 render_initial_result = False
-                final_result = await follow_run_progress(
+                start_follow_task(
                     run_id=result.run.run_id or "",
                     previous_status=result.run.status.upper(),
                 )
             elif should_refresh_after_input(result) and isinstance(command, InputCommand):
                 render_initial_result = False
-                final_result = await follow_run_progress(run_id=command.run_id)
+                start_follow_task(run_id=command.run_id)
 
             if render_initial_result:
                 apply_result(result)
@@ -321,6 +371,8 @@ def run_prompt_toolkit_ui(
             return
 
         command = build_submit_command(session=session, text=raw_value)
+        if isinstance(command, RunCommand):
+            cancel_active_follow()
         input_area.buffer.reset()
         status_busy = True
         status_text = build_pending_status_text(command=command)

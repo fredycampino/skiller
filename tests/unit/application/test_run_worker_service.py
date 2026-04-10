@@ -18,6 +18,7 @@ from skiller.application.use_cases.step_execution_result import (
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.step_execution_model import (
     NotifyOutput,
+    SendOutput,
     ShellOutput,
     StepExecution,
     WaitInputOutput,
@@ -165,6 +166,7 @@ def _build_service(
     *,
     render_results: list[RenderCurrentStepResult],
     notify_results: list[StepAdvance] | None = None,
+    send_results: list[StepAdvance] | None = None,
     shell_results: list[StepAdvance] | None = None,
     input_wait_results: list[StepAdvance] | None = None,
     wait_results: list[StepAdvance] | None = None,
@@ -186,6 +188,7 @@ def _build_service(
             StepAdvance(status=StepExecutionStatus.COMPLETED)
         ),
         execute_notify_step_use_case=_FakeStepUseCase(notify_results, error=notify_error),
+        execute_send_step_use_case=_FakeStepUseCase(send_results),
         execute_shell_step_use_case=_FakeStepUseCase(shell_results),
         execute_switch_step_use_case=_FakeStepUseCase(),
         execute_when_step_use_case=_FakeStepUseCase(),
@@ -259,6 +262,66 @@ def test_worker_executes_shell_step() -> None:
                         "exit_code": 0,
                         "stdout": "hello\n",
                         "stderr": "",
+                    },
+                    "body_ref": None,
+                },
+                "next": "done",
+            },
+        },
+    ]
+
+
+def test_worker_executes_send_step() -> None:
+    service, complete_run_use_case, fail_run_use_case = _build_service(
+        render_results=[
+            RenderCurrentStepResult(
+                status=CurrentStepStatus.READY,
+                current_step=_build_current_step(StepType.SEND),
+            ),
+            RenderCurrentStepResult(status=CurrentStepStatus.DONE),
+        ],
+        send_results=[
+            StepAdvance(
+                status=StepExecutionStatus.NEXT,
+                next_step_id="done",
+                execution=StepExecution(
+                    step_type=StepType.SEND,
+                    output=SendOutput(
+                        text="Message sent: whatsapp:chat-1.",
+                        channel="whatsapp",
+                        key="chat-1",
+                        message="hola",
+                        message_id="msg-1",
+                    ),
+                ),
+            )
+        ],
+    )
+
+    result = service.run("run-1")
+
+    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert complete_run_use_case.calls == ["run-1"]
+    assert fail_run_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls[:2] == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_STARTED,
+            "payload": {"step": "start", "step_type": "send"},
+        },
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.STEP_SUCCESS,
+            "payload": {
+                "step": "start",
+                "step_type": "send",
+                "output": {
+                    "text": "Message sent: whatsapp:chat-1.",
+                    "value": {
+                        "channel": "whatsapp",
+                        "key": "chat-1",
+                        "message": "hola",
+                        "message_id": "msg-1",
                     },
                     "body_ref": None,
                 },

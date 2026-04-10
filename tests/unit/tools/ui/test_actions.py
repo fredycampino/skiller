@@ -547,6 +547,88 @@ def test_status_command_resolves_llm_prompt_body_ref_in_context() -> None:
     }
 
 
+def test_status_command_keeps_original_llm_prompt_output_when_body_ref_is_missing() -> None:
+    class _FakeRuntimeAdapter:
+        def run(self, *, raw_args: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def runs(self, *, statuses: list[str] | None = None) -> list[dict[str, object]]:
+            _ = statuses
+            raise AssertionError("not expected")
+
+        def webhooks(self) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def status(self, *, run_id: str) -> dict[str, object]:
+            assert run_id == "run-1"
+            return {
+                "id": "run-1",
+                "status": "WAITING",
+                "skill_ref": "chat",
+                "context": {
+                    "inputs": {},
+                    "step_executions": {
+                        "answer": {
+                            "step_type": "llm_prompt",
+                            "input": {},
+                            "evaluation": {},
+                            "output": {
+                                "text": "preview...",
+                                "text_ref": "data.reply",
+                                "value": {"data": {"truncated": True, "reply": "preview..."}},
+                                "body_ref": "execution_output:missing",
+                            },
+                        }
+                    },
+                },
+            }
+
+        def logs(self, *, run_id: str) -> list[dict[str, object]]:
+            raise AssertionError("not expected")
+
+        def get_execution_output(self, *, body_ref: str) -> dict[str, object] | None:
+            assert body_ref == "execution_output:missing"
+            return None
+
+        def watch(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def input_receive(self, *, run_id: str, text: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+        def resume(self, *, run_id: str) -> dict[str, object]:
+            raise AssertionError("not expected")
+
+    result = handle_command(
+        session=UiSession(session_key="a1b2c3d4"),
+        command=StatusCommand(run_id="run-1"),
+        runtime=_FakeRuntimeAdapter(),
+    )
+
+    assert result.kind == "status"
+    assert result.payload == {
+        "id": "run-1",
+        "status": "WAITING",
+        "skill_ref": "chat",
+        "context": {
+            "inputs": {},
+            "step_executions": {
+                "answer": {
+                    "step_type": "llm_prompt",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "preview...",
+                        "text_ref": "data.reply",
+                        "value": {"data": {"truncated": True, "reply": "preview..."}},
+                        "body_ref": "execution_output:missing",
+                    },
+                }
+            },
+        },
+    }
+
+
 def test_body_command_returns_error_when_body_ref_is_missing() -> None:
     class _FakeRuntimeAdapter:
         def run(self, *, raw_args: str) -> dict[str, object]:

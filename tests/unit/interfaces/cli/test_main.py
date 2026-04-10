@@ -14,6 +14,9 @@ class _FakeController:
         self.resume_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
+        self.receive_channel_calls: list[
+            tuple[str, str, dict[str, str], str | None, str | None]
+        ] = []
         self.logs_calls: list[str] = []
         self.execution_output_calls: list[str] = []
         self.status_calls: list[str] = []
@@ -133,6 +136,26 @@ class _FakeController:
             "accepted": True,
             "run_id": run_id,
             "matched_runs": [run_id],
+        }
+
+    def receive_channel(
+        self,
+        channel: str,
+        key: str,
+        payload: dict[str, str],
+        *,
+        external_id: str | None = None,
+        dedup_key: str | None = None,
+    ) -> dict[str, object]:
+        self.receive_channel_calls.append(
+            (channel, key, payload, external_id, dedup_key)
+        )
+        return {
+            "accepted": True,
+            "duplicate": False,
+            "channel": channel,
+            "key": key,
+            "matched_runs": ["run-1"],
         }
 
     def register_webhook(self, webhook: str) -> dict[str, object]:
@@ -827,6 +850,240 @@ def test_cloudflared_login_stop_command(
     assert '"log_path": "/tmp/cloudflared-home/.skiller/cloudflared/login.log"' in captured.out
 
 
+def test_whatsapp_pair_start_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppPairService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def start(self):
+            return SimpleNamespace(
+                paired=False,
+                started=True,
+                running=False,
+                pid=4455,
+                state="paired",
+                qr_count=2,
+                home="/tmp/whatsapp-home",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
+
+    exit_code = cli_main.main(["whatsapp", "pair", "start"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"started": true' in captured.out
+    assert '"pid": 4455' in captured.out
+    assert '"state": "paired"' in captured.out
+    assert '"session_path": "/tmp/whatsapp-home/.skiller/whatsapp/session"' in captured.out
+
+
+def test_whatsapp_pair_status_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppPairService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def status(self):
+            return SimpleNamespace(
+                paired=True,
+                running=False,
+                pid=None,
+                state="paired",
+                qr_count=3,
+                home="/tmp/whatsapp-home",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
+
+    exit_code = cli_main.main(["whatsapp", "pair", "status"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"paired": true' in captured.out
+    assert '"qr_count": 3' in captured.out
+    assert '"running": false' in captured.out
+
+
+def test_whatsapp_pair_stop_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppPairService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                paired=False,
+                stopped=True,
+                running=False,
+                pid=4455,
+                state="stopped",
+                qr_count=4,
+                home="/tmp/whatsapp-home",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
+
+    exit_code = cli_main.main(["whatsapp", "pair", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": true' in captured.out
+    assert '"pid": 4455' in captured.out
+
+
+def test_whatsapp_start_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def start(self):
+            return SimpleNamespace(
+                started=True,
+                running=True,
+                managed=True,
+                paired=True,
+                state="connected",
+                qr_count=0,
+                queue_length=2,
+                endpoint="http://127.0.0.1:8002/health",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                pid=5566,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
+
+    exit_code = cli_main.main(["whatsapp", "start"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"started": true' in captured.out
+    assert '"managed_by_skiller": true' in captured.out
+    assert '"queue_length": 2' in captured.out
+
+
+def test_whatsapp_status_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def status(self):
+            return SimpleNamespace(
+                running=True,
+                managed=False,
+                paired=True,
+                state="connected",
+                qr_count=0,
+                queue_length=5,
+                endpoint="http://127.0.0.1:8002/health",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                pid=None,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
+
+    exit_code = cli_main.main(["whatsapp", "status"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"running": true' in captured.out
+    assert '"managed_by_skiller": false' in captured.out
+    assert '"queue_length": 5' in captured.out
+
+
+def test_whatsapp_stop_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _FakeWhatsAppProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            return SimpleNamespace(
+                stopped=True,
+                running=False,
+                managed=True,
+                paired=True,
+                state="stopped",
+                qr_count=0,
+                queue_length=0,
+                endpoint="http://127.0.0.1:8002/health",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+                pid=5566,
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
+
+    exit_code = cli_main.main(["whatsapp", "stop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"stopped": true' in captured.out
+    assert '"state": "stopped"' in captured.out
+
+
 def test_run_rejects_missing_or_duplicated_skill_selection(
     monkeypatch: pytest.MonkeyPatch, fake_container: SimpleNamespace
 ) -> None:
@@ -1096,6 +1353,43 @@ def test_input_receive_uses_run_id_and_text(
     assert worker_process_service.calls == [("resume", "run-1")]
     assert '"accepted": true' in captured.out
     assert '"matched_runs": [' in captured.out
+    assert '"resumed_runs": [' in captured.out
+
+
+def test_channel_receive_uses_channel_and_key(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    worker_process_service = _FakeWorkerProcessService()
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+
+    exit_code = cli_main.main(
+        [
+            "channel",
+            "receive",
+            "whatsapp",
+            "172584771580071@lid",
+            "--json",
+            '{"text":"hola"}',
+            "--external-id",
+            "msg-1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.receive_channel_calls == [
+        ("whatsapp", "172584771580071@lid", {"text": "hola"}, "msg-1", None)
+    ]
+    assert worker_process_service.calls == [("resume", "run-1")]
+    assert '"accepted": true' in captured.out
+    assert '"channel": "whatsapp"' in captured.out
+    assert '"key": "172584771580071@lid"' in captured.out
     assert '"resumed_runs": [' in captured.out
 
 

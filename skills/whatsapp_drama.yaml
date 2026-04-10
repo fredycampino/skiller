@@ -1,0 +1,35 @@
+name: whatsapp_drama
+start: listen
+
+steps:
+  - wait_channel: listen
+    channel: whatsapp
+    key: all
+    next: dramatize
+
+  - llm_prompt: dramatize
+    system: |
+      You are a witty soap-opera writer.
+      Always reply in the same language as the user's message.
+      Keep the reply short, playful, and dramatic.
+      Return JSON only.
+    prompt: |
+      Rewrite the following message as a dramatic soap-opera reply.
+
+      User message:
+      {{output_value("listen").payload.text}}
+    output:
+      format: json
+      schema:
+        type: object
+        required: [reply]
+        properties:
+          reply:
+            type: string
+    next: reply
+
+  - send: reply
+    channel: whatsapp
+    key: '{{output_value("listen").key}}'
+    message: '{{output_value("dramatize").data.reply}}'
+    next: listen

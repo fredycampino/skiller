@@ -4,6 +4,18 @@
 
 `wait_input` pauses a run until human input is received for the current `run_id + step_id`.
 
+Runtime correlation:
+- `source_type = input`
+- `source_name = manual`
+- `match_type = run`
+- `match_key = <run_id>`
+
+Current semantics:
+- events created before the run are ignored
+- events created during the run may resolve the wait, even if they arrived before the step was reached
+- each external event is single-consumer
+- if multiple pending inputs could match, the oldest one is consumed first
+
 ## Shape
 
 ```yaml

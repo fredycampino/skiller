@@ -1,0 +1,15 @@
+name: whatsapp_demo
+description: "Minimal demo that resumes on any inbound WhatsApp key"
+version: "0.1"
+start: listen_whatsapp
+
+inputs: {}
+
+steps:
+  - wait_channel: listen_whatsapp
+    channel: whatsapp
+    key: all
+    next: notify_message
+
+  - notify: notify_message
+    message: 'WhatsApp recibido: {{ output_value("listen_whatsapp").payload.text }}'

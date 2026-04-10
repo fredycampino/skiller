@@ -5,7 +5,7 @@ from typing import Any
 
 from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
 from skiller.application.ports.llm_port import LLMPort
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepAdvance,
@@ -30,7 +30,7 @@ class _LlmPromptStepConfig:
 class ExecuteLlmPromptStepUseCase:
     def __init__(
         self,
-        store: StateStorePort,
+        store: RunStorePort,
         execution_output_store: ExecutionOutputStorePort,
         llm: LLMPort,
         large_result_truncator: LargeResultTruncator,

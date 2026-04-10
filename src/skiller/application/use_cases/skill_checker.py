@@ -266,6 +266,11 @@ class SkillCheckerUseCase:
                 "SKILL_NOTIFY_MESSAGE_MISSING",
                 "notify step requires message",
             ),
+            StepType.SEND.value: (
+                "channel",
+                "SKILL_SEND_CHANNEL_MISSING",
+                "send step requires channel",
+            ),
             StepType.SHELL.value: (
                 "command",
                 "SKILL_SHELL_COMMAND_MISSING",
@@ -281,12 +286,47 @@ class SkillCheckerUseCase:
                 "SKILL_WAIT_WEBHOOK_WEBHOOK_MISSING",
                 "wait_webhook step requires webhook",
             ),
+            StepType.WAIT_CHANNEL.value: (
+                "channel",
+                "SKILL_WAIT_CHANNEL_CHANNEL_MISSING",
+                "wait_channel step requires channel",
+            ),
             StepType.MCP.value: ("server", "SKILL_MCP_SERVER_MISSING", "mcp step requires server"),
         }
         if step.step_type in required_fields:
             field, code, text = required_fields[step.step_type]
             if not str(step.body.get(field, "")).strip():
                 self._add(errors, code, f"{code}: {text} (step={step.step_id})")
+
+        if (
+            step.step_type == StepType.SEND.value
+            and not str(step.body.get("key", "")).strip()
+        ):
+            self._add(
+                errors,
+                "SKILL_SEND_KEY_MISSING",
+                f"SKILL_SEND_KEY_MISSING: send step requires key (step={step.step_id})",
+            )
+
+        if (
+            step.step_type == StepType.SEND.value
+            and not str(step.body.get("message", "")).strip()
+        ):
+            self._add(
+                errors,
+                "SKILL_SEND_MESSAGE_MISSING",
+                f"SKILL_SEND_MESSAGE_MISSING: send step requires message (step={step.step_id})",
+            )
+
+        if step.step_type == StepType.SEND.value:
+            channel = str(step.body.get("channel", "")).strip().lower()
+            if channel and channel != "whatsapp":
+                self._add(
+                    errors,
+                    "SKILL_SEND_CHANNEL_UNSUPPORTED",
+                    "SKILL_SEND_CHANNEL_UNSUPPORTED: send step supports only whatsapp "
+                    f"(step={step.step_id}, channel={channel})",
+                )
 
         if (
             step.step_type == StepType.WAIT_WEBHOOK.value
@@ -296,6 +336,17 @@ class SkillCheckerUseCase:
                 errors,
                 "SKILL_WAIT_WEBHOOK_KEY_MISSING",
                 "SKILL_WAIT_WEBHOOK_KEY_MISSING: wait_webhook step requires key "
+                f"(step={step.step_id})",
+            )
+
+        if (
+            step.step_type == StepType.WAIT_CHANNEL.value
+            and not str(step.body.get("key", "")).strip()
+        ):
+            self._add(
+                errors,
+                "SKILL_WAIT_CHANNEL_KEY_MISSING",
+                "SKILL_WAIT_CHANNEL_KEY_MISSING: wait_channel step requires key "
                 f"(step={step.step_id})",
             )
 

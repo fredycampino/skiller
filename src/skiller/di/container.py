@@ -11,8 +11,10 @@ from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepU
 from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
 from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute_wait_channel_step import ExecuteWaitChannelStepUseCase
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
 from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
@@ -23,6 +25,7 @@ from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_runs import GetRunsUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.get_waiting_metadata import GetWaitingMetadataUseCase
+from skiller.application.use_cases.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
@@ -32,18 +35,23 @@ from skiller.application.use_cases.render_current_step import RenderCurrentStepU
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
+from skiller.application.use_cases.skill_server_checker import SkillServerCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
+from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
 from skiller.infrastructure.llm.minimax_llm import MinimaxLLM
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
+from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 from skiller.infrastructure.tools.shell.default_shell import DefaultShellRunner
+from skiller.infrastructure.tools.webhooks.default_server_status import DefaultServerStatus
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,8 @@ def build_runtime_container(
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     store = SqliteStateStore(cfg.db_path)
+    wait_store = SqliteWaitStore(cfg.db_path)
+    external_event_store = SqliteExternalEventStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     execution_output_store = SqliteExecutionOutputStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
@@ -70,6 +80,8 @@ def build_runtime_container(
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
     shell = DefaultShellRunner()
+    server_status = DefaultServerStatus(cfg)
+    channel_sender = DefaultChannelSender(cfg)
     large_result_truncator = LargeResultTruncator()
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
@@ -83,12 +95,28 @@ def build_runtime_container(
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
-    handle_input_use_case = HandleInputUseCase(store=store)
-    handle_webhook_use_case = HandleWebhookUseCase(store=store)
+    handle_input_use_case = HandleInputUseCase(
+        run_store=store,
+        external_event_store=external_event_store,
+        runtime_event_store=store,
+    )
+    handle_channel_use_case = HandleChannelUseCase(
+        external_event_store=external_event_store,
+        wait_store=wait_store,
+    )
+    handle_webhook_use_case = HandleWebhookUseCase(
+        external_event_store=external_event_store,
+        wait_store=wait_store,
+    )
     list_webhooks_use_case = ListWebhooksUseCase(registry=webhook_registry)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
     skill_checker_use_case = SkillCheckerUseCase(skill_runner=skill_runner)
+    skill_server_checker_use_case = SkillServerCheckerUseCase(
+        skill_runner=skill_runner,
+        server_status=server_status,
+        channel_sender=channel_sender,
+    )
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -106,6 +134,10 @@ def build_runtime_container(
         large_result_truncator=large_result_truncator,
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_send_step_use_case = ExecuteSendStepUseCase(
+        store=store,
+        channel_sender=channel_sender,
+    )
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         execution_output_store=execution_output_store,
@@ -114,8 +146,21 @@ def build_runtime_container(
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
-    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
-    execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
+    execute_wait_channel_step_use_case = ExecuteWaitChannelStepUseCase(
+        run_store=store,
+        wait_store=wait_store,
+        external_event_store=external_event_store,
+    )
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=wait_store,
+        external_event_store=external_event_store,
+    )
+    execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
+        run_store=store,
+        wait_store=wait_store,
+        external_event_store=external_event_store,
+    )
     resume_run_use_case = ResumeRunUseCase(store=store)
     get_waiting_metadata_use_case = GetWaitingMetadataUseCase(
         store=store,
@@ -135,9 +180,11 @@ def build_runtime_container(
         execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_send_step_use_case=execute_send_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_channel_step_use_case=execute_wait_channel_step_use_case,
         execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
@@ -156,8 +203,10 @@ def build_runtime_container(
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,
         skill_checker_use_case=skill_checker_use_case,
+        skill_server_checker_use_case=skill_server_checker_use_case,
         handle_input_use_case=handle_input_use_case,
         handle_webhook_use_case=handle_webhook_use_case,
+        handle_channel_use_case=handle_channel_use_case,
         list_webhooks_use_case=list_webhooks_use_case,
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,

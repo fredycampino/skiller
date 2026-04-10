@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 
-from skiller.application.ports.state_store_port import StateStorePort
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.application.ports.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.runtime_event_store_port import RuntimeEventStorePort
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_model import RunStatus
 from skiller.domain.skill_step_model import find_skill_step
+from skiller.domain.source_type import SourceType
 from skiller.domain.step_type import StepType
 
 
@@ -16,8 +19,15 @@ class HandleInputResult:
 
 
 class HandleInputUseCase:
-    def __init__(self, store: StateStorePort) -> None:
-        self.store = store
+    def __init__(
+        self,
+        run_store: RunStorePort,
+        external_event_store: ExternalEventStorePort,
+        runtime_event_store: RuntimeEventStorePort,
+    ) -> None:
+        self.run_store = run_store
+        self.external_event_store = external_event_store
+        self.runtime_event_store = runtime_event_store
 
     def execute(self, run_id: str, *, text: str) -> HandleInputResult:
         if not run_id:
@@ -25,7 +35,7 @@ class HandleInputUseCase:
         if not text:
             return HandleInputResult(accepted=False, run_ids=[], error="text is required")
 
-        run = self.store.get_run(run_id)
+        run = self.run_store.get_run(run_id)
         if run is None:
             return HandleInputResult(accepted=False, run_ids=[], error=f"Run '{run_id}' not found")
         if run.status != RunStatus.WAITING.value:
@@ -59,13 +69,16 @@ class HandleInputUseCase:
             )
 
         payload = {"text": text}
-        event_id = self.store.create_external_event(
-            event_type=ExternalEventType.INPUT,
+        event_id = self.external_event_store.create_external_event(
+            source_type=SourceType.INPUT,
+            source_name="manual",
+            match_type=MatchType.RUN,
+            match_key=run_id,
             run_id=run_id,
             step_id=run.current,
             payload=payload,
         )
-        self.store.append_event(
+        self.runtime_event_store.append_event(
             "INPUT_RECEIVED",
             {"step": run.current, "payload": payload},
             run_id=run_id,

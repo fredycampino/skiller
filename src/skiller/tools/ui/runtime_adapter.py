@@ -48,7 +48,12 @@ class CliRuntimeAdapter:
         return payload
 
     def get_execution_output(self, *, body_ref: str) -> dict[str, Any] | None:
-        payload = _run_json_command("execution-output", body_ref)
+        try:
+            payload = _run_json_command("execution-output", body_ref)
+        except RuntimeError as exc:
+            if str(exc).strip() == "Execution output not found":
+                return None
+            raise
         if payload is None:
             return None
         if not isinstance(payload, dict):

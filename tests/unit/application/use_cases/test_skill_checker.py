@@ -212,3 +212,48 @@ def test_skill_checker_rejects_non_object_payload() -> None:
 
     assert result.status == SkillCheckStatus.INVALID
     assert [item.code for item in result.errors] == ["SKILL_FORMAT_INVALID"]
+
+
+def test_skill_checker_rejects_send_step_without_required_fields() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "reply",
+                "steps": [{"send": "reply"}],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.INVALID
+    assert [item.code for item in result.errors] == [
+        "SKILL_SEND_CHANNEL_MISSING",
+        "SKILL_SEND_KEY_MISSING",
+        "SKILL_SEND_MESSAGE_MISSING",
+    ]
+
+
+def test_skill_checker_rejects_send_step_with_unsupported_channel() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "reply",
+                "steps": [
+                    {
+                        "send": "reply",
+                        "channel": "telegram",
+                        "key": "chat-1",
+                        "message": "hola",
+                    }
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.INVALID
+    assert [item.code for item in result.errors] == ["SKILL_SEND_CHANNEL_UNSUPPORTED"]

@@ -1,0 +1,19 @@
+curl -s http: //127.0.0.1:8002/messages
+[
+    {
+        "messageId": "ACBD2DAB618DBE864077D6D0850A89DF",
+        "chatId": "172584771580071@lid",
+        "senderId": "172584771580071@lid",
+        "senderName": "Fedadasdadasdasdmdno",
+        "text": "Maxim",
+        "timestamp": 1775388655
+    },
+    {
+        "messageId": "AC357A990DB2A34714199F351C580891",
+        "chatId": "172584771580071@lid",
+        "senderId": "172584771580071@lid",
+        "senderName": "Fedadasdadasdasdmdno",
+        "text": "Otro mensaje..",
+        "timestamp": 1775388681
+    }
+]

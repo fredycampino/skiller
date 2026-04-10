@@ -1,6 +1,6 @@
 from typing import Any
 
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepAdvance,
@@ -13,7 +13,7 @@ _SUPPORTED_WHEN_OPERATORS = {"eq", "ne", "gt", "gte", "lt", "lte"}
 
 
 class ExecuteWhenStepUseCase:
-    def __init__(self, store: StateStorePort) -> None:
+    def __init__(self, store: RunStorePort) -> None:
         self.store = store
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:

@@ -297,6 +297,25 @@ def test_cli_runtime_adapter_get_execution_output_invokes_cli(
     ]
 
 
+def test_cli_runtime_adapter_get_execution_output_returns_none_when_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout="",
+            stderr="Execution output not found\n",
+        )
+
+    monkeypatch.setattr(runtime_adapter.subprocess, "run", fake_run)
+
+    adapter = runtime_adapter.CliRuntimeAdapter()
+    result = adapter.get_execution_output(body_ref="execution_output:missing")
+
+    assert result is None
+
+
 def test_cli_runtime_adapter_watch_returns_structured_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -3,9 +3,10 @@ import pytest
 from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
 from skiller.application.use_cases.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.step_execution_result import StepExecutionStatus
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
+from skiller.domain.source_type import SourceType
 from skiller.domain.step_execution_model import StepExecution, WaitInputOutput
 from skiller.domain.wait_type import WaitType
 
@@ -25,6 +26,8 @@ class _FakeStore:
         self.events: list[dict[str, object]] = []
         self.created_waits: list[dict[str, object]] = []
         self.resolved_wait_ids: list[str] = []
+        self.consumed_event_ids: list[dict[str, str]] = []
+        self.latest_event_query: dict[str, object] | None = None
 
     def get_active_wait(
         self,
@@ -39,18 +42,31 @@ class _FakeStore:
     def get_latest_external_event(
         self,
         *,
-        event_type: ExternalEventType,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         run_id: str | None = None,
         step_id: str | None = None,
-        webhook: str | None = None,
-        key: str | None = None,
         since_created_at: str | None = None,
     ) -> dict[str, object] | None:
-        _ = (event_type, run_id, step_id, webhook, key, since_created_at)
+        self.latest_event_query = {
+            "source_type": source_type,
+            "source_name": source_name,
+            "match_type": match_type,
+            "match_key": match_key,
+            "run_id": run_id,
+            "step_id": step_id,
+            "since_created_at": since_created_at,
+        }
         return self.input_event
 
     def resolve_wait(self, wait_id: str) -> None:
         self.resolved_wait_ids.append(wait_id)
+
+    def consume_external_event(self, event_id: str, *, run_id: str) -> bool:
+        self.consumed_event_ids.append({"event_id": event_id, "run_id": run_id})
+        return True
 
     def create_wait(
         self,
@@ -58,8 +74,10 @@ class _FakeStore:
         *,
         step_id: str,
         wait_type: WaitType,
-        webhook: str | None = None,
-        key: str | None = None,
+        source_type: SourceType,
+        source_name: str,
+        match_type: MatchType,
+        match_key: str,
         expires_at: str | None = None,
     ) -> str:
         self.created_waits.append(
@@ -67,8 +85,10 @@ class _FakeStore:
                 "run_id": run_id,
                 "step_id": step_id,
                 "wait_type": wait_type,
-                "webhook": webhook,
-                "key": key,
+                "source_type": source_type,
+                "source_name": source_name,
+                "match_type": match_type,
+                "match_key": match_key,
                 "expires_at": expires_at,
             }
         )
@@ -105,12 +125,17 @@ def _build_current_step(*, next_step_id: object = "done") -> CurrentStep:
         step_type=StepType.WAIT_INPUT,
         step=step,
         context=RunContext(inputs={}, step_executions={}),
+        run_created_at="2026-03-18 09:00:00",
     )
 
 
 def test_wait_input_returns_waiting_and_persists_wait() -> None:
     store = _FakeStore()
-    use_case = ExecuteWaitInputStepUseCase(store=store)
+    use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
 
     result = use_case.execute(_build_current_step())
 
@@ -125,8 +150,10 @@ def test_wait_input_returns_waiting_and_persists_wait() -> None:
             "run_id": "run-1",
             "step_id": "ask_user",
             "wait_type": WaitType.INPUT,
-            "webhook": None,
-            "key": None,
+            "source_type": SourceType.INPUT,
+            "source_name": "manual",
+            "match_type": MatchType.RUN,
+            "match_key": "run-1",
             "expires_at": None,
         }
     ]
@@ -139,6 +166,8 @@ def test_wait_input_returns_waiting_and_persists_wait() -> None:
         }
     ]
     assert store.events == []
+    assert store.latest_event_query is not None
+    assert store.latest_event_query["since_created_at"] == "2026-03-18 09:00:00"
 
 
 def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
@@ -146,7 +175,11 @@ def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
         active_wait={"id": "input-wait-1", "created_at": "2026-03-18 10:00:00"},
         input_event={"id": "input-1", "payload": {"text": "database timeout"}},
     )
-    use_case = ExecuteWaitInputStepUseCase(store=store)
+    use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
     current_step = _build_current_step()
 
     result = use_case.execute(current_step)
@@ -161,6 +194,7 @@ def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
     )
     assert current_step.context.step_executions["ask_user"] == result.execution
     assert result.execution.evaluation == {"input_event_id": "input-1"}
+    assert store.consumed_event_ids == [{"event_id": "input-1", "run_id": "run-1"}]
     assert store.resolved_wait_ids == ["input-wait-1"]
     assert store.updated == [
         {
@@ -171,11 +205,17 @@ def test_wait_input_returns_next_when_event_exists_and_next_declared() -> None:
         }
     ]
     assert store.events == []
+    assert store.latest_event_query is not None
+    assert store.latest_event_query["since_created_at"] == "2026-03-18 09:00:00"
 
 
 def test_wait_input_returns_completed_when_event_exists_and_next_missing() -> None:
     store = _FakeStore(input_event={"id": "input-1", "payload": {"text": "database timeout"}})
-    use_case = ExecuteWaitInputStepUseCase(store=store)
+    use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
     current_step = _build_current_step(next_step_id=None)
 
     result = use_case.execute(current_step)
@@ -195,13 +235,20 @@ def test_wait_input_returns_completed_when_event_exists_and_next_missing() -> No
             "context": current_step.context,
         }
     ]
+    assert store.consumed_event_ids == [{"event_id": "input-1", "run_id": "run-1"}]
+    assert store.latest_event_query is not None
+    assert store.latest_event_query["since_created_at"] == "2026-03-18 09:00:00"
 
 
 def test_wait_input_ignores_input_event_already_consumed_for_same_step() -> None:
     store = _FakeStore(
         input_event={"id": "input-1", "payload": {"text": "database timeout"}},
     )
-    use_case = ExecuteWaitInputStepUseCase(store=store)
+    use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
     current_step = _build_current_step()
     current_step.context.step_executions["ask_user"] = StepExecution(
         step_type=StepType.WAIT_INPUT,
@@ -227,8 +274,10 @@ def test_wait_input_ignores_input_event_already_consumed_for_same_step() -> None
             "run_id": "run-1",
             "step_id": "ask_user",
             "wait_type": WaitType.INPUT,
-            "webhook": None,
-            "key": None,
+            "source_type": SourceType.INPUT,
+            "source_name": "manual",
+            "match_type": MatchType.RUN,
+            "match_key": "run-1",
             "expires_at": None,
         }
     ]
@@ -246,7 +295,11 @@ def test_wait_input_ignores_input_event_already_consumed_for_same_step() -> None
 
 def test_wait_input_rejects_empty_next_when_declared() -> None:
     store = _FakeStore(input_event={"id": "input-1", "payload": {"text": "database timeout"}})
-    use_case = ExecuteWaitInputStepUseCase(store=store)
+    use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
 
     with pytest.raises(ValueError, match="requires non-empty next"):
         use_case.execute(_build_current_step(next_step_id="   "))

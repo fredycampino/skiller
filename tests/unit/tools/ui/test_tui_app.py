@@ -214,6 +214,17 @@ def test_build_progress_render_result_uses_status_for_terminal_transition_withou
     )
 
 
+def test_build_progress_render_result_does_not_treat_waiting_as_terminal_without_events() -> None:
+    run = UiRun(raw_args="chat", run_id="run-1", status="WAITING")
+    result = ActionResult(
+        kind="watch",
+        run=run,
+        payload={"status": "WAITING", "events": []},
+    )
+
+    assert build_progress_render_result(result=result, previous_status="RUNNING") is None
+
+
 def test_build_output_wrap_prefix_preserves_line_indentation_on_wrapped_lines() -> None:
     result = build_output_wrap_prefix(
         text="[run-resume] chat:7f1f\n    España tiene 48 millones.",

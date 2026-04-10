@@ -35,6 +35,7 @@ from skiller.application.use_cases.render_current_step import (
 from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
+from skiller.application.use_cases.skill_server_checker import SkillServerCheckerUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -47,6 +48,17 @@ from skiller.infrastructure.tools.shell.default_shell import DefaultShellRunner
 pytestmark = [
     pytest.mark.integration,
 ]
+
+
+class _FakeServerStatus:
+    def is_available(self) -> bool:
+        return True
+
+
+class _FakeChannelSender:
+    def is_available(self, *, channel: str) -> bool:
+        _ = channel
+        return True
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
@@ -86,8 +98,16 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
-    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(store=store)
-    execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(store=store)
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
+    execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
@@ -116,8 +136,20 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
         skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
-        handle_input_use_case=HandleInputUseCase(store=store),
-        handle_webhook_use_case=HandleWebhookUseCase(store=store),
+        skill_server_checker_use_case=SkillServerCheckerUseCase(
+            skill_runner=skill_runner,
+            server_status=_FakeServerStatus(),
+            channel_sender=_FakeChannelSender(),
+        ),
+        handle_input_use_case=HandleInputUseCase(
+            run_store=store,
+            external_event_store=store,
+            runtime_event_store=store,
+        ),
+        handle_webhook_use_case=HandleWebhookUseCase(
+            external_event_store=store,
+            wait_store=store,
+        ),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),

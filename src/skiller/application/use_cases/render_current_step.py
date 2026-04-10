@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.application.ports.skill_runner_port import SkillRunnerPort
-from skiller.application.ports.state_store_port import StateStorePort
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 from skiller.domain.skill_step_model import find_skill_step
@@ -30,6 +30,7 @@ class CurrentStep:
     step_type: StepType
     step: dict[str, Any]
     context: RunContext
+    run_created_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ class RenderCurrentStepResult:
 
 
 class RenderCurrentStepUseCase:
-    def __init__(self, store: StateStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 
@@ -88,5 +89,6 @@ class RenderCurrentStepUseCase:
                 step_type=parsed_step.step_type,
                 step=step,
                 context=run.context,
+                run_created_at=run.created_at,
             ),
         )

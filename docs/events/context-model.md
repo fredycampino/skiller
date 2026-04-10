@@ -162,6 +162,28 @@ Rules:
 }
 ```
 
+### `wait_channel`
+
+```json
+{
+  "text": "Channel message received: whatsapp:172584771580071@lid.",
+  "value": {
+    "channel": "whatsapp",
+    "key": "172584771580071@lid",
+    "payload": {
+      "channel": "whatsapp",
+      "message_id": "msg-1",
+      "key": "172584771580071@lid",
+      "sender_id": "172584771580071@lid",
+      "sender_name": "Fede",
+      "text": "hola",
+      "timestamp": 1775388655
+    }
+  },
+  "body_ref": null
+}
+```
+
 ### `wait_webhook`
 
 ```json

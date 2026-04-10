@@ -10,6 +10,7 @@ from skiller.application.use_cases.create_run import CreateRunUseCase
 from skiller.application.use_cases.fail_run import FailRunUseCase
 from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.handle_input import HandleInputUseCase
 from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
@@ -17,6 +18,10 @@ from skiller.application.use_cases.register_webhook import RegisterWebhookUseCas
 from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
 from skiller.application.use_cases.resume_run import ResumeRunStatus, ResumeRunUseCase
 from skiller.application.use_cases.skill_checker import SkillCheckerUseCase, SkillCheckStatus
+from skiller.application.use_cases.skill_server_checker import (
+    SkillServerCheckerUseCase,
+    SkillServerCheckStatus,
+)
 from skiller.domain.run_model import RunStatus, SkillSource
 
 
@@ -29,6 +34,7 @@ class RuntimeApplicationService:
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
         skill_checker_use_case: SkillCheckerUseCase,
+        skill_server_checker_use_case: SkillServerCheckerUseCase,
         handle_webhook_use_case: HandleWebhookUseCase,
         list_webhooks_use_case: ListWebhooksUseCase,
         register_webhook_use_case: RegisterWebhookUseCase,
@@ -37,6 +43,7 @@ class RuntimeApplicationService:
         get_run_status_use_case: GetRunStatusUseCase,
         run_worker_service: RunWorkerService,
         handle_input_use_case: HandleInputUseCase | None = None,
+        handle_channel_use_case: HandleChannelUseCase | None = None,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
@@ -44,6 +51,7 @@ class RuntimeApplicationService:
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
         self.skill_checker_use_case = skill_checker_use_case
+        self.skill_server_checker_use_case = skill_server_checker_use_case
         self.handle_input_use_case = handle_input_use_case
         self.handle_webhook_use_case = handle_webhook_use_case
         self.list_webhooks_use_case = list_webhooks_use_case
@@ -52,6 +60,7 @@ class RuntimeApplicationService:
         self.resume_run_use_case = resume_run_use_case
         self.get_run_status_use_case = get_run_status_use_case
         self.run_worker_service = run_worker_service
+        self.handle_channel_use_case = handle_channel_use_case
 
     def initialize(self) -> None:
         self.bootstrap_runtime_use_case.initialize()
@@ -113,6 +122,13 @@ class RuntimeApplicationService:
         check_result = self.skill_checker_use_case.execute(skill_ref, skill_source=skill_source)
         if check_result.status == SkillCheckStatus.INVALID:
             messages = [item.message for item in check_result.errors]
+            raise ValueError("\n".join(messages))
+        server_check_result = self.skill_server_checker_use_case.execute(
+            skill_ref,
+            skill_source=skill_source,
+        )
+        if server_check_result.status == SkillServerCheckStatus.INVALID:
+            messages = [item.message for item in server_check_result.errors]
             raise ValueError("\n".join(messages))
         run_id = self.create_run_use_case.execute(skill_ref, inputs, skill_source=skill_source)
         self.append_runtime_event_use_case.execute(
@@ -179,6 +195,38 @@ class RuntimeApplicationService:
         if result.error is not None:
             payload["error"] = result.error
         return payload
+
+    def handle_channel(
+        self,
+        channel: str,
+        key: str,
+        payload: dict[str, Any],
+        *,
+        external_id: str | None = None,
+        dedup_key: str | None = None,
+    ) -> dict[str, Any]:
+        if self.handle_channel_use_case is None:
+            raise ValueError("channel handling is not configured")
+        final_dedup_key = dedup_key or ""
+        result = self.handle_channel_use_case.execute(
+            channel,
+            key,
+            payload,
+            external_id=external_id,
+            dedup_key=final_dedup_key,
+        )
+        response = {
+            "accepted": result.accepted,
+            "duplicate": result.duplicate,
+            "channel": channel,
+            "key": key,
+            "matched_runs": result.run_ids,
+        }
+        if external_id is not None:
+            response["external_id"] = external_id
+        if result.error is not None:
+            response["error"] = result.error
+        return response
 
     def register_webhook(self, webhook: str) -> dict[str, Any]:
         result = self.register_webhook_use_case.execute(webhook)

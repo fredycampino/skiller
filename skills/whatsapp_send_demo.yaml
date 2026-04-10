@@ -1,0 +1,13 @@
+name: whatsapp_send_demo
+start: listen
+
+steps:
+  - wait_channel: listen
+    channel: whatsapp
+    key: all
+    next: reply
+
+  - send: reply
+    channel: whatsapp
+    key: '{{output_value("listen").key}}'
+    message: 'Echo: {{output_value("listen").payload.text}}'

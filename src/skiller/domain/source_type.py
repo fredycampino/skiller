@@ -1,6 +1,7 @@
 from enum import Enum
 
 
-class ExternalEventType(str, Enum):
+class SourceType(str, Enum):
     INPUT = "input"
     WEBHOOK = "webhook"
+    CHANNEL = "channel"

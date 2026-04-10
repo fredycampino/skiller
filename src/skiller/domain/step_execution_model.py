@@ -31,6 +31,14 @@ class AssignOutput(OutputBase):
 
 
 @dataclass(frozen=True)
+class SendOutput(OutputBase):
+    channel: str = ""
+    key: str = ""
+    message: str = ""
+    message_id: str | None = None
+
+
+@dataclass(frozen=True)
 class NotifyOutput(OutputBase):
     message: str = ""
 
@@ -67,6 +75,13 @@ class WaitWebhookOutput(OutputBase):
 
 
 @dataclass(frozen=True)
+class WaitChannelOutput(OutputBase):
+    channel: str = ""
+    key: str = ""
+    payload: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class LlmPromptOutput(OutputBase):
     data: Any = None
 
@@ -78,12 +93,14 @@ class McpOutput(OutputBase):
 
 _OUTPUT_TYPES: dict[StepType, Type[OutputBase]] = {
     StepType.ASSIGN: AssignOutput,
+    StepType.SEND: SendOutput,
     StepType.NOTIFY: NotifyOutput,
     StepType.SHELL: ShellOutput,
     StepType.SWITCH: SwitchOutput,
     StepType.WHEN: WhenOutput,
     StepType.WAIT_INPUT: WaitInputOutput,
     StepType.WAIT_WEBHOOK: WaitWebhookOutput,
+    StepType.WAIT_CHANNEL: WaitChannelOutput,
     StepType.LLM_PROMPT: LlmPromptOutput,
     StepType.MCP: McpOutput,
 }

@@ -20,6 +20,8 @@ class Settings:
     log_level: str = "INFO"
     webhooks_host: str = "127.0.0.1"
     webhooks_port: int = 8001
+    whatsapp_bridge_host: str = "127.0.0.1"
+    whatsapp_bridge_port: int = 8002
 
 
 def _maybe_load_dotenv() -> None:
@@ -74,4 +76,6 @@ def get_settings() -> Settings:
         log_level=os.getenv("AGENT_LOG_LEVEL", "INFO"),
         webhooks_host=os.getenv("AGENT_WEBHOOKS_HOST", "127.0.0.1"),
         webhooks_port=int(os.getenv("AGENT_WEBHOOKS_PORT", "8001")),
+        whatsapp_bridge_host=os.getenv("AGENT_WHATSAPP_BRIDGE_HOST", "127.0.0.1"),
+        whatsapp_bridge_port=int(os.getenv("AGENT_WHATSAPP_BRIDGE_PORT", "8002")),
     )

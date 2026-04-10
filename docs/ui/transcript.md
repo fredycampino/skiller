@@ -69,6 +69,7 @@ Ignored in the user transcript:
 Examples:
 - `wait_input` -> prompt
 - `wait_webhook` -> webhook or webhook:key
+- `wait_channel` -> channel or channel:key
 
 ### Hidden Resolved Wait Steps
 Resolved `wait_input` and `wait_webhook` `STEP_SUCCESS` events are not shown in the user transcript.
@@ -76,6 +77,11 @@ Resolved `wait_input` and `wait_webhook` `STEP_SUCCESS` events are not shown in 
 Reason:
 - they are technical resume events
 - they duplicate the previous wait and make the flow harder to scan
+
+`wait_channel` is different:
+- resolved `wait_channel` `STEP_SUCCESS` events stay visible
+- they carry the channel/key that actually resumed the run
+- they help explain why the next steps executed
 
 ### Incremental Behavior
 The transcript must append only new events for the run.
@@ -105,10 +111,8 @@ Tracebacks and provider errors must be reduced to a concise readable message.
 
 ```text
 [run-resume] chat:7f1f
-  [switch] decide_exit
-    answer
-  [llm_prompt] answer
-    España tiene 50 provincias.
-  [wait_input] ask_user
-    Write a message. Type exit, quit, or bye to stop.
+  [wait_channel] listen_whatsapp
+    Channel message received: whatsapp:172584771580071@lid.
+  [notify] notify_message
+    WhatsApp recibido: hola
 ```

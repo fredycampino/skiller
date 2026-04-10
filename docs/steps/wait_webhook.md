@@ -4,6 +4,18 @@
 
 `wait_webhook` pauses a run until an external event arrives for the expected `webhook + key`.
 
+Runtime correlation:
+- `source_type = webhook`
+- `source_name = <webhook>`
+- `match_type = signal`
+- `match_key = <key>`
+
+Current semantics:
+- events created before the run are ignored
+- events created during the run may resolve the wait, even if they arrived before the step was reached
+- each external event is single-consumer
+- if multiple pending webhook events could match, the oldest one is consumed first
+
 ## Shape
 
 ```yaml

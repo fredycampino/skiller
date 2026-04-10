@@ -1,9 +1,9 @@
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.run_store_port import RunStorePort
 from skiller.domain.run_model import RunStatus
 
 
 class CompleteRunUseCase:
-    def __init__(self, store: StateStorePort) -> None:
+    def __init__(self, store: RunStorePort) -> None:
         self.store = store
 
     def execute(self, run_id: str) -> None:

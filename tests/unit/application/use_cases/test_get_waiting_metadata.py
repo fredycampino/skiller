@@ -66,3 +66,32 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
         "wait_type": "input",
         "prompt": "Write a short summary",
     }
+
+
+def test_get_waiting_metadata_returns_channel_data() -> None:
+    run = SimpleNamespace(
+        id="run-3",
+        status="WAITING",
+        current="listen_whatsapp",
+        skill_snapshot={
+            "steps": [
+                {
+                    "wait_channel": "listen_whatsapp",
+                    "channel": "whatsapp",
+                    "key": "all",
+                }
+            ]
+        },
+        context=SimpleNamespace(to_dict=lambda: {"inputs": {}, "results": {}}),
+    )
+
+    store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-3" else None)
+    skill_runner = SimpleNamespace(render_step=lambda step, context: step)
+
+    result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-3")
+
+    assert result == {
+        "wait_type": "channel",
+        "channel": "whatsapp",
+        "key": "all",
+    }

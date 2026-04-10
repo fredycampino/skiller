@@ -1,18 +1,28 @@
-from skiller.application.ports.state_store_port import StateStorePort
+from skiller.application.ports.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.wait_store_port import WaitStorePort
 from skiller.application.use_cases.render_current_step import CurrentStep
 from skiller.application.use_cases.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
-from skiller.domain.external_event_type import ExternalEventType
+from skiller.domain.match_type import MatchType
 from skiller.domain.run_model import RunStatus
+from skiller.domain.source_type import SourceType
 from skiller.domain.step_execution_model import StepExecution, WaitWebhookOutput
 from skiller.domain.wait_type import WaitType
 
 
 class ExecuteWaitWebhookStepUseCase:
-    def __init__(self, store: StateStorePort) -> None:
-        self.store = store
+    def __init__(
+        self,
+        run_store: RunStorePort,
+        wait_store: WaitStorePort,
+        external_event_store: ExternalEventStorePort,
+    ) -> None:
+        self.run_store = run_store
+        self.wait_store = wait_store
+        self.external_event_store = external_event_store
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step = current_step.step
@@ -25,18 +35,28 @@ class ExecuteWaitWebhookStepUseCase:
         if not key:
             raise ValueError(f"Step '{step_id}' requires key")
 
-        active_wait = self.store.get_active_wait(
+        active_wait = self.wait_store.get_active_wait(
             current_step.run_id,
             step_id,
             wait_type=WaitType.WEBHOOK,
         )
-        since_created_at = str(active_wait["created_at"]) if active_wait is not None else None
-        webhook_event = self.store.get_latest_external_event(
-            event_type=ExternalEventType.WEBHOOK,
-            webhook=webhook,
-            key=key,
-            since_created_at=since_created_at,
+        webhook_event = self.external_event_store.get_latest_external_event(
+            source_type=SourceType.WEBHOOK,
+            source_name=webhook,
+            match_type=MatchType.SIGNAL,
+            match_key=key,
+            since_created_at=current_step.run_created_at,
         )
+
+        if webhook_event is not None:
+            webhook_event_id = str(webhook_event.get("id", "")).strip()
+            if not webhook_event_id:
+                webhook_event = None
+            elif not self.external_event_store.consume_external_event(
+                webhook_event_id,
+                run_id=current_step.run_id,
+            ):
+                webhook_event = None
 
         if webhook_event is not None:
             payload = webhook_event.get("payload")
@@ -55,11 +75,11 @@ class ExecuteWaitWebhookStepUseCase:
             )
             current_step.context.step_executions[step_id] = execution
             if active_wait is not None:
-                self.store.resolve_wait(str(active_wait["id"]))
+                self.wait_store.resolve_wait(str(active_wait["id"]))
 
             raw_next = step.get("next")
             if raw_next is None:
-                self.store.update_run(
+                self.run_store.update_run(
                     current_step.run_id,
                     status=RunStatus.RUNNING,
                     context=current_step.context,
@@ -73,7 +93,7 @@ class ExecuteWaitWebhookStepUseCase:
             if not next_step_id:
                 raise ValueError(f"Step '{step_id}' requires non-empty next")
 
-            self.store.update_run(
+            self.run_store.update_run(
                 current_step.run_id,
                 status=RunStatus.RUNNING,
                 current=next_step_id,
@@ -86,14 +106,16 @@ class ExecuteWaitWebhookStepUseCase:
             )
 
         if active_wait is None:
-            self.store.create_wait(
+            self.wait_store.create_wait(
                 current_step.run_id,
                 step_id=step_id,
                 wait_type=WaitType.WEBHOOK,
-                webhook=webhook,
-                key=key,
+                source_type=SourceType.WEBHOOK,
+                source_name=webhook,
+                match_type=MatchType.SIGNAL,
+                match_key=key,
             )
-        self.store.update_run(
+        self.run_store.update_run(
             current_step.run_id,
             status=RunStatus.WAITING,
             current=step_id,

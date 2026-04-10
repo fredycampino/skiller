@@ -35,10 +35,16 @@ It does not depend on runtime state.
 | `SKILL_STEP_NEXT_EMPTY` | `next` exists but is empty | `SKILL_STEP_NEXT_EMPTY: next requires non-empty target (step={step_id})` |
 | `SKILL_STEP_NEXT_NOT_FOUND` | `next` references an unknown `step_id` | `SKILL_STEP_NEXT_NOT_FOUND: next references unknown step_id (step={step_id}, next={target_step_id})` |
 | `SKILL_NOTIFY_MESSAGE_MISSING` | `notify` step has no `message` | `SKILL_NOTIFY_MESSAGE_MISSING: notify step requires message (step={step_id})` |
+| `SKILL_SEND_CHANNEL_MISSING` | `send` step has no `channel` | `SKILL_SEND_CHANNEL_MISSING: send step requires channel (step={step_id})` |
+| `SKILL_SEND_KEY_MISSING` | `send` step has no `key` | `SKILL_SEND_KEY_MISSING: send step requires key (step={step_id})` |
+| `SKILL_SEND_MESSAGE_MISSING` | `send` step has no `message` | `SKILL_SEND_MESSAGE_MISSING: send step requires message (step={step_id})` |
+| `SKILL_SEND_CHANNEL_UNSUPPORTED` | `send` step uses an unsupported channel | `SKILL_SEND_CHANNEL_UNSUPPORTED: send step supports only whatsapp (step={step_id}, channel={channel})` |
 | `SKILL_SHELL_COMMAND_MISSING` | `shell` step has no `command` | `SKILL_SHELL_COMMAND_MISSING: shell step requires command (step={step_id})` |
 | `SKILL_WAIT_INPUT_PROMPT_MISSING` | `wait_input` step has no `prompt` | `SKILL_WAIT_INPUT_PROMPT_MISSING: wait_input step requires prompt (step={step_id})` |
 | `SKILL_WAIT_WEBHOOK_WEBHOOK_MISSING` | `wait_webhook` step has no `webhook` | `SKILL_WAIT_WEBHOOK_WEBHOOK_MISSING: wait_webhook step requires webhook (step={step_id})` |
 | `SKILL_WAIT_WEBHOOK_KEY_MISSING` | `wait_webhook` step has no `key` | `SKILL_WAIT_WEBHOOK_KEY_MISSING: wait_webhook step requires key (step={step_id})` |
+| `SKILL_WAIT_CHANNEL_CHANNEL_MISSING` | `wait_channel` step has no `channel` | `SKILL_WAIT_CHANNEL_CHANNEL_MISSING: wait_channel step requires channel (step={step_id})` |
+| `SKILL_WAIT_CHANNEL_KEY_MISSING` | `wait_channel` step has no `key` | `SKILL_WAIT_CHANNEL_KEY_MISSING: wait_channel step requires key (step={step_id})` |
 | `SKILL_MCP_SERVER_MISSING` | `mcp` step has no `server` | `SKILL_MCP_SERVER_MISSING: mcp step requires server (step={step_id})` |
 | `SKILL_MCP_TOOL_MISSING` | `mcp` step has no `tool` | `SKILL_MCP_TOOL_MISSING: mcp step requires tool (step={step_id})` |
 | `SKILL_SWITCH_CASE_TARGET_NOT_FOUND` | a `switch` case points to an unknown step | `SKILL_SWITCH_CASE_TARGET_NOT_FOUND: switch case references unknown step_id (step={step_id}, target={target_step_id})` |
@@ -95,3 +101,6 @@ output_value(dynamic_var)
 - whether the resolved output body contains a requested field path
 
 Those checks belong to execution-time rendering.
+
+Server availability before run creation is handled separately by
+[`skills/skill-server-checker.md`](skill-server-checker.md).

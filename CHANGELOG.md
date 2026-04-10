@@ -19,6 +19,29 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-alpha.8 - 2026-04-10
+
+### Added
+- Added WhatsApp channel tooling with pairing, bridge lifecycle management, and dedicated operator documentation.
+- Added `wait_channel` and `channel receive` as first-class runtime primitives backed by normalized wait and external-event stores.
+- Added the `send` step with WhatsApp bridge delivery, demo skills, and outbound bridge availability checks before run creation.
+- Added `SkillServerCheckerUseCase` and server/channel availability guards so runs fail before creation when required local runtime pieces are missing.
+
+### Changed
+- Changed channel matching to the generic `key` / `channel_key` contract across runtime, persistence, and docs.
+- Changed the WhatsApp bridge to deliver inbound messages through the shared local server and to apply a more human-like delay before outbound sends.
+- Changed the TUI status polling path to tolerate missing persisted `body_ref` payloads instead of crashing the event loop.
+
+### Fixed
+- Fixed UI polling when an `execution_output` body could no longer be resolved from a stored `body_ref`.
+- Fixed channel-related runtime and persistence contracts so waits, external events, and examples stay aligned around normalized matching fields.
+
+### Removed
+- Removed the last public `conversation` naming from the generic channel contract in favor of `key`.
+
+### Notes
+- This release establishes WhatsApp as the first end-to-end channel with inbound waits, outbound send, bridge lifecycle tooling, and pre-run runtime checks.
+
 ## 1.0.0-alpha.7 - 2026-04-03
 
 ### Added

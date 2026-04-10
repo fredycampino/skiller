@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to publish (for example: v1.0.0-alpha.8)"
+        required: true
+        type: string
 
 permissions:
   id-token: write
@@ -16,6 +22,8 @@ jobs:
     steps:
       - name: Checkout tagged commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

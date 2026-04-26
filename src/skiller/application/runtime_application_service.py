@@ -1,28 +1,35 @@
 from typing import Any
 
 from skiller.application.run_worker_service import RunWorkerService
-from skiller.application.use_cases.append_runtime_event import (
+from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
+from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
+from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
+from skiller.application.use_cases.run.append_runtime_event import (
     AppendRuntimeEventUseCase,
     RuntimeEventType,
 )
-from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
-from skiller.application.use_cases.create_run import CreateRunUseCase
-from skiller.application.use_cases.fail_run import FailRunUseCase
-from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.get_start_step import GetStartStepUseCase
-from skiller.application.use_cases.handle_channel import HandleChannelUseCase
-from skiller.application.use_cases.handle_input import HandleInputUseCase
-from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
-from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
-from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
-from skiller.application.use_cases.resume_run import ResumeRunStatus, ResumeRunUseCase
-from skiller.application.use_cases.skill_checker import SkillCheckerUseCase, SkillCheckStatus
-from skiller.application.use_cases.skill_server_checker import (
+from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.delete_run import DeleteRunStatus, DeleteRunUseCase
+from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.resume_run import ResumeRunStatus, ResumeRunUseCase
+from skiller.application.use_cases.skill.skill_checker import (
+    SkillCheckerUseCase,
+    SkillCheckStatus,
+)
+from skiller.application.use_cases.skill.skill_server_checker import (
     SkillServerCheckerUseCase,
     SkillServerCheckStatus,
 )
-from skiller.domain.run_model import RunStatus, SkillSource
+from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
+from skiller.application.use_cases.webhook.remove_webhook import (
+    RemoveWebhookStatus,
+    RemoveWebhookUseCase,
+)
+from skiller.domain.run.run_model import RunStatus, SkillSource
 
 
 class RuntimeApplicationService:
@@ -31,6 +38,7 @@ class RuntimeApplicationService:
         bootstrap_runtime_use_case: BootstrapRuntimeUseCase,
         append_runtime_event_use_case: AppendRuntimeEventUseCase,
         create_run_use_case: CreateRunUseCase,
+        delete_run_use_case: DeleteRunUseCase,
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
         skill_checker_use_case: SkillCheckerUseCase,
@@ -48,6 +56,7 @@ class RuntimeApplicationService:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
         self.create_run_use_case = create_run_use_case
+        self.delete_run_use_case = delete_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
         self.skill_checker_use_case = skill_checker_use_case
@@ -160,6 +169,17 @@ class RuntimeApplicationService:
         run = self.get_run_status_use_case.execute(run_id)
         status = str(run.status) if run else RunStatus.FAILED.value
         return {"run_id": run_id, "status": status}
+
+    def delete_run(self, run_id: str) -> dict[str, Any]:
+        result = self.delete_run_use_case.execute(run_id)
+        payload = {
+            "run_id": result.run_id,
+            "status": result.status.value,
+            "deleted": result.status == DeleteRunStatus.DELETED,
+        }
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
 
     def handle_webhook(
         self,

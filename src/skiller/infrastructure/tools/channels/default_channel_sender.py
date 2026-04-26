@@ -69,8 +69,9 @@ class DefaultChannelSender(ChannelSenderPort):
             method="POST",
         )
 
+        timeout_seconds = self.settings.whatsapp_bridge_send_timeout_seconds
         try:
-            with urlopen(request, timeout=2.0) as response:  # noqa: S310
+            with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             raise RuntimeError(self._http_error_message(exc)) from exc

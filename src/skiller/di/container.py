@@ -3,41 +3,65 @@ from dataclasses import dataclass
 from skiller.application.query_service import RunQueryService
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
-from skiller.application.use_cases.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.create_run import CreateRunUseCase
-from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
-from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
-from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
-from skiller.application.use_cases.execute_send_step import ExecuteSendStepUseCase
-from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
-from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
-from skiller.application.use_cases.execute_wait_channel_step import ExecuteWaitChannelStepUseCase
-from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
-from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
-from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.fail_run import FailRunUseCase
-from skiller.application.use_cases.get_execution_output import GetExecutionOutputUseCase
-from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
-from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.get_runs import GetRunsUseCase
-from skiller.application.use_cases.get_start_step import GetStartStepUseCase
-from skiller.application.use_cases.get_waiting_metadata import GetWaitingMetadataUseCase
-from skiller.application.use_cases.handle_channel import HandleChannelUseCase
-from skiller.application.use_cases.handle_input import HandleInputUseCase
-from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
-from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
-from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
-from skiller.application.use_cases.render_current_step import RenderCurrentStepUseCase
-from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
-from skiller.application.use_cases.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
-from skiller.application.use_cases.skill_server_checker import SkillServerCheckerUseCase
-from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.application.tools.notify import NotifyTool, NotifyToolAdapter
+from skiller.application.tools.shell import ShellTool, ShellToolAdapter
+from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
+from skiller.application.use_cases.agent.tool_manager import ToolManager
+from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
+from skiller.application.use_cases.execute.execute_llm_prompt_step import (
+    ExecuteLlmPromptStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
+from skiller.application.use_cases.execute.execute_notify_step import (
+    ExecuteNotifyStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
+from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
+from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_input_step import (
+    ExecuteWaitInputStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_webhook_step import (
+    ExecuteWaitWebhookStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
+from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
+from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
+from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.query.get_execution_output import (
+    GetExecutionOutputUseCase,
+)
+from skiller.application.use_cases.query.get_run_logs import GetRunLogsUseCase
+from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.query.get_runs import GetRunsUseCase
+from skiller.application.use_cases.query.get_waiting_metadata import (
+    GetWaitingMetadataUseCase,
+)
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
+from skiller.application.use_cases.render.render_current_step import (
+    RenderCurrentStepUseCase,
+)
+from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
+from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
+from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
+from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
+from skiller.application.use_cases.skill.skill_server_checker import (
+    SkillServerCheckerUseCase,
+)
+from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
+from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings, get_settings
+from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
@@ -70,6 +94,7 @@ def build_runtime_container(
     store = SqliteStateStore(cfg.db_path)
     wait_store = SqliteWaitStore(cfg.db_path)
     external_event_store = SqliteExternalEventStore(cfg.db_path)
+    agent_context_store = SqliteAgentContextStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     execution_output_store = SqliteExecutionOutputStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
@@ -83,6 +108,16 @@ def build_runtime_container(
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender(cfg)
     large_result_truncator = LargeResultTruncator()
+    tool_manager = ToolManager(
+        tools=[
+            ShellTool(shell),
+            NotifyTool(),
+        ],
+        adapters=[
+            ShellToolAdapter(),
+            NotifyToolAdapter(),
+        ],
+    )
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
         store=store,
@@ -91,6 +126,7 @@ def build_runtime_container(
     )
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)
+    delete_run_use_case = DeleteRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
@@ -120,6 +156,12 @@ def build_runtime_container(
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    execute_agent_step_use_case = ExecuteAgentStepUseCase(
+        store=store,
+        agent_context_store=agent_context_store,
+        llm=llm,
+        tool_manager=tool_manager,
+    )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
         store=store,
@@ -176,6 +218,7 @@ def build_runtime_container(
         append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
+        execute_agent_step_use_case=execute_agent_step_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
         execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
@@ -200,6 +243,7 @@ def build_runtime_container(
         bootstrap_runtime_use_case=bootstrap_runtime_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
+        delete_run_use_case=delete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,
         skill_checker_use_case=skill_checker_use_case,

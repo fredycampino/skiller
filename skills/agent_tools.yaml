@@ -1,0 +1,39 @@
+name: agent_tools
+description: "Simple chat loop using the agent step with tools enabled"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "Write a message. Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: support_agent
+
+  - agent: support_agent
+    system: |
+      You are a helpful assistant in a terminal chat.
+      Reply in the same language as the user.
+      Be concise, clear, and direct.
+      Use tools only when they genuinely help.
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - notify
+      - shell
+    max_turns: 10
+    next: show_reply
+
+  - notify: show_reply
+    message: '{{output_value("support_agent").data.final.text}}'
+    next: ask_user
+
+  - notify: done
+    message: "Chat closed."

@@ -1,0 +1,1 @@
+"""Tool domain models."""

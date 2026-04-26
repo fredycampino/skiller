@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.render_current_step import (
+from skiller.application.use_cases.render.render_current_step import (
     CurrentStepStatus,
     RenderCurrentStepUseCase,
     StepType,

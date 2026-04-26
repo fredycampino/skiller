@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
 from skiller.domain.match_type import MatchType
 from skiller.domain.source_type import SourceType
 

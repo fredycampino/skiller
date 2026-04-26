@@ -42,7 +42,6 @@ htmlcov/
 # Environment files
 .env
 .env.*
-!.env.example
 
 # Runtime artifacts
 *.db
@@ -53,5 +52,5 @@ docs-legacy/
 docs/spikes/
 
 # Local JS bridge artifacts
-src/skiller/tools/whatsapp/bridge/node_modules/
-src/skiller/tools/whatsapp/bridge/package-lock.json
+src/skiller/local/channels/whatsapp/bridge/node_modules/
+src/skiller/local/channels/whatsapp/bridge/package-lock.json

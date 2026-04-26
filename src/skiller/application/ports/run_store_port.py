@@ -1,7 +1,7 @@
 from typing import Protocol
 
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run, RunStatus
 
 
 class RunStorePort(Protocol):
@@ -25,3 +25,5 @@ class RunStorePort(Protocol):
     ) -> None: ...
 
     def get_run(self, run_id: str) -> Run | None: ...
+
+    def delete_run(self, run_id: str) -> bool: ...

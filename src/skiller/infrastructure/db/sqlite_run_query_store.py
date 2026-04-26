@@ -1,6 +1,6 @@
 from typing import Any
 
-from skiller.domain.run_list_item_model import RunListItem
+from skiller.domain.run.run_list_item_model import RunListItem
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 

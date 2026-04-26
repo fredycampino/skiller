@@ -1,9 +1,10 @@
 import re
+from pathlib import Path
 
 import pytest
 
-from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.render_mcp_config import (
+from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
+from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
@@ -307,6 +308,99 @@ def test_render_mcp_config_returns_rendered_http_config_with_headers() -> None:
     )
 
 
+def test_render_mcp_config_resolves_http_config_from_secret_files(tmp_path: Path) -> None:
+    url_file = tmp_path / "github_mcp_url"
+    token_file = tmp_path / "github_mcp_token"
+    url_file.write_text("https://api.github.example/mcp\n", encoding="utf-8")
+    token_file.write_text("secret-token\n", encoding="utf-8")
+    run = _build_run(
+        {
+            "mcp": [
+                {
+                    "name": "github",
+                    "transport": "streamable-http",
+                    "url_file": str(url_file),
+                    "headers": {
+                        "Authorization": {
+                            "file": str(token_file),
+                            "prefix": "Bearer ",
+                        }
+                    },
+                }
+            ]
+        }
+    )
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(run),
+        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="create_pr",
+            step_type=StepType.MCP,
+            step={"server": "github", "tool": "create_pull_request", "args": {}},
+            context=run.context,
+        )
+    )
+
+    assert result.status == RenderMcpConfigStatus.RENDERED
+    assert result.error is None
+    assert result.mcp_config == RenderedMcpConfig(
+        name="github",
+        transport="streamable-http",
+        url="https://api.github.example/mcp",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+
+def test_render_mcp_config_resolves_header_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENT_GITHUB_MCP_TOKEN", "secret-token")
+    run = _build_run(
+        {
+            "mcp": [
+                {
+                    "name": "github",
+                    "transport": "streamable-http",
+                    "url": "https://api.github.example/mcp",
+                    "headers": {
+                        "Authorization": {
+                            "env": "AGENT_GITHUB_MCP_TOKEN",
+                            "prefix": "Bearer ",
+                        }
+                    },
+                }
+            ]
+        }
+    )
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(run),
+        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="create_pr",
+            step_type=StepType.MCP,
+            step={"server": "github", "tool": "create_pull_request", "args": {}},
+            context=run.context,
+        )
+    )
+
+    assert result.status == RenderMcpConfigStatus.RENDERED
+    assert result.error is None
+    assert result.mcp_config == RenderedMcpConfig(
+        name="github",
+        transport="streamable-http",
+        url="https://api.github.example/mcp",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+
 def test_render_mcp_config_renders_http_url_template() -> None:
     run = _build_run_with_inputs(
         host="127.0.0.1",
@@ -528,4 +622,41 @@ def test_render_mcp_config_rejects_unresolved_template() -> None:
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
     assert (
         result.error == "Unresolved template in MCP config for server 'local-mcp' at 'mcp.command'"
+    )
+
+
+def test_render_mcp_config_rejects_missing_header_env() -> None:
+    run = _build_run(
+        {
+            "mcp": [
+                {
+                    "name": "github",
+                    "transport": "streamable-http",
+                    "url": "https://api.github.example/mcp",
+                    "headers": {"Authorization": {"env": "AGENT_GITHUB_MCP_TOKEN"}},
+                }
+            ]
+        }
+    )
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(run),
+        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="create_pr",
+            step_type=StepType.MCP,
+            step={"server": "github", "tool": "create_pull_request", "args": {}},
+            context=run.context,
+        )
+    )
+
+    assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
+    assert (
+        result.error
+        == "MCP header references missing env variable "
+        "(server='github', header='Authorization', env='AGENT_GITHUB_MCP_TOKEN')"
     )

@@ -1,8 +1,10 @@
 import pytest
 
-from skiller.application.use_cases.execute_wait_channel_step import ExecuteWaitChannelStepUseCase
-from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
+from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
+from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.match_type import MatchType
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
@@ -161,8 +163,7 @@ def test_wait_channel_returns_waiting_and_persists_wait() -> None:
             "context": current_step.context,
         }
     ]
-    assert store.latest_event_query is not None
-    assert store.latest_event_query["since_created_at"] == "2026-04-07 09:00:00"
+    assert store.latest_event_query is None
 
 
 def test_wait_channel_returns_next_when_event_exists() -> None:
@@ -197,4 +198,38 @@ def test_wait_channel_returns_next_when_event_exists() -> None:
     assert store.consumed_event_ids == [{"event_id": "channel-1", "run_id": "run-1"}]
     assert store.resolved_wait_ids == ["channel-wait-1"]
     assert store.latest_event_query is not None
-    assert store.latest_event_query["since_created_at"] == "2026-04-07 09:00:00"
+    assert store.latest_event_query["since_created_at"] == "2026-04-07 10:00:00"
+
+
+def test_wait_channel_ignores_stale_message_timestamp() -> None:
+    store = _FakeStore(
+        active_wait={"id": "channel-wait-1", "created_at": "2026-04-20 17:58:17"},
+        channel_event={
+            "id": "channel-1",
+            "payload": {
+                "key": "172584771580071@lid",
+                "text": "hola",
+                "timestamp": 1775388655,
+            },
+        },
+    )
+    use_case = ExecuteWaitChannelStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=store,
+    )
+    current_step = _build_current_step()
+
+    result = use_case.execute(current_step)
+
+    assert result.status == StepExecutionStatus.WAITING
+    assert store.consumed_event_ids == [{"event_id": "channel-1", "run_id": "run-1"}]
+    assert store.resolved_wait_ids == []
+    assert store.updated == [
+        {
+            "run_id": "run-1",
+            "status": RunStatus.WAITING,
+            "current": "listen_whatsapp",
+            "context": current_step.context,
+        }
+    ]

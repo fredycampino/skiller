@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from skiller.di.container import build_runtime_container
-from skiller.domain.run_model import RunStatus, SkillSource
-from skiller.interfaces.controllers import RuntimeController
-from skiller.tools.cloudflared.ensure_service import CloudflaredEnsureService
-from skiller.tools.cloudflared.login_service import CloudflaredLoginService
-from skiller.tools.cloudflared.process_service import CloudflaredProcessService
-from skiller.tools.webhooks.process_service import WebhookProcessService
-from skiller.tools.whatsapp.pair_service import WhatsAppPairService
-from skiller.tools.whatsapp.process_service import WhatsAppProcessService
-from skiller.tools.workers.process_service import WorkerProcessService
+from skiller.domain.run.run_model import RunStatus, SkillSource
+from skiller.interfaces.runtime_controller import RuntimeController
+from skiller.local.channels.whatsapp.pair_service import WhatsAppPairService
+from skiller.local.channels.whatsapp.process_service import WhatsAppProcessService
+from skiller.local.server.process_service import WebhookProcessService
+from skiller.local.tunnels.cloudflared.ensure_service import CloudflaredEnsureService
+from skiller.local.tunnels.cloudflared.login_service import CloudflaredLoginService
+from skiller.local.tunnels.cloudflared.process_service import CloudflaredProcessService
+from skiller.local.workers.process_service import WorkerProcessService
 
 _WATCH_TERMINAL_STATUSES = {
     RunStatus.WAITING.value,
@@ -280,6 +280,9 @@ def build_parser() -> argparse.ArgumentParser:
     resume_parser = sub.add_parser("resume", help="Resume a waiting run")
     resume_parser.add_argument("run_id")
 
+    delete_parser = sub.add_parser("delete", help="Delete a run and all associated database rows")
+    delete_parser.add_argument("run_id")
+
     worker_parser = sub.add_parser("worker", help="Worker operations")
     worker_sub = worker_parser.add_subparsers(dest="worker_command", required=True)
 
@@ -388,6 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
     whatsapp_pair_sub.add_parser("start", help="Start WhatsApp pairing")
     whatsapp_pair_sub.add_parser("status", help="Show WhatsApp pairing status")
     whatsapp_pair_sub.add_parser("stop", help="Stop a managed WhatsApp pairing attempt")
+    whatsapp_pair_sub.add_parser("reset", help="Delete local WhatsApp session and pairing state")
 
     register_parser = webhook_sub.add_parser(
         "register",
@@ -419,15 +423,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     effective_argv = list(sys.argv[1:] if argv is None else argv)
     if not effective_argv:
-        from skiller.tools.ui.app import run_ui
+        from skiller.interfaces.tui.app import run_tui
 
-        run_ui()
+        run_tui()
         return 0
 
     parser = build_parser()
     args = parser.parse_args(effective_argv)
     if args.command == "ui":
-        from skiller.tools.ui.app import run_ui
+        from skiller.interfaces.ui.app import run_ui
 
         run_ui()
         return 0
@@ -842,6 +846,28 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if result.stopped or not result.running else 1
 
+        if args.whatsapp_pair_command == "reset":
+            try:
+                stop_result = WhatsAppProcessService(container.settings).stop()
+                result = WhatsAppPairService(container.settings).reset()
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "reset": result.reset,
+                        "paired": result.paired,
+                        "stopped_bridge": stop_result.stopped,
+                        "stopped_pairing": result.stopped_pairing,
+                        "home": result.home,
+                        "session_path": result.session_path,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+
     if args.command == "worker" and args.worker_command == "start":
         try:
             result = controller.start_worker(args.run_id)
@@ -872,6 +898,11 @@ def main(argv: list[str] | None = None) -> int:
         result = controller.resume(args.run_id)
         print(json.dumps(result, indent=2))
         return 0 if result["resume_status"] == "RESUMED" else 1
+
+    if args.command == "delete":
+        result = controller.delete_run(args.run_id)
+        print(json.dumps(result, indent=2))
+        return 0 if result["deleted"] else 1
 
     if args.command == "status":
         run = controller.status(args.run_id)

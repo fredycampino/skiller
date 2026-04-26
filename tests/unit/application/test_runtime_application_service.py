@@ -3,21 +3,22 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.use_cases.append_runtime_event import RuntimeEventType
-from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
-from skiller.application.use_cases.list_webhooks import ListWebhooksResult
-from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus
-from skiller.application.use_cases.resume_run import ResumeRunResult, ResumeRunStatus
-from skiller.application.use_cases.skill_checker import (
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksResult
+from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
+from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.delete_run import DeleteRunStatus
+from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
+from skiller.application.use_cases.skill.skill_checker import (
     SkillCheckError,
     SkillCheckResult,
     SkillCheckStatus,
 )
-from skiller.application.use_cases.skill_server_checker import (
+from skiller.application.use_cases.skill.skill_server_checker import (
     SkillServerCheckError,
     SkillServerCheckResult,
     SkillServerCheckStatus,
 )
+from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookStatus
 
 pytestmark = pytest.mark.unit
 
@@ -41,6 +42,17 @@ class _FakeCreateRunUseCase:
             }
         )
         return "run-1"
+
+
+class _FakeDeleteRunUseCase:
+    def __init__(self, *, status: DeleteRunStatus = DeleteRunStatus.DELETED) -> None:
+        self.status = status
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        error = None if self.status == DeleteRunStatus.DELETED else f"Run '{run_id}' not found"
+        return SimpleNamespace(status=self.status, run_id=run_id, error=error)
 
 
 class _FakeAppendRuntimeEventUseCase:
@@ -208,6 +220,7 @@ def _build_service(
     handle_webhook_use_case: _FakeHandleWebhookUseCase | None = None,
     skill_checker_use_case: _FakeSkillCheckerUseCase | None = None,
     skill_server_checker_use_case: _FakeSkillServerCheckerUseCase | None = None,
+    delete_run_use_case: _FakeDeleteRunUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RuntimeApplicationService,
@@ -238,6 +251,7 @@ def _build_service(
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
+        delete_run_use_case=delete_run_use_case or _FakeDeleteRunUseCase(),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
         skill_checker_use_case=final_skill_checker_use_case,
@@ -321,6 +335,28 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
     assert get_start_step_use_case.calls == ["run-1"]
     assert run_worker_service.calls == ["run-1"]
     assert get_run_status_use_case.calls == ["run-1"]
+
+
+def test_delete_run_returns_delete_result() -> None:
+    delete_run_use_case = _FakeDeleteRunUseCase()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(delete_run_use_case=delete_run_use_case)
+
+    result = service.delete_run("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "status": "DELETED",
+        "deleted": True,
+    }
+    assert delete_run_use_case.calls == ["run-1"]
 
 
 def test_start_worker_prepares_created_run() -> None:
@@ -450,6 +486,7 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=_FakeCreateRunUseCase(),
+        delete_run_use_case=_FakeDeleteRunUseCase(),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=_FakeGetStartStepUseCase(
             run_status_use_case=get_run_status_use_case

@@ -12,6 +12,7 @@ class _FakeController:
         self.start_worker_calls: list[str] = []
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
+        self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
         self.receive_channel_calls: list[
@@ -88,6 +89,10 @@ class _FakeController:
     def resume(self, run_id: str) -> dict[str, str]:
         self.resume_calls.append(run_id)
         return {"run_id": run_id, "resume_status": "RESUMED", "status": "WAITING"}
+
+    def delete_run(self, run_id: str) -> dict[str, object]:
+        self.delete_run_calls.append(run_id)
+        return {"run_id": run_id, "status": "DELETED", "deleted": True}
 
     def logs(self, run_id: str) -> list[dict[str, object]]:
         self.logs_calls.append(run_id)
@@ -206,18 +211,18 @@ class _FakeWorkerProcessService:
 
 
 def test_main_without_args_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"run_ui": False}
+    called = {"run_tui": False}
 
-    def fake_run_ui() -> str:
-        called["run_ui"] = True
+    def fake_run_tui() -> str:
+        called["run_tui"] = True
         return "session-key"
 
-    monkeypatch.setattr("skiller.tools.ui.app.run_ui", fake_run_ui)
+    monkeypatch.setattr("skiller.interfaces.tui.app.run_tui", fake_run_tui)
 
     exit_code = cli_main.main([])
 
     assert exit_code == 0
-    assert called["run_ui"] is True
+    assert called["run_tui"] is True
 
 
 def test_ui_subcommand_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -227,7 +232,7 @@ def test_ui_subcommand_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
         called["run_ui"] = True
         return "session-key"
 
-    monkeypatch.setattr("skiller.tools.ui.app.run_ui", fake_run_ui)
+    monkeypatch.setattr("skiller.interfaces.ui.app.run_ui", fake_run_ui)
 
     exit_code = cli_main.main(["ui"])
 
@@ -966,6 +971,56 @@ def test_whatsapp_pair_stop_command(
     assert '"pid": 4455' in captured.out
 
 
+def test_whatsapp_pair_reset_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[str] = []
+
+    class _FakeWhatsAppProcessService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def stop(self):
+            calls.append("stop_bridge")
+            return SimpleNamespace(stopped=True)
+
+    class _FakeWhatsAppPairService:
+        def __init__(self, settings) -> None:  # noqa: ANN001
+            self.settings = settings
+
+        def reset(self):
+            calls.append("reset_pair")
+            return SimpleNamespace(
+                reset=True,
+                paired=False,
+                stopped_pairing=False,
+                home="/tmp/whatsapp-home",
+                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
+            )
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(
+        cli_main,
+        "RuntimeController",
+        lambda **_: _FakeController(None, None, None),
+    )
+    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
+    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
+
+    exit_code = cli_main.main(["whatsapp", "pair", "reset"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == ["stop_bridge", "reset_pair"]
+    assert '"reset": true' in captured.out
+    assert '"paired": false' in captured.out
+    assert '"stopped_bridge": true' in captured.out
+    assert '"stopped_pairing": false' in captured.out
+    assert '"session_path": "/tmp/whatsapp-home/.skiller/whatsapp/session"' in captured.out
+
+
 def test_whatsapp_start_command(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -1305,6 +1360,25 @@ def test_runs_accepts_status_filters(
     assert exit_code == 0
     assert controller.list_runs_calls == [(5, ["WAITING"])]
     assert '"status": "WAITING"' in captured.out
+
+
+def test_delete_deletes_run(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["delete", "run-1"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.delete_run_calls == ["run-1"]
+    assert '"status": "DELETED"' in captured.out
+    assert '"deleted": true' in captured.out
 
 
 def test_webhook_receive_uses_webhook_and_key(

@@ -26,7 +26,7 @@ class _FakeResponse:
 
 
 def test_default_channel_sender_posts_to_whatsapp_bridge() -> None:
-    sender = DefaultChannelSender(Settings())
+    sender = DefaultChannelSender(Settings(whatsapp_bridge_send_timeout_seconds=11.5))
 
     with patch(
         "skiller.infrastructure.tools.channels.default_channel_sender.urlopen",
@@ -37,6 +37,7 @@ def test_default_channel_sender_posts_to_whatsapp_bridge() -> None:
         result = sender.send_text(channel="whatsapp", key="chat-1", message="hola")
 
     request = mock_urlopen.call_args.args[0]
+    assert mock_urlopen.call_args.kwargs["timeout"] == 11.5
     assert request.full_url == "http://127.0.0.1:8002/messages"
     assert request.get_method() == "POST"
     assert request.data == b'{"channel": "whatsapp", "key": "chat-1", "text": "hola"}'

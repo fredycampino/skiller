@@ -14,9 +14,11 @@ inputs:
 mcp:
   - name: github
     transport: streamable-http
-    url: "{{env.AGENT_GITHUB_MCP_URL}}"
+    url: "https://api.githubcopilot.com/mcp/"
     headers:
-      Authorization: "Bearer {{env.AGENT_GITHUB_MCP_TOKEN}}"
+      Authorization:
+        file: "~/.skiller/secrets/github_mcp_token"
+        prefix: "Bearer "
 
 steps:
   - mcp: create_pr

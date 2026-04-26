@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.get_runs import GetRunsUseCase
+from skiller.application.use_cases.query.get_runs import GetRunsUseCase
 from skiller.domain.run_list_item_model import RunListItem
 
 pytestmark = pytest.mark.unit

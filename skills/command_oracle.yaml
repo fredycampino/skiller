@@ -1,0 +1,46 @@
+name: command_oracle
+description: "Wait for a webhook command, classify it with LLM, and report the decision"
+version: "0.1"
+start: wait_command
+
+inputs:
+  key: string
+
+steps:
+  - wait_webhook: wait_command
+    webhook: command
+    key: "{{inputs.key}}"
+    next: analyze_command
+
+  - llm_prompt: analyze_command
+    system: |
+      You are a command classifier. Respond only with valid JSON.
+    prompt: |
+      A command was received: {{context.step_outputs.wait_command.output.value.payload}}
+
+      Classify it and return:
+      - action: "deploy", "rollback", "investigate", "ignore"
+      - reason: one sentence explaining why
+      - priority: "high", "medium", "low"
+    output:
+      format: json
+      schema:
+        type: object
+        required: [action, reason, priority]
+        properties:
+          action:
+            type: string
+            enum: [deploy, rollback, investigate, ignore]
+          reason:
+            type: string
+          priority:
+            type: string
+            enum: [high, medium, low]
+    next: report
+
+  - notify: report
+    message: |
+      Command received: {{context.step_outputs.wait_command.output.value.payload}}
+      Action: {{context.step_outputs.analyze_command.output.value.data.action}}
+      Reason: {{context.step_outputs.analyze_command.output.value.data.reason}}
+      Priority: {{context.step_outputs.analyze_command.output.value.data.priority}}

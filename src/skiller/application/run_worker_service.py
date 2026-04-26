@@ -2,34 +2,45 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.use_cases.append_runtime_event import (
-    AppendRuntimeEventUseCase,
-    RuntimeEventType,
+from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
+from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
+from skiller.application.use_cases.execute.execute_llm_prompt_step import (
+    ExecuteLlmPromptStepUseCase,
 )
-from skiller.application.use_cases.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
-from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
-from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
-from skiller.application.use_cases.execute_send_step import ExecuteSendStepUseCase
-from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
-from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
-from skiller.application.use_cases.execute_wait_channel_step import ExecuteWaitChannelStepUseCase
-from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
-from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
-from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.fail_run import FailRunUseCase
-from skiller.application.use_cases.render_current_step import (
+from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
+from skiller.application.use_cases.execute.execute_notify_step import (
+    ExecuteNotifyStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
+from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
+from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_input_step import (
+    ExecuteWaitInputStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_webhook_step import (
+    ExecuteWaitWebhookStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
+from skiller.application.use_cases.render.render_current_step import (
     CurrentStep,
     CurrentStepStatus,
     RenderCurrentStepUseCase,
     StepType,
 )
-from skiller.application.use_cases.render_mcp_config import (
+from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
-from skiller.application.use_cases.step_execution_result import (
+from skiller.application.use_cases.run.append_runtime_event import (
+    AppendRuntimeEventUseCase,
+    RuntimeEventType,
+)
+from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
+from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
@@ -58,6 +69,7 @@ class RunWorkerService:
         append_runtime_event_use_case: AppendRuntimeEventUseCase,
         render_current_step_use_case: RenderCurrentStepUseCase,
         render_mcp_config_use_case: RenderMcpConfigUseCase,
+        execute_agent_step_use_case: ExecuteAgentStepUseCase,
         execute_assign_step_use_case: ExecuteAssignStepUseCase,
         execute_llm_prompt_step_use_case: ExecuteLlmPromptStepUseCase,
         execute_mcp_step_use_case: ExecuteMcpStepUseCase,
@@ -75,6 +87,7 @@ class RunWorkerService:
         self.append_runtime_event_use_case = append_runtime_event_use_case
         self.render_current_step_use_case = render_current_step_use_case
         self.render_mcp_config_use_case = render_mcp_config_use_case
+        self.execute_agent_step_use_case = execute_agent_step_use_case
         self.execute_assign_step_use_case = execute_assign_step_use_case
         self.execute_llm_prompt_step_use_case = execute_llm_prompt_step_use_case
         self.execute_mcp_step_use_case = execute_mcp_step_use_case
@@ -158,6 +171,9 @@ class RunWorkerService:
             return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.FAILED, error=error)
 
     def _execute_ready_step(self, current_step: CurrentStep) -> StepAdvance:
+        if current_step.step_type == StepType.AGENT:
+            return self.execute_agent_step_use_case.execute(current_step)
+
         if current_step.step_type == StepType.NOTIFY:
             return self.execute_notify_step_use_case.execute(current_step)
 
@@ -207,7 +223,7 @@ class RunWorkerService:
 
         raise ValueError(
             f"Unsupported step type '{current_step.step_type.value}' in step "
-            f"'{current_step.step_id}': only 'assign', 'llm_prompt', 'mcp', "
+            f"'{current_step.step_id}': only 'agent', 'assign', 'llm_prompt', 'mcp', "
             "'notify', 'send', 'shell', "
             "'switch', 'wait_channel', 'wait_input', 'wait_webhook' and 'when' are enabled "
             "in run loop"

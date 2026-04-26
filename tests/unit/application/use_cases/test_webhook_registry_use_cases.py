@@ -1,9 +1,12 @@
-from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
-from skiller.application.use_cases.register_webhook import (
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
+from skiller.application.use_cases.webhook.register_webhook import (
     RegisterWebhookStatus,
     RegisterWebhookUseCase,
 )
-from skiller.application.use_cases.remove_webhook import RemoveWebhookStatus, RemoveWebhookUseCase
+from skiller.application.use_cases.webhook.remove_webhook import (
+    RemoveWebhookStatus,
+    RemoveWebhookUseCase,
+)
 
 
 class _FakeRegistry:

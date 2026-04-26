@@ -14,6 +14,8 @@ from skiller.domain.step_execution_model import (
     WhenOutput,
 )
 from skiller.domain.step_type import StepType
+from skiller.domain.wait_type import WaitType
+from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
@@ -337,6 +339,53 @@ def test_init_db_creates_normalized_waits_and_external_events_schema(tmp_path) -
     ]
 
 
+def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
+    db_path = tmp_path / "terminal-status-expires-waits.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "whatsapp_demo",
+        {"start": "listen_whatsapp", "steps": [{"wait_channel": "listen_whatsapp"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id="550e8400-e29b-41d4-a716-446655440012",
+    )
+    wait_id = store.create_wait(
+        run_id,
+        step_id="listen_whatsapp",
+        wait_type=WaitType.CHANNEL,
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="all",
+    )
+
+    store.update_run(run_id, status=RunStatus.CANCELLED, current="listen_whatsapp")
+
+    active_wait = store.get_active_wait(
+        run_id,
+        "listen_whatsapp",
+        wait_type=WaitType.CHANNEL,
+    )
+
+    assert active_wait is None
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT status, resolved_at
+            FROM waits
+            WHERE id = ?
+            """,
+            (wait_id,),
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == "EXPIRED"
+    assert row[1] is not None
+
+
 def test_external_event_is_created_pending_and_removed_from_pending_lookup_when_consumed(
     tmp_path,
 ) -> None:
@@ -437,6 +486,154 @@ def test_get_latest_external_event_returns_oldest_pending_match_first(tmp_path) 
     assert event["id"] == first_event_id
     assert event["payload"] == {"text": "first"}
     assert second_event_id != first_event_id
+
+
+def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
+    db_path = tmp_path / "delete-run.db"
+    store = SqliteStateStore(str(db_path))
+    execution_outputs = SqliteExecutionOutputStore(str(db_path))
+    store.init_db()
+    execution_outputs.init_db()
+
+    run_id = "550e8400-e29b-41d4-a716-446655440021"
+    other_run_id = "550e8400-e29b-41d4-a716-446655440022"
+    skill_snapshot = {"start": "wait", "steps": [{"wait_channel": "wait"}]}
+    context = RunContext(inputs={}, step_executions={})
+    store.create_run("internal", "skill", skill_snapshot, context, run_id=run_id)
+    store.create_run("internal", "skill", skill_snapshot, context, run_id=other_run_id)
+    store.append_event("RUN_CREATE", {"skill": "skill"}, run_id=run_id)
+    store.append_event("RUN_CREATE", {"skill": "skill"}, run_id=other_run_id)
+    store.create_wait(
+        run_id,
+        step_id="wait",
+        wait_type=WaitType.CHANNEL,
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="chat-1",
+    )
+    store.create_wait(
+        other_run_id,
+        step_id="wait",
+        wait_type=WaitType.CHANNEL,
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="chat-2",
+    )
+    store.create_external_event(
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="chat-1",
+        payload={"text": "run scoped"},
+        run_id=run_id,
+        step_id="wait",
+        external_id="msg-1",
+        dedup_key="msg-1",
+    )
+    store.register_external_receipt(
+        "msg-1",
+        SourceType.CHANNEL,
+        "whatsapp",
+        MatchType.CHANNEL_KEY,
+        "chat-1",
+        {"text": "run scoped"},
+    )
+    consumed_event_id = store.create_external_event(
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="chat-2",
+        payload={"text": "consumed by deleted run"},
+        run_id=other_run_id,
+        step_id="wait",
+        external_id="msg-2",
+        dedup_key="msg-2",
+    )
+    store.register_external_receipt(
+        "msg-2",
+        SourceType.CHANNEL,
+        "whatsapp",
+        MatchType.CHANNEL_KEY,
+        "chat-2",
+        {"text": "consumed by deleted run"},
+    )
+    store.consume_external_event(consumed_event_id, run_id=run_id)
+    store.create_external_event(
+        source_type=SourceType.CHANNEL,
+        source_name="whatsapp",
+        match_type=MatchType.CHANNEL_KEY,
+        match_key="chat-3",
+        payload={"text": "other"},
+        run_id=other_run_id,
+        step_id="wait",
+        external_id="msg-3",
+        dedup_key="msg-3",
+    )
+    store.register_external_receipt(
+        "msg-3",
+        SourceType.CHANNEL,
+        "whatsapp",
+        MatchType.CHANNEL_KEY,
+        "chat-3",
+        {"text": "other"},
+    )
+    execution_outputs.store_execution_output(
+        run_id=run_id,
+        step_id="wait",
+        output_body={"deleted": True},
+    )
+    execution_outputs.store_execution_output(
+        run_id=other_run_id,
+        step_id="wait",
+        output_body={"deleted": False},
+    )
+
+    deleted = store.delete_run(run_id)
+
+    assert deleted is True
+    assert store.get_run(run_id) is None
+    assert store.get_run(other_run_id) is not None
+
+    with sqlite3.connect(db_path) as conn:
+        assert _count(conn, "runs", "id = ?", run_id) == 0
+        assert _count(conn, "events", "run_id = ?", run_id) == 0
+        assert _count(conn, "waits", "run_id = ?", run_id) == 0
+        assert (
+            _count(
+                conn,
+                "external_events",
+                "run_id = ? OR consumed_by_run_id = ?",
+                run_id,
+                run_id,
+            )
+            == 0
+        )
+        assert _count(conn, "external_receipts", "dedup_key IN ('msg-1', 'msg-2')") == 0
+        assert _count(conn, "execution_outputs", "run_id = ?", run_id) == 0
+        assert _count(conn, "runs", "id = ?", other_run_id) == 1
+        assert _count(conn, "events", "run_id = ?", other_run_id) == 1
+        assert _count(conn, "waits", "run_id = ?", other_run_id) == 1
+        assert _count(conn, "external_events", "run_id = ?", other_run_id) == 1
+        assert _count(conn, "external_receipts", "dedup_key = 'msg-3'") == 1
+        assert _count(conn, "execution_outputs", "run_id = ?", other_run_id) == 1
+
+
+def test_delete_run_returns_false_for_missing_run(tmp_path) -> None:
+    db_path = tmp_path / "delete-missing-run.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+
+    deleted = store.delete_run("missing-run")
+
+    assert deleted is False
+
+
+def _count(conn: sqlite3.Connection, table: str, where: str, *params: object) -> int:
+    row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", params).fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:

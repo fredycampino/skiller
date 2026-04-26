@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.application.use_cases.get_waiting_metadata import GetWaitingMetadataUseCase
+from skiller.application.use_cases.query.get_waiting_metadata import GetWaitingMetadataUseCase
 
 pytestmark = pytest.mark.unit
 

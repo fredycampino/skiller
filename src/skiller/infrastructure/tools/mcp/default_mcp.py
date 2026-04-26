@@ -1,7 +1,7 @@
 from typing import Any
 
 from skiller.application.ports.mcp_port import MCPPort
-from skiller.domain.mcp_config_model import RenderedMcpConfig
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 
 

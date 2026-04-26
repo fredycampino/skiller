@@ -220,11 +220,11 @@ With `large_result: true`:
 
 ```json
 {
-  "text": "Europa es uno de los continentes más pequeños...",
+  "text": "Europe is one of the smallest continents...",
   "text_ref": "data.reply",
   "value": {
     "data": {
-      "reply": "Europa es uno de los continentes más pequeños...",
+      "reply": "Europe is one of the smallest continents...",
       "reply_length": 980,
       "truncated": true
     }

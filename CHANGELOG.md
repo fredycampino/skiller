@@ -5,7 +5,9 @@ All notable changes to this project should be summarized here before a version i
 ## Unreleased
 
 ### Added
-- Nothing yet.
+- Added `skiller delete <run_id>` to remove a run and all database rows tied to it,
+  including events, waits, external event records, matching deduplication receipts, and
+  persisted execution output bodies.
 
 ### Changed
 - Nothing yet.

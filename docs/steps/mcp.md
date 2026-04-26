@@ -14,6 +14,14 @@ mcp:
     args:
       - /opt/local-mcp/local_mcp.py
 
+  - name: github
+    transport: streamable-http
+    url_file: "~/.skiller/secrets/github_mcp_url"
+    headers:
+      Authorization:
+        file: "~/.skiller/secrets/github_mcp_token"
+        prefix: "Bearer "
+
 steps:
   - mcp: create_file
     server: local-mcp
@@ -64,3 +72,14 @@ Template access:
 Use `output_value(...)` instead of reading `step_executions.<step_id>.output.value...` directly.
 
 The transport outcome is also kept in `evaluation.ok`.
+
+## Secret Inputs For MCP Config
+
+For HTTP MCP servers you can resolve sensitive values without `.env` templates:
+
+- `url`: inline URL
+- `url_env`: environment variable name that contains the URL
+- `url_file`: file path that contains the URL
+- `headers.<name>` can be:
+  - string
+  - object with `value` or `env` or `file`, plus optional `prefix`/`suffix`

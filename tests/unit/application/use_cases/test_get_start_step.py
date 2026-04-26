@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
 

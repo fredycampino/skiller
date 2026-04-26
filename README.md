@@ -44,6 +44,16 @@ Run a minimal skill:
 skiller run notify_test
 ```
 
+Persistent configuration lives outside the current working directory:
+
+```text
+~/.skiller/settings/config.json
+```
+
+Use `AGENT_CONFIG_FILE=/path/to/config.json` to point Skiller at another JSON config.
+Environment variables override the JSON file for one-off runs. Skiller does not load `.env` files.
+See [`docs/configuration.md`](docs/configuration.md) for the full JSON format.
+
 Run a demo with branching:
 
 ```bash
@@ -55,7 +65,11 @@ Inspect a run:
 ```bash
 skiller status <run_id>
 skiller logs <run_id>
+skiller delete <run_id>
 ```
+
+`delete` removes the run and database rows tied to it, including runtime events, waits,
+external event records, deduplication receipts for those events, and persisted output bodies.
 
 Run a skill file directly:
 
@@ -120,6 +134,10 @@ Minimal examples already in the repo:
 - [`skills/pull_request.yaml`](skills/pull_request.yaml)
 
 The source of truth for MCP connection settings lives in the skill YAML under `mcp:`.
+For GitHub PR flow, `skills/pull_request.yaml` uses:
+
+- URL: `https://api.githubcopilot.com/mcp/`
+- Token: `~/.skiller/secrets/github_mcp_token`
 
 ## Webhooks And Waiting
 

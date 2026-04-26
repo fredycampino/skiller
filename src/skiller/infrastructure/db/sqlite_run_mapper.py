@@ -2,8 +2,8 @@ import json
 import sqlite3
 from typing import Any
 
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run
 
 
 def build_run_from_row(row: sqlite3.Row) -> Run:

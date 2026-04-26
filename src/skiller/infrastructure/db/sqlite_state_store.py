@@ -4,11 +4,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from skiller.domain.match_type import MatchType
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run, RunStatus
-from skiller.domain.source_type import SourceType
-from skiller.domain.wait_type import WaitType
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run, RunStatus
+from skiller.domain.wait.match_type import MatchType
+from skiller.domain.wait.source_type import SourceType
+from skiller.domain.wait.wait_type import WaitType
+from skiller.infrastructure.db.sqlite_agent_context_store import ensure_agent_context_schema
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
@@ -69,6 +70,7 @@ class SqliteStateStore(SqliteRepository):
             )
             self._ensure_waits_table(conn)
             self._ensure_external_events_table(conn)
+            ensure_agent_context_schema(conn)
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_waits_run_step_type_status
@@ -154,6 +156,7 @@ class SqliteStateStore(SqliteRepository):
         current: str | None = None,
         context: RunContext | None = None,
     ) -> None:
+        terminal_statuses = (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED)
         updates: list[str] = []
         params: list[Any] = []
 
@@ -170,7 +173,7 @@ class SqliteStateStore(SqliteRepository):
             params.append(json.dumps(context.steering_messages))
             updates.append("cancel_reason = ?")
             params.append(context.cancel_reason)
-        if status in (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED):
+        if status in terminal_statuses:
             updates.append("finished_at = CURRENT_TIMESTAMP")
 
         if not updates:
@@ -182,6 +185,15 @@ class SqliteStateStore(SqliteRepository):
         query = f"UPDATE runs SET {', '.join(updates)} WHERE id = ?"
         with self._connect() as conn:
             conn.execute(query, params)
+            if status in terminal_statuses:
+                conn.execute(
+                    """
+                    UPDATE waits
+                    SET status = 'EXPIRED', resolved_at = CURRENT_TIMESTAMP
+                    WHERE run_id = ? AND status = 'ACTIVE'
+                    """,
+                    (run_id,),
+                )
 
     def get_run(self, run_id: str) -> Run | None:
         with self._connect() as conn:
@@ -207,6 +219,40 @@ class SqliteStateStore(SqliteRepository):
         if row is None:
             return None
         return build_run_from_row(row)
+
+    def delete_run(self, run_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT 1 FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if row is None:
+                return False
+
+            if self._table_exists(conn, "execution_outputs"):
+                conn.execute("DELETE FROM execution_outputs WHERE run_id = ?", (run_id,))
+            if self._table_exists(conn, "agent_context_entries"):
+                conn.execute("DELETE FROM agent_context_entries WHERE run_id = ?", (run_id,))
+            conn.execute(
+                """
+                DELETE FROM external_receipts
+                WHERE dedup_key IN (
+                  SELECT dedup_key
+                  FROM external_events
+                  WHERE (run_id = ? OR consumed_by_run_id = ?)
+                    AND dedup_key IS NOT NULL
+                )
+                """,
+                (run_id, run_id),
+            )
+            conn.execute(
+                """
+                DELETE FROM external_events
+                WHERE run_id = ? OR consumed_by_run_id = ?
+                """,
+                (run_id, run_id),
+            )
+            conn.execute("DELETE FROM waits WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM events WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+        return True
 
     def _ensure_runs_current_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()

@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.handle_channel import HandleChannelUseCase
+from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.domain.match_type import MatchType
 from skiller.domain.source_type import SourceType
 
@@ -120,3 +120,64 @@ def test_handle_channel_selects_only_first_matching_run() -> None:
     )
 
     assert result.run_ids == ["run-1"]
+
+
+def test_handle_channel_does_not_resume_wait_for_stale_message_timestamp() -> None:
+    store = _FakeStore()
+    store.waits = [{"run_id": "run-1", "created_at": "2026-04-20 17:58:17"}]
+    use_case = HandleChannelUseCase(external_event_store=store, wait_store=store)
+
+    result = use_case.execute(
+        "whatsapp",
+        "172584771580071@lid",
+        {
+            "text": "hola",
+            "timestamp": 1775388655,
+        },
+        external_id="msg-demo-1",
+        dedup_key="dedup-demo-1",
+    )
+
+    assert result.accepted is True
+    assert result.duplicate is False
+    assert result.run_ids == []
+    assert result.event_id is None
+    assert store.created_external_events == []
+
+
+def test_handle_channel_resumes_wait_for_fresh_message_timestamp() -> None:
+    store = _FakeStore()
+    store.waits = [{"run_id": "run-1", "created_at": "2026-04-20 17:58:17"}]
+    use_case = HandleChannelUseCase(external_event_store=store, wait_store=store)
+
+    result = use_case.execute(
+        "whatsapp",
+        "172584771580071@lid",
+        {
+            "text": "hola",
+            "timestamp": 1900000000,
+        },
+        external_id="msg-demo-2",
+        dedup_key="dedup-demo-2",
+    )
+
+    assert result.accepted is True
+    assert result.duplicate is False
+    assert result.run_ids == ["run-1"]
+    assert result.event_id == "channel-1"
+    assert store.created_external_events == [
+        {
+            "source_type": SourceType.CHANNEL,
+            "source_name": "whatsapp",
+            "match_type": MatchType.CHANNEL_KEY,
+            "match_key": "172584771580071@lid",
+            "run_id": None,
+            "step_id": None,
+            "external_id": "msg-demo-2",
+            "dedup_key": "dedup-demo-2",
+            "payload": {
+                "text": "hola",
+                "timestamp": 1900000000,
+            },
+        }
+    ]

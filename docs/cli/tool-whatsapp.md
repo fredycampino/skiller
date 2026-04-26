@@ -49,6 +49,11 @@ POST /channels/whatsapp/{key}
 For the current WhatsApp channel flow:
 - `key = WhatsApp chat id`
 
+Outbound sends wait for the bridge response so the runtime can store the WhatsApp `message_id`.
+The bridge intentionally simulates human typing before sending, with a delay up to 6.5 seconds by
+default. Skiller waits up to `AGENT_WHATSAPP_BRIDGE_SEND_TIMEOUT_SECONDS` seconds for that response;
+the default is 10 seconds.
+
 ## State
 
 Managed state lives under:

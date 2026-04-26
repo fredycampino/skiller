@@ -1,7 +1,1 @@
-from enum import Enum
-
-
-class SourceType(str, Enum):
-    INPUT = "input"
-    WEBHOOK = "webhook"
-    CHANNEL = "channel"
+from skiller.domain.wait.source_type import *  # noqa: F401,F403

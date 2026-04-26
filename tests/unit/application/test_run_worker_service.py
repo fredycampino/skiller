@@ -3,15 +3,15 @@ from dataclasses import dataclass
 import pytest
 
 from skiller.application.run_worker_service import RunWorkerService, RunWorkerStatus
-from skiller.application.use_cases.append_runtime_event import RuntimeEventType
-from skiller.application.use_cases.render_current_step import (
+from skiller.application.use_cases.render.render_current_step import (
     CurrentStep,
     CurrentStepStatus,
     RenderCurrentStepResult,
     StepType,
 )
-from skiller.application.use_cases.render_mcp_config import RenderMcpConfigStatus
-from skiller.application.use_cases.step_execution_result import (
+from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigStatus
+from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
+from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
@@ -165,6 +165,7 @@ def _build_current_step(
 def _build_service(
     *,
     render_results: list[RenderCurrentStepResult],
+    agent_results: list[StepAdvance] | None = None,
     notify_results: list[StepAdvance] | None = None,
     send_results: list[StepAdvance] | None = None,
     shell_results: list[StepAdvance] | None = None,
@@ -182,6 +183,7 @@ def _build_service(
         append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=_FakeRenderCurrentStepUseCase(render_results),
         render_mcp_config_use_case=_FakeRenderMcpConfigUseCase(mcp_render_result),
+        execute_agent_step_use_case=_FakeStepUseCase(agent_results),
         execute_assign_step_use_case=_FakeStepUseCase(),
         execute_llm_prompt_step_use_case=_FakeStepUseCase(),
         execute_mcp_step_use_case=_FakeMcpStepUseCase(

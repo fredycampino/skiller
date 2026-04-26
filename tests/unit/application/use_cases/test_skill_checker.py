@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.skill_checker import SkillCheckerUseCase, SkillCheckStatus
+from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase, SkillCheckStatus
 
 pytestmark = pytest.mark.unit
 

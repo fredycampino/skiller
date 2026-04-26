@@ -1,8 +1,8 @@
 import pytest
 
-from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
-from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
+from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus
 from skiller.domain.step_execution_model import NotifyOutput

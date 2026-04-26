@@ -7,36 +7,45 @@ import pytest
 
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.use_cases.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.application.use_cases.bootstrap_runtime import BootstrapRuntimeUseCase
-from skiller.application.use_cases.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.create_run import CreateRunUseCase
-from skiller.application.use_cases.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
-from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
-from skiller.application.use_cases.execute_notify_step import ExecuteNotifyStepUseCase
-from skiller.application.use_cases.execute_shell_step import ExecuteShellStepUseCase
-from skiller.application.use_cases.execute_switch_step import ExecuteSwitchStepUseCase
-from skiller.application.use_cases.execute_wait_input_step import ExecuteWaitInputStepUseCase
-from skiller.application.use_cases.execute_wait_webhook_step import ExecuteWaitWebhookStepUseCase
-from skiller.application.use_cases.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.fail_run import FailRunUseCase
-from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.get_start_step import GetStartStepUseCase
-from skiller.application.use_cases.handle_input import HandleInputUseCase
-from skiller.application.use_cases.handle_webhook import HandleWebhookUseCase
-from skiller.application.use_cases.list_webhooks import ListWebhooksUseCase
-from skiller.application.use_cases.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.remove_webhook import RemoveWebhookUseCase
-from skiller.application.use_cases.render_current_step import (
+from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
+from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
+from skiller.application.use_cases.execute.execute_llm_prompt_step import (
+    ExecuteLlmPromptStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
+from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
+from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_input_step import (
+    ExecuteWaitInputStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_webhook_step import (
+    ExecuteWaitWebhookStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
+from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
+from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
+from skiller.application.use_cases.render.render_current_step import (
     CurrentStepStatus,
     RenderCurrentStepUseCase,
 )
-from skiller.application.use_cases.render_mcp_config import RenderMcpConfigUseCase
-from skiller.application.use_cases.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.skill_checker import SkillCheckerUseCase
-from skiller.application.use_cases.skill_server_checker import SkillServerCheckerUseCase
+from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
+from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
+from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
+from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
+from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
+from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
+from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
+from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -64,6 +73,7 @@ class _FakeChannelSender:
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execution_output_store = SqliteExecutionOutputStore(store.db_path)
     execution_output_store.init_db()
+    agent_context_store = SqliteAgentContextStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
         execution_output_store=execution_output_store,
@@ -76,6 +86,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    execute_agent_step_use_case = ExecuteAgentStepUseCase(
+        store=store,
+        agent_context_store=agent_context_store,
+        llm=NullLLM(),
+    )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
         store=store,
@@ -114,6 +129,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         append_runtime_event_use_case=append_runtime_event_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
+        execute_agent_step_use_case=execute_agent_step_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
         execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
@@ -133,6 +149,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
+        delete_run_use_case=DeleteRunUseCase(store),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
         skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),

@@ -1,0 +1,46 @@
+name: delay_test
+description: "Notify test with four delayed notifications for TUI observation"
+version: "0.1"
+start: notify_1
+
+inputs: {}
+
+steps:
+  - notify: notify_1
+    message: "delay_test 1/4"
+    next: delay_1
+
+  - shell: delay_1
+    command: |
+      sleep 1
+    cwd: .
+    timeout: 10
+    check: true
+    next: notify_2
+
+  - notify: notify_2
+    message: "delay_test 2/4"
+    next: delay_2
+
+  - shell: delay_2
+    command: |
+      sleep 2
+    cwd: .
+    timeout: 10
+    check: true
+    next: notify_3
+
+  - notify: notify_3
+    message: "delay_test 3/4"
+    next: delay_3
+
+  - shell: delay_3
+    command: |
+      sleep 5
+    cwd: .
+    timeout: 10
+    check: true
+    next: notify_4
+
+  - notify: notify_4
+    message: "delay_test 4/4"

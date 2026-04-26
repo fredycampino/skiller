@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from skiller.domain.run_list_item_model import RunListItem
+from skiller.domain.run.run_list_item_model import RunListItem
 
 
 class RunQueryPort(Protocol):

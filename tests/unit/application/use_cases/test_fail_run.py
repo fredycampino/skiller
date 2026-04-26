@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.use_cases.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import Run, RunStatus
 

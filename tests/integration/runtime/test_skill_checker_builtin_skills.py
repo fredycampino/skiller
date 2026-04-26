@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from skiller.application.use_cases.skill_checker import SkillCheckerUseCase, SkillCheckStatus
+from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase, SkillCheckStatus
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 

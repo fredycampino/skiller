@@ -3,8 +3,8 @@ import sqlite3
 import uuid
 from typing import Any
 
-from skiller.domain.match_type import MatchType
-from skiller.domain.source_type import SourceType
+from skiller.domain.wait.match_type import MatchType
+from skiller.domain.wait.source_type import SourceType
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 

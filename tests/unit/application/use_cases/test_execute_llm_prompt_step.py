@@ -1,8 +1,10 @@
 import pytest
 
-from skiller.application.use_cases.execute_llm_prompt_step import ExecuteLlmPromptStepUseCase
-from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.execute.execute_llm_prompt_step import (
+    ExecuteLlmPromptStepUseCase,
+)
+from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
+from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.domain.run_context_model import RunContext
 from skiller.domain.run_model import RunStatus

@@ -1,7 +1,1 @@
-from typing import Any
-
-
-class PolicyGate:
-    def authorize(self, _skill_ref: str, _step: dict[str, Any]) -> bool:
-        # Paso 0: estrategia mínima, permitir todo.
-        return True
+from skiller.domain.shared.policies import *  # noqa: F401,F403

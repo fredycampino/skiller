@@ -1,10 +1,14 @@
 from typing import Any
 
-from skiller.application.use_cases.get_execution_output import GetExecutionOutputUseCase
-from skiller.application.use_cases.get_run_logs import GetRunLogsUseCase
-from skiller.application.use_cases.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.get_runs import GetRunsUseCase
-from skiller.application.use_cases.get_waiting_metadata import GetWaitingMetadataUseCase
+from skiller.application.use_cases.query.get_execution_output import (
+    GetExecutionOutputUseCase,
+)
+from skiller.application.use_cases.query.get_run_logs import GetRunLogsUseCase
+from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.query.get_runs import GetRunsUseCase
+from skiller.application.use_cases.query.get_waiting_metadata import (
+    GetWaitingMetadataUseCase,
+)
 
 
 class RunQueryService:

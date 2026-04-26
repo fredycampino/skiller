@@ -23,6 +23,7 @@ skiller status <run_id>
 skiller runs [--limit N] [--status WAITING] [--status FAILED]
 skiller logs <run_id>
 skiller watch <run_id>
+skiller delete <run_id>
 ```
 
 ### Human input
@@ -54,6 +55,11 @@ skiller worker resume <run_id>
 ```bash
 skiller init-db
 ```
+
+### Configuration
+
+Skiller reads persistent config from `~/.skiller/settings/config.json`.
+See [`../configuration.md`](../configuration.md).
 
 ### Cloudflared
 
@@ -134,6 +140,15 @@ Live progress until the run stabilizes:
 ```bash
 skiller watch <run_id>
 ```
+
+Delete a run and all database rows tied to it:
+
+```bash
+skiller delete <run_id>
+```
+
+This is a destructive cleanup command. It removes the run, runtime events, waits, external
+event records, deduplication receipts for those events, and persisted execution output bodies.
 
 `watch`:
 - polls `status`
@@ -314,6 +329,22 @@ Best used for:
 Notes:
 - `/logs` is a debug/raw surface, not the user-facing transcript
 - it should expose exact event payloads rather than transcript-style formatting
+
+### `delete`
+
+Deletes the run row and every database row structurally tied to the run:
+
+- runtime events
+- waits
+- external events where `run_id` or `consumed_by_run_id` matches
+- external receipts whose `dedup_key` belongs to those external events
+- persisted execution output bodies
+
+Examples:
+
+```bash
+skiller delete <run_id>
+```
 
 ### `watch`
 

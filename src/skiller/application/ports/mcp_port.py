@@ -1,6 +1,6 @@
 from typing import Any, Protocol
 
-from skiller.domain.mcp_config_model import RenderedMcpConfig
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 
 
 class MCPPort(Protocol):

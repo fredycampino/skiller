@@ -1,7 +1,1 @@
-from enum import Enum
-
-
-class WaitType(str, Enum):
-    INPUT = "wait_input"
-    WEBHOOK = "wait_webhook"
-    CHANNEL = "wait_channel"
+from skiller.domain.wait.wait_type import *  # noqa: F401,F403

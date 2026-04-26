@@ -1,7 +1,1 @@
-from enum import Enum
-
-
-class MatchType(str, Enum):
-    RUN = "run"
-    SIGNAL = "signal"
-    CHANNEL_KEY = "channel_key"
+from skiller.domain.wait.match_type import *  # noqa: F401,F403

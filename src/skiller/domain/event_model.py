@@ -1,10 +1,1 @@
-from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass
-class Event:
-    event_id: str
-    event_type: str
-    payload: dict[str, Any]
-    run_id: str | None = None
+from skiller.domain.event.event_model import *  # noqa: F401,F403

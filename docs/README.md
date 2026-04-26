@@ -1,5 +1,9 @@
 # Documentation
 
+## Configuration
+
+- [`configuration.md`](configuration.md)
+
 ## CLI
 
 - [`cli/command-guide.md`](cli/command-guide.md)
@@ -12,6 +16,7 @@
 - [`skills/skill-schema.md`](skills/skill-schema.md)
 - [`skills/skill-checker.md`](skills/skill-checker.md)
 - [`skills/skill-server-checker.md`](skills/skill-server-checker.md)
+- [`steps/agent.md`](steps/agent.md)
 - [`steps/assign.md`](steps/assign.md)
 - [`steps/llm_prompt.md`](steps/llm_prompt.md)
 - [`steps/mcp.md`](steps/mcp.md)
@@ -26,6 +31,7 @@
 
 ## Runtime
 
+- [`runtime/agent-architecture.md`](runtime/agent-architecture.md)
 - [`runtime/execution-model.md`](runtime/execution-model.md)
 
 ## UI
@@ -44,4 +50,5 @@
 
 ## DB
 
+- [`db/agent-context.md`](db/agent-context.md)
 - [`db/schema.md`](db/schema.md)

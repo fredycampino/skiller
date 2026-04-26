@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 
-from skiller.domain.mcp_config_model import RenderedMcpConfig
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 
 
 @dataclass(frozen=True)

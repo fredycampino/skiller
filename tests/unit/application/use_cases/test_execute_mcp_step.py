@@ -1,8 +1,8 @@
 import pytest
 
-from skiller.application.use_cases.execute_mcp_step import ExecuteMcpStepUseCase
-from skiller.application.use_cases.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.step_execution_result import StepExecutionStatus
+from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
+from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
+from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.large_result_truncator import LargeResultTruncator
 from skiller.domain.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run_context_model import RunContext

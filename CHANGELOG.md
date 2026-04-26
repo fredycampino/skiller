@@ -5,9 +5,7 @@ All notable changes to this project should be summarized here before a version i
 ## Unreleased
 
 ### Added
-- Added `skiller delete <run_id>` to remove a run and all database rows tied to it,
-  including events, waits, external event records, matching deduplication receipts, and
-  persisted execution output bodies.
+- Nothing yet.
 
 ### Changed
 - Nothing yet.
@@ -20,6 +18,32 @@ All notable changes to this project should be summarized here before a version i
 
 ### Notes
 - Update this section when a branch is ready for release.
+
+## 1.0.0-beta.1 - 2026-04-26
+
+### Added
+- Added `agent` as a first-class runtime step with iterative turns, tool calls, and persisted agent context entries.
+- Added the first application tools (`shell`, `notify`) under a shared domain tool contract and manager orchestration.
+- Added a richer TUI stack (`interfaces/tui`) with dedicated adapter, viewmodel, and screen layers.
+- Added `skiller delete <run_id>` to remove run state and associated persisted runtime artifacts.
+- Added manual publish workflow dispatch support for repository release operations.
+
+### Changed
+- Reorganized runtime modules by bounded package structure (`run`, `render`, `execute`, `ingress`, `query`, `skill`, `webhook`) to keep use-case boundaries explicit.
+- Changed agent execution flow to support plain-text final answers with tool-call JSON only when needed, improving provider compatibility.
+- Changed MCP HTTP configuration to support inline values plus `env`/`file` resolution for URL and headers.
+- Changed docs and examples to align with the new agent/tool architecture and MCP configuration model.
+
+### Fixed
+- Fixed repeated agent step failures caused by strict JSON terminal-response requirements when providers returned plain text.
+- Fixed MCP configuration resolution errors with explicit support for file-based token loading in HTTP headers.
+- Fixed repository lint conformance on current branch scope (`ruff` import ordering and line-length constraints).
+
+### Removed
+- Removed reliance on `.env` loading from runtime configuration flow; environment variables remain explicit process overrides.
+
+### Notes
+- This beta consolidates the new agent/tool architecture and TUI/runtime refactor into the first pre-release targeted for `1.0.0` stabilization.
 
 ## 1.0.0-alpha.8 - 2026-04-10
 

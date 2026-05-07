@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from skiller.application.ports.webhook_registry_port import WebhookRegistryPort
+from skiller.application.ports.persistence.webhook_registry_port import WebhookRegistryPort
 
 
 @dataclass(frozen=True)

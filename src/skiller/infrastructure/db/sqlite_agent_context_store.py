@@ -14,7 +14,111 @@ class SqliteAgentContextStore(SqliteRepository):
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
 
-    def append_entry(
+    def append_user_message(
+        self,
+        *,
+        run_id: str,
+        context_id: str,
+        source_step_id: str,
+        turn_id: str,
+        text: str,
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=run_id,
+            context_id=context_id,
+            entry_type=AgentContextEntryType.USER_MESSAGE,
+            payload={"type": "user_message", "text": text},
+            source_step_id=source_step_id,
+            idempotency_key=f"user:{source_step_id}:{turn_id}",
+        )
+
+    def append_assistant_message(
+        self,
+        *,
+        run_id: str,
+        context_id: str,
+        source_step_id: str,
+        turn_id: str,
+        message_type: str,
+        text: str,
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=run_id,
+            context_id=context_id,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            payload={
+                "type": "assistant_message",
+                "turn_id": turn_id,
+                "message_type": message_type,
+                "text": text,
+            },
+            source_step_id=source_step_id,
+            idempotency_key=f"assistant:{source_step_id}:{turn_id}",
+        )
+
+    def append_tool_call(
+        self,
+        *,
+        run_id: str,
+        context_id: str,
+        source_step_id: str,
+        turn_id: str,
+        parent_sequence: int | None,
+        tool_call_id: str,
+        tool: str,
+        args: dict[str, object],
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=run_id,
+            context_id=context_id,
+            entry_type=AgentContextEntryType.TOOL_CALL,
+            payload={
+                "type": "tool_call",
+                "turn_id": turn_id,
+                "parent_sequence": parent_sequence,
+                "tool_call_id": tool_call_id,
+                "tool": tool,
+                "args": args,
+            },
+            source_step_id=source_step_id,
+            idempotency_key=f"tool_call:{source_step_id}:{turn_id}:{tool_call_id}",
+        )
+
+    def append_tool_result(
+        self,
+        *,
+        run_id: str,
+        context_id: str,
+        source_step_id: str,
+        turn_id: str,
+        parent_sequence: int | None,
+        tool_call_id: str,
+        tool: str,
+        status: str,
+        data: object,
+        text: str | None,
+        error: str | None,
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=run_id,
+            context_id=context_id,
+            entry_type=AgentContextEntryType.TOOL_RESULT,
+            payload={
+                "type": "tool_result",
+                "turn_id": turn_id,
+                "parent_sequence": parent_sequence,
+                "tool_call_id": tool_call_id,
+                "tool": tool,
+                "status": status,
+                "data": data,
+                "text": text,
+                "error": error,
+            },
+            source_step_id=source_step_id,
+            idempotency_key=f"tool_result:{source_step_id}:{turn_id}:{tool_call_id}",
+        )
+
+    def _append_entry(
         self,
         *,
         run_id: str,

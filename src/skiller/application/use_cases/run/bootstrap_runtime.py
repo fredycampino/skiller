@@ -1,6 +1,8 @@
-from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
-from skiller.application.ports.runtime_bootstrap_port import RuntimeBootstrapPort
-from skiller.application.ports.webhook_registry_port import WebhookRegistryPort
+from skiller.application.ports.persistence.execution_output_store_port import (
+    ExecutionOutputStorePort,
+)
+from skiller.application.ports.persistence.webhook_registry_port import WebhookRegistryPort
+from skiller.application.ports.runtime.runtime_bootstrap_port import RuntimeBootstrapPort
 
 
 class BootstrapRuntimeUseCase:

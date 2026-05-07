@@ -298,6 +298,14 @@ def build_parser() -> argparse.ArgumentParser:
     worker_resume_parser = worker_sub.add_parser("resume", help="Resume a WAITING run")
     worker_resume_parser.add_argument("run_id")
 
+    agent_parser = sub.add_parser("agent", help="Agent control operations")
+    agent_sub = agent_parser.add_subparsers(dest="agent_command", required=True)
+    agent_interrupt_parser = agent_sub.add_parser(
+        "interrupt",
+        help="Interrupt the current agent turn for a run",
+    )
+    agent_interrupt_parser.add_argument("run_id")
+
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
 
@@ -898,6 +906,11 @@ def main(argv: list[str] | None = None) -> int:
         result = controller.resume(args.run_id)
         print(json.dumps(result, indent=2))
         return 0 if result["resume_status"] == "RESUMED" else 1
+
+    if args.command == "agent" and args.agent_command == "interrupt":
+        result = controller.interrupt_agent(args.run_id)
+        print(json.dumps(result, indent=2))
+        return 0 if result["enqueued"] else 1
 
     if args.command == "delete":
         result = controller.delete_run(args.run_id)

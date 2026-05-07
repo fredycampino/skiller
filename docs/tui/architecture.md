@@ -1,157 +1,153 @@
 # TUI Architecture
 
-## Architecture
+## Purpose
 
-Current shape:
+This document explains the architectural patterns used by the TUI. It does not document command syntax or command semantics. Those live in [`../cli/command-guide.md`](../cli/command-guide.md).
+
+## Core Patterns
+
+### `State-driven UI`
+- the screen renders `ConsoleScreenState`
+- the UI does not render raw runtime payloads directly
+- transcript, prompt, autocomplete, status, and runs table are all presentation state
+
+### `ViewModel as Orchestrator`
+- the screen emits user intent
+- the viewmodel decides which use case to call
+- the viewmodel emits the updated state back to the screen
+
+### `Use Case per Interaction`
+- each interaction is handled by a focused use case
+- use cases expose `execute(...)`
+- use cases receive dependencies through `port` or `context`
+- use cases return state or result data to the viewmodel
+
+### `Ports and Adapters Boundary`
+- ports define what the TUI needs from the outside world
+- adapters implement those contracts against the CLI/runtime
+- the viewmodel and screen do not talk to subprocess or polling code directly
+
+### `Event Reduction`
+- runtime status and logs are converted into normalized events
+- normalized events are reduced into presentation state
+- the reducer is responsible for transcript-ready state updates
+
+### `Blocking I/O Offloading`
+- blocking runtime calls use `asyncio.to_thread(...)`
+- the async UI loop stays responsive while the CLI is queried
+
+## State Model
+
+`ConsoleScreenState` is the central UI contract.
+
+It holds:
+- `transcript_items`
+- `screen_status`
+- `waiting_prompt`
+- `prompt_text`
+- `prompt_cursor_position`
+- `autocompletion`
+- `runs`
+- `runs_table_visible`
+- `session_key`
+
+This keeps rendering decisions in one place and allows the screen to re-render from state instead of from runtime responses.
+
+## Layer Responsibilities
+
+### `Screen`
+- owns Textual widgets and lifecycle
+- captures keyboard input and focus changes
+- forwards intent to the viewmodel
+- renders widgets from `ConsoleScreenState`
+
+### `ViewModel`
+- orchestrates presentation behavior
+- coordinates dispatch, query, waiting input, autocomplete, and observation
+- updates and emits `ConsoleScreenState`
+
+### `UseCase`
+- owns one interaction or transformation
+- applies presentation rules outside the screen
+- stays small and directly testable
+
+### `Port`
+- defines external capabilities needed by the TUI
+- isolates the TUI from concrete runtime transport
+
+### `Adapter`
+- implements ports using the CLI/runtime
+- translates external payloads into TUI-friendly data
+- keeps subprocess, polling, and mapping details out of higher layers
+
+## Interaction Patterns
+
+### `Dispatch pattern`
 
 ```text
-ConsoleScreen
--> ConsoleScreenViewModel
--> RunPort
--> DefaultRunPort
-   -> CliRunAdapter
-   -> PollingEventObserver
-   -> RunEventMapper
+Screen
+-> ViewModel
+-> UseCase
+-> Port
+-> Adapter
 -> skiller CLI
+-> ViewModel emits state
+-> Screen re-renders
 ```
 
-High-level block flows:
+### `Query pattern`
 
 ```text
-Dispatch / command flow
-
-[ConsoleScreen] -> [ConsoleScreenViewModel] -> [RunPort] -> [CliRunAdapter] -> [skiller CLI]
-
-
-Observation / event flow
-
-[skiller CLI] -> [PollingEventObserver] -> [RunEventMapper] -> [RunPort] -> [ConsoleScreenViewModel] -> [ConsoleScreen]
-```
-
-Current UI shape:
-
-```text
-[TranscriptLog / RichLog]
-[ScreenStatusView]
-[Prompt]
-[Footer]
-```
-
-The TUI is separated into:
-- `screen`
-- `viewmodel`
-- `port`
-- `adapter`
-
-## Components
-
-### `ConsoleScreen`
-- Textual screen
-- captures keyboard input
-- owns widgets and screen lifecycle
-- refreshes the UI from `ConsoleScreenState`
-
-### `ScreenStatusView`
-- global visual status component
-- renders `ScreenStatus`
-- owns the running spinner animation locally
-- does not render run-local status; run status stays in the transcript
-
-### `ConsoleScreenViewModel`
-- presentation logic
-- handles `/run` and `/quit`
-- subscribes to run observation
-- transforms observed runtime events into UI state
-- the visual output is modeled as UI state, not raw logs
-- exposes global `ScreenStatus` for the status view
-
-### `RunPort`
-- output boundary of the TUI
-- defines command dispatch and observation subscription
-
-### `DefaultRunPort`
-- concrete composition of the port
-- delegates command dispatch to `CliRunAdapter`
-- delegates observation to `PollingEventObserver`
-
-### `CliRunAdapter`
-- executes `python -m skiller ...`
-- maps the immediate command result to `CommandAck`
-
-### `PollingEventObserver`
-- polls `status` and `logs`
-- notifies the subscribed observer with batches of `PollingEvent`
-
-### `RunEventMapper`
-- converts raw `status/logs` payloads into structured `PollingEvent`
-- does not own UI formatting
-
-## Actions And Events
-
-### Dispatch Flow
-
-```text
-user types /run ...
--> ConsoleScreen.action_submit()
--> ConsoleScreenViewModel.submit()
--> RunPort.run()
--> CliRunAdapter.run()
+Screen
+-> ViewModel
+-> UseCase
+-> Port
+-> Adapter
 -> skiller CLI
--> CommandAck
--> ConsoleScreenViewModel updates state
--> ConsoleScreen refreshes
+-> ViewModel emits state
+-> Screen re-renders
 ```
 
-### Observation Flow
+### `Observation pattern`
 
 ```text
-ConsoleScreenViewModel.start_observing(run_id)
--> RunPort.subscribe(observer)
--> PollingEventObserver.subscribe(observer)
--> polling loop
-   -> skiller status
-   -> skiller logs
-   -> RunEventMapper
-   -> list[PollingEvent]
--> observer.notify(events)
--> ConsoleScreenViewModel updates ConsoleScreenState
--> ConsoleScreen refreshes
+PollingEventObserver
+-> RunEventMapper
+-> PollingEventReducerUseCase
+-> ViewModel emits state
+-> Screen re-renders
 ```
 
-## UI / Screen
+### `Prompt assistance pattern`
 
-Responsibilities:
-- build the screen layout
-- own prompt, transcript, status and footer widgets
-- submit prompt text to the viewmodel
-- apply `ConsoleScreenState` to the widgets
-- keep UI concerns local, such as scroll actions and focus
+```text
+Prompt change
+-> ViewModel
+-> AutocompleteUseCase
+-> ViewModel emits state
+-> Screen re-renders
+```
 
-## ViewModel
+### `Overlay pattern`
 
-Responsibilities:
-- parse user intent at presentation level
-- coordinate command dispatch
-- start and stop observation
-- update `ConsoleScreenState`
-- produce transcript items for the UI
-- produce `ScreenStatus` for the global status view
+```text
+Use case or screen action
+-> updates `runs_table_visible`
+-> screen shows or hides `RunsTableView`
+```
 
-Important point:
-- visual output is already modeled as UI state through `TranscriptItem[]`
-- the screen renders transcript items, not raw runtime log strings directly
-- the global status view renders `ScreenStatus`, not free-form status strings
+## Current Mapping
 
-## Port / Adapter
+- `State-driven UI` -> `ConsoleScreen`, `ConsoleScreenState`
+- `ViewModel as Orchestrator` -> `ConsoleScreenViewModel`
+- `Use Case per Interaction` -> `RunCommandUseCase`, `ListRunsUseCase`, `PromptEnterUseCase`, `AutocompleteUseCase`, `MoveCompletionUseCase`, `SubmitWaitingInputUseCase`, `PollingEventReducerUseCase`
+- `Ports and Adapters Boundary` -> `RunPort`, `RunsPort`, `DefaultRunPort`, `DefaultRunsPort`, `CliRunAdapter`, `CliRunsAdapter`
+- `Event Reduction` -> `PollingEventObserver`, `RunEventMapper`, `PollingEventReducerUseCase`
 
-Responsibilities:
+## Design Rules
 
-### Port
-- define what the TUI asks from the outside world
-- keep the screen and viewmodel isolated from the concrete runtime transport
-
-### Adapters
-- execute the real CLI command
-- poll and observe runtime progress
-- map external payloads into neutral `PollingEvent`
-- keep runtime transport details out of the UI layer
+- screens do not make business decisions
+- viewmodels do not call the CLI directly
+- use cases do not create infrastructure
+- adapters do not format UI
+- new UI behavior should be represented in `ConsoleScreenState`

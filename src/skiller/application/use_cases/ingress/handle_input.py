@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from skiller.application.ports.external_event_store_port import ExternalEventStorePort
-from skiller.application.ports.run_store_port import RunStorePort
-from skiller.application.ports.runtime_event_store_port import RuntimeEventStorePort
+from skiller.application.ports.persistence.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
+from skiller.application.ports.runtime.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.step.skill_step_model import find_skill_step
 from skiller.domain.step.step_type import StepType

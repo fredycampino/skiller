@@ -7,4 +7,11 @@ class NullLLM:
     ) -> dict[str, Any]:
         _ = messages
         _ = config
-        return {"ok": False, "error": "LLM is not configured for llm_prompt steps"}
+        return {
+            "ok": False,
+            "error": (
+                "LLM is not configured (provider='null'). "
+                "Set 'llm.default_provider' in ~/.skiller/settings/agent.json "
+                "or set AGENT_LLM_PROVIDER."
+            ),
+        }

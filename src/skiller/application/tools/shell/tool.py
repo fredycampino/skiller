@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-from skiller.application.ports.shell_port import ShellPort
+from skiller.application.ports.execution.shell_port import ShellPort
+from skiller.application.tools.shell.config import ShellToolConfig
 from skiller.domain.tool.tool_contract import Tool, ToolRequest, ToolResult, ToolResultStatus
 
 
@@ -14,6 +15,7 @@ class ShellToolRequest(ToolRequest):
 
 class ShellTool(Tool[ShellToolRequest, ToolResult]):
     name = "shell"
+    config = ShellToolConfig()
 
     def __init__(self, shell: ShellPort) -> None:
         self.shell = shell
@@ -46,16 +48,12 @@ class ShellTool(Tool[ShellToolRequest, ToolResult]):
         stderr = str(data.get("stderr", "")).strip()
 
         if stdout:
-            first_line = stdout.splitlines()[0].strip()
-            if first_line:
-                return first_line
+            return stdout
 
         if ok:
             return "Command completed successfully."
 
         if stderr:
-            first_line = stderr.splitlines()[0].strip()
-            if first_line:
-                return first_line
+            return stderr
 
         return f"Command failed with exit code {exit_code}."

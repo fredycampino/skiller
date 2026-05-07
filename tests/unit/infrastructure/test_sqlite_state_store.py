@@ -2,19 +2,24 @@ import sqlite3
 
 import pytest
 
-from skiller.domain.match_type import MatchType
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import RunStatus
-from skiller.domain.source_type import SourceType
-from skiller.domain.step_execution_model import (
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.steering_model import (
+    SteeringAction,
+    SteeringItem,
+    SteeringTarget,
+)
+from skiller.domain.step.step_execution_model import (
     NotifyOutput,
     StepExecution,
     SwitchOutput,
     WaitInputOutput,
     WhenOutput,
 )
-from skiller.domain.step_type import StepType
-from skiller.domain.wait_type import WaitType
+from skiller.domain.step.step_type import StepType
+from skiller.domain.wait.match_type import MatchType
+from skiller.domain.wait.source_type import SourceType
+from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -118,7 +123,7 @@ def test_init_db_drops_legacy_current_step_column(tmp_path) -> None:
 
     assert "current_step" not in columns
     assert "step_executions_json" in columns
-    assert "steering_messages_json" in columns
+    assert "steering_queue_json" in columns
 
     run = store.get_run("run-1")
 
@@ -187,7 +192,7 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     ).to_persisted_dict()
 
 
-def test_update_run_persists_context_results_and_steering_messages(tmp_path) -> None:
+def test_update_run_persists_context_results_and_steering_queue(tmp_path) -> None:
     db_path = tmp_path / "persisted-context.db"
     store = SqliteStateStore(str(db_path))
     store.init_db()
@@ -202,7 +207,13 @@ def test_update_run_persists_context_results_and_steering_messages(tmp_path) -> 
     context = RunContext(
         inputs={"repo": "acme"},
         step_executions={"start": _notify_execution("ok")},
-        steering_messages=["be concise"],
+        steering_queue=[
+            SteeringItem(
+                target=SteeringTarget.AGENT,
+                action=SteeringAction.STEERING_MESSAGE,
+                text="be concise",
+            )
+        ],
     )
 
     store.update_run(run_id, status=RunStatus.RUNNING, current="start", context=context)
@@ -213,7 +224,13 @@ def test_update_run_persists_context_results_and_steering_messages(tmp_path) -> 
     assert run.context.step_executions["start"].to_persisted_dict() == _notify_execution(
         "ok"
     ).to_persisted_dict()
-    assert run.context.steering_messages == ["be concise"]
+    assert run.context.steering_queue == [
+        SteeringItem(
+            target=SteeringTarget.AGENT,
+            action=SteeringAction.STEERING_MESSAGE,
+            text="be concise",
+        )
+    ]
 
 
 def test_create_run_uses_explicit_run_id(tmp_path) -> None:

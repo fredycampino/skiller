@@ -80,12 +80,15 @@ Rules:
 Target shape:
 
 ```text
-Waiting
+Waiting [Write a message. Type exit, quit, or bye to stop.]
 ```
 
 Rules:
 - no animation
 - neutral/default text color
+- include the current waiting prompt in brackets
+- the bracketed prompt uses muted style
+- this prompt is global status content; it must not be duplicated in transcript output
 
 ### `ERROR`
 

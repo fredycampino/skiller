@@ -1,12 +1,19 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Mapping, TypeVar
 
 
 @dataclass(frozen=True)
 class ToolRequest:
     pass
+
+
+@dataclass(frozen=True)
+class ToolConfig:
+    name: str
+    description: str
+    parameters_schema: Mapping[str, object] = field(default_factory=dict)
 
 
 class ToolResultStatus(str, Enum):

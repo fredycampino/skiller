@@ -28,11 +28,21 @@ class PollingEvent:
     kind: PollingEventKind
     run_id: str = ""
     status: str = ""
+    prompt: str = ""
     text: str = ""
+    assistant_text: str = ""
     event_type: str = ""
     skill: str = ""
     step: str = ""
     step_type: str = ""
+    turn_id: str = ""
+    message_type: str = ""
+    tool: str = ""
+    tool_call_id: str = ""
+    command: str = ""
+    parent_sequence: int | None = None
+    sequence: int | None = None
+    context_ref: str = ""
     output: str = ""
     error: str = ""
     event_id: str | None = None

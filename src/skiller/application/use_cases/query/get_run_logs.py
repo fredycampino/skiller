@@ -1,6 +1,6 @@
 from typing import Any
 
-from skiller.application.ports.runtime_event_store_port import RuntimeEventStorePort
+from skiller.application.ports.runtime.runtime_event_store_port import RuntimeEventStorePort
 
 
 class GetRunLogsUseCase:

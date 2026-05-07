@@ -2,6 +2,9 @@
 
 This document defines the runtime event contract used by `/logs`, `watch`, the CLI, and the UI transcript.
 
+Agent internal tool-loop events are specified in
+[`agent-event.md`](./agent-event.md).
+
 ## Event Model
 
 Every runtime event follows this shape:
@@ -157,6 +160,13 @@ Example for `wait_channel`:
   }
 }
 ```
+
+Rules:
+
+- `RUN_WAITING` is emitted by explicit wait steps such as `wait_input`, `wait_channel`, and `wait_webhook`.
+- an `agent` step does not emit `RUN_WAITING` by itself.
+- if an `agent` step ends by asking the user to continue, it still finalizes as a normal step result.
+- the actual `RUN_WAITING` is emitted later only if the next step in the skill graph is a wait step.
 
 ### `RUN_FINISHED`
 

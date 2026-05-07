@@ -3,6 +3,7 @@
 ## Configuration
 
 - [`configuration.md`](configuration.md)
+- [`runtime/config.md`](runtime/config.md)
 
 ## CLI
 
@@ -29,6 +30,16 @@
 - [`steps/wait_webhook.md`](steps/wait_webhook.md)
 - [`steps/when.md`](steps/when.md)
 
+## Agent
+
+- [`agent/agent-config.md`](agent/agent-config.md)
+- [`agent/agent-event.md`](agent/agent-event.md)
+- [`agent/agent-context.md`](agent/agent-context.md)
+- [`agent/agent-tools.md`](agent/agent-tools.md)
+- [`agent/agent-loop.md`](agent/agent-loop.md)
+- [`agent/agent-flow.md`](agent/agent-flow.md)
+- [`agent/agent-flow-spec.md`](agent/agent-flow-spec.md)
+
 ## Runtime
 
 - [`runtime/agent-architecture.md`](runtime/agent-architecture.md)
@@ -50,5 +61,4 @@
 
 ## DB
 
-- [`db/agent-context.md`](db/agent-context.md)
 - [`db/schema.md`](db/schema.md)

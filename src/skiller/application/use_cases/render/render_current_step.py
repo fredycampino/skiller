@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.ports.run_store_port import RunStorePort
-from skiller.application.ports.skill_runner_port import SkillRunnerPort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
+from skiller.application.ports.skills.skill_runner_port import SkillRunnerPort
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.step.skill_step_model import find_skill_step

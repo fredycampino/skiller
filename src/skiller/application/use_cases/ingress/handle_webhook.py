@@ -3,8 +3,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from skiller.application.ports.external_event_store_port import ExternalEventStorePort
-from skiller.application.ports.wait_store_port import WaitStorePort
+from skiller.application.ports.persistence.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.persistence.wait_store_port import WaitStorePort
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 

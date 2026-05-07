@@ -1,6 +1,8 @@
 from typing import Any
 
-from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
+from skiller.application.ports.persistence.execution_output_store_port import (
+    ExecutionOutputStorePort,
+)
 
 
 class GetExecutionOutputUseCase:

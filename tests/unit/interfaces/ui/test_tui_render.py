@@ -374,7 +374,11 @@ def test_render_result_for_buffer_prefers_error_field_over_failed_watch_line() -
                         "payload": {
                             "step": "answer",
                             "step_type": "llm_prompt",
-                            "error": "LLM is not configured for llm_prompt steps",
+                            "error": (
+                                "LLM is not configured (provider='null'). "
+                                "Set 'llm.default_provider' in ~/.skiller/settings/agent.json "
+                                "or set AGENT_LLM_PROVIDER."
+                            ),
                         },
                     },
                     {
@@ -382,7 +386,11 @@ def test_render_result_for_buffer_prefers_error_field_over_failed_watch_line() -
                         "type": "RUN_FINISHED",
                         "payload": {
                             "status": "FAILED",
-                            "error": "LLM is not configured for llm_prompt steps",
+                            "error": (
+                                "LLM is not configured (provider='null'). "
+                                "Set 'llm.default_provider' in ~/.skiller/settings/agent.json "
+                                "or set AGENT_LLM_PROVIDER."
+                            ),
                         },
                     },
                 ]
@@ -393,7 +401,8 @@ def test_render_result_for_buffer_prefers_error_field_over_failed_watch_line() -
     assert result.text == (
         "[run-resume] chat:83b6\n"
         "  ↳ error\n"
-        "    LLM is not configured for llm_prompt steps\n"
+        "    LLM is not configured (provider='null'). Set 'llm.default_provider' in "
+        "~/.skiller/settings/agent.json or set AGENT_LLM_PROVIDER.\n"
     )
     assert result.replace is False
 
@@ -1156,7 +1165,13 @@ def test_build_result_status_text_prefers_error_field_over_failed_watch_line() -
                 raw_args="chat",
                 run_id="12345678-1234-1234-1234-1234567883b6",
                 status="FAILED",
-                last_payload={"error": "LLM is not configured for llm_prompt steps"},
+                last_payload={
+                    "error": (
+                        "LLM is not configured (provider='null'). "
+                        "Set 'llm.default_provider' in ~/.skiller/settings/agent.json "
+                        "or set AGENT_LLM_PROVIDER."
+                    )
+                },
             ),
         )
     )

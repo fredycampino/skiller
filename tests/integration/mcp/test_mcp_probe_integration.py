@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from skiller.domain.mcp_config_model import RenderedMcpConfig
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 

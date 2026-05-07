@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.ports.skill_runner_port import SkillRunnerPort
+from skiller.application.ports.skills.skill_runner_port import SkillRunnerPort
 from skiller.domain.step.step_type import StepType
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")

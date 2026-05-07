@@ -15,8 +15,8 @@ from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.step_execution_model import (
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.step.step_execution_model import (
     NotifyOutput,
     SendOutput,
     ShellOutput,
@@ -24,7 +24,7 @@ from skiller.domain.step_execution_model import (
     WaitInputOutput,
     WaitWebhookOutput,
 )
-from skiller.domain.step_type import StepType as DomainStepType
+from skiller.domain.step.step_type import StepType as DomainStepType
 
 pytestmark = pytest.mark.unit
 

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from textual import events
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
-from textual.widgets import Static, TextArea
+from textual.widgets import DataTable, Static, TextArea
 
-from skiller.interfaces.tui.adapter.default_run_port import DefaultRunPort
+from skiller.interfaces.tui.di.container import build_tui_container
+from skiller.interfaces.tui.port.runs_port import RunsPortItem
+from skiller.interfaces.tui.screen.autocomplete_view import AutoCompleteView
 from skiller.interfaces.tui.screen.prompt import PromptController
 from skiller.interfaces.tui.screen.render import render_transcript
+from skiller.interfaces.tui.screen.runs_table_view import RunsTableRow, RunsTableView
 from skiller.interfaces.tui.screen.screen_status_view import ScreenStatusView
 from skiller.interfaces.tui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
 from skiller.interfaces.tui.screen.transcript_log import TranscriptLog
@@ -23,6 +26,7 @@ class ConsoleScreen(App[str]):
     BINDINGS = [
         Binding("enter", "submit", show=False, priority=True),
         Binding("ctrl+j", "submit", show=False, priority=True),
+        Binding("escape", "close_runs", show=False, priority=True),
         Binding("up", "transcript_scroll_up", show=False, priority=True),
         Binding("down", "transcript_scroll_down", show=False, priority=True),
         Binding("pageup", "transcript_page_up", show=False, priority=True),
@@ -42,13 +46,16 @@ class ConsoleScreen(App[str]):
         self.ui_theme = theme
         self.viewmodel = viewmodel
         self.state: ConsoleScreenState = viewmodel.state
-        self._follow_transcript = True
-        self._last_renderable_count = -1
-        self._last_transcript_empty = False
+        self._suppress_next_prompt_change = False
+        self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             TranscriptLog(id="transcript-log", auto_scroll=False, highlight=False, markup=False),
+            Container(
+                RunsTableView(id="runs-table", visible=False),
+                id="runs-table-area",
+            ),
             ScreenStatusView(id="status", theme=self.ui_theme),
             Horizontal(
                 Static(self.ui_theme.cursor, id="prompt-prefix"),
@@ -63,19 +70,19 @@ class ConsoleScreen(App[str]):
                 ),
                 id="prompt-row",
             ),
-            Static(self._build_footer_text(), id="footer"),
+            AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
+            Horizontal(
+                Static(self._build_footer_left_text(), id="footer-left"),
+                Static(self._build_footer_right_text(), id="footer-right"),
+                id="footer",
+            ),
             id="root",
         )
 
     def on_mount(self) -> None:
-        self.viewmodel.bind_on_change(self._refresh_from_state)
-        self._refresh_status()
-        self._refresh_transcript(scroll_to_end=True, force_scroll=True)
-        self._refresh_footer()
+        self.viewmodel.bind_on_state(self._on_state_changed)
+        self._refresh_from_state(force_scroll=True)
         self._prompt().focus()
-
-    def on_unmount(self) -> None:
-        self.viewmodel.stop_observing()
 
     def on_key(self, event: events.Key) -> None:
         if event.key == "up":
@@ -105,106 +112,195 @@ class ConsoleScreen(App[str]):
         self.action_transcript_scroll_down()
         event.stop()
 
+    @on(TextArea.Changed, "#prompt")
+    def on_prompt_changed(self, message: TextArea.Changed) -> None:
+        if getattr(self, "_suppress_next_prompt_change", False):
+            self._suppress_next_prompt_change = False
+            return
+        prompt = self._prompt()
+        self.viewmodel.prompt_change(
+            text=prompt.text(),
+            cursor_position=prompt.cursor_position(),
+        )
+
     async def action_submit(self) -> None:
-        result = await self.viewmodel.submit(self._prompt().normalized_text())
-        if result.should_exit:
+        normalized_text = self._prompt().normalized_text()
+        if self.state.runs_table_visible:
+            self._runs_table().action_select_cursor()
+            return
+
+        if normalized_text.lower() in {"/quit", "quit", "exit"}:
             self.exit(self.state.session_key)
             return
 
-        if result.clear_prompt:
-            self._prompt().clear()
-        self._refresh_from_state(force_scroll=True)
-        if result.observe_run_id:
-            self.viewmodel.start_observing(result.observe_run_id)
+        await self.viewmodel.prompt_enter()
+        self._prompt().focus()
+
+    def action_close_runs(self) -> None:
+        if not self.state.runs_table_visible:
+            return
+        self.viewmodel.hide_runs_table()
         self._prompt().focus()
 
     def action_transcript_page_up(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.scroll_page_up(animate=False)
-        self._follow_transcript = False
+        if self.state.runs_table_visible and self._runs_table().move_selection(-3):
+            return
+        self._transcript_log().scroll_page_up(animate=False, force=True)
 
     def action_transcript_scroll_up(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.action_scroll_up()
-        self._follow_transcript = False
+        if self.viewmodel.move_completion(-1):
+            return
+        if self.state.runs_table_visible and self._runs_table().move_selection(-1):
+            return
+        self._transcript_log().scroll_up(animate=False, force=True, immediate=True)
 
     def action_transcript_page_down(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.scroll_page_down(animate=False)
-        self._follow_transcript = transcript_log.is_vertical_scroll_end
+        if self.state.runs_table_visible and self._runs_table().move_selection(3):
+            return
+        self._transcript_log().scroll_page_down(animate=False, force=True)
 
     def action_transcript_scroll_down(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.action_scroll_down()
-        self._follow_transcript = transcript_log.is_vertical_scroll_end
+        if self.viewmodel.move_completion(1):
+            return
+        if self.state.runs_table_visible and self._runs_table().move_selection(1):
+            return
+        self._transcript_log().scroll_down(animate=False, force=True, immediate=True)
 
     def action_transcript_home(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.scroll_home(animate=False)
-        self._follow_transcript = False
+        if self.state.runs_table_visible and self._runs_table().move_to_start():
+            return
+        self._transcript_log().scroll_home(animate=False, force=True, immediate=True)
 
     def action_transcript_end(self) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        transcript_log.scroll_end(animate=False)
-        self._follow_transcript = True
+        if self.state.runs_table_visible and self._runs_table().move_to_end():
+            return
+        self._transcript_log().scroll_end(animate=False, force=True, immediate=True)
+
+    @on(DataTable.RowSelected, "#runs-table")
+    def on_runs_table_row_selected(self, _: DataTable.RowSelected) -> None:
+        runs_table = self._runs_table()
+        selected_run = runs_table.selected_run
+        self.viewmodel.select_runs_table_row(
+            prompt_text=self._prompt().text(),
+            status=selected_run.status if selected_run is not None else "",
+            run_id=selected_run.run_id if selected_run is not None else "",
+            skill_name=selected_run.skill if selected_run is not None else "",
+            is_exit=runs_table.selected_is_exit,
+        )
+        self._prompt().focus()
 
     def _refresh_status(self) -> None:
         try:
             status = self.query_one("#status", ScreenStatusView)
         except NoMatches:
             return
-        status.set_status(self.state.screen_status)
-
-    def _refresh_transcript(self, *, scroll_to_end: bool, force_scroll: bool = False) -> None:
-        transcript_log = self.query_one("#transcript-log", TranscriptLog)
-        was_at_end = transcript_log.is_vertical_scroll_end
-        renderables = render_transcript(
-            items=self.state.transcript_items,
-            prompt_placeholder=self.ui_theme.prompt_placeholder,
+        status.set_status(
+            self.state.screen_status,
+            waiting_prompt=self.state.waiting_prompt,
         )
-        renderable_count = len(renderables)
-        is_empty = len(self.state.transcript_items) == 0
-        should_scroll_end = scroll_to_end and (
-            force_scroll or self._follow_transcript or was_at_end
-        )
-
-        can_append = (
-            not is_empty
-            and not self._last_transcript_empty
-            and self._last_renderable_count >= 0
-            and renderable_count >= self._last_renderable_count
-        )
-        if can_append and renderable_count > self._last_renderable_count:
-            append_renderables = renderables[self._last_renderable_count :]
-            for renderable in append_renderables:
-                transcript_log.write(renderable, scroll_end=should_scroll_end)
-        else:
-            transcript_log.clear()
-            for renderable in renderables:
-                transcript_log.write(renderable, scroll_end=should_scroll_end)
-
-        self._last_renderable_count = renderable_count
-        self._last_transcript_empty = is_empty
-        if scroll_to_end and (force_scroll or self._follow_transcript or was_at_end):
-            self._follow_transcript = True
 
     def _refresh_footer(self) -> None:
         try:
-            footer = self.query_one("#footer", Static)
+            footer_left = self.query_one("#footer-left", Static)
+            footer_right = self.query_one("#footer-right", Static)
         except NoMatches:
             return
-        footer.update(self._build_footer_text())
+        footer_left.update(self._build_footer_left_text())
+        footer_right.update(self._build_footer_right_text())
 
-    def _build_footer_text(self) -> str:
+    def _build_footer_left_text(self) -> str:
         return "/quit exit"
+
+    def _build_footer_right_text(self) -> str:
+        session_key = self.state.session_key.strip()
+        if not session_key or session_key == "main":
+            return self.ui_theme.session_empty_icon
+        return session_key
 
     def _prompt(self) -> PromptController:
         return PromptController(self.query_one("#prompt", TextArea))
 
+    def _autocomplete_view(self) -> AutoCompleteView:
+        return self.query_one("#autocomplete", AutoCompleteView)
+
+    def _transcript_log(self) -> TranscriptLog:
+        return self.query_one("#transcript-log", TranscriptLog)
+
     def _refresh_from_state(self, force_scroll: bool = False) -> None:
+        self._refresh_transcript()
+        self._refresh_runs_table()
+        self._refresh_runs_visibility()
+        self._refresh_prompt()
         self._refresh_status()
-        self._refresh_transcript(scroll_to_end=True, force_scroll=force_scroll)
+        self._refresh_autocomplete()
         self._refresh_footer()
+
+    def _refresh_prompt(self) -> None:
+        prompt = self._prompt()
+        if (
+            prompt.text() == self.state.prompt_text
+            and prompt.cursor_position() == self.state.prompt_cursor_position
+        ):
+            return
+
+        self._suppress_next_prompt_change = True
+        prompt.set_text(
+            self.state.prompt_text,
+            cursor_position=self.state.prompt_cursor_position,
+        )
+
+    def _refresh_autocomplete(self) -> None:
+        autocomplete = self._autocomplete_view()
+        autocomplete.set_state(self.state.autocompletion)
+
+    def _refresh_transcript(self) -> None:
+        transcript = self._transcript_log()
+        transcript.clear()
+        renderables = render_transcript(
+            items=self.state.transcript_items,
+            theme=self.ui_theme,
+            prompt_placeholder="",
+        )
+        for index, renderable in enumerate(renderables):
+            transcript.write(renderable, scroll_end=index == len(renderables) - 1)
+
+    def _refresh_runs_table(self) -> None:
+        if self._last_runs_snapshot is not None and self.state.runs == self._last_runs_snapshot:
+            return
+        runs_table = self._runs_table()
+        runs_table.set_rows(
+            [
+                self._run_list_item_to_row(run)
+                for run in self.state.runs
+            ]
+        )
+        self._last_runs_snapshot = self.state.runs
+
+    def _refresh_runs_visibility(self) -> None:
+        try:
+            runs_table_area = self.query_one("#runs-table-area", Container)
+            runs_table = self.query_one("#runs-table", RunsTableView)
+            status = self.query_one("#status", ScreenStatusView)
+        except NoMatches:
+            return
+
+        runs_table_area.display = self.state.runs_table_visible
+        runs_table.display = self.state.runs_table_visible
+        status.display = not self.state.runs_table_visible
+
+    def _runs_table(self) -> RunsTableView:
+        return self.query_one("#runs-table", RunsTableView)
+
+    def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
+        return RunsTableRow(
+            status=_format_run_status(run),
+            skill=run.skill_ref,
+            run_id=run.id,
+        )
+
+    def _on_state_changed(self, state: ConsoleScreenState) -> None:
+        self.state = state
+        self._refresh_from_state()
 
 
 def run_console_screen(
@@ -212,10 +308,8 @@ def run_console_screen(
     session_key: str,
     theme: TuiTheme = DEFAULT_TUI_THEME,
 ) -> str:
-    viewmodel = ConsoleScreenViewModel(
-        session_key=session_key,
-        run_port=DefaultRunPort(),
-    )
+    container = build_tui_container(theme=theme)
+    viewmodel = container.build_viewmodel(session_key=session_key)
 
     class ThemedConsoleScreen(ConsoleScreen):
         CSS = build_textual_css(theme)
@@ -223,3 +317,22 @@ def run_console_screen(
     app = ThemedConsoleScreen(viewmodel=viewmodel, theme=theme)
     result = app.run(mouse=False)
     return result or session_key
+
+
+def _format_run_status(run: RunsPortItem) -> str:
+    status = run.status.lower()
+    wait_suffix = _wait_type_suffix(run.wait_type)
+    if not wait_suffix:
+        return status
+    return f"{status}-{wait_suffix}"
+
+
+def _wait_type_suffix(wait_type: str | None) -> str:
+    normalized = str(wait_type or "").strip().lower()
+    if normalized == "input":
+        return "i"
+    if normalized == "webhook":
+        return "w"
+    if normalized == "channel":
+        return "c"
+    return ""

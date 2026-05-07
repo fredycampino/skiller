@@ -29,10 +29,6 @@ steps:
       - notify
       - shell
     max_turns: 10
-    next: show_reply
-
-  - notify: show_reply
-    message: '{{output_value("support_agent").data.final.text}}'
     next: ask_user
 
   - notify: done

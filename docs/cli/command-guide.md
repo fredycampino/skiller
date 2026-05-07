@@ -50,6 +50,12 @@ skiller worker run <run_id>
 skiller worker resume <run_id>
 ```
 
+### Agent control
+
+```bash
+skiller agent interrupt <run_id>
+```
+
 ### Setup
 
 ```bash
@@ -160,6 +166,17 @@ event records, deduplication receipts for those events, and persisted execution 
 Rule of thumb:
 - use `watch` to follow a run as it evolves
 - use `logs` when you need the raw event payloads
+
+## Interrupt the current agent turn
+
+```bash
+skiller agent interrupt <run_id>
+```
+
+What it does:
+- enqueues an `agent` steering item with action `abort_turn`
+- does not cancel the run
+- is consumed later by the agent loop at its steering checkpoints
 
 ## Resume a waiting run with text
 

@@ -4,7 +4,6 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from skiller.domain.run.run_model import RunStatus
 from skiller.interfaces.tui.port.run_port import PollingEvent, PollingEventKind
 
 
@@ -18,6 +17,7 @@ class RunLogRecord:
 @dataclass(frozen=True)
 class RunStatusRecord:
     status: str
+    prompt: str = ""
 
 
 class RunEventMapper:
@@ -44,10 +44,19 @@ class RunEventMapper:
                     kind=PollingEventKind.LOG,
                     run_id=run_id,
                     text=text,
+                    assistant_text=_string_field(record.payload, "text"),
                     event_type=record.event_type,
                     skill=_string_field(record.payload, "skill"),
                     step=_string_field(record.payload, "step"),
                     step_type=_string_field(record.payload, "step_type"),
+                    turn_id=_string_field(record.payload, "turn_id"),
+                    message_type=_string_field(record.payload, "message_type"),
+                    tool=_string_field(record.payload, "tool"),
+                    tool_call_id=_string_field(record.payload, "tool_call_id"),
+                    command=_extract_command(record.payload.get("args")),
+                    parent_sequence=_int_field(record.payload, "parent_sequence"),
+                    sequence=_int_field(record.payload, "sequence"),
+                    context_ref=_string_field(record.payload, "context_ref"),
                     output=_compact_output(record.payload.get("output")),
                     error=_string_field(record.payload, "error"),
                     event_id=record.event_id,
@@ -71,6 +80,7 @@ class RunEventMapper:
             kind=PollingEventKind.STATUS,
             run_id=run_id,
             status=record.status,
+            prompt=record.prompt,
             text=f"[{_display_run_id(run_id)}] {record.status}",
         )
 
@@ -97,7 +107,8 @@ def _parse_run_status_record(status_payload: dict[str, Any]) -> RunStatusRecord 
     if not status:
         return None
 
-    return RunStatusRecord(status=status)
+    prompt = str(status_payload.get("prompt", "")).strip()
+    return RunStatusRecord(status=status, prompt=prompt)
 
 
 def _format_watch_event(run_id: str, record: RunLogRecord) -> str | None:
@@ -140,7 +151,7 @@ def _format_watch_event(run_id: str, record: RunLogRecord) -> str | None:
         ]
     elif event_type == "RUN_FINISHED":
         status = str(payload.get("status", "")).upper()
-        if status == RunStatus.SUCCEEDED.value:
+        if status == "SUCCEEDED":
             return None
         parts = [
             _format_field("status", payload.get("status")),
@@ -185,14 +196,36 @@ def _string_field(payload: dict[str, Any], name: str) -> str:
 def _compact_output(value: Any) -> str:
     if value is None:
         return ""
-    return _compact_value(value)
+    return _serialize_value(value)
+
+
+def _int_field(payload: dict[str, Any], name: str) -> int | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_command(args: Any) -> str:
+    if not isinstance(args, dict):
+        return ""
+    command = args.get("command")
+    if not isinstance(command, str):
+        return ""
+    return command.strip()
 
 
 def _compact_value(value: Any) -> str:
-    if isinstance(value, str):
-        raw = json.dumps(value, ensure_ascii=True)
-    else:
-        raw = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    raw = _serialize_value(value)
     if len(raw) <= 120:
         return raw
     return f"{raw[:117]}..."
+
+
+def _serialize_value(value: Any) -> str:
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=True)
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))

@@ -70,6 +70,9 @@ class RuntimeController:
     def resume(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.resume_run(run_id)
 
+    def interrupt_agent(self, run_id: str) -> dict[str, Any]:
+        return self.runtime_service.interrupt_agent(run_id.strip())
+
     def delete_run(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.delete_run(run_id.strip())
 

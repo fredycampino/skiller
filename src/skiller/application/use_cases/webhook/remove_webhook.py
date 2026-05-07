@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from skiller.application.ports.webhook_registry_port import WebhookRegistryPort
+from skiller.application.ports.persistence.webhook_registry_port import WebhookRegistryPort
 
 
 class RemoveWebhookStatus(str, Enum):

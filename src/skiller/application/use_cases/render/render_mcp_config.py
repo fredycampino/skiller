@@ -4,8 +4,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from skiller.application.ports.run_store_port import RunStorePort
-from skiller.application.ports.skill_runner_port import SkillRunnerPort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
+from skiller.application.ports.skills.skill_runner_port import SkillRunnerPort
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 

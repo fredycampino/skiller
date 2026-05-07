@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 
 pytestmark = pytest.mark.unit
 

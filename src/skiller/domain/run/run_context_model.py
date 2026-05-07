@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from skiller.domain.run.steering_model import (
+    SteeringAction,
+    SteeringItem,
+    SteeringTarget,
+)
 from skiller.domain.step.step_execution_model import StepExecution
 
 
@@ -8,7 +13,7 @@ from skiller.domain.step.step_execution_model import StepExecution
 class RunContext:
     inputs: dict[str, Any] = field(default_factory=dict)
     step_executions: dict[str, StepExecution] = field(default_factory=dict)
-    steering_messages: list[str] = field(default_factory=list)
+    steering_queue: list[SteeringItem] = field(default_factory=list)
     cancel_reason: str | None = None
 
     @classmethod
@@ -16,7 +21,7 @@ class RunContext:
         raw = data if isinstance(data, dict) else {}
         inputs = raw.get("inputs", {})
         raw_step_executions = raw.get("step_executions", {})
-        steering_messages = raw.get("steering_messages", [])
+        raw_steering_queue = raw.get("steering_queue", raw.get("steering_messages", []))
         cancel_reason = raw.get("cancel_reason")
 
         step_executions: dict[str, StepExecution] = {}
@@ -29,7 +34,7 @@ class RunContext:
         return cls(
             inputs=inputs if isinstance(inputs, dict) else {},
             step_executions=step_executions,
-            steering_messages=steering_messages if isinstance(steering_messages, list) else [],
+            steering_queue=_build_steering_queue(raw_steering_queue),
             cancel_reason=cancel_reason if isinstance(cancel_reason, str) else None,
         )
 
@@ -41,8 +46,31 @@ class RunContext:
                 for step_id, execution in self.step_executions.items()
             },
         }
-        if self.steering_messages:
-            data["steering_messages"] = self.steering_messages
+        if self.steering_queue:
+            data["steering_queue"] = [item.to_dict() for item in self.steering_queue]
         if self.cancel_reason:
             data["cancel_reason"] = self.cancel_reason
         return data
+
+
+def _build_steering_queue(raw: Any) -> list[SteeringItem]:
+    if not isinstance(raw, list):
+        return []
+
+    queue: list[SteeringItem] = []
+    for item in raw:
+        try:
+            if isinstance(item, dict):
+                queue.append(SteeringItem.from_dict(item))
+                continue
+            if isinstance(item, str) and item.strip():
+                queue.append(
+                    SteeringItem(
+                        target=SteeringTarget.AGENT,
+                        action=SteeringAction.STEERING_MESSAGE,
+                        text=item,
+                    )
+                )
+        except ValueError:
+            continue
+    return queue

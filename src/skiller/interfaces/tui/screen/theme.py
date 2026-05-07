@@ -11,18 +11,24 @@ class TuiTheme:
     color_text_muted: str = "#555555"
     color_text_success: str = "#7ee787"
     color_text_error: str = "#ff7b72"
+    color_text_accent: str = "#79c0ff"
     color_text_selected: str = "white"
     color_prompt_border: str = "#444444"
     cursor: str = ">"
+    user_icon: str = "›"
+    agent_message_icon: str = "‹"
+    agent_tool_icon: str = "▪"
     selector: str = "→"
+    autocomplete_selector_icon: str = "->"
     prompt_placeholder: str = "escribe /quit para salir"
+    session_empty_icon: str = "◌"
     status_spinner_frames: tuple[str, ...] = ("◐", "◓", "◑", "◒")
     status_icon_waiting: str = "◌"
     status_icon_success: str = "✓"
     status_icon_error: str = "×"
     status_animation_interval: float = 0.1
     slash_command_name_width: int = 8
-    autocomplete_max_height: int = 5
+    autocomplete_visible_lines: int = 3
     horizontal_padding: int = 1
     status_margin_top: int = 1
     prompt_prefix_width: int = 2
@@ -42,6 +48,7 @@ DEFAULT_TUI_THEME = TuiTheme()
 
 def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
     footer_margin_x = theme.horizontal_padding * 2
+    autocomplete_box_height = theme.autocomplete_visible_lines + 2
     return f"""
         App {{
             background: {theme.color_terminal_default};
@@ -62,25 +69,43 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #transcript-log {{
             height: 1fr;
+            width: 100%;
             overflow: scroll;
             scrollbar-size: 0 0;
             scrollbar-visibility: hidden;
             background: {theme.color_terminal_default};
             border: none;
-            padding: 0 {theme.horizontal_padding};
+            margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
+            padding: 0 1;
         }}
 
         #status {{
-            height: 1;
-            margin: {theme.status_margin_top} 0 0 0;
-            padding: 0 {theme.horizontal_padding + 1};
+            height: auto;
+            width: 100%;
+            margin:
+                {theme.status_margin_top}
+                {theme.horizontal_padding}
+                0
+                {theme.horizontal_padding};
+            padding: 0 1;
             color: {theme.color_text_primary};
             text-style: dim;
             background: {theme.color_terminal_default};
         }}
 
+        #runs-table-area {{
+            height: 1fr;
+            align: center bottom;
+            width: 100%;
+            margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
         #prompt-row {{
             height: auto;
+            width: 100%;
             min-height: {theme.prompt_min_height};
             max-height: {theme.prompt_max_height};
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
@@ -127,6 +152,43 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             background: {theme.color_terminal_default};
         }}
 
+        #autocomplete {{
+            height: {autocomplete_box_height};
+            min-height: {autocomplete_box_height};
+            max-height: {autocomplete_box_height};
+            margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
+            padding: 0 1;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_terminal_default};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+        }}
+
+        #runs-table {{
+            height: auto;
+            width: 100%;
+            padding: 0 0 0 0;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_terminal_default};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #runs-table > .datatable--header {{
+            color: {theme.color_text_primary};
+            background: {theme.color_terminal_default};
+            padding-bottom: 1;
+            text-style: bold;
+        }}
+
+        #runs-table > .datatable--cursor {{
+            color: {theme.color_text_accent};
+            background: {theme.color_terminal_default} 0%;
+            text-style: bold;
+        }}
+
         #footer {{
             height: 2;
             margin: {theme.footer_margin_top} {footer_margin_x} 0 {footer_margin_x};
@@ -146,8 +208,8 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
         }}
 
         #slash-autocomplete {{
-            height: auto;
-            max-height: {theme.autocomplete_max_height};
+            height: {autocomplete_box_height};
+            max-height: {autocomplete_box_height};
             padding: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
             background: {theme.color_terminal_default};
             color: {theme.color_text_primary};

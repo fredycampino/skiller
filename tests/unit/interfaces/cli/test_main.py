@@ -12,6 +12,7 @@ class _FakeController:
         self.start_worker_calls: list[str] = []
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
+        self.interrupt_agent_calls: list[str] = []
         self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
@@ -89,6 +90,15 @@ class _FakeController:
     def resume(self, run_id: str) -> dict[str, str]:
         self.resume_calls.append(run_id)
         return {"run_id": run_id, "resume_status": "RESUMED", "status": "WAITING"}
+
+    def interrupt_agent(self, run_id: str) -> dict[str, object]:
+        self.interrupt_agent_calls.append(run_id)
+        return {
+            "run_id": run_id,
+            "status": "ENQUEUED",
+            "enqueued": True,
+            "item": {"target": "agent", "action": "abort_turn"},
+        }
 
     def delete_run(self, run_id: str) -> dict[str, object]:
         self.delete_run_calls.append(run_id)
@@ -562,6 +572,24 @@ def test_server_stop_command(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '"stopped": true' in captured.out
+
+
+def test_agent_interrupt_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["agent", "interrupt", "run-1"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.interrupt_agent_calls == ["run-1"]
+    assert '"status": "ENQUEUED"' in captured.out
+    assert '"action": "abort_turn"' in captured.out
 
 
 def test_cloudflared_start_command(

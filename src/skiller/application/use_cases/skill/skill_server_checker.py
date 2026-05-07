@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.ports.channel_sender_port import ChannelSenderPort
-from skiller.application.ports.server_status_port import ServerStatusPort
-from skiller.application.ports.skill_runner_port import SkillRunnerPort
+from skiller.application.ports.execution.channel_sender_port import ChannelSenderPort
+from skiller.application.ports.skills.server_status_port import ServerStatusPort
+from skiller.application.ports.skills.skill_runner_port import SkillRunnerPort
 from skiller.domain.step.step_type import StepType
 
 

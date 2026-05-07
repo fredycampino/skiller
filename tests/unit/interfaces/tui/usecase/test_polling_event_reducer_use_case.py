@@ -8,15 +8,16 @@ from skiller.interfaces.tui.usecase.polling_event_reducer_use_case import (
 )
 from skiller.interfaces.tui.usecase.run_event_context import (
     RunEventContext,
-    RunMode,
     RunStatus,
 )
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     ConsoleScreenState,
+    PromptMode,
     RunStatusItem,
     RunStepItem,
-    ScreenStatus,
+    TranscriptMode,
+    ViewStatusKind,
 )
 
 pytestmark = pytest.mark.unit
@@ -46,20 +47,20 @@ def test_polling_event_reducer_keeps_waiting_context_and_dedupes_event_ids() -> 
     result = use_case.execute(state=state, events=events)
 
     assert result.state is state
-    assert state.screen_status == ScreenStatus.WAITING
-    assert state.waiting_prompt == "Write a message"
+    assert state.view_status.kind == ViewStatusKind.WAITING
+    assert state.prompt.waiting_prompt == "Write a message"
+    assert state.prompt.mode == PromptMode.CHAT
     assert context.run_id == "run-1"
-    assert context.mode == RunMode.FLOW
     assert context.status == RunStatus.WAITING_INPUT
     assert context.event_ids == {"evt-1"}
-    assert len(state.transcript_items) == 1
-    assert isinstance(state.transcript_items[0], RunStatusItem)
-    assert state.transcript_items[0].status == "waiting"
+    assert len(state.transcript.items) == 1
+    assert isinstance(state.transcript.items[0], RunStatusItem)
+    assert state.transcript.items[0].status == "waiting"
 
     use_case.execute(state=state, events=events)
 
     assert context.event_ids == {"evt-1"}
-    assert len(state.transcript_items) == 1
+    assert len(state.transcript.items) == 1
 
 
 def test_polling_event_reducer_keeps_waiting_step_context_from_step_started() -> None:
@@ -87,10 +88,9 @@ def test_polling_event_reducer_keeps_waiting_step_context_from_step_started() ->
     )
 
     assert context.run_id == "run-2"
-    assert context.mode == RunMode.FLOW
     assert context.status == RunStatus.WAITING_INPUT
-    assert any(isinstance(item, RunStepItem) for item in state.transcript_items)
-    assert state.screen_status == ScreenStatus.WAITING
+    assert any(isinstance(item, RunStepItem) for item in state.transcript.items)
+    assert state.view_status.kind == ViewStatusKind.WAITING
 
 
 def test_polling_event_reducer_appends_agent_assistant_message() -> None:
@@ -115,7 +115,8 @@ def test_polling_event_reducer_appends_agent_assistant_message() -> None:
     )
 
     assert result.state is state
-    assert len(state.transcript_items) == 1
-    assert isinstance(state.transcript_items[0], AgentAssistantMessageItem)
-    assert state.transcript_items[0].message_type == "tool_calls"
-    assert state.transcript_items[0].text == "I will inspect the repository state."
+    assert len(state.transcript.items) == 1
+    assert isinstance(state.transcript.items[0], AgentAssistantMessageItem)
+    assert state.transcript.items[0].message_type == "tool_calls"
+    assert state.transcript.items[0].text == "I will inspect the repository state."
+    assert state.transcript.mode == TranscriptMode.CHAT

@@ -5,7 +5,12 @@ from types import ModuleType
 from typing import Iterator
 
 from skiller.interfaces.tui.di.container import build_tui_container
-from skiller.interfaces.tui.port.run_port import PollingEvent, PollingEventKind
+from skiller.interfaces.tui.port.run_port import (
+    CommandAck,
+    CommandAckStatus,
+    PollingEvent,
+    PollingEventKind,
+)
 from skiller.interfaces.tui.port.runs_port import RunsPortItem
 from skiller.interfaces.tui.viewmodel.console_screen_viewmodel import (
     ConsoleScreenViewModel,
@@ -139,3 +144,13 @@ class ActivatingRunPort:
 class NeverCalledWaitingPort:
     def send_input(self, *, run_id: str, text: str):  # noqa: ANN001
         raise AssertionError(f"unexpected send_input call: {run_id} {text}")
+
+
+class FakeAgentPort:
+    def __init__(self, ack: CommandAck | None = None) -> None:
+        self.ack = ack or CommandAck(status=CommandAckStatus.ACCEPTED, message="accepted")
+        self.called_with: list[str] = []
+
+    def interrupt(self, run_id: str) -> CommandAck:
+        self.called_with.append(run_id)
+        return self.ack

@@ -42,10 +42,10 @@ def test_autocomplete_use_case_hides_queries_with_whitespace() -> None:
     assert use_case.execute(text="/run chat", cursor_position=9) is None
 
 
-def test_autocomplete_use_case_suggests_agents_command() -> None:
+def test_autocomplete_use_case_suggests_chats_command() -> None:
     use_case = AutocompleteUseCase()
 
-    state = use_case.execute(text="/ag", cursor_position=3)
+    state = use_case.execute(text="/ch", cursor_position=3)
 
     assert state is not None
-    assert [item.label for item in state.items] == ["agents"]
+    assert [item.label for item in state.items] == ["chats"]

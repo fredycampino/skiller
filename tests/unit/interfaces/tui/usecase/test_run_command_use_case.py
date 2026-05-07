@@ -12,15 +12,15 @@ from skiller.interfaces.tui.usecase.normalize_command_use_case import (
 from skiller.interfaces.tui.usecase.run_command_use_case import RunCommandUseCase
 from skiller.interfaces.tui.usecase.run_event_context import (
     RunEventContext,
-    RunMode,
     RunStatus,
 )
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
     RunAckItem,
-    ScreenStatus,
+    TranscriptMode,
     UserInputItem,
+    ViewStatusKind,
 )
 
 pytestmark = pytest.mark.unit
@@ -85,16 +85,48 @@ def test_run_command_use_case_dispatches_normalized_args(monkeypatch: pytest.Mon
         assert result.ack.run_id == "run-1234"
         assert context.run_id == "run-1234"
         assert context.skill_name == "chat"
-        assert context.mode == RunMode.FLOW
         assert context.status == RunStatus.RUNNING
         assert state.session_key == "run-1234"
-        assert state.screen_status == ScreenStatus.RUNNING
-        assert state.prompt_text == ""
-        assert state.prompt_cursor_position == 0
-        assert isinstance(state.transcript_items[-2], UserInputItem)
-        assert isinstance(state.transcript_items[-1], RunAckItem)
-        assert state.transcript_items[-1].skill == "chat"
-        assert state.transcript_items[-1].run_id == "run-1234"
+        assert state.view_status.kind == ViewStatusKind.RUNNING
+        assert state.prompt.text == ""
+        assert state.prompt.cursor_position == 0
+        assert isinstance(state.transcript.items[-2], UserInputItem)
+        assert isinstance(state.transcript.items[-1], RunAckItem)
+        assert state.transcript.items[-1].skill == "chat"
+        assert state.transcript.items[-1].run_id == "run-1234"
+
+    asyncio.run(run())
+
+
+def test_run_command_use_case_sets_chat_transcript_mode_for_chat_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(run_command_use_case_module.asyncio, "to_thread", fake_to_thread)
+
+    async def run() -> None:
+        port = FakeRunPort(
+            CommandAck(
+                status=CommandAckStatus.ACCEPTED,
+                run_id="run-1234",
+                message="accepted",
+            )
+        )
+        context = RunEventContext()
+        use_case = RunCommandUseCase(run_port=port, context=context)
+        state = ConsoleScreenState(session_key="main")
+        observer = FakeObserver(run_id="")
+
+        await use_case.execute(
+            observer,
+            state=state,
+            command=NormalizeCommandUseCase().execute(text="/chat agent_tools"),
+        )
+
+        assert state.transcript.mode == TranscriptMode.CHAT
+        assert port.called_with == ["agent_tools"]
 
     asyncio.run(run())
 
@@ -134,9 +166,9 @@ def test_run_command_use_case_records_dispatch_error(monkeypatch: pytest.MonkeyP
         assert context.skill_name == ""
         assert context.status is None
         assert state.session_key == "main"
-        assert state.screen_status == ScreenStatus.ERROR
-        assert isinstance(state.transcript_items[-2], UserInputItem)
-        assert isinstance(state.transcript_items[-1], DispatchErrorItem)
-        assert state.transcript_items[-1].message == "error: boom"
+        assert state.view_status.kind == ViewStatusKind.ERROR
+        assert isinstance(state.transcript.items[-2], UserInputItem)
+        assert isinstance(state.transcript.items[-1], DispatchErrorItem)
+        assert state.transcript.items[-1].message == "error: boom"
 
     asyncio.run(run())

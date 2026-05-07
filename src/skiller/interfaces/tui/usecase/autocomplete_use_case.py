@@ -21,9 +21,9 @@ _COMPLETION_CATALOG: tuple[CompletionItem, ...] = (
         kind="command",
     ),
     CompletionItem(
-        label="agents",
-        description="Show waiting input runs",
-        insert_text="/agents",
+        label="chats",
+        description="Show waiting input chats",
+        insert_text="/chats",
         kind="command",
     ),
     CompletionItem(

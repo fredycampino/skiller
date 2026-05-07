@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from rich.markdown import Markdown
+from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
 
@@ -21,6 +22,7 @@ from skiller.interfaces.tui.viewmodel.console_screen_state import (
     RunResumeItem,
     RunStatusItem,
     RunStepItem,
+    TranscriptMode,
     UserInputItem,
 )
 
@@ -94,11 +96,13 @@ def test_render_transcript_does_not_insert_blank_line_before_resume() -> None:
         ],
     )
 
-    assert len(renderables) == 2
+    assert len(renderables) == 3
     assert isinstance(renderables[0], Text)
     assert isinstance(renderables[1], Text)
+    assert isinstance(renderables[2], Text)
     assert renderables[0].plain == "› hola"
-    assert renderables[1].plain == "↳ resume(wait_input_test)"
+    assert renderables[1].plain == ""
+    assert renderables[2].plain == "↳ resume(wait_input_test)"
 
 
 def test_render_transcript_keeps_blank_line_between_command_and_run_ack() -> None:
@@ -114,6 +118,27 @@ def test_render_transcript_keeps_blank_line_between_command_and_run_ack() -> Non
     assert isinstance(renderables[1], Text)
     assert renderables[0].plain == "› /run test"
     assert renderables[1].plain == ""
+
+
+def test_render_transcript_inserts_blank_line_between_user_and_agent_step() -> None:
+    renderables = render_transcript(
+        items=[
+            UserInputItem(text="hola"),
+            RunStepItem(
+                run_id="run-1",
+                step_type="agent",
+                step_id="support_agent",
+            ),
+        ],
+    )
+
+    assert len(renderables) == 3
+    assert isinstance(renderables[0], Text)
+    assert isinstance(renderables[1], Text)
+    assert isinstance(renderables[2], Text)
+    assert renderables[0].plain == "› hola"
+    assert renderables[1].plain == ""
+    assert renderables[2].plain == "[agent] support_agent"
 
 
 def test_render_transcript_inserts_blank_line_between_agent_reply_and_next_user_input() -> None:
@@ -262,8 +287,40 @@ def test_render_transcript_inserts_blank_line_between_tool_result_and_agent_assi
     assert renderables[2].plain == "      Command completed successfully."
     assert renderables[3].plain == ""
     content = _assert_agent_grid(renderables[4])
+    assert isinstance(content, Styled)
+    assert isinstance(content.renderable, Markdown)
+    assert content.renderable.markup == "Ahora voy a revisar el siguiente comando."
+
+
+def test_render_transcript_inserts_blank_line_after_final_agent_assistant_message() -> None:
+    renderables = render_transcript(
+        items=[
+            RunStepItem(
+                run_id="run-1",
+                step_type="agent",
+                step_id="support_agent",
+            ),
+            AgentAssistantMessageItem(
+                run_id="run-1",
+                step_id="support_agent",
+                message_type="final",
+                text="Hecho.",
+            ),
+            UserInputItem(text="sigue"),
+        ],
+    )
+
+    assert len(renderables) == 4
+    assert isinstance(renderables[0], Text)
+    assert isinstance(renderables[1], Table)
+    assert isinstance(renderables[2], Text)
+    assert isinstance(renderables[3], Text)
+    assert renderables[0].plain == "[agent] support_agent"
+    content = _assert_agent_grid(renderables[1])
     assert isinstance(content, Markdown)
-    assert content.markup == "Ahora voy a revisar el siguiente comando."
+    assert content.markup == "Hecho."
+    assert renderables[2].plain == ""
+    assert renderables[3].plain == "› sigue"
 
 
 def test_render_transcript_collapses_switch_route_in_single_muted_suffix_line() -> None:
@@ -371,6 +428,46 @@ def test_render_transcript_item_renders_agent_step_with_accent_tag() -> None:
     )
 
 
+def test_render_transcript_item_renders_agent_step_muted_in_chat_mode() -> None:
+    theme = TuiTheme(color_text_muted="grey50")
+    renderable = render_transcript_item(
+        RunStepItem(
+            run_id="run-1",
+            step_type="agent",
+            step_id="support_agent",
+        ),
+        mode=TranscriptMode.CHAT,
+        theme=theme,
+    )
+
+    assert isinstance(renderable, Text)
+    assert renderable.plain == "[agent] support_agent"
+    assert any(
+        span.start == 0
+        and span.end == 1
+        and span.style == f"{theme.rich_style(theme.color_text_muted)} dim"
+        for span in renderable.spans
+    )
+    assert any(
+        span.start == 1
+        and span.end == 6
+        and span.style == f"{theme.rich_style(theme.color_text_muted)} dim"
+        for span in renderable.spans
+    )
+    assert any(
+        span.start == 6
+        and span.end == 8
+        and span.style == f"{theme.rich_style(theme.color_text_muted)} dim"
+        for span in renderable.spans
+    )
+    assert any(
+        span.start == 8
+        and span.end == len("[agent] support_agent")
+        and span.style == f"{theme.rich_style(theme.color_text_muted)} dim"
+        for span in renderable.spans
+    )
+
+
 def test_render_transcript_item_renders_agent_tool_call_with_muted_square_icon() -> None:
     theme = TuiTheme(agent_tool_icon="▪", color_text_muted="grey50")
     renderable = render_transcript_item(
@@ -404,7 +501,11 @@ def test_render_transcript_item_renders_agent_tool_result_in_muted_text() -> Non
 
 
 def test_render_transcript_item_renders_agent_assistant_message_as_agent_output() -> None:
-    theme = TuiTheme(agent_message_icon="‹")
+    theme = TuiTheme(
+        agent_message_icon="‹",
+        color_text_muted="grey50",
+        color_text_secondary="grey70",
+    )
     renderable = render_transcript_item(
         AgentAssistantMessageItem(
             run_id="run-1",
@@ -416,8 +517,27 @@ def test_render_transcript_item_renders_agent_assistant_message_as_agent_output(
     )
 
     content = _assert_agent_grid(renderable)
+    assert isinstance(content, Styled)
+    assert content.style == theme.rich_style(theme.color_text_secondary)
+    assert isinstance(content.renderable, Markdown)
+    assert content.renderable.markup == "I will inspect the repository state."
+
+
+def test_render_transcript_item_keeps_final_agent_assistant_message_unmuted() -> None:
+    theme = TuiTheme(agent_message_icon="‹", color_text_muted="grey50")
+    renderable = render_transcript_item(
+        AgentAssistantMessageItem(
+            run_id="run-1",
+            step_id="support_agent",
+            message_type="final",
+            text="Done.",
+        ),
+        theme=theme,
+    )
+
+    content = _assert_agent_grid(renderable)
     assert isinstance(content, Markdown)
-    assert content.markup == "I will inspect the repository state."
+    assert content.markup == "Done."
 
 
 def test_render_transcript_item_renders_agent_output_as_simple_text() -> None:

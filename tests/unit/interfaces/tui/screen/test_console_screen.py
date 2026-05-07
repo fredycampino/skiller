@@ -3,19 +3,54 @@ from __future__ import annotations
 import pytest
 
 from skiller.interfaces.tui.port.runs_port import RunsPortItem
-from skiller.interfaces.tui.screen.console_screen import _format_run_status
+from skiller.interfaces.tui.screen.console_screen import (
+    _resolve_run_row_mode,
+    _resolve_run_row_status,
+)
+from skiller.interfaces.tui.screen.runs_table_view import RunRowMode, RunRowStatus
 
 pytestmark = pytest.mark.unit
 
 
-def test_format_run_status_adds_wait_type_suffix_when_present() -> None:
-    assert _format_run_status(_run_item(status="WAITING", wait_type="input")) == "waiting-i"
-    assert _format_run_status(_run_item(status="WAITING", wait_type="webhook")) == "waiting-w"
-    assert _format_run_status(_run_item(status="WAITING", wait_type="channel")) == "waiting-c"
+def test_resolve_run_row_mode_maps_input_waits_to_chat() -> None:
+    assert (
+        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="input"))
+        == RunRowMode.CHAT
+    )
+    assert (
+        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="webhook"))
+        == RunRowMode.FLOW
+    )
 
 
-def test_format_run_status_leaves_plain_status_when_wait_type_is_missing() -> None:
-    assert _format_run_status(_run_item(status="FAILED", wait_type=None)) == "failed"
+def test_resolve_run_row_status_maps_wait_variants() -> None:
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="input"))
+        == RunRowStatus.WAITING_INPUT
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="webhook"))
+        == RunRowStatus.WAITING_WEBHOOK
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="channel"))
+        == RunRowStatus.WAITING_CHANNEL
+    )
+
+
+def test_resolve_run_row_status_maps_terminal_and_running_statuses() -> None:
+    assert (
+        _resolve_run_row_status(_run_item(status="FAILED", wait_type=None))
+        == RunRowStatus.FAILED
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="SUCCEEDED", wait_type=None))
+        == RunRowStatus.SUCCESS
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None))
+        == RunRowStatus.RUNNING
+    )
 
 
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:

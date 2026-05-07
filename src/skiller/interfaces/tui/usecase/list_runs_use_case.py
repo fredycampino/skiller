@@ -8,8 +8,9 @@ from skiller.interfaces.tui.usecase.normalize_command_use_case import Command, C
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
-    ScreenStatus,
+    PromptMode,
     UserInputItem,
+    ViewStatusKind,
 )
 
 
@@ -38,38 +39,42 @@ class ListRunsUseCase:
             )
         except RuntimeError as exc:
             _clear_prompt_state(state)
-            state.transcript_items.append(UserInputItem(text=command.raw_text))
-            state.transcript_items.append(
+            state.transcript.items.append(UserInputItem(text=command.raw_text))
+            state.transcript.items.append(
                 DispatchErrorItem(message=f"error: {str(exc).strip() or 'runs query failed'}")
             )
-            state.screen_status = ScreenStatus.ERROR
-            state.waiting_prompt = ""
-            state.runs = tuple()
-            state.runs_table_visible = False
-            state.runs_table_command = ""
+            state.view_status.kind = ViewStatusKind.ERROR
+            state.view_status.message = "Error"
+            state.prompt.waiting_prompt = ""
+            state.runs_table.rows = tuple()
+            state.runs_table.visible = False
+            state.runs_table.command = ""
+            state.prompt.mode = PromptMode.FLOW
             return ListRunsResult(state=state)
 
         if waiting_input_only:
             runs = [run for run in runs if (run.wait_type or "").strip().lower() == "input"]
 
         _clear_prompt_state(state)
-        state.transcript_items.append(UserInputItem(text=command.raw_text))
-        state.runs = tuple(runs)
-        state.runs_table_visible = True
-        state.runs_table_command = command.raw_text
-        state.screen_status = ScreenStatus.READY
-        state.waiting_prompt = ""
+        state.transcript.items.append(UserInputItem(text=command.raw_text))
+        state.runs_table.rows = tuple(runs)
+        state.runs_table.visible = True
+        state.runs_table.command = command.raw_text
+        state.view_status.kind = ViewStatusKind.HIDDEN
+        state.view_status.message = ""
+        state.prompt.waiting_prompt = ""
+        state.prompt.mode = PromptMode.RUNS_TABLE
         return ListRunsResult(state=state)
 
 
 def _clear_prompt_state(state: ConsoleScreenState) -> None:
     state.autocompletion = None
-    state.prompt_text = ""
-    state.prompt_cursor_position = 0
+    state.prompt.text = ""
+    state.prompt.cursor_position = 0
 
 
 def _resolve_runs_query(command: Command) -> tuple[list[str], bool]:
-    if command.kind == CommandKind.AGENTS:
+    if command.kind == CommandKind.CHATS:
         return ["WAITING"], True
 
     if command.kind != CommandKind.RUNS:

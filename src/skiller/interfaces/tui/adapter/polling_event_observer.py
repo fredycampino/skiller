@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import subprocess
-import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from skiller.domain.run.run_model import RunStatus
+from skiller.interfaces.tui.adapter.cli_invoker import CliInvoker
 from skiller.interfaces.tui.adapter.run_event_mapper import RunEventMapper
 from skiller.interfaces.tui.port.run_port import (
     ObserverType,
@@ -18,16 +15,17 @@ from skiller.interfaces.tui.port.run_port import (
 )
 
 _TERMINAL_STATUSES = {
-    RunStatus.WAITING.value,
-    RunStatus.SUCCEEDED.value,
-    RunStatus.FAILED.value,
-    RunStatus.CANCELLED.value,
+    "WAITING",
+    "SUCCEEDED",
+    "FAILED",
+    "CANCELLED",
 }
 
 
 @dataclass
 class PollingEventObserver:
     interval_seconds: float = 0.1
+    invoker: CliInvoker = field(default_factory=CliInvoker)
     mapper: RunEventMapper = field(default_factory=RunEventMapper)
     _observer: RunObserver | None = field(default=None, init=False, repr=False)
     _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
@@ -88,8 +86,8 @@ class PollingEventObserver:
         observer: RunObserver,
     ) -> list[PollingEvent]:
         run_id = observer.run_id
-        status_payload = await asyncio.to_thread(_run_json_command, "status", run_id)
-        events_payload = await asyncio.to_thread(_run_json_list_command, "logs", run_id)
+        status_payload = await asyncio.to_thread(self._run_json_command, "status", run_id)
+        events_payload = await asyncio.to_thread(self._run_json_list_command, "logs", run_id)
 
         observed = self.mapper.logs_to_events(
             run_id=run_id,
@@ -120,49 +118,44 @@ class PollingEventObserver:
                 is_terminal = True
         return is_terminal
 
+    def _run_json_command(self, *args: str) -> dict[str, Any]:
+        completed = self.invoker.run(*args)
+        if completed.returncode != 0:
+            detail = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "runtime command failed"
+            )
+            raise RuntimeError(detail)
+
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("runtime command returned invalid JSON") from exc
+
+        if not isinstance(payload, dict):
+            raise RuntimeError("runtime command returned invalid payload")
+        return payload
+
+    def _run_json_list_command(self, *args: str) -> list[dict[str, Any]]:
+        completed = self.invoker.run(*args)
+        if completed.returncode != 0:
+            detail = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "runtime command failed"
+            )
+            raise RuntimeError(detail)
+
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("runtime command returned invalid JSON") from exc
+
+        if not isinstance(payload, list):
+            raise RuntimeError("runtime command returned invalid payload")
+        return [item for item in payload if isinstance(item, dict)]
+
 
 def _is_same_run_observer(left: RunObserver, right: RunObserver) -> bool:
     return left.run_id == right.run_id
-
-
-def _run_json_command(*args: str) -> dict[str, Any]:
-    completed = _run_cli_command(*args)
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "runtime command failed"
-        raise RuntimeError(detail)
-
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("runtime command returned invalid JSON") from exc
-
-    if not isinstance(payload, dict):
-        raise RuntimeError("runtime command returned invalid payload")
-    return payload
-
-
-def _run_json_list_command(*args: str) -> list[dict[str, Any]]:
-    completed = _run_cli_command(*args)
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "runtime command failed"
-        raise RuntimeError(detail)
-
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("runtime command returned invalid JSON") from exc
-
-    if not isinstance(payload, list):
-        raise RuntimeError("runtime command returned invalid payload")
-    return [item for item in payload if isinstance(item, dict)]
-
-
-def _run_cli_command(*args: str) -> subprocess.CompletedProcess[str]:
-    command = [sys.executable, "-m", "skiller", *args]
-    return subprocess.run(  # noqa: S603
-        command,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
-    )

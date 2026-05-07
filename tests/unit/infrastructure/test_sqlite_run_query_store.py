@@ -1,10 +1,10 @@
 import pytest
 
-from skiller.domain.match_type import MatchType
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import RunStatus
-from skiller.domain.source_type import SourceType
-from skiller.domain.wait_type import WaitType
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import RunStatus
+from skiller.domain.wait.match_type import MatchType
+from skiller.domain.wait.source_type import SourceType
+from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 

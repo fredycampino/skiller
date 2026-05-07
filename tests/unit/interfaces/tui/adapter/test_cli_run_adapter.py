@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 
 import pytest
 
-import skiller.interfaces.tui.adapter.cli_run_adapter as cli_run_adapter_module
 from skiller.interfaces.tui.adapter.cli_run_adapter import CliRunAdapter
 from skiller.interfaces.tui.port.run_port import CommandAckStatus
 
 pytestmark = pytest.mark.unit
+
+
+@dataclass
+class FakeInvoker:
+    completed: subprocess.CompletedProcess[str]
+
+    def run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        _ = args
+        return self.completed
 
 
 def test_cli_run_adapter_rejects_empty_args() -> None:
@@ -21,19 +30,16 @@ def test_cli_run_adapter_rejects_empty_args() -> None:
 
 
 def test_cli_run_adapter_returns_dispatch_ack(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_run(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
-        _ = args
-        _ = kwargs
-        return subprocess.CompletedProcess(
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=0,
             stdout='{"run_id": "run-1234", "status": "CREATED"}',
             stderr="",
-        )
-
-    monkeypatch.setattr(cli_run_adapter_module.subprocess, "run", fake_run)
-
-    adapter = CliRunAdapter()
+        ))
+    )
     result = adapter.run("chat")
 
     assert result.status == CommandAckStatus.ACCEPTED
@@ -42,19 +48,16 @@ def test_cli_run_adapter_returns_dispatch_ack(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_cli_run_adapter_returns_error_ack(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_run(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
-        _ = args
-        _ = kwargs
-        return subprocess.CompletedProcess(
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=1,
             stdout="",
             stderr="boom",
-        )
-
-    monkeypatch.setattr(cli_run_adapter_module.subprocess, "run", fake_run)
-
-    adapter = CliRunAdapter()
+        ))
+    )
     result = adapter.run("chat")
 
     assert result.status == CommandAckStatus.ERROR
@@ -64,10 +67,10 @@ def test_cli_run_adapter_returns_error_ack(monkeypatch: pytest.MonkeyPatch) -> N
 def test_cli_run_adapter_sanitizes_skill_not_found_traceback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
-        _ = args
-        _ = kwargs
-        return subprocess.CompletedProcess(
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=1,
             stdout="",
@@ -76,11 +79,8 @@ def test_cli_run_adapter_sanitizes_skill_not_found_traceback(
                 '  File "/tmp/x.py", line 1, in <module>\n'
                 "FileNotFoundError: Skill not found: source=internal ref=av\n"
             ),
-        )
-
-    monkeypatch.setattr(cli_run_adapter_module.subprocess, "run", fake_run)
-
-    adapter = CliRunAdapter()
+        ))
+    )
     result = adapter.run("av")
 
     assert result.status == CommandAckStatus.ERROR

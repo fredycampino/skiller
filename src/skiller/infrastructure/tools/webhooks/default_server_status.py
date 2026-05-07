@@ -1,7 +1,7 @@
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from skiller.application.ports.server_status_port import ServerStatusPort
+from skiller.application.ports.skills.server_status_port import ServerStatusPort
 from skiller.infrastructure.config.settings import Settings
 
 

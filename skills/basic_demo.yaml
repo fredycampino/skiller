@@ -1,0 +1,30 @@
+name: basic_demo
+description: "Demo basico sin agente - calculadora simple"
+version: "0.1"
+start: inicio
+
+steps:
+  - notify: inicio
+    message: "Calculadora Simple"
+    next: pedir_operacion
+
+  - wait_input: pedir_operacion
+    prompt: "Operacion (+ - * /)"
+    next: verificar_salir
+
+  - switch: verificar_salir
+    value: '{{output_value("pedir_operacion").payload.text}}'
+    cases:
+      salir: fin
+    default: pedir_num1
+
+  - wait_input: pedir_num1
+    prompt: "Primer numero:"
+    next: pedir_num2
+
+  - wait_input: pedir_num2
+    prompt: "Segundo numero:"
+    next: inicio
+
+  - notify: fin
+    message: "Chau!"

@@ -1,6 +1,8 @@
-from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
-from skiller.application.ports.run_store_port import RunStorePort
-from skiller.application.ports.shell_port import ShellPort
+from skiller.application.ports.execution.shell_port import ShellPort
+from skiller.application.ports.persistence.execution_output_store_port import (
+    ExecutionOutputStorePort,
+)
+from skiller.application.ports.persistence.run_store_port import RunStorePort
 from skiller.application.tools.shell import ShellTool, ShellToolAdapter
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import (

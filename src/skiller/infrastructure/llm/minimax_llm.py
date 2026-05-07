@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from skiller.application.ports.llm.llm_port import LLMRequest, LLMResponse
+from skiller.infrastructure.llm.openai_mapper import (
+    to_openai_kwargs,
+    to_port_llm_response,
+)
 
 
 class MinimaxLLM:
@@ -20,40 +25,25 @@ class MinimaxLLM:
         self.model = model
         self.timeout_seconds = timeout_seconds
 
-    def generate(
-        self,
-        messages: list[dict[str, str]],
-        config: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    def generate(self, request: LLMRequest) -> LLMResponse:
         if not self.api_key.strip():
-            return {"ok": False, "error": "MiniMax API key is not configured"}
+            return LLMResponse(ok=False, error="MiniMax API key is not configured")
 
-        model = self._resolve_model(config)
-        payload = {
-            "model": model,
-            "messages": messages,
-            "reasoning_split": True,
-        }
+        payload = to_openai_kwargs(request, default_model=self.model)
+        # Keep MiniMax reasoning out of message.content so agent context, step output,
+        # and TUI transcript stay aligned with the OpenAI-style content we expect.
+        payload["reasoning_split"] = True
 
         try:
             response = self._post_json("/chat/completions", payload)
         except HTTPError as exc:
-            return {"ok": False, "error": self._extract_http_error(exc)}
+            return LLMResponse(ok=False, error=self._extract_http_error(exc))
         except (URLError, TimeoutError, ValueError) as exc:
-            return {"ok": False, "error": f"MiniMax request failed: {exc}"}
+            return LLMResponse(ok=False, error=f"MiniMax request failed: {exc}")
 
-        return self._parse_response(response, model=model)
+        return to_port_llm_response(response, fallback_model=str(payload["model"]))
 
-    def _resolve_model(self, config: dict[str, Any] | None) -> str:
-        if config is None:
-            return self.model
-
-        raw_model = config.get("model")
-        if isinstance(raw_model, str) and raw_model.strip():
-            return raw_model.strip()
-        return self.model
-
-    def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post_json(self, path: str, payload: dict[str, object]) -> dict[str, object]:
         body = json.dumps(payload).encode("utf-8")
         request = Request(
             f"{self.base_url}{path}",
@@ -71,30 +61,6 @@ class MinimaxLLM:
         if not isinstance(parsed, dict):
             raise ValueError("MiniMax returned invalid JSON payload")
         return parsed
-
-    def _parse_response(self, payload: dict[str, Any], *, model: str) -> dict[str, Any]:
-        choices = payload.get("choices")
-        if not isinstance(choices, list) or not choices:
-            return {"ok": False, "error": "MiniMax response missing choices"}
-
-        first_choice = choices[0]
-        if not isinstance(first_choice, dict):
-            return {"ok": False, "error": "MiniMax response contains invalid choice payload"}
-
-        message = first_choice.get("message")
-        if not isinstance(message, dict):
-            return {"ok": False, "error": "MiniMax response missing message payload"}
-
-        content = message.get("content")
-        if not isinstance(content, str):
-            return {"ok": False, "error": "MiniMax response missing text content"}
-
-        response_model = payload.get("model")
-        return {
-            "ok": True,
-            "content": content,
-            "model": str(response_model) if isinstance(response_model, str) else model,
-        }
 
     def _extract_http_error(self, error: HTTPError) -> str:
         try:

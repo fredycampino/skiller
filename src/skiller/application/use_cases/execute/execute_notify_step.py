@@ -1,4 +1,4 @@
-from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
 from skiller.application.tools.notify import NotifyTool, NotifyToolAdapter
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import (

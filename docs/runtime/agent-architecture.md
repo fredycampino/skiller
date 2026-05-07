@@ -7,7 +7,8 @@ Current runtime status:
 - `agent` V2 first slice is implemented
 - prompt-driven tool loop is active
 - current tools: `shell`, `notify`
-- provider-native tool calling is not implemented yet
+- provider-native single-tool calling is implemented
+- multi-tool turns and streaming tool-call assembly are still open
 
 ## Decision
 
@@ -82,16 +83,18 @@ The current V2 slice is intentionally provider-agnostic.
 Tool-enabled turns are implemented with:
 
 - strict prompt instructions
-- one JSON decision per turn
+- native single-tool decisions when the provider returns `tool_calls`
 - transcript reconstruction from persisted context
 
-This avoids coupling the first implementation to provider-specific native tool calling APIs.
+This keeps the implementation aligned with provider-native tool calling.
 
 ## Remaining Work
 
 Still open:
 
-- provider-native tool calling
+- multiple tool calls in one assistant response
+- content + tool call preservation in the same assistant turn
+- streaming `tool_calls` assembly
 - later tools such as `mcp`
 - explicit `WAITING` semantics for `wait_*` inside the agent loop
 - optional force-final-answer recovery when `max_turns` is reached

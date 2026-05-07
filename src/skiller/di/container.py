@@ -1,12 +1,27 @@
 from dataclasses import dataclass
 
+from skiller.application.agent.agent_runner import AgentRunner
+from skiller.application.agent.config.event_output_sanitizer import (
+    AgentEventOutputPolicy,
+    AgentEventOutputSanitizer,
+)
+from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
+from skiller.application.agent.observer.runtime_event_emitter import AgentRuntimeEventEmitter
+from skiller.application.agent.prompt.final_message_extractor import (
+    AgentFinalMessageExtractor,
+)
+from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
+from skiller.application.agent.tools.tool_manager import ToolManager
+from skiller.application.agent.tools.tool_turn_executor import AgentToolTurnExecutor
 from skiller.application.query_service import RunQueryService
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.notify import NotifyTool, NotifyToolAdapter
 from skiller.application.tools.shell import ShellTool, ShellToolAdapter
-from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
-from skiller.application.use_cases.agent.tool_manager import ToolManager
+from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
+from skiller.application.use_cases.execute.execute_agent_step import (
+    ExecuteAgentStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_llm_prompt_step import (
     ExecuteLlmPromptStepUseCase,
@@ -60,6 +75,7 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.domain.shared.large_result_truncator import LargeResultTruncator
+from skiller.infrastructure.agent.default_agent_steering import DefaultAgentSteering
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
@@ -102,9 +118,16 @@ def build_runtime_container(
         skills_dir=skills_dir,
         execution_output_store=execution_output_store,
     )
+    agent_steering = DefaultAgentSteering(store)
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
-    shell = DefaultShellRunner()
+    shell = DefaultShellRunner(
+        workspace_root=cfg.agent_shell_allowlist_workspace or None,
+        allowlist_enabled=cfg.agent_shell_allowlist_enabled,
+        allowed_commands=list(cfg.agent_shell_allowlist_allowed_commands),
+        allow_env_prefix=cfg.agent_shell_allowlist_allow_env_prefix,
+        sandbox_enabled=cfg.agent_shell_sandbox_enabled,
+    )
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender(cfg)
     large_result_truncator = LargeResultTruncator()
@@ -147,6 +170,10 @@ def build_runtime_container(
     list_webhooks_use_case = ListWebhooksUseCase(registry=webhook_registry)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
+    interrupt_agent_use_case = InterruptAgentUseCase(
+        store=store,
+        agent_steering=agent_steering,
+    )
     skill_checker_use_case = SkillCheckerUseCase(skill_runner=skill_runner)
     skill_server_checker_use_case = SkillServerCheckerUseCase(
         skill_runner=skill_runner,
@@ -156,11 +183,42 @@ def build_runtime_container(
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    agent_event_output_sanitizer = AgentEventOutputSanitizer(
+        AgentEventOutputPolicy(
+            truncate_enabled=cfg.agent_event_output_truncate_enabled,
+            pii_enabled=cfg.agent_event_output_pii_enabled,
+            secrets_enabled=cfg.agent_event_output_secrets_enabled,
+            max_text_chars=cfg.agent_event_output_max_text_chars,
+            max_json_chars=cfg.agent_event_output_max_json_chars,
+            max_array_items=cfg.agent_event_output_max_array_items,
+        )
+    )
+    agent_event_emitter = AgentRuntimeEventEmitter(
+        append_runtime_event_use_case=append_runtime_event_use_case
+    )
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
-        agent_context_store=agent_context_store,
-        llm=llm,
-        tool_manager=tool_manager,
+        runner=AgentRunner(
+            agent_context_store=agent_context_store,
+            agent_steering=agent_steering,
+            llm=llm,
+            tool_manager=tool_manager,
+            prompt_builder=AgentPromptBuilder(),
+            final_message_extractor=AgentFinalMessageExtractor(),
+            event_output_sanitizer=agent_event_output_sanitizer,
+            event_emitter=agent_event_emitter,
+            tool_turn_executor=AgentToolTurnExecutor(
+                agent_context_store=agent_context_store,
+                agent_steering=agent_steering,
+                tool_manager=tool_manager,
+                event_output_sanitizer=agent_event_output_sanitizer,
+                event_emitter=agent_event_emitter,
+            ),
+        ),
+        config_reader=AgentStepConfigReader(
+            default_max_turns=cfg.agent_loop_max_turns,
+            default_max_tool_calls=cfg.agent_loop_max_tool_calls,
+        ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
@@ -255,6 +313,7 @@ def build_runtime_container(
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,
         resume_run_use_case=resume_run_use_case,
+        interrupt_agent_use_case=interrupt_agent_use_case,
         get_run_status_use_case=get_run_status_use_case,
         run_worker_service=run_worker_service,
     )

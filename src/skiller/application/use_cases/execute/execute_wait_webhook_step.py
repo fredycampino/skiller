@@ -1,6 +1,6 @@
-from skiller.application.ports.external_event_store_port import ExternalEventStorePort
-from skiller.application.ports.run_store_port import RunStorePort
-from skiller.application.ports.wait_store_port import WaitStorePort
+from skiller.application.ports.persistence.external_event_store_port import ExternalEventStorePort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
+from skiller.application.ports.persistence.wait_store_port import WaitStorePort
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,

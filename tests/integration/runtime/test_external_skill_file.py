@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
-from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
+from skiller.application.use_cases.execute.execute_agent_step import (
+    ExecuteAgentStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_llm_prompt_step import (
     ExecuteLlmPromptStepUseCase,
@@ -44,7 +47,7 @@ from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCas
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
-from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -53,6 +56,7 @@ from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 from skiller.infrastructure.tools.shell.default_shell import DefaultShellRunner
+from tests.helpers.agent_runner import build_agent_runner
 
 pytestmark = [
     pytest.mark.integration,
@@ -88,8 +92,12 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
-        agent_context_store=agent_context_store,
-        llm=NullLLM(),
+        runner=build_agent_runner(
+            agent_context_store=agent_context_store,
+            llm=NullLLM(),
+            tool_manager=None,
+            append_runtime_event_use_case=append_runtime_event_use_case,
+        ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
@@ -171,6 +179,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),
+        interrupt_agent_use_case=SimpleNamespace(execute=lambda run_id: None),
         get_run_status_use_case=GetRunStatusUseCase(store),
         run_worker_service=run_worker_service,
     )

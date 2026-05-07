@@ -7,7 +7,9 @@ from typing import Any
 
 import yaml
 
-from skiller.application.ports.execution_output_store_port import ExecutionOutputStorePort
+from skiller.application.ports.persistence.execution_output_store_port import (
+    ExecutionOutputStorePort,
+)
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
 _FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")

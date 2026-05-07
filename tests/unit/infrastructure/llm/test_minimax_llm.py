@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 
 import pytest
 
+from skiller.application.ports.llm.llm_port import LLMMessage, LLMRequest, LLMResponse
 from skiller.infrastructure.llm import minimax_llm
 from skiller.infrastructure.llm.minimax_llm import MinimaxLLM
 
@@ -57,13 +58,13 @@ def test_minimax_llm_returns_content_on_success(monkeypatch: pytest.MonkeyPatch)
         model="MiniMax-M2.5",
         timeout_seconds=12.5,
     )
-    result = llm.generate([{"role": "user", "content": "Analyze"}])
+    result = llm.generate(LLMRequest(messages=(LLMMessage.user("Analyze"),)))
 
-    assert result == {
-        "ok": True,
-        "content": '{"summary":"ok","severity":"low","next_action":"retry"}',
-        "model": "MiniMax-M2.5",
-    }
+    assert result == LLMResponse(
+        ok=True,
+        content='{"summary":"ok","severity":"low","next_action":"retry"}',
+        model="MiniMax-M2.5",
+    )
     assert captured["url"] == "https://api.minimax.io/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer secret-key"
     assert captured["body"] == {
@@ -74,30 +75,59 @@ def test_minimax_llm_returns_content_on_success(monkeypatch: pytest.MonkeyPatch)
     assert captured["timeout"] == 12.5
 
 
-def test_minimax_llm_uses_model_override_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, object] = {}
-
+def test_minimax_llm_maps_tool_calls_from_openai_style_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_urlopen(request, timeout=0):  # noqa: ANN001, ANN202
-        _ = timeout
-        captured["body"] = json.loads(request.data.decode("utf-8"))
-        return _FakeHTTPResponse({"choices": [{"message": {"content": "{}"}}]})
+        _ = (request, timeout)
+        return _FakeHTTPResponse(
+            {
+                "model": "MiniMax-M2.5",
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "tool-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "notify",
+                                        "arguments": '{"message":"hi"}',
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
 
     monkeypatch.setattr(minimax_llm, "urlopen", fake_urlopen)
 
     llm = MinimaxLLM(api_key="secret-key")
-    llm.generate(
-        [{"role": "user", "content": "Analyze"}], config={"model": "MiniMax-M2.5-highspeed"}
-    )
+    result = llm.generate(LLMRequest(messages=(LLMMessage.user("Analyze"),)))
 
-    assert captured["body"]["model"] == "MiniMax-M2.5-highspeed"
+    assert result == LLMResponse(
+        ok=True,
+        content=None,
+        model="MiniMax-M2.5",
+        finish_reason="tool_calls",
+        tool_calls=result.tool_calls,
+    )
+    assert result.tool_calls[0].id == "tool-1"
+    assert result.tool_calls[0].function.name == "notify"
+    assert result.tool_calls[0].function.arguments_json == '{"message":"hi"}'
 
 
 def test_minimax_llm_returns_error_when_api_key_missing() -> None:
     llm = MinimaxLLM(api_key="")
 
-    result = llm.generate([{"role": "user", "content": "Analyze"}])
+    result = llm.generate(LLMRequest(messages=(LLMMessage.user("Analyze"),)))
 
-    assert result == {"ok": False, "error": "MiniMax API key is not configured"}
+    assert result == LLMResponse(ok=False, error="MiniMax API key is not configured")
 
 
 def test_minimax_llm_returns_error_message_from_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,9 +144,9 @@ def test_minimax_llm_returns_error_message_from_http_error(monkeypatch: pytest.M
     monkeypatch.setattr(minimax_llm, "urlopen", fake_urlopen)
 
     llm = MinimaxLLM(api_key="bad-key")
-    result = llm.generate([{"role": "user", "content": "Analyze"}])
+    result = llm.generate(LLMRequest(messages=(LLMMessage.user("Analyze"),)))
 
-    assert result == {"ok": False, "error": "Invalid API key"}
+    assert result == LLMResponse(ok=False, error="Invalid API key")
 
 
 def test_minimax_llm_returns_error_on_invalid_response_payload(
@@ -129,6 +159,6 @@ def test_minimax_llm_returns_error_on_invalid_response_payload(
     monkeypatch.setattr(minimax_llm, "urlopen", fake_urlopen)
 
     llm = MinimaxLLM(api_key="secret-key")
-    result = llm.generate([{"role": "user", "content": "Analyze"}])
+    result = llm.generate(LLMRequest(messages=(LLMMessage.user("Analyze"),)))
 
-    assert result == {"ok": False, "error": "MiniMax response missing choices"}
+    assert result == LLMResponse(ok=False, error="OpenAI response missing choices")

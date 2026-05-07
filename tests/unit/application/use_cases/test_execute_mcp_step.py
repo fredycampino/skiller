@@ -3,11 +3,11 @@ import pytest
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
-from skiller.domain.large_result_truncator import LargeResultTruncator
-from skiller.domain.mcp_config_model import RenderedMcpConfig
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import RunStatus
-from skiller.domain.step_execution_model import McpOutput
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import RunStatus
+from skiller.domain.shared.large_result_truncator import LargeResultTruncator
+from skiller.domain.step.step_execution_model import McpOutput
 
 pytestmark = pytest.mark.unit
 

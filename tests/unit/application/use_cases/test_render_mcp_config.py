@@ -8,9 +8,9 @@ from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
-from skiller.domain.mcp_config_model import RenderedMcpConfig
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run
 
 pytestmark = pytest.mark.unit
 

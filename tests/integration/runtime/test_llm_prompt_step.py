@@ -2,15 +2,26 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from skiller.application.agent.config.step_config_reader import AGENT_RUNTIME_SYSTEM
+from skiller.application.agent.tools.tool_manager import ToolManager
+from skiller.application.ports.llm.llm_port import (
+    LLMMessage,
+    LLMRequest,
+    LLMResponse,
+    LLMToolCall,
+    LLMToolCallFunction,
+)
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.notify import NotifyTool, NotifyToolAdapter
 from skiller.application.tools.shell import ShellTool, ShellToolAdapter
-from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
-from skiller.application.use_cases.agent.tool_manager import ToolManager
+from skiller.application.use_cases.execute.execute_agent_step import (
+    ExecuteAgentStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_llm_prompt_step import (
     ExecuteLlmPromptStepUseCase,
@@ -41,7 +52,7 @@ from skiller.application.use_cases.skill.skill_server_checker import SkillServer
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.di.container import build_runtime_container
-from skiller.domain.large_result_truncator import LargeResultTruncator
+from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
@@ -51,10 +62,21 @@ from skiller.infrastructure.llm.fake_llm import FakeLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 from skiller.infrastructure.tools.shell.default_shell import DefaultShellRunner
+from tests.helpers.agent_runner import build_agent_runner
 
 pytestmark = [
     pytest.mark.integration,
 ]
+
+
+def _assert_system_message_contains(
+    message: LLMMessage,
+    *,
+    step_system: str,
+) -> None:
+    assert message.role.value == "system"
+    assert AGENT_RUNTIME_SYSTEM in (message.content or "")
+    assert step_system.strip() in (message.content or "")
 
 
 class _FakeServerStatus:
@@ -79,11 +101,20 @@ class _FakeLLM:
     ) -> None:
         self._responses = responses or [content]
         self._response_index = 0
-        self.calls: list[dict[str, object]] = []
+        self.calls: list[object] = []
 
-    def generate(
-        self, messages: list[dict[str, str]], config: dict[str, object] | None = None
-    ) -> dict[str, object]:
+    def generate(self, request_or_messages, config: dict[str, object] | None = None):  # noqa: ANN001
+        if isinstance(request_or_messages, LLMRequest):
+            self.calls.append(request_or_messages)
+            if self._response_index >= len(self._responses):
+                raise AssertionError("Fake LLM received more calls than expected")
+            content = self._responses[self._response_index]
+            self._response_index += 1
+            if isinstance(content, LLMResponse):
+                return content
+            return LLMResponse(ok=True, content=content, model="fake-llm")
+
+        messages = request_or_messages
         self.calls.append({"messages": messages, "config": config})
         if self._response_index >= len(self._responses):
             raise AssertionError("Fake LLM received more calls than expected")
@@ -124,9 +155,12 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
-        agent_context_store=agent_context_store,
-        llm=llm,
-        tool_manager=tool_manager,
+        runner=build_agent_runner(
+            agent_context_store=agent_context_store,
+            llm=llm,
+            tool_manager=tool_manager,
+            append_runtime_event_use_case=append_runtime_event_use_case,
+        ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
@@ -197,6 +231,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),
+        interrupt_agent_use_case=SimpleNamespace(execute=lambda run_id: None),
         get_run_status_use_case=GetRunStatusUseCase(store),
         run_worker_service=run_worker_service,
     )
@@ -289,7 +324,7 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
 
 
 def test_agent_step_succeeds_and_persists_agent_context() -> None:
-    llm = _FakeLLM(content='{"reply":"Hola, claro."}')
+    llm = _FakeLLM(content="Hola, claro.")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
@@ -360,25 +395,41 @@ def test_agent_step_succeeds_and_persists_agent_context() -> None:
         assert entries[1].payload == {
             "type": "assistant_message",
             "turn_id": "turn-1",
+            "message_type": "final",
             "text": "Hola, claro.",
         }
-        assert llm.calls[0]["messages"] == [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful WhatsApp assistant.\n"
-                    "Reply in the same language as the incoming message.\n"
-                ),
-            },
-            {"role": "user", "content": "Hola"},
-        ]
+        _assert_system_message_contains(
+            llm.calls[0].messages[0],
+            step_system=(
+                "You are a helpful WhatsApp assistant.\n"
+                "Reply in the same language as the incoming message.\n"
+            ),
+        )
+        assert llm.calls[0].messages[1:] == (LLMMessage.user("Hola"),)
 
 
 def test_agent_step_executes_tool_then_succeeds_and_persists_context() -> None:
     llm = _FakeLLM(
         responses=[
-            '{"type":"tool_call","tool":"notify","args":{"message":"Abrimos un ticket interno."}}',
-            '{"type":"success","text":"Ya registré una nota interna y sigo disponible."}',
+            LLMResponse(
+                ok=True,
+                model="fake",
+                tool_calls=(
+                    LLMToolCall(
+                        id="openai-call-1",
+                        function=LLMToolCallFunction(
+                            name="notify",
+                            arguments_json='{"message":"Abrimos un ticket interno."}',
+                        ),
+                    ),
+                ),
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                ok=True,
+                content="Ya registré una nota interna y sigue disponible.",
+                model="fake",
+            ),
         ]
     )
 
@@ -429,11 +480,11 @@ def test_agent_step_executes_tool_then_succeeds_and_persists_context() -> None:
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
         assert run.context.step_executions["support_agent"].output.to_public_dict() == {
-            "text": "Ya registré una nota interna y sigo disponible.",
+            "text": "Ya registré una nota interna y sigue disponible.",
             "value": {
                 "data": {
                     "context_id": "chat-tools-1",
-                    "final": {"text": "Ya registré una nota interna y sigo disponible."},
+                    "final": {"text": "Ya registré una nota interna y sigue disponible."},
                     "turn_count": 2,
                     "tool_call_count": 1,
                     "stop_reason": "success",
@@ -443,7 +494,7 @@ def test_agent_step_executes_tool_then_succeeds_and_persists_context() -> None:
             "text_ref": "data.final.text",
         }
         assert run.context.step_executions["done"].output.to_public_dict()["value"] == {
-            "message": "Ya registré una nota interna y sigo disponible."
+            "message": "Ya registré una nota interna y sigue disponible."
         }
         assert [entry.entry_type.value for entry in entries] == [
             "user_message",
@@ -458,12 +509,16 @@ def test_agent_step_executes_tool_then_succeeds_and_persists_context() -> None:
         assert entries[1].payload == {
             "type": "tool_call",
             "turn_id": "turn-1",
+            "parent_sequence": None,
+            "tool_call_id": "openai-call-1",
             "tool": "notify",
             "args": {"message": "Abrimos un ticket interno."},
         }
         assert entries[2].payload == {
             "type": "tool_result",
             "turn_id": "turn-1",
+            "parent_sequence": None,
+            "tool_call_id": "openai-call-1",
             "tool": "notify",
             "status": "COMPLETED",
             "data": {"message": "Abrimos un ticket interno."},
@@ -473,58 +528,146 @@ def test_agent_step_executes_tool_then_succeeds_and_persists_context() -> None:
         assert entries[3].payload == {
             "type": "assistant_message",
             "turn_id": "turn-2",
-            "text": "Ya registré una nota interna y sigo disponible.",
+            "message_type": "final",
+            "text": "Ya registré una nota interna y sigue disponible.",
         }
         assert len(llm.calls) == 2
-        assert llm.calls[0]["config"] == {
-            "step_id": "support_agent",
-            "agent": True,
-            "max_turns": 3,
-            "tools": ["notify"],
+        _assert_system_message_contains(
+            llm.calls[0].messages[0],
+            step_system=(
+                "You are a helpful support assistant.\n"
+                "Keep responses concise.\n"
+            ),
+        )
+        assert llm.calls[0].messages[1] == LLMMessage.user("Necesito que lo revises")
+        assert [tool.name for tool in llm.calls[0].tools] == ["notify"]
+        assert llm.calls[1].messages == (
+            llm.calls[0].messages[0],
+            LLMMessage.user("Necesito que lo revises"),
+            LLMMessage.assistant(
+                tool_calls=(
+                    LLMToolCall(
+                        id="openai-call-1",
+                        function=LLMToolCallFunction(
+                            name="notify",
+                            arguments_json='{"message": "Abrimos un ticket interno."}',
+                        ),
+                    ),
+                )
+            ),
+            LLMMessage.tool(
+                "Abrimos un ticket interno.",
+                tool_call_id="openai-call-1",
+            ),
+        )
+        assert [tool.name for tool in llm.calls[1].tools] == ["notify"]
+
+
+def test_agent_step_preserves_assistant_content_with_tool_call_in_context() -> None:
+    llm = _FakeLLM(
+        responses=[
+            LLMResponse(
+                ok=True,
+                content="I should send a note first.",
+                model="fake",
+                tool_calls=(
+                    LLMToolCall(
+                        id="openai-call-1",
+                        function=LLMToolCallFunction(
+                            name="notify",
+                            arguments_json='{"message":"Abrimos un ticket interno."}',
+                        ),
+                    ),
+                ),
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(
+                ok=True,
+                content="Ya registré una nota interna y sigue disponible.",
+                model="fake",
+            ),
+        ]
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "agent_tools.yaml"
+        skill_path.write_text(
+            (
+                "name: agent_tools_demo\n"
+                "start: support_agent\n"
+                "inputs:\n"
+                "  message: string\n"
+                "  thread_id: string\n"
+                "steps:\n"
+                "  - agent: support_agent\n"
+                "    system: |\n"
+                "      You are a helpful support assistant.\n"
+                "      Keep responses concise.\n"
+                "    task: '{{inputs.message}}'\n"
+                "    context_id: '{{inputs.thread_id}}'\n"
+                "    tools:\n"
+                "      - notify\n"
+                "    max_turns: 3\n"
+                "    next: done\n"
+                "  - notify: done\n"
+                '    message: \'{{output_value("support_agent").data.final.text}}\'\n'
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteStateStore(db_path)
+        store.init_db()
+        runtime = _build_runtime(store, llm)
+
+        run_result = runtime.run(
+            str(skill_path),
+            {"message": "Necesito que lo revises", "thread_id": "chat-tools-1"},
+            skill_source="file",
+        )
+
+        run = store.get_run(run_result["run_id"])
+        agent_context_store = SqliteAgentContextStore(store.db_path)
+        entries = agent_context_store.list_entries(
+            run_id=run_result["run_id"],
+            context_id="chat-tools-1",
+        )
+
+        assert run_result["status"] == "SUCCEEDED"
+        assert run is not None
+        assert [entry.entry_type.value for entry in entries] == [
+            "user_message",
+            "assistant_message",
+            "tool_call",
+            "tool_result",
+            "assistant_message",
+        ]
+        assert entries[1].payload == {
+            "type": "assistant_message",
+            "turn_id": "turn-1",
+            "message_type": "tool_calls",
+            "text": "I should send a note first.",
         }
-        assert llm.calls[0]["messages"] == [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful support assistant.\n"
-                    "Keep responses concise.\n\n"
-                    "If you need to use a tool, reply with exactly one JSON object and no "
-                    "extra text.\n"
-                    'The only structured tool response type is "tool_call".\n'
-                    "Allowed tools are: notify.\n"
-                    'Use only tool names from this list: ["notify"].\n'
-                    'For a tool call respond with '
-                    '{"type":"tool_call","tool":"<tool>","args":{...}}.\n'
-                    'Example tool call: {"type":"tool_call","tool":"shell",'
-                    '"args":{"command":"pytest -q"}}.\n'
-                    "When the task is complete, answer the user directly in plain text.\n"
-                    "Do not wrap the final answer in JSON unless you are making a tool call.\n"
-                    "If a tool fails, use the returned tool_result to decide whether to try "
-                    "another tool or continue reasoning. "
-                    "Do not emit an error terminal response."
+        assert llm.calls[1].messages == (
+            llm.calls[0].messages[0],
+            LLMMessage.user("Necesito que lo revises"),
+            LLMMessage.assistant(
+                "I should send a note first.",
+                tool_calls=(
+                    LLMToolCall(
+                        id="openai-call-1",
+                        function=LLMToolCallFunction(
+                            name="notify",
+                            arguments_json='{"message": "Abrimos un ticket interno."}',
+                        ),
+                    ),
                 ),
-            },
-            {"role": "user", "content": "Necesito que lo revises"},
-        ]
-        assert llm.calls[1]["messages"] == [
-            llm.calls[0]["messages"][0],
-            {"role": "user", "content": "Necesito que lo revises"},
-            {
-                "role": "assistant",
-                "content": (
-                    '{"args": {"message": "Abrimos un ticket interno."}, "tool": "notify", '
-                    '"turn_id": "turn-1", "type": "tool_call"}'
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    '{"data": {"message": "Abrimos un ticket interno."}, "error": null, '
-                    '"status": "COMPLETED", "text": "Abrimos un ticket interno.", '
-                    '"tool": "notify", "turn_id": "turn-1", "type": "tool_result"}'
-                ),
-            },
-        ]
+            ),
+            LLMMessage.tool(
+                "Abrimos un ticket interno.",
+                tool_call_id="openai-call-1",
+            ),
+        )
 
 
 def test_llm_prompt_step_persists_large_result_body_and_truncates_output_value() -> None:

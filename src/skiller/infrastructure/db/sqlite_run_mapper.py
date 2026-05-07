@@ -16,9 +16,9 @@ def build_run_from_row(row: sqlite3.Row) -> Run:
     step_executions_dict = json.loads(row["step_executions_json"])
     if not isinstance(step_executions_dict, dict):
         step_executions_dict = {}
-    steering_messages = json.loads(row["steering_messages_json"])
-    if not isinstance(steering_messages, list):
-        steering_messages = []
+    steering_queue = json.loads(row["steering_queue_json"])
+    if not isinstance(steering_queue, list):
+        steering_queue = []
 
     return Run(
         id=str(row["id"]),
@@ -30,7 +30,7 @@ def build_run_from_row(row: sqlite3.Row) -> Run:
         context=build_context(
             inputs=inputs_dict,
             step_executions=step_executions_dict,
-            steering_messages=steering_messages,
+            steering_queue=steering_queue,
             cancel_reason=row["cancel_reason"],
         ),
         created_at=row["created_at"],
@@ -42,7 +42,7 @@ def build_context(
     *,
     inputs: dict[str, Any],
     step_executions: dict[str, Any],
-    steering_messages: list[str],
+    steering_queue: list[dict[str, Any]] | list[str],
     cancel_reason: str | None,
 ) -> RunContext:
     context = RunContext(
@@ -55,7 +55,11 @@ def build_context(
                 ),
             }
         ).step_executions,
-        steering_messages=steering_messages if isinstance(steering_messages, list) else [],
+        steering_queue=RunContext.from_dict(
+            {
+                "steering_queue": steering_queue if isinstance(steering_queue, list) else [],
+            }
+        ).steering_queue,
     )
     if isinstance(cancel_reason, str) and cancel_reason.strip():
         context.cancel_reason = cancel_reason

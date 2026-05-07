@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentStatus
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksResult
 from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
@@ -170,6 +171,27 @@ class _FakeResumeRunUseCase:
         return ResumeRunResult(status=self.status)
 
 
+class _FakeInterruptAgentUseCase:
+    def __init__(self, *, status: InterruptAgentStatus = InterruptAgentStatus.ENQUEUED) -> None:
+        self.status = status
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        item = None
+        error = None
+        if self.status == InterruptAgentStatus.ENQUEUED:
+            item = SimpleNamespace(to_dict=lambda: {"target": "agent", "action": "abort_turn"})
+        else:
+            error = f"Run '{run_id}' not found"
+        return SimpleNamespace(
+            status=self.status,
+            run_id=run_id,
+            item=item,
+            error=error,
+        )
+
+
 class _FakeGetRunStatusUseCase:
     def __init__(self, status: str = "CREATED", current: str | None = None) -> None:
         self.status = status
@@ -221,6 +243,7 @@ def _build_service(
     skill_checker_use_case: _FakeSkillCheckerUseCase | None = None,
     skill_server_checker_use_case: _FakeSkillServerCheckerUseCase | None = None,
     delete_run_use_case: _FakeDeleteRunUseCase | None = None,
+    interrupt_agent_use_case: _FakeInterruptAgentUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RuntimeApplicationService,
@@ -262,6 +285,7 @@ def _build_service(
         register_webhook_use_case=_FakeRegisterWebhookUseCase(),
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
         resume_run_use_case=_FakeResumeRunUseCase(),
+        interrupt_agent_use_case=interrupt_agent_use_case or _FakeInterruptAgentUseCase(),
         get_run_status_use_case=status_use_case,
         run_worker_service=run_worker_service,
     )
@@ -357,6 +381,29 @@ def test_delete_run_returns_delete_result() -> None:
         "deleted": True,
     }
     assert delete_run_use_case.calls == ["run-1"]
+
+
+def test_interrupt_agent_returns_enqueued_result() -> None:
+    interrupt_agent_use_case = _FakeInterruptAgentUseCase()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(interrupt_agent_use_case=interrupt_agent_use_case)
+
+    result = service.interrupt_agent("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "status": "ENQUEUED",
+        "enqueued": True,
+        "item": {"target": "agent", "action": "abort_turn"},
+    }
+    assert interrupt_agent_use_case.calls == ["run-1"]
 
 
 def test_start_worker_prepares_created_run() -> None:
@@ -499,6 +546,7 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         register_webhook_use_case=_FakeRegisterWebhookUseCase(),
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
         resume_run_use_case=resume_run_use_case,
+        interrupt_agent_use_case=_FakeInterruptAgentUseCase(),
         get_run_status_use_case=get_run_status_use_case,
         run_worker_service=run_worker_service,
     )

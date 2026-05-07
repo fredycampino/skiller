@@ -26,7 +26,7 @@ Represents:
 | current                | TEXT     | nullable                             |
 | inputs_json            | TEXT     | NOT NULL, default '{}'               |
 | step_executions_json   | TEXT     | NOT NULL, default '{}'               |
-| steering_messages_json | TEXT     | NOT NULL, default '[]'               |
+| steering_queue_json    | TEXT     | NOT NULL, default '[]'               |
 | cancel_reason          | TEXT     | nullable                             |
 | created_at             | TEXT     | NOT NULL, default CURRENT_TIMESTAMP  |
 | updated_at             | TEXT     | NOT NULL, default CURRENT_TIMESTAMP  |

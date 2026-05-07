@@ -5,8 +5,8 @@ from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepUseCase,
     StepType,
 )
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run, RunStatus
 
 pytestmark = pytest.mark.unit
 

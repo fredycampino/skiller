@@ -1,6 +1,10 @@
 from typing import Any
 
 from skiller.application.run_worker_service import RunWorkerService
+from skiller.application.use_cases.agent.interrupt_agent import (
+    InterruptAgentStatus,
+    InterruptAgentUseCase,
+)
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
@@ -48,6 +52,7 @@ class RuntimeApplicationService:
         register_webhook_use_case: RegisterWebhookUseCase,
         remove_webhook_use_case: RemoveWebhookUseCase,
         resume_run_use_case: ResumeRunUseCase,
+        interrupt_agent_use_case: InterruptAgentUseCase,
         get_run_status_use_case: GetRunStatusUseCase,
         run_worker_service: RunWorkerService,
         handle_input_use_case: HandleInputUseCase | None = None,
@@ -67,6 +72,7 @@ class RuntimeApplicationService:
         self.register_webhook_use_case = register_webhook_use_case
         self.remove_webhook_use_case = remove_webhook_use_case
         self.resume_run_use_case = resume_run_use_case
+        self.interrupt_agent_use_case = interrupt_agent_use_case
         self.get_run_status_use_case = get_run_status_use_case
         self.run_worker_service = run_worker_service
         self.handle_channel_use_case = handle_channel_use_case
@@ -292,6 +298,19 @@ class RuntimeApplicationService:
             "resume_status": result.status.value,
             "status": status_payload["status"],
         }
+
+    def interrupt_agent(self, run_id: str) -> dict[str, Any]:
+        result = self.interrupt_agent_use_case.execute(run_id)
+        payload: dict[str, Any] = {
+            "run_id": result.run_id,
+            "status": result.status.value,
+            "enqueued": result.status == InterruptAgentStatus.ENQUEUED,
+        }
+        if result.item is not None:
+            payload["item"] = result.item.to_dict()
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
 
     def _get_run_or_raise(self, run_id: str) -> Any:
         run = self.get_run_status_use_case.execute(run_id)

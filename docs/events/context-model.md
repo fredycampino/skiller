@@ -8,10 +8,42 @@ This document defines the persisted runtime model used by `RunContext`.
 RunContext(
     inputs: dict[str, Any],
     step_executions: dict[str, StepExecution],
-    steering_messages: list[str] = [],
+    steering_queue: list[SteeringItem] = [],
     cancel_reason: str | None = None,
 )
 ```
+
+`SteeringItem`:
+
+```python
+SteeringItem(
+    target: SteeringTarget,
+    action: SteeringAction,
+    text: str | None = None,
+)
+```
+
+Current `agent` actions:
+
+- `abort_turn`
+- `steering_message`
+
+When `abort_turn` is consumed during a running agent tool turn, the runtime also appends
+one control `user_message` to the agent context:
+
+```text
+User interrupted the current agent turn.
+```
+
+That control message belongs to `agent context`, not to `RunContext.step_executions`.
+
+The `agent` step itself still finishes as a normal step result.
+If the skill should wait for the user after that, the following explicit wait step is what
+creates `RunStatus.WAITING` and `RUN_WAITING`.
+
+In `RunContext.step_executions`, the `agent` step is persisted exactly like any other
+step: a normal `StepExecution` with `input`, `evaluation`, and `output`. Its internal
+turn transcript stays in `agent context`; its consolidated step result stays in runtime context.
 
 Each step stores one `StepExecution`:
 

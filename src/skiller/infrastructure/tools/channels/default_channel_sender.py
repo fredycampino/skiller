@@ -2,7 +2,10 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from skiller.application.ports.channel_sender_port import ChannelSenderPort, ChannelSendResult
+from skiller.application.ports.execution.channel_sender_port import (
+    ChannelSenderPort,
+    ChannelSendResult,
+)
 from skiller.infrastructure.config.settings import Settings
 
 

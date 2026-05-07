@@ -71,6 +71,33 @@ def test_shell_tool_runs_shell() -> None:
     ]
 
 
+def test_shell_tool_keeps_full_stdout_in_text() -> None:
+    shell = _FakeShell(
+        result={
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "M docs/README.md\nM src/skiller/application/agent/agent_runner.py\n",
+            "stderr": "",
+        }
+    )
+    tool = ShellTool(shell=shell)
+
+    result = tool.execute(ShellToolRequest(command="git status --short"))
+
+    assert result == ToolResult(
+        name="shell",
+        status=ToolResultStatus.COMPLETED,
+        data={
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "M docs/README.md\nM src/skiller/application/agent/agent_runner.py\n",
+            "stderr": "",
+        },
+        text="M docs/README.md\nM src/skiller/application/agent/agent_runner.py",
+        error=None,
+    )
+
+
 def test_shell_tool_propagates_timeout() -> None:
     tool = ShellTool(shell=_FakeShell(error=TimeoutError()))
 

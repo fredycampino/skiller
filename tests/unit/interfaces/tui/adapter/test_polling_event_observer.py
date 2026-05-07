@@ -4,7 +4,6 @@ import asyncio
 
 import pytest
 
-import skiller.interfaces.tui.adapter.polling_event_observer as polling_module
 from skiller.interfaces.tui.adapter.polling_event_observer import (
     PollingEventObserver,
 )
@@ -78,13 +77,12 @@ def test_polling_event_observer_subscribes_and_notifies_run_observer(
     async def fake_sleep(_seconds: float) -> None:
         await original_sleep(0)
 
-    monkeypatch.setattr(polling_module, "_run_json_command", fake_run_json_command)
-    monkeypatch.setattr(polling_module, "_run_json_list_command", fake_run_json_list_command)
-    monkeypatch.setattr(polling_module.asyncio, "to_thread", fake_to_thread)
-    monkeypatch.setattr(polling_module.asyncio, "sleep", fake_sleep)
-
     async def run() -> None:
         event_observer = PollingEventObserver(interval_seconds=0.0)
+        monkeypatch.setattr(event_observer, "_run_json_command", fake_run_json_command)
+        monkeypatch.setattr(event_observer, "_run_json_list_command", fake_run_json_list_command)
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         run_observer = FakeRunObserver("run-1234")
         event_observer.subscribe(run_observer)
         await asyncio.sleep(0)
@@ -126,7 +124,7 @@ def test_run_event_mapper_converts_payloads() -> None:
     )
     status_event = mapper.status_to_event(
         run_id="run-1234",
-        status_payload={"status": "RUNNING"},
+        status_payload={"status": "RUNNING", "prompt": "Write a message"},
         last_status="CREATED",
     )
 
@@ -139,3 +137,87 @@ def test_run_event_mapper_converts_payloads() -> None:
     assert status_event is not None
     assert status_event.kind == PollingEventKind.STATUS
     assert status_event.status == "RUNNING"
+    assert status_event.prompt == "Write a message"
+
+
+def test_run_event_mapper_keeps_agent_assistant_message_fields() -> None:
+    mapper = RunEventMapper()
+
+    log_events = mapper.logs_to_events(
+        run_id="run-1234",
+        events_payload=[
+            {
+                "id": "evt-200",
+                "type": "AGENT_ASSISTANT_MESSAGE",
+                "payload": {
+                    "step": "support_agent",
+                    "step_type": "agent",
+                    "turn_id": "turn-1",
+                    "sequence": 32,
+                    "message_type": "tool_calls",
+                    "text": "I will inspect the repository state.",
+                },
+            },
+        ],
+        seen_event_ids=set(),
+    )
+
+    assert len(log_events) == 1
+    assert log_events[0].event_type == "AGENT_ASSISTANT_MESSAGE"
+    assert log_events[0].step == "support_agent"
+    assert log_events[0].step_type == "agent"
+    assert log_events[0].turn_id == "turn-1"
+    assert log_events[0].sequence == 32
+    assert log_events[0].message_type == "tool_calls"
+    assert log_events[0].assistant_text == "I will inspect the repository state."
+
+
+def test_run_event_mapper_keeps_full_output_payload_without_truncation() -> None:
+    mapper = RunEventMapper()
+
+    long_text = "x" * 300
+    output_payload = {
+        "body_ref": None,
+        "text": long_text,
+        "value": {"payload": {"text": long_text}},
+    }
+    log_events = mapper.logs_to_events(
+        run_id="run-1234",
+        events_payload=[
+            {
+                "id": "evt-99",
+                "type": "STEP_SUCCESS",
+                "payload": {
+                    "step": "ask_user",
+                    "step_type": "wait_input",
+                    "output": output_payload,
+                },
+            },
+        ],
+        seen_event_ids=set(),
+    )
+
+    assert len(log_events) == 1
+    assert "..." not in log_events[0].output
+    assert long_text in log_events[0].output
+
+
+def test_run_event_mapper_ignores_succeeded_run_finished_event() -> None:
+    mapper = RunEventMapper()
+
+    log_events = mapper.logs_to_events(
+        run_id="run-1234",
+        events_payload=[
+            {
+                "id": "evt-100",
+                "type": "RUN_FINISHED",
+                "payload": {
+                    "status": "SUCCEEDED",
+                    "error": "",
+                },
+            },
+        ],
+        seen_event_ids=set(),
+    )
+
+    assert log_events == []

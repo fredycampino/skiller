@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
 from skiller.domain.run.run_model import RunStatus
 
 

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
-import subprocess
-import sys
+from dataclasses import dataclass, field
 from typing import Any
 
+from skiller.interfaces.tui.adapter.cli_invoker import CliInvoker
 from skiller.interfaces.tui.port.run_port import CommandAck, CommandAckStatus
 
 
+@dataclass(frozen=True)
 class CliRunAdapter:
+    invoker: CliInvoker = field(default_factory=CliInvoker)
+
     def run(self, raw_args: str) -> CommandAck:
         normalized_args = raw_args.strip()
         if not normalized_args:
@@ -20,7 +22,12 @@ class CliRunAdapter:
             )
 
         try:
-            payload = _run_json_command("run", *shlex.split(normalized_args), "--detach")
+            payload = _run_json_command(
+                self.invoker,
+                "run",
+                *shlex.split(normalized_args),
+                "--detach",
+            )
         except RuntimeError as exc:
             return CommandAck(
                 status=CommandAckStatus.ERROR,
@@ -38,8 +45,8 @@ class CliRunAdapter:
         )
 
 
-def _run_json_command(*args: str) -> dict[str, Any]:
-    completed = _run_cli_command(*args)
+def _run_json_command(invoker: CliInvoker, *args: str) -> dict[str, Any]:
+    completed = invoker.run(*args)
 
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or "runtime command failed"
@@ -54,24 +61,6 @@ def _run_json_command(*args: str) -> dict[str, Any]:
         raise RuntimeError("runtime command returned invalid payload")
 
     return payload
-
-
-def _run_cli_command(*args: str) -> subprocess.CompletedProcess[str]:
-    command = [
-        sys.executable,
-        "-m",
-        "skiller",
-        *args,
-    ]
-
-    return subprocess.run(  # noqa: S603
-        command,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
-    )
-
 
 def _sanitize_dispatch_error(raw_error: str, *, raw_args: str) -> str:
     normalized = raw_error.strip()

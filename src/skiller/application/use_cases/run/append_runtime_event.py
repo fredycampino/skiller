@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.ports.runtime_event_store_port import RuntimeEventStorePort
+from skiller.application.ports.runtime.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.step.step_execution_model import StepExecution
 from skiller.domain.step.step_type import StepType
 
@@ -15,6 +15,9 @@ class RuntimeEventType(str, Enum):
     STEP_ERROR = "STEP_ERROR"
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
+    AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
+    AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
+    AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
 
 
 @dataclass(frozen=True)

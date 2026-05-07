@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
-from skiller.domain.match_type import MatchType
-from skiller.domain.source_type import SourceType
+from skiller.domain.wait.match_type import MatchType
+from skiller.domain.wait.source_type import SourceType
 
 pytestmark = pytest.mark.unit
 

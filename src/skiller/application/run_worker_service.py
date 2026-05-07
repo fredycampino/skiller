@@ -2,7 +2,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.application.use_cases.agent.execute_agent_step import ExecuteAgentStepUseCase
+from skiller.application.use_cases.execute.execute_agent_step import (
+    ExecuteAgentStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_llm_prompt_step import (
     ExecuteLlmPromptStepUseCase,

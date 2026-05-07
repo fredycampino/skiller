@@ -1,4 +1,4 @@
-from skiller.application.ports.run_store_port import RunStorePort
+from skiller.application.ports.persistence.run_store_port import RunStorePort
 from skiller.domain.step.skill_step_model import find_skill_step
 
 

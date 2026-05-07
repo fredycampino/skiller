@@ -1,0 +1,23 @@
+{
+  "default_provider": "null",
+  "providers": {
+    "null": {
+      "type": "null"
+    },
+    "fake": {
+      "type": "fake",
+      "response_json": {
+        "summary": "fake summary",
+        "severity": "low",
+        "next_action": "retry"
+      },
+      "model": "fake-llm"
+    },
+    "minimax": {
+      "type": "minimax",
+      "base_url": "https://api.minimax.io/v1",
+      "model": "MiniMax-M2.5",
+      "timeout_seconds": 30
+    }
+  }
+}

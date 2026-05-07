@@ -36,7 +36,7 @@ class SqliteStateStore(SqliteRepository):
                   current TEXT,
                   inputs_json TEXT NOT NULL DEFAULT '{}',
                   step_executions_json TEXT NOT NULL DEFAULT '{}',
-                  steering_messages_json TEXT NOT NULL DEFAULT '[]',
+                  steering_queue_json TEXT NOT NULL DEFAULT '[]',
                   cancel_reason TEXT,
                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,7 +104,7 @@ class SqliteStateStore(SqliteRepository):
             )
             self._ensure_runs_current_column(conn)
             self._ensure_runs_step_executions_column(conn)
-            self._ensure_runs_steering_messages_column(conn)
+            self._ensure_runs_steering_queue_column(conn)
             self._drop_runs_current_step_column(conn)
 
     def create_run(
@@ -129,7 +129,7 @@ class SqliteStateStore(SqliteRepository):
                       current,
                       inputs_json,
                       step_executions_json,
-                      steering_messages_json
+                      steering_queue_json
                     )
                     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
                     """,
@@ -141,7 +141,7 @@ class SqliteStateStore(SqliteRepository):
                         RunStatus.CREATED.value,
                         json.dumps(context.inputs),
                         json.dumps(context.to_dict()["step_executions"]),
-                        json.dumps(context.steering_messages),
+                        json.dumps([item.to_dict() for item in context.steering_queue]),
                     ),
                 )
         except sqlite3.IntegrityError as exc:
@@ -169,8 +169,8 @@ class SqliteStateStore(SqliteRepository):
         if context is not None:
             updates.append("step_executions_json = ?")
             params.append(json.dumps(context.to_dict()["step_executions"]))
-            updates.append("steering_messages_json = ?")
-            params.append(json.dumps(context.steering_messages))
+            updates.append("steering_queue_json = ?")
+            params.append(json.dumps([item.to_dict() for item in context.steering_queue]))
             updates.append("cancel_reason = ?")
             params.append(context.cancel_reason)
         if status in terminal_statuses:
@@ -208,7 +208,7 @@ class SqliteStateStore(SqliteRepository):
                   current,
                   inputs_json,
                   step_executions_json,
-                  steering_messages_json,
+                  steering_queue_json,
                   cancel_reason,
                   created_at,
                   updated_at
@@ -268,14 +268,22 @@ class SqliteStateStore(SqliteRepository):
             return
         conn.execute("ALTER TABLE runs ADD COLUMN step_executions_json TEXT NOT NULL DEFAULT '{}'")
 
-    def _ensure_runs_steering_messages_column(self, conn: sqlite3.Connection) -> None:
+    def _ensure_runs_steering_queue_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()
         column_names = {str(row["name"]) for row in rows}
-        if "steering_messages_json" in column_names:
+        if "steering_queue_json" in column_names:
             return
         conn.execute(
-            "ALTER TABLE runs ADD COLUMN steering_messages_json TEXT NOT NULL DEFAULT '[]'"
+            "ALTER TABLE runs ADD COLUMN steering_queue_json TEXT NOT NULL DEFAULT '[]'"
         )
+        if "steering_messages_json" in column_names:
+            conn.execute(
+                """
+                UPDATE runs
+                SET steering_queue_json = steering_messages_json
+                WHERE steering_queue_json = '[]'
+                """
+            )
 
     def _drop_runs_current_step_column(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(runs)").fetchall()

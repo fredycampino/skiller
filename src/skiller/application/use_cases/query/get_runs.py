@@ -1,4 +1,4 @@
-from skiller.application.ports.run_query_port import RunQueryPort
+from skiller.application.ports.persistence.run_query_port import RunQueryPort
 from skiller.domain.run.run_list_item_model import RunListItem
 
 

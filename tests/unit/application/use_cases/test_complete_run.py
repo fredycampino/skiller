@@ -1,7 +1,7 @@
 import pytest
 
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.domain.run_model import RunStatus
+from skiller.domain.run.run_model import RunStatus
 
 pytestmark = pytest.mark.unit
 

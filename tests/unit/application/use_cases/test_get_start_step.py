@@ -1,8 +1,8 @@
 import pytest
 
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import Run, RunStatus
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run, RunStatus
 
 pytestmark = pytest.mark.unit
 

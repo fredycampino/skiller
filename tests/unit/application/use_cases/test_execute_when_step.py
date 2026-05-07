@@ -3,9 +3,9 @@ import pytest
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
-from skiller.domain.run_context_model import RunContext
-from skiller.domain.run_model import RunStatus
-from skiller.domain.step_execution_model import WhenOutput
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import RunStatus
+from skiller.domain.step.step_execution_model import WhenOutput
 
 pytestmark = pytest.mark.unit
 

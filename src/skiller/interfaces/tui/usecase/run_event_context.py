@@ -4,15 +4,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
-class RunMode(StrEnum):
-    FLOW = "flow"
-    AGENT = "agent"
-
-
 class RunStatus(StrEnum):
     RUNNING = "running"
-    WAITING = "waiting"
     WAITING_INPUT = "waiting_input"
+    WAITING_WEBHOOK = "waiting_webhook"
+    WAITING_CHANNEL = "waiting_channel"
     FAILED = "failed"
     SUCCESS = "success"
 
@@ -21,7 +17,6 @@ class RunStatus(StrEnum):
 class RunEventContext:
     run_id: str = ""
     skill_name: str = ""
-    mode: RunMode = RunMode.FLOW
     status: RunStatus | None = None
     event_ids: set[str] = field(default_factory=set)
 
@@ -30,7 +25,6 @@ class RunEventContext:
         run_id: str,
         *,
         skill_name: str = "",
-        mode: RunMode | None = None,
         status: RunStatus | None = None,
     ) -> None:
         normalized_run_id = run_id.strip()
@@ -41,8 +35,6 @@ class RunEventContext:
             self.skill_name = skill_name
         elif not normalized_run_id:
             self.skill_name = ""
-        if mode is not None:
-            self.mode = mode
         self.status = status
 
     def remember_event_id(self, event_id: str) -> bool:

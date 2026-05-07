@@ -7,13 +7,19 @@ from skiller.interfaces.tui.viewmodel.console_screen_state import (
     CompletionItem,
     CompletionState,
     ConsoleScreenState,
+    PromptState,
 )
 
 pytestmark = pytest.mark.unit
 
 
 def test_prompt_enter_use_case_applies_visible_completion() -> None:
-    state = ConsoleScreenState(prompt_text="/ru", prompt_cursor_position=3)
+    state = ConsoleScreenState(
+        prompt=PromptState(
+            text="/ru",
+            cursor_position=3,
+        )
+    )
     state.autocompletion = CompletionState(
         visible=True,
         query="/ru",
@@ -32,13 +38,18 @@ def test_prompt_enter_use_case_applies_visible_completion() -> None:
     assert result.should_submit is False
     assert result.submit_text == ""
     assert result.state is state
-    assert state.prompt_text == "/runs "
-    assert state.prompt_cursor_position == 6
+    assert state.prompt.text == "/runs "
+    assert state.prompt.cursor_position == 6
     assert state.autocompletion is None
 
 
 def test_prompt_enter_use_case_requests_submit_when_no_completion() -> None:
-    state = ConsoleScreenState(prompt_text="/run chat", prompt_cursor_position=9)
+    state = ConsoleScreenState(
+        prompt=PromptState(
+            text="/run chat",
+            cursor_position=9,
+        )
+    )
     use_case = PromptEnterUseCase()
 
     result = use_case.execute(state=state)
@@ -46,6 +57,6 @@ def test_prompt_enter_use_case_requests_submit_when_no_completion() -> None:
     assert result.should_submit is True
     assert result.submit_text == "/run chat"
     assert result.state is state
-    assert state.prompt_text == "/run chat"
-    assert state.prompt_cursor_position == 9
+    assert state.prompt.text == "/run chat"
+    assert state.prompt.cursor_position == 9
     assert state.autocompletion is None

@@ -10,9 +10,14 @@ from textual.widgets import DataTable, Static, TextArea
 from skiller.interfaces.tui.di.container import build_tui_container
 from skiller.interfaces.tui.port.runs_port import RunsPortItem
 from skiller.interfaces.tui.screen.autocomplete_view import AutoCompleteView
-from skiller.interfaces.tui.screen.prompt import PromptController
+from skiller.interfaces.tui.screen.prompt import PromptController, PromptTextArea
 from skiller.interfaces.tui.screen.render import render_transcript
-from skiller.interfaces.tui.screen.runs_table_view import RunsTableRow, RunsTableView
+from skiller.interfaces.tui.screen.runs_table_view import (
+    RunRowMode,
+    RunRowStatus,
+    RunsTableRow,
+    RunsTableView,
+)
 from skiller.interfaces.tui.screen.screen_status_view import ScreenStatusView
 from skiller.interfaces.tui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
 from skiller.interfaces.tui.screen.transcript_log import TranscriptLog
@@ -26,7 +31,7 @@ class ConsoleScreen(App[str]):
     BINDINGS = [
         Binding("enter", "submit", show=False, priority=True),
         Binding("ctrl+j", "submit", show=False, priority=True),
-        Binding("escape", "close_runs", show=False, priority=True),
+        Binding("escape", "handle_escape", show=False, priority=True),
         Binding("up", "transcript_scroll_up", show=False, priority=True),
         Binding("down", "transcript_scroll_down", show=False, priority=True),
         Binding("pageup", "transcript_page_up", show=False, priority=True),
@@ -59,7 +64,7 @@ class ConsoleScreen(App[str]):
             ScreenStatusView(id="status", theme=self.ui_theme),
             Horizontal(
                 Static(self.ui_theme.cursor, id="prompt-prefix"),
-                TextArea(
+                PromptTextArea(
                     "",
                     id="prompt",
                     placeholder=self.ui_theme.prompt_placeholder,
@@ -125,7 +130,7 @@ class ConsoleScreen(App[str]):
 
     async def action_submit(self) -> None:
         normalized_text = self._prompt().normalized_text()
-        if self.state.runs_table_visible:
+        if self.state.runs_table.visible:
             self._runs_table().action_select_cursor()
             return
 
@@ -136,43 +141,46 @@ class ConsoleScreen(App[str]):
         await self.viewmodel.prompt_enter()
         self._prompt().focus()
 
-    def action_close_runs(self) -> None:
-        if not self.state.runs_table_visible:
+    async def action_handle_escape(self) -> None:
+        if self.state.runs_table.visible:
+            self.viewmodel.hide_runs_table()
+            self._prompt().focus()
             return
-        self.viewmodel.hide_runs_table()
+
+        await self.viewmodel.interrupt_running_agent_turn()
         self._prompt().focus()
 
     def action_transcript_page_up(self) -> None:
-        if self.state.runs_table_visible and self._runs_table().move_selection(-3):
+        if self.state.runs_table.visible and self._runs_table().move_selection(-3):
             return
         self._transcript_log().scroll_page_up(animate=False, force=True)
 
     def action_transcript_scroll_up(self) -> None:
         if self.viewmodel.move_completion(-1):
             return
-        if self.state.runs_table_visible and self._runs_table().move_selection(-1):
+        if self.state.runs_table.visible and self._runs_table().move_selection(-1):
             return
         self._transcript_log().scroll_up(animate=False, force=True, immediate=True)
 
     def action_transcript_page_down(self) -> None:
-        if self.state.runs_table_visible and self._runs_table().move_selection(3):
+        if self.state.runs_table.visible and self._runs_table().move_selection(3):
             return
         self._transcript_log().scroll_page_down(animate=False, force=True)
 
     def action_transcript_scroll_down(self) -> None:
         if self.viewmodel.move_completion(1):
             return
-        if self.state.runs_table_visible and self._runs_table().move_selection(1):
+        if self.state.runs_table.visible and self._runs_table().move_selection(1):
             return
         self._transcript_log().scroll_down(animate=False, force=True, immediate=True)
 
     def action_transcript_home(self) -> None:
-        if self.state.runs_table_visible and self._runs_table().move_to_start():
+        if self.state.runs_table.visible and self._runs_table().move_to_start():
             return
         self._transcript_log().scroll_home(animate=False, force=True, immediate=True)
 
     def action_transcript_end(self) -> None:
-        if self.state.runs_table_visible and self._runs_table().move_to_end():
+        if self.state.runs_table.visible and self._runs_table().move_to_end():
             return
         self._transcript_log().scroll_end(animate=False, force=True, immediate=True)
 
@@ -182,10 +190,11 @@ class ConsoleScreen(App[str]):
         selected_run = runs_table.selected_run
         self.viewmodel.select_runs_table_row(
             prompt_text=self._prompt().text(),
-            status=selected_run.status if selected_run is not None else "",
+            mode=selected_run.mode if selected_run is not None else RunRowMode.FLOW,
+            status=selected_run.status if selected_run is not None else RunRowStatus.SUCCESS,
             run_id=selected_run.run_id if selected_run is not None else "",
             skill_name=selected_run.skill if selected_run is not None else "",
-            is_exit=runs_table.selected_is_exit,
+            is_exit=False,
         )
         self._prompt().focus()
 
@@ -194,9 +203,9 @@ class ConsoleScreen(App[str]):
             status = self.query_one("#status", ScreenStatusView)
         except NoMatches:
             return
-        status.set_status(
-            self.state.screen_status,
-            waiting_prompt=self.state.waiting_prompt,
+        status.set_state(
+            self.state.view_status,
+            waiting_prompt=self.state.prompt.waiting_prompt,
         )
 
     def _refresh_footer(self) -> None:
@@ -209,7 +218,7 @@ class ConsoleScreen(App[str]):
         footer_right.update(self._build_footer_right_text())
 
     def _build_footer_left_text(self) -> str:
-        return "/quit exit"
+        return "/ for commands"
 
     def _build_footer_right_text(self) -> str:
         session_key = self.state.session_key.strip()
@@ -238,15 +247,15 @@ class ConsoleScreen(App[str]):
     def _refresh_prompt(self) -> None:
         prompt = self._prompt()
         if (
-            prompt.text() == self.state.prompt_text
-            and prompt.cursor_position() == self.state.prompt_cursor_position
+            prompt.text() == self.state.prompt.text
+            and prompt.cursor_position() == self.state.prompt.cursor_position
         ):
             return
 
         self._suppress_next_prompt_change = True
         prompt.set_text(
-            self.state.prompt_text,
-            cursor_position=self.state.prompt_cursor_position,
+            self.state.prompt.text,
+            cursor_position=self.state.prompt.cursor_position,
         )
 
     def _refresh_autocomplete(self) -> None:
@@ -257,7 +266,8 @@ class ConsoleScreen(App[str]):
         transcript = self._transcript_log()
         transcript.clear()
         renderables = render_transcript(
-            items=self.state.transcript_items,
+            items=self.viewmodel.visible_transcript_items(),
+            mode=self.state.transcript.mode,
             theme=self.ui_theme,
             prompt_placeholder="",
         )
@@ -265,16 +275,19 @@ class ConsoleScreen(App[str]):
             transcript.write(renderable, scroll_end=index == len(renderables) - 1)
 
     def _refresh_runs_table(self) -> None:
-        if self._last_runs_snapshot is not None and self.state.runs == self._last_runs_snapshot:
+        if (
+            self._last_runs_snapshot is not None
+            and self.state.runs_table.rows == self._last_runs_snapshot
+        ):
             return
         runs_table = self._runs_table()
         runs_table.set_rows(
             [
                 self._run_list_item_to_row(run)
-                for run in self.state.runs
+                for run in self.state.runs_table.rows
             ]
         )
-        self._last_runs_snapshot = self.state.runs
+        self._last_runs_snapshot = self.state.runs_table.rows
 
     def _refresh_runs_visibility(self) -> None:
         try:
@@ -284,16 +297,17 @@ class ConsoleScreen(App[str]):
         except NoMatches:
             return
 
-        runs_table_area.display = self.state.runs_table_visible
-        runs_table.display = self.state.runs_table_visible
-        status.display = not self.state.runs_table_visible
+        runs_table_area.display = self.state.runs_table.visible
+        runs_table.display = self.state.runs_table.visible
+        status.display = not self.state.runs_table.visible
 
     def _runs_table(self) -> RunsTableView:
         return self.query_one("#runs-table", RunsTableView)
 
     def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
         return RunsTableRow(
-            status=_format_run_status(run),
+            mode=_resolve_run_row_mode(run),
+            status=_resolve_run_row_status(run),
             skill=run.skill_ref,
             run_id=run.id,
         )
@@ -319,20 +333,24 @@ def run_console_screen(
     return result or session_key
 
 
-def _format_run_status(run: RunsPortItem) -> str:
-    status = run.status.lower()
-    wait_suffix = _wait_type_suffix(run.wait_type)
-    if not wait_suffix:
-        return status
-    return f"{status}-{wait_suffix}"
+def _resolve_run_row_mode(run: RunsPortItem) -> RunRowMode:
+    normalized_wait_type = str(run.wait_type or "").strip().lower()
+    if normalized_wait_type == "input":
+        return RunRowMode.CHAT
+    return RunRowMode.FLOW
 
 
-def _wait_type_suffix(wait_type: str | None) -> str:
-    normalized = str(wait_type or "").strip().lower()
-    if normalized == "input":
-        return "i"
-    if normalized == "webhook":
-        return "w"
-    if normalized == "channel":
-        return "c"
-    return ""
+def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
+    normalized_status = run.status.strip().lower()
+    normalized_wait_type = str(run.wait_type or "").strip().lower()
+    if normalized_status == "waiting":
+        if normalized_wait_type == "input":
+            return RunRowStatus.WAITING_INPUT
+        if normalized_wait_type == "channel":
+            return RunRowStatus.WAITING_CHANNEL
+        return RunRowStatus.WAITING_WEBHOOK
+    if normalized_status == "failed":
+        return RunRowStatus.FAILED
+    if normalized_status == "succeeded":
+        return RunRowStatus.SUCCESS
+    return RunRowStatus.RUNNING

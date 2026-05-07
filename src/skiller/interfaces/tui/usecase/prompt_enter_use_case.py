@@ -17,15 +17,19 @@ class PromptEnterUseCase:
     def execute(self, *, state: ConsoleScreenState) -> PromptEnterResult:
         completion = state.autocompletion
         if completion is None or not completion.visible or completion.selected_item is None:
-            return PromptEnterResult(state=state, should_submit=True, submit_text=state.prompt_text)
+            return PromptEnterResult(
+                state=state,
+                should_submit=True,
+                submit_text=state.prompt.text,
+            )
 
         selected_item = completion.selected_item
         completion_text = selected_item.insert_text or selected_item.label
         if not completion_text:
-            completion_text = state.prompt_text[: state.prompt_cursor_position]
+            completion_text = state.prompt.text[: state.prompt.cursor_position]
         completion_text = completion_text.rstrip() + " "
 
-        state.prompt_text = completion_text
-        state.prompt_cursor_position = len(completion_text)
+        state.prompt.text = completion_text
+        state.prompt.cursor_position = len(completion_text)
         state.autocompletion = None
         return PromptEnterResult(state=state, should_submit=False)

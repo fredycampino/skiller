@@ -20,7 +20,7 @@ class TuiTheme:
     agent_tool_icon: str = "▪"
     selector: str = "→"
     autocomplete_selector_icon: str = "->"
-    prompt_placeholder: str = "escribe /quit para salir"
+    prompt_placeholder: str = "type / for commands"
     session_empty_icon: str = "◌"
     status_spinner_frames: tuple[str, ...] = ("◐", "◓", "◑", "◒")
     status_icon_waiting: str = "◌"
@@ -33,8 +33,8 @@ class TuiTheme:
     status_margin_top: int = 1
     prompt_prefix_width: int = 2
     prompt_min_height: int = 3
-    prompt_max_height: int = 7
-    prompt_editor_max_height: int = 5
+    prompt_max_height: int = 5
+    prompt_editor_max_height: int = 3
     footer_margin_top: int = 1
 
     def rich_style(self, color: str) -> str:

@@ -12,8 +12,8 @@ from skiller.interfaces.tui.usecase.normalize_command_use_case import (
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
-    ScreenStatus,
     UserInputItem,
+    ViewStatusKind,
 )
 from tests.unit.interfaces.tui.support import (
     FakeRunsPort,
@@ -38,11 +38,11 @@ def test_list_runs_use_case_returns_query_rows() -> None:
 
         assert port.called_with == [(5, ["waiting"])]
         assert result.state is state
-        assert state.runs_table_visible is True
-        assert state.screen_status == ScreenStatus.READY
-        assert state.runs == tuple(port.runs)
-        assert isinstance(state.transcript_items[0], UserInputItem)
-        assert state.transcript_items[0].text == "/runs waiting"
+        assert state.runs_table.visible is True
+        assert state.view_status.kind == ViewStatusKind.HIDDEN
+        assert state.runs_table.rows == tuple(port.runs)
+        assert isinstance(state.transcript.items[0], UserInputItem)
+        assert state.transcript.items[0].text == "/runs waiting"
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())
@@ -61,18 +61,18 @@ def test_list_runs_use_case_maps_runtime_errors_to_state() -> None:
 
         assert port.called_with == [(20, [])]
         assert result.state is state
-        assert state.runs_table_visible is False
-        assert state.screen_status == ScreenStatus.ERROR
-        assert state.runs == ()
-        assert isinstance(state.transcript_items[0], UserInputItem)
-        assert isinstance(state.transcript_items[1], DispatchErrorItem)
-        assert state.transcript_items[1].message == "error: runs command failed"
+        assert state.runs_table.visible is False
+        assert state.view_status.kind == ViewStatusKind.ERROR
+        assert state.runs_table.rows == ()
+        assert isinstance(state.transcript.items[0], UserInputItem)
+        assert isinstance(state.transcript.items[1], DispatchErrorItem)
+        assert state.transcript.items[1].message == "error: runs command failed"
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())
 
 
-def test_list_runs_use_case_filters_waiting_input_runs_for_agents_command() -> None:
+def test_list_runs_use_case_filters_waiting_input_runs_for_chats_command() -> None:
     async def run() -> None:
         port = FakeRunsPort(
             runs=[
@@ -89,13 +89,13 @@ def test_list_runs_use_case_filters_waiting_input_runs_for_agents_command() -> N
 
         result = await use_case.execute(
             state=state,
-            command=NormalizeCommandUseCase().execute(text="/agents"),
+            command=NormalizeCommandUseCase().execute(text="/chats"),
         )
 
         assert result.state is state
         assert port.called_with == [(20, ["WAITING"])]
-        assert [item.id for item in state.runs] == ["run-input"]
-        assert state.runs_table_command == "/agents"
+        assert [item.id for item in state.runs_table.rows] == ["run-input"]
+        assert state.runs_table.command == "/chats"
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())

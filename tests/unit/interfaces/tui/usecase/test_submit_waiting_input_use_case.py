@@ -10,7 +10,6 @@ from skiller.interfaces.tui.usecase import (
 )
 from skiller.interfaces.tui.usecase.run_event_context import (
     RunEventContext,
-    RunMode,
     RunStatus,
 )
 from skiller.interfaces.tui.usecase.submit_waiting_input_use_case import (
@@ -19,10 +18,11 @@ from skiller.interfaces.tui.usecase.submit_waiting_input_use_case import (
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
+    PromptState,
     RunAckItem,
     RunResumeItem,
-    ScreenStatus,
     UserInputItem,
+    ViewStatusKind,
 )
 
 pytestmark = pytest.mark.unit
@@ -79,7 +79,6 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         context.activate_run(
             "run-1234",
             skill_name="wait_input_test",
-            mode=RunMode.FLOW,
             status=RunStatus.WAITING_INPUT,
         )
         use_case = SubmitWaitingInputUseCase(
@@ -90,9 +89,9 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         observer = FakeObserver(run_id="run-1234")
         state = ConsoleScreenState(
             session_key="main",
-            waiting_prompt="Write a message",
+            prompt=PromptState(waiting_prompt="Write a message"),
         )
-        state.transcript_items.append(RunAckItem(skill="wait_input_test", run_id="run-1234"))
+        state.transcript.items.append(RunAckItem(skill="wait_input_test", run_id="run-1234"))
 
         result = await use_case.execute(
             observer,
@@ -106,18 +105,18 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         assert observer.run_id == "run-5678"
         assert result.state is state
         assert state.session_key == "run-5678"
-        assert state.screen_status == ScreenStatus.RUNNING
+        assert state.view_status.kind == ViewStatusKind.RUNNING
         assert context.run_id == "run-5678"
         assert context.skill_name == "wait_input_test"
         assert context.status == RunStatus.RUNNING
-        assert state.waiting_prompt == ""
-        assert state.prompt_text == ""
-        assert state.prompt_cursor_position == 0
-        assert isinstance(state.transcript_items[-2], UserInputItem)
-        assert state.transcript_items[-2].text == "hello world"
-        assert isinstance(state.transcript_items[-1], RunResumeItem)
-        assert state.transcript_items[-1].skill == "wait_input_test"
-        assert state.transcript_items[-1].run_id == "run-1234"
+        assert state.prompt.waiting_prompt == ""
+        assert state.prompt.text == ""
+        assert state.prompt.cursor_position == 0
+        assert isinstance(state.transcript.items[-2], UserInputItem)
+        assert state.transcript.items[-2].text == "hello world"
+        assert isinstance(state.transcript.items[-1], RunResumeItem)
+        assert state.transcript.items[-1].skill == "wait_input_test"
+        assert state.transcript.items[-1].run_id == "run-1234"
 
     asyncio.run(run())
 
@@ -146,12 +145,14 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
             context=RunEventContext(
                 run_id="run-1234",
                 skill_name="wait_input_test",
-                mode=RunMode.FLOW,
                 status=RunStatus.WAITING_INPUT,
             ),
         )
         observer = FakeObserver(run_id="run-1234")
-        state = ConsoleScreenState(session_key="main", waiting_prompt="Write a message")
+        state = ConsoleScreenState(
+            session_key="main",
+            prompt=PromptState(waiting_prompt="Write a message"),
+        )
 
         result = await use_case.execute(
             observer,
@@ -164,10 +165,10 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
         assert run_port.unsubscribed == []
         assert observer.run_id == "run-1234"
         assert result.state is state
-        assert state.screen_status == ScreenStatus.ERROR
-        assert isinstance(state.transcript_items[-2], UserInputItem)
-        assert isinstance(state.transcript_items[-1], DispatchErrorItem)
-        assert state.transcript_items[-1].message == "error: input rejected"
+        assert state.view_status.kind == ViewStatusKind.ERROR
+        assert isinstance(state.transcript.items[-2], UserInputItem)
+        assert isinstance(state.transcript.items[-1], DispatchErrorItem)
+        assert state.transcript.items[-1].message == "error: input rejected"
 
     asyncio.run(run())
 
@@ -194,7 +195,7 @@ def test_submit_waiting_input_use_case_ignores_missing_waiting_run() -> None:
         assert waiting_port.called_with == []
         assert run_port.subscribed == []
         assert run_port.unsubscribed == []
-        assert state.transcript_items == []
-        assert state.screen_status == ScreenStatus.READY
+        assert state.transcript.items == []
+        assert state.view_status.kind == ViewStatusKind.HIDDEN
 
     asyncio.run(run())

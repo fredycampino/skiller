@@ -18,6 +18,9 @@ from skiller.interfaces.tui.port.runs_port import RunsPort
 from skiller.interfaces.tui.port.waiting_port import WaitingPort
 from skiller.interfaces.tui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from skiller.interfaces.tui.usecase.autocomplete_use_case import AutocompleteUseCase
+from skiller.interfaces.tui.usecase.interrupt_agent_turn_use_case import (
+    InterruptAgentTurnUseCase,
+)
 from skiller.interfaces.tui.usecase.list_runs_use_case import ListRunsUseCase
 from skiller.interfaces.tui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
@@ -27,6 +30,9 @@ from skiller.interfaces.tui.usecase.normalize_command_use_case import (
 )
 from skiller.interfaces.tui.usecase.polling_event_reducer_use_case import (
     PollingEventReducerUseCase,
+)
+from skiller.interfaces.tui.usecase.project_transcript_use_case import (
+    ProjectTranscriptUseCase,
 )
 from skiller.interfaces.tui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from skiller.interfaces.tui.usecase.run_command_use_case import RunCommandUseCase
@@ -45,10 +51,12 @@ from skiller.interfaces.tui.viewmodel.console_screen_viewmodel import (
 @dataclass(frozen=True)
 class TuiUseCases:
     autocomplete_use_case: AutocompleteUseCase
+    interrupt_agent_turn_use_case: InterruptAgentTurnUseCase
     move_completion_use_case: MoveCompletionUseCase
     list_runs_use_case: ListRunsUseCase
     normalize_command_use_case: NormalizeCommandUseCase
     polling_event_reducer_use_case: PollingEventReducerUseCase
+    project_transcript_use_case: ProjectTranscriptUseCase
     prompt_enter_use_case: PromptEnterUseCase
     run_command_use_case: RunCommandUseCase
     select_runs_table_row_use_case: SelectRunsTableRowUseCase
@@ -70,10 +78,12 @@ class TuiContainer:
             session_key=session_key,
             run_event_context=self.run_event_context,
             autocomplete_use_case=self.use_cases.autocomplete_use_case,
+            interrupt_agent_turn_use_case=self.use_cases.interrupt_agent_turn_use_case,
             move_completion_use_case=self.use_cases.move_completion_use_case,
             list_runs_use_case=self.use_cases.list_runs_use_case,
             normalize_command_use_case=self.use_cases.normalize_command_use_case,
             polling_event_reducer_use_case=self.use_cases.polling_event_reducer_use_case,
+            project_transcript_use_case=self.use_cases.project_transcript_use_case,
             prompt_enter_use_case=self.use_cases.prompt_enter_use_case,
             run_command_use_case=self.use_cases.run_command_use_case,
             select_runs_table_row_use_case=self.use_cases.select_runs_table_row_use_case,
@@ -107,12 +117,16 @@ def build_tui_container(
     run_event_context = RunEventContext()
     use_cases = TuiUseCases(
         autocomplete_use_case=AutocompleteUseCase(),
+        interrupt_agent_turn_use_case=InterruptAgentTurnUseCase(
+            agent_port=resolved_agent_port,
+        ),
         move_completion_use_case=MoveCompletionUseCase(),
         list_runs_use_case=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command_use_case=NormalizeCommandUseCase(),
         polling_event_reducer_use_case=PollingEventReducerUseCase(
             context=run_event_context,
         ),
+        project_transcript_use_case=ProjectTranscriptUseCase(),
         prompt_enter_use_case=PromptEnterUseCase(),
         run_command_use_case=RunCommandUseCase(
             run_port=resolved_run_port,

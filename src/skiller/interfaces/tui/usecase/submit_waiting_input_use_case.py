@@ -5,17 +5,14 @@ from dataclasses import dataclass
 
 from skiller.interfaces.tui.port.run_port import CommandAckStatus, RunObserver, RunPort
 from skiller.interfaces.tui.port.waiting_port import WaitingPort
-from skiller.interfaces.tui.usecase.run_event_context import (
-    RunEventContext,
-    RunMode,
-    RunStatus,
-)
+from skiller.interfaces.tui.usecase.run_event_context import RunEventContext, RunStatus
 from skiller.interfaces.tui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
+    PromptMode,
     RunResumeItem,
-    ScreenStatus,
     UserInputItem,
+    ViewStatusKind,
 )
 
 
@@ -42,12 +39,14 @@ class SubmitWaitingInputUseCase:
         if not run_id:
             return SubmitWaitingInputResult(state=state)
 
-        state.transcript_items.append(UserInputItem(text=normalized_text))
-        state.screen_status = ScreenStatus.RUNNING
-        state.waiting_prompt = ""
+        state.transcript.items.append(UserInputItem(text=normalized_text))
+        state.view_status.kind = ViewStatusKind.RUNNING
+        state.view_status.message = ""
+        state.prompt.waiting_prompt = ""
+        state.prompt.mode = PromptMode.FLOW
         state.autocompletion = None
-        state.prompt_text = ""
-        state.prompt_cursor_position = 0
+        state.prompt.text = ""
+        state.prompt.cursor_position = 0
 
         ack = await asyncio.to_thread(
             self.waiting_port.send_input,
@@ -66,22 +65,22 @@ class SubmitWaitingInputUseCase:
             self.context.activate_run(
                 resolved_run_id,
                 skill_name=self.context.skill_name or run_id,
-                mode=RunMode.FLOW,
                 status=RunStatus.RUNNING,
             )
             state.session_key = resolved_run_id
-            state.transcript_items.append(
+            state.transcript.items.append(
                 RunResumeItem(
                     run_id=run_id,
                     skill=self.context.skill_name or run_id,
                 )
             )
-            state.screen_status = ScreenStatus.RUNNING
+            state.view_status.kind = ViewStatusKind.RUNNING
             return SubmitWaitingInputResult(state=state)
 
-        state.transcript_items.append(
+        state.transcript.items.append(
             DispatchErrorItem(message=ack.message or "error: input rejected")
         )
-        state.screen_status = ScreenStatus.ERROR
+        state.view_status.kind = ViewStatusKind.ERROR
+        state.view_status.message = "Error"
         self.context.status = RunStatus.FAILED
         return SubmitWaitingInputResult(state=state)

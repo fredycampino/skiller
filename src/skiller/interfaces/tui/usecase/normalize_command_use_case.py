@@ -8,8 +8,9 @@ class CommandKind(StrEnum):
     EMPTY = "empty"
     QUIT = "quit"
     RUN = "run"
+    CHAT = "chat"
     RUNS = "runs"
-    AGENTS = "agents"
+    CHATS = "chats"
     FREE_TEXT = "free_text"
     UNKNOWN = "unknown"
 
@@ -77,8 +78,10 @@ def _split_command(command_text: str) -> tuple[str, tuple[str, ...], str]:
 def _resolve_command_kind(command_name: str) -> CommandKind:
     if command_name == "/run":
         return CommandKind.RUN
+    if command_name == "/chat":
+        return CommandKind.CHAT
     if command_name == "/runs":
         return CommandKind.RUNS
-    if command_name == "/agents":
-        return CommandKind.AGENTS
+    if command_name == "/chats":
+        return CommandKind.CHATS
     return CommandKind.UNKNOWN

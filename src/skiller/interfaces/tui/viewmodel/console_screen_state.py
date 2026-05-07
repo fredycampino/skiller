@@ -6,10 +6,22 @@ from enum import StrEnum
 from skiller.interfaces.tui.port.runs_port import RunsPortItem
 
 
-class ScreenStatus(StrEnum):
-    READY = "ready"
-    RUNNING = "running"
+class TranscriptMode(StrEnum):
+    FLOW = "flow"
+    CHAT = "chat"
+
+
+class PromptMode(StrEnum):
+    FLOW = "flow"
+    CHAT = "chat"
+    AUTOCOMPLETION = "autocompletion"
+    RUNS_TABLE = "runs_table"
+
+
+class ViewStatusKind(StrEnum):
+    HIDDEN = "hidden"
     WAITING = "waiting"
+    RUNNING = "running"
     ERROR = "error"
 
 
@@ -125,14 +137,37 @@ class CompletionState:
 
 
 @dataclass
+class TranscriptState:
+    mode: TranscriptMode = TranscriptMode.FLOW
+    items: list[TranscriptItem] = field(default_factory=list)
+
+
+@dataclass
+class PromptState:
+    mode: PromptMode = PromptMode.FLOW
+    text: str = ""
+    cursor_position: int = 0
+    waiting_prompt: str = ""
+
+
+@dataclass
+class RunsTableState:
+    visible: bool = False
+    command: str = ""
+    rows: tuple[RunsPortItem, ...] = field(default_factory=tuple)
+
+
+@dataclass
+class ViewStatusState:
+    kind: ViewStatusKind = ViewStatusKind.HIDDEN
+    message: str = ""
+
+
+@dataclass
 class ConsoleScreenState:
     session_key: str = "main"
-    screen_status: ScreenStatus = ScreenStatus.READY
-    runs_table_visible: bool = False
-    runs_table_command: str = ""
-    runs: tuple[RunsPortItem, ...] = field(default_factory=tuple)
-    waiting_prompt: str = ""
-    prompt_text: str = ""
-    prompt_cursor_position: int = 0
-    transcript_items: list[TranscriptItem] = field(default_factory=list)
+    transcript: TranscriptState = field(default_factory=TranscriptState)
+    prompt: PromptState = field(default_factory=PromptState)
+    runs_table: RunsTableState = field(default_factory=RunsTableState)
+    view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None

@@ -2,6 +2,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from textual import events
+from textual.widgets import TextArea
+
+
+class PromptTextArea(TextArea):
+    def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        super().__init__(*args, **kwargs)
+        self._multiline_paste_count = 0
+
+    async def _on_paste(self, event: events.Paste) -> None:
+        normalized_text = event.text.replace("\r\n", "\n").replace("\r", "\n")
+        if "\n" not in normalized_text:
+            await super()._on_paste(event)
+            return
+
+        self._multiline_paste_count += 1
+        compacted_text = compact_pasted_prompt_text(
+            normalized_text,
+            paste_count=self._multiline_paste_count,
+        )
+
+        if self.read_only:
+            return
+        if result := self._replace_via_keyboard(compacted_text, *self.selection):
+            self.move_cursor(result.end_location)
+            self.focus()
+        event.prevent_default()
+        event.stop()
+
 
 @dataclass(frozen=True)
 class PromptController:
@@ -51,3 +80,15 @@ def text_offset_to_location(text: str, cursor_position: int) -> tuple[int, int]:
             return row, safe_position - current_offset
         current_offset = line_end + 1
     return len(lines) - 1, len(lines[-1])
+
+
+def compact_pasted_prompt_text(text: str, *, paste_count: int) -> str:
+    if "\n" not in text:
+        return text
+
+    lines = text.splitlines()
+    if not lines:
+        return ""
+    extra_lines = max(0, len(lines) - 1)
+    line_label = "line" if extra_lines == 1 else "lines"
+    return f"[paste #{paste_count} +{extra_lines} {line_label}]"

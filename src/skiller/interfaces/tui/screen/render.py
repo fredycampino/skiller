@@ -9,6 +9,7 @@ from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.pretty import Pretty
 from rich.segment import Segment, Segments
+from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
 
@@ -26,6 +27,7 @@ from skiller.interfaces.tui.viewmodel.console_screen_state import (
     RunStatusItem,
     RunStepItem,
     TranscriptItem,
+    TranscriptMode,
     UserInputItem,
 )
 
@@ -50,6 +52,7 @@ _MARKDOWN_CODE_THEME = "monokai" #default theme, dracula, github-light
 def render_transcript(
     *,
     items: list[TranscriptItem],
+    mode: TranscriptMode = TranscriptMode.FLOW,
     theme: TuiTheme = DEFAULT_TUI_THEME,
     prompt_placeholder: str | None = None,
 ) -> list[RenderableType]:
@@ -93,7 +96,7 @@ def render_transcript(
 
         if _needs_prefix_separator(items=items, index=index):
             renderables.append(Text(""))
-        renderables.append(render_transcript_item(item, theme=theme))
+        renderables.append(render_transcript_item(item, mode=mode, theme=theme))
         if _needs_separator(item, items, index):
             renderables.append(Text(""))
         index += 1
@@ -103,6 +106,7 @@ def render_transcript(
 def render_transcript_item(
     item: TranscriptItem,
     *,
+    mode: TranscriptMode = TranscriptMode.FLOW,
     theme: TuiTheme = DEFAULT_TUI_THEME,
 ) -> RenderableType:
     if isinstance(item, UserInputItem):
@@ -136,15 +140,19 @@ def render_transcript_item(
                 style=theme.rich_style(theme.color_text_muted),
             )
         if normalized_step_type == "agent":
+            tag_style = _agent_step_tag_style(theme=theme, mode=mode)
+            id_style = _agent_step_id_style(theme=theme, mode=mode)
             renderable = Text("[")
+            renderable.stylize(tag_style, 0, 1)
             renderable.append(
                 item.step_type,
-                style=theme.rich_style(theme.color_text_accent),
+                style=tag_style,
             )
             renderable.append("] ")
+            renderable.stylize(tag_style, len(renderable.plain) - 2, len(renderable.plain))
             renderable.append(
                 item.step_id,
-                style=theme.rich_style(theme.color_text_secondary),
+                style=id_style,
             )
             return renderable
         return Text(f"   [{item.step_type}] {item.step_id}")
@@ -169,9 +177,9 @@ def render_transcript_item(
         )
     if isinstance(item, AgentAssistantMessageItem):
         return _wrap_agent_renderable(
-            _render_agent_content(
-                output=item.text,
-                format=item.format,
+            _render_agent_assistant_content(
+                item=item,
+                theme=theme,
             ),
             theme=theme,
         )
@@ -193,6 +201,20 @@ def render_transcript_item(
             return Text("  error:", style=error_style)
         return Text(f"  {item.status}")
     return Text("")
+
+
+def _agent_step_tag_style(*, theme: TuiTheme, mode: TranscriptMode) -> str:
+    if mode == TranscriptMode.CHAT:
+        base_style = theme.rich_style(theme.color_text_muted)
+        return f"{base_style} dim".strip()
+    return theme.rich_style(theme.color_text_accent)
+
+
+def _agent_step_id_style(*, theme: TuiTheme, mode: TranscriptMode) -> str:
+    if mode == TranscriptMode.CHAT:
+        base_style = theme.rich_style(theme.color_text_muted)
+        return f"{base_style} dim".strip()
+    return theme.rich_style(theme.color_text_secondary)
 
 
 def _render_run_output(
@@ -328,6 +350,23 @@ def _extract_markdown_text(normalized: str, parsed: object | None) -> str:
         if isinstance(text, str):
             return text
     return normalized
+
+
+def _render_agent_assistant_content(
+    *,
+    item: AgentAssistantMessageItem,
+    theme: TuiTheme,
+) -> RenderableType:
+    renderable = _render_agent_content(
+        output=item.text,
+        format=item.format,
+    )
+    if item.message_type.strip().lower() == "final":
+        return renderable
+    return Styled(
+        renderable,
+        style=theme.rich_style(theme.color_text_secondary),
+    )
 
 
 def _wrap_agent_renderable(
@@ -466,26 +505,25 @@ def _needs_separator(item: TranscriptItem, items: list[TranscriptItem], index: i
     next_item = _next_visible_item(items=items, start_index=index + 1)
     if next_item is None:
         return False
-    if isinstance(item, UserInputItem):
-        return isinstance(next_item, (RunAckItem, DispatchErrorItem))
-    if isinstance(item, (AgentAssistantMessageItem, RunOutputItem)):
-        step_type = "agent"
-        if isinstance(item, RunOutputItem):
-            step_type = item.step_type.strip().lower()
-        if step_type != "agent":
-            return False
-        return isinstance(next_item, UserInputItem)
+    if isinstance(item, (RunAckItem, DispatchErrorItem, UserInputItem)):
+        return True
+    if isinstance(item, AgentAssistantMessageItem):
+        return item.message_type.strip().lower() == "final"
+    if isinstance(item, RunOutputItem):
+        return item.step_type.strip().lower() == "agent"
     return False
 
 
 def _needs_prefix_separator(*, items: list[TranscriptItem], index: int) -> bool:
     item = items[index]
-    if not isinstance(item, (AgentAssistantMessageItem, RunOutputItem)):
-        return False
-    if isinstance(item, RunOutputItem) and item.step_type.strip().lower() != "agent":
-        return False
     previous_item = _previous_visible_item(items=items, start_index=index - 1)
-    return isinstance(previous_item, AgentToolResultItem)
+    if previous_item is None:
+        return False
+    return _is_tool_item(previous_item) and not _is_tool_item(item)
+
+
+def _is_tool_item(item: TranscriptItem) -> bool:
+    return isinstance(item, (AgentToolCallItem, AgentToolResultItem))
 
 
 def _needs_blank_line_after_collapsed_conditional(

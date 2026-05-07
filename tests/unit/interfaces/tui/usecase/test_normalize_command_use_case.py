@@ -36,11 +36,21 @@ def test_normalize_command_use_case_normalizes_runs_command() -> None:
     assert command.params == ("waiting",)
 
 
-def test_normalize_command_use_case_normalizes_agents_command() -> None:
-    command = NormalizeCommandUseCase().execute(text="/agents")
+def test_normalize_command_use_case_normalizes_chat_command() -> None:
+    command = NormalizeCommandUseCase().execute(text="  /chat   agent_tools  ")
 
-    assert command.kind == CommandKind.AGENTS
-    assert command.name == "/agents"
+    assert command.kind == CommandKind.CHAT
+    assert command.name == "/chat"
+    assert command.raw_text == "/chat   agent_tools"
+    assert command.params == ("agent_tools",)
+    assert command.args_text == "agent_tools"
+
+
+def test_normalize_command_use_case_normalizes_chats_command() -> None:
+    command = NormalizeCommandUseCase().execute(text="/chats")
+
+    assert command.kind == CommandKind.CHATS
+    assert command.name == "/chats"
     assert command.params == ()
 
 

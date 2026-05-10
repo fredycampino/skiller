@@ -1,0 +1,37 @@
+name: pr
+description: "Open a GitHub pull request for a branch workflow"
+version: "0.1"
+start: create_pr
+
+inputs:
+  owner: string
+  repo: string
+  head: string
+  base: string
+  title: string
+  body: string
+
+mcp:
+  - name: github
+    transport: streamable-http
+    url: "https://api.githubcopilot.com/mcp/"
+    headers:
+      Authorization:
+        file: "~/.skiller/secrets/github_mcp_token"
+        prefix: "Bearer "
+
+steps:
+  - mcp: create_pr
+    server: github
+    tool: create_pull_request
+    args:
+      owner: "{{inputs.owner}}"
+      repo: "{{inputs.repo}}"
+      head: "{{inputs.head}}"
+      base: "{{inputs.base}}"
+      title: "{{inputs.title}}"
+      body: "{{inputs.body}}"
+    next: done
+
+  - notify: done
+    message: "pull request created for {{inputs.owner}}/{{inputs.repo}} {{inputs.head}} -> {{inputs.base}}"

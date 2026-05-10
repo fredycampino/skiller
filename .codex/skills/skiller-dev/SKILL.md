@@ -9,6 +9,10 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 ## Core Rules
 
+- Follow the dependency rule: `interfaces -> application -> domain <- infrastructure`.
+- Infrastructure may implement domain ports and use domain models, but must not orchestrate
+  other domain ports or coordinate business flows.
+- Put ports in `domain` under their feature directory, never in `application`.
 - Keep services thin. Orchestrate; do not persist state directly from the service.
 - Put state changes and side effects in dedicated use cases.
 - Prefer closed contracts with enums for finite domains like statuses and step types.

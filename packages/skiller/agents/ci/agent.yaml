@@ -1,0 +1,31 @@
+name: ci
+description: "Repository CI, PR, and release preparation agent"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "What CI, PR, or release task should I prepare? Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: ci_agent
+
+  - agent: ci_agent
+    system:
+      file: "./system.md"
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - shell
+    max_turns: 10
+    next: ask_user
+
+  - notify: done
+    message: "CI agent closed."

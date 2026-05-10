@@ -54,3 +54,6 @@ docs/spikes/
 # Local JS bridge artifacts
 src/skiller/local/channels/whatsapp/bridge/node_modules/
 src/skiller/local/channels/whatsapp/bridge/package-lock.json
+packages/skiller/src/skiller/local/channels/whatsapp/bridge/node_modules/
+packages/skiller/src/skiller/local/channels/whatsapp/bridge/package-lock.json
+legacy/

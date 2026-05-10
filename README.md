@@ -159,7 +159,7 @@ skiller resume <run_id>
 You can also start the local server automatically when a run ends in `WAITING`:
 
 ```bash
-skiller run --file tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-server
+skiller run --file packages/skiller/tests/e2e/skills/wait_webhook_cli_e2e.yaml --arg key=42 --start-server
 ```
 
 Operational tooling:
@@ -176,45 +176,45 @@ skiller cloudflared start
 
 ## Project Layout
 
-- `src/skiller`: application code
+- `packages/skiller/src/skiller`: product runtime and CLI code
+- `apps/tui`: extracted Textual UI app (`stui`)
 - `skills`: internal YAML skills
-- `docs`: technical documentation
-- `tests`: automated and manual verification
+- `docs`: repo and monorepo documentation
+- `tests`: runtime, CLI, and shared verification
 
 ## Documentation
 
 Core guides:
 - [`docs/README.md`](docs/README.md)
-- [`docs/cli/command-guide.md`](docs/cli/command-guide.md)
-- [`docs/cli/tool-server.md`](docs/cli/tool-server.md)
-- [`docs/cli/tool-cloudflared.md`](docs/cli/tool-cloudflared.md)
-- [`docs/skills/skill-schema.md`](docs/skills/skill-schema.md)
+- [`packages/skiller/docs/cli/command-guide.md`](packages/skiller/docs/cli/command-guide.md)
+- [`packages/skiller/docs/cli/tool-server.md`](packages/skiller/docs/cli/tool-server.md)
+- [`packages/skiller/docs/cli/tool-cloudflared.md`](packages/skiller/docs/cli/tool-cloudflared.md)
+- [`packages/skiller/docs/skills/skill-schema.md`](packages/skiller/docs/skills/skill-schema.md)
 - [`docs/db/schema.md`](docs/db/schema.md)
-- [`docs/runtime/execution-model.md`](docs/runtime/execution-model.md)
-- [`docs/ui/transcript.md`](docs/ui/transcript.md)
-- [`docs/steps/mcp.md`](docs/steps/mcp.md)
-- [`docs/steps/wait_input.md`](docs/steps/wait_input.md)
-- [`docs/steps/wait_webhook.md`](docs/steps/wait_webhook.md)
+- [`packages/skiller/docs/runtime/execution-model.md`](packages/skiller/docs/runtime/execution-model.md)
+- [`packages/skiller/docs/steps/mcp.md`](packages/skiller/docs/steps/mcp.md)
+- [`packages/skiller/docs/steps/wait_input.md`](packages/skiller/docs/steps/wait_input.md)
+- [`packages/skiller/docs/steps/wait_webhook.md`](packages/skiller/docs/steps/wait_webhook.md)
 
 Step references:
-- [`docs/steps/assign.md`](docs/steps/assign.md)
-- [`docs/steps/llm_prompt.md`](docs/steps/llm_prompt.md)
-- [`docs/steps/shell.md`](docs/steps/shell.md)
-- [`docs/steps/notify.md`](docs/steps/notify.md)
-- [`docs/steps/switch.md`](docs/steps/switch.md)
-- [`docs/steps/when.md`](docs/steps/when.md)
+- [`packages/skiller/docs/steps/assign.md`](packages/skiller/docs/steps/assign.md)
+- [`packages/skiller/docs/steps/llm_prompt.md`](packages/skiller/docs/steps/llm_prompt.md)
+- [`packages/skiller/docs/steps/shell.md`](packages/skiller/docs/steps/shell.md)
+- [`packages/skiller/docs/steps/notify.md`](packages/skiller/docs/steps/notify.md)
+- [`packages/skiller/docs/steps/switch.md`](packages/skiller/docs/steps/switch.md)
+- [`packages/skiller/docs/steps/when.md`](packages/skiller/docs/steps/when.md)
 
 ## Development
 
 Run the main checks:
 
 ```bash
-./.venv/bin/python -m ruff check src tests scripts/ci
-./.venv/bin/python -m pytest
+./.venv/bin/python -m ruff check src apps/tui/src tests apps/tui/tests scripts/ci
+./.venv/bin/python -m pytest tests apps/tui/tests
 ./.venv/bin/python -m build --no-isolation
 ```
 
-Manual CLI E2E flows live in `tests/e2e/cli_*.sh`. Use them when you need to exercise the real CLI path without mixing those checks into the default `pytest` suite.
+Manual CLI E2E flows live in `packages/skiller/tests/e2e/cli_*.sh`. Use them when you need to exercise the real CLI path without mixing those checks into the default `pytest` suite.
 
 ## License
 

@@ -58,7 +58,7 @@ jobs:
             --head-ref "$GITHUB_HEAD_REF"
 
       - name: Run ruff
-        run: python -m ruff check src tests
+        run: python -m ruff check packages/skiller/src apps/tui/src packages/skiller/tests apps/tui/tests
 
       - name: Run pytest
         run: python -m pytest

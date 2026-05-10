@@ -1,0 +1,645 @@
+from types import SimpleNamespace
+
+import pytest
+from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentStatus
+from skiller.application.use_cases.query.list_webhooks import ListWebhooksResult
+from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
+from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.delete_run import DeleteRunStatus
+from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
+from skiller.application.use_cases.skill.skill_checker import (
+    SkillCheckError,
+    SkillCheckResult,
+    SkillCheckStatus,
+)
+from skiller.application.use_cases.skill.skill_server_checker import (
+    SkillServerCheckError,
+    SkillServerCheckResult,
+    SkillServerCheckStatus,
+)
+from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookStatus
+
+pytestmark = pytest.mark.unit
+
+
+class _FakeCreateRunUseCase:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def execute(
+        self,
+        skill_ref: str,
+        inputs: dict[str, object],
+        *,
+        skill_source: str,
+    ) -> str:
+        self.calls.append(
+            {
+                "skill_ref": skill_ref,
+                "inputs": inputs,
+                "skill_source": skill_source,
+            }
+        )
+        return "run-1"
+
+
+class _FakeDeleteRunUseCase:
+    def __init__(self, *, status: DeleteRunStatus = DeleteRunStatus.DELETED) -> None:
+        self.status = status
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        error = None if self.status == DeleteRunStatus.DELETED else f"Run '{run_id}' not found"
+        return SimpleNamespace(status=self.status, run_id=run_id, error=error)
+
+
+class _FakeAppendRuntimeEventUseCase:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def execute(
+        self,
+        run_id: str,
+        *,
+        event_type: RuntimeEventType,
+        payload: dict[str, object],
+    ) -> None:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "event_type": event_type,
+                "payload": payload,
+            }
+        )
+
+
+class _FakeSkillCheckerUseCase:
+    def __init__(self, result: SkillCheckResult | None = None) -> None:
+        self.result = result or SkillCheckResult(status=SkillCheckStatus.VALID, errors=[])
+        self.calls: list[dict[str, object]] = []
+
+    def execute(self, skill_ref: str, *, skill_source: str) -> SkillCheckResult:
+        self.calls.append({"skill_ref": skill_ref, "skill_source": skill_source})
+        return self.result
+
+
+class _FakeSkillServerCheckerUseCase:
+    def __init__(self, result: SkillServerCheckResult | None = None) -> None:
+        self.result = result or SkillServerCheckResult(
+            status=SkillServerCheckStatus.VALID,
+            errors=[],
+        )
+        self.calls: list[dict[str, object]] = []
+
+    def execute(self, skill_ref: str, *, skill_source: str) -> SkillServerCheckResult:
+        self.calls.append({"skill_ref": skill_ref, "skill_source": skill_source})
+        return self.result
+
+
+class _FakeFailRunUseCase:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def execute(self, run_id: str, *, error: str) -> None:
+        self.calls.append({"run_id": run_id, "error": error})
+
+
+class _FakeGetStartStepUseCase:
+    def __init__(self, run_status_use_case: "_FakeGetRunStatusUseCase | None" = None) -> None:
+        self.run_status_use_case = run_status_use_case
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str) -> str:
+        self.calls.append(run_id)
+        if self.run_status_use_case is not None:
+            self.run_status_use_case.current = "start"
+        return "start"
+
+
+class _FakeHandleWebhookUseCase:
+    def __init__(self, run_ids: list[str] | None = None) -> None:
+        self.run_ids = run_ids or []
+
+    def execute(self, webhook: str, key: str, payload: dict[str, object], *, dedup_key: str):  # noqa: ANN001
+        return SimpleNamespace(
+            accepted=True,
+            duplicate=False,
+            run_ids=self.run_ids,
+        )
+
+
+class _FakeHandleInputUseCase:
+    def __init__(self, run_ids: list[str] | None = None, *, accepted: bool = True) -> None:
+        self.run_ids = run_ids or []
+        self.accepted = accepted
+
+    def execute(self, run_id: str, *, text: str):  # noqa: ANN201
+        _ = (run_id, text)
+        return SimpleNamespace(
+            accepted=self.accepted,
+            run_ids=self.run_ids,
+            error=None,
+        )
+
+
+class _FakeRegisterWebhookUseCase:
+    def execute(self, webhook: str):  # noqa: ANN201
+        return SimpleNamespace(
+            webhook=webhook,
+            status=SimpleNamespace(value="REGISTERED"),
+            secret=None,
+            enabled=None,
+            error=None,
+        )
+
+
+class _FakeRemoveWebhookUseCase:
+    def execute(self, webhook: str):  # noqa: ANN201
+        return SimpleNamespace(webhook=webhook, status=RemoveWebhookStatus.REMOVED, error=None)
+
+
+class _FakeResumeRunUseCase:
+    def __init__(self, *, status: ResumeRunStatus = ResumeRunStatus.NOT_WAITING) -> None:
+        self.status = status
+        self.calls: list[dict[str, str]] = []
+
+    def execute(self, run_id: str, *, source: str = "manual") -> ResumeRunResult:
+        self.calls.append({"run_id": run_id, "source": source})
+        return ResumeRunResult(status=self.status)
+
+
+class _FakeInterruptAgentUseCase:
+    def __init__(self, *, status: InterruptAgentStatus = InterruptAgentStatus.ENQUEUED) -> None:
+        self.status = status
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        item = None
+        error = None
+        if self.status == InterruptAgentStatus.ENQUEUED:
+            item = SimpleNamespace(to_dict=lambda: {"type": "agent_interrupt"})
+        else:
+            error = f"Run '{run_id}' not found"
+        return SimpleNamespace(
+            status=self.status,
+            run_id=run_id,
+            item=item,
+            error=error,
+        )
+
+
+class _FakeGetRunStatusUseCase:
+    def __init__(self, status: str = "CREATED", current: str | None = None) -> None:
+        self.status = status
+        self.current = current
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        return SimpleNamespace(status=self.status, current=self.current)
+
+
+class _FakeRunWorkerService:
+    def __init__(
+        self,
+        run_status_use_case: _FakeGetRunStatusUseCase | None = None,
+        *,
+        final_status: str = "SUCCEEDED",
+    ) -> None:
+        self.run_status_use_case = run_status_use_case
+        self.final_status = final_status
+        self.calls: list[str] = []
+
+    def run(self, run_id: str):  # noqa: ANN201
+        self.calls.append(run_id)
+        if self.run_status_use_case is not None:
+            self.run_status_use_case.status = self.final_status
+        return SimpleNamespace(run_id=run_id, status=self.final_status, error=None)
+
+
+class _FakeListWebhooksUseCase:
+    def execute(self) -> ListWebhooksResult:
+        return ListWebhooksResult(
+            webhooks=[
+                {
+                    "webhook": "github-ci",
+                    "secret": "secret-1",
+                    "enabled": True,
+                    "created_at": "2026-03-19 10:00:00",
+                }
+            ]
+        )
+
+
+def _build_service(
+    *,
+    get_run_status_use_case: _FakeGetRunStatusUseCase | None = None,
+    handle_input_use_case: _FakeHandleInputUseCase | None = None,
+    handle_webhook_use_case: _FakeHandleWebhookUseCase | None = None,
+    skill_checker_use_case: _FakeSkillCheckerUseCase | None = None,
+    skill_server_checker_use_case: _FakeSkillServerCheckerUseCase | None = None,
+    delete_run_use_case: _FakeDeleteRunUseCase | None = None,
+    interrupt_agent_use_case: _FakeInterruptAgentUseCase | None = None,
+    worker_final_status: str = "SUCCEEDED",
+) -> tuple[
+    RuntimeApplicationService,
+    _FakeAppendRuntimeEventUseCase,
+    _FakeCreateRunUseCase,
+    _FakeGetStartStepUseCase,
+    _FakeRunWorkerService,
+    _FakeSkillCheckerUseCase,
+    _FakeSkillServerCheckerUseCase,
+]:
+    append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
+    create_run_use_case = _FakeCreateRunUseCase()
+    final_skill_checker_use_case = skill_checker_use_case or _FakeSkillCheckerUseCase()
+    final_skill_server_checker_use_case = (
+        skill_server_checker_use_case or _FakeSkillServerCheckerUseCase()
+    )
+    status_use_case = get_run_status_use_case or _FakeGetRunStatusUseCase()
+    get_start_step_use_case = _FakeGetStartStepUseCase(run_status_use_case=status_use_case)
+    run_worker_service = _FakeRunWorkerService(
+        run_status_use_case=status_use_case,
+        final_status=worker_final_status,
+    )
+    service = RuntimeApplicationService(
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
+            store=SimpleNamespace(init_db=lambda: None),
+            execution_output_store=SimpleNamespace(init_db=lambda: None),
+            webhook_registry=SimpleNamespace(init_db=lambda: None),
+        ),
+        append_runtime_event_use_case=append_runtime_event_use_case,
+        create_run_use_case=create_run_use_case,
+        delete_run_use_case=delete_run_use_case or _FakeDeleteRunUseCase(),
+        fail_run_use_case=_FakeFailRunUseCase(),
+        get_start_step_use_case=get_start_step_use_case,
+        skill_checker_use_case=final_skill_checker_use_case,
+        skill_server_checker_use_case=final_skill_server_checker_use_case,
+        handle_input_use_case=handle_input_use_case or _FakeHandleInputUseCase(),
+        handle_webhook_use_case=handle_webhook_use_case or _FakeHandleWebhookUseCase(),
+        list_webhooks_use_case=_FakeListWebhooksUseCase(),
+        register_webhook_use_case=_FakeRegisterWebhookUseCase(),
+        remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
+        resume_run_use_case=_FakeResumeRunUseCase(),
+        interrupt_agent_use_case=interrupt_agent_use_case or _FakeInterruptAgentUseCase(),
+        get_run_status_use_case=status_use_case,
+        run_worker_service=run_worker_service,
+    )
+    return (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+        final_skill_checker_use_case,
+        final_skill_server_checker_use_case,
+    )
+
+
+def test_create_run_only_creates_run() -> None:
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+        skill_checker_use_case,
+        skill_server_checker_use_case,
+    ) = _build_service()
+
+    result = service.create_run("notify_test", {"message": "ok"}, skill_source="internal")
+
+    assert result == {"run_id": "run-1", "status": "CREATED"}
+    assert create_run_use_case.calls == [
+        {
+            "skill_ref": "notify_test",
+            "inputs": {"message": "ok"},
+            "skill_source": "internal",
+        }
+    ]
+    assert get_start_step_use_case.calls == []
+    assert run_worker_service.calls == []
+    assert skill_checker_use_case.calls == [
+        {"skill_ref": "notify_test", "skill_source": "internal"}
+    ]
+    assert skill_server_checker_use_case.calls == [
+        {"skill_ref": "notify_test", "skill_source": "internal"}
+    ]
+    assert append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_CREATE,
+            "payload": {"skill": "notify_test", "skill_source": "internal"},
+        }
+    ]
+
+
+def test_run_prepares_dispatches_and_reads_final_status() -> None:
+    get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(
+        get_run_status_use_case=get_run_status_use_case,
+        worker_final_status="WAITING",
+    )
+
+    result = service.run("notify_test", {})
+
+    assert result == {"run_id": "run-1", "status": "WAITING"}
+    assert get_start_step_use_case.calls == ["run-1"]
+    assert run_worker_service.calls == ["run-1"]
+    assert get_run_status_use_case.calls == ["run-1"]
+
+
+def test_delete_run_returns_delete_result() -> None:
+    delete_run_use_case = _FakeDeleteRunUseCase()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(delete_run_use_case=delete_run_use_case)
+
+    result = service.delete_run("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "status": "DELETED",
+        "deleted": True,
+    }
+    assert delete_run_use_case.calls == ["run-1"]
+
+
+def test_interrupt_agent_returns_enqueued_result() -> None:
+    interrupt_agent_use_case = _FakeInterruptAgentUseCase()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(interrupt_agent_use_case=interrupt_agent_use_case)
+
+    result = service.interrupt_agent("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "status": "ENQUEUED",
+        "enqueued": True,
+        "item": {"type": "agent_interrupt"},
+    }
+    assert interrupt_agent_use_case.calls == ["run-1"]
+
+
+def test_start_worker_prepares_created_run() -> None:
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        get_start_step_use_case,
+        run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service()
+
+    result = service.start_worker("run-1")
+
+    assert result == {"run_id": "run-1", "start_status": "PREPARED", "status": "CREATED"}
+    assert get_start_step_use_case.calls == ["run-1"]
+    assert run_worker_service.calls == []
+
+
+def test_run_worker_dispatches_prepared_run() -> None:
+    get_run_status_use_case = _FakeGetRunStatusUseCase(status="RUNNING", current="start")
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(
+        get_run_status_use_case=get_run_status_use_case,
+    )
+    service.prepare_run("run-1")
+
+    result = service.run_worker("run-1")
+
+    assert result == {"run_id": "run-1", "status": "SUCCEEDED"}
+    assert run_worker_service.calls == ["run-1"]
+
+
+def test_handle_webhook_only_returns_matched_runs() -> None:
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(
+        handle_webhook_use_case=_FakeHandleWebhookUseCase(run_ids=["run-1", "run-2"]),
+    )
+
+    result = service.handle_webhook("github", "42", {"ok": True}, dedup_key="delivery-1")
+
+    assert result == {
+        "accepted": True,
+        "duplicate": False,
+        "webhook": "github",
+        "key": "42",
+        "matched_runs": ["run-1", "run-2"],
+    }
+    assert run_worker_service.calls == []
+
+
+def test_handle_input_only_returns_matched_runs() -> None:
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(
+        handle_input_use_case=_FakeHandleInputUseCase(run_ids=["run-1"]),
+    )
+
+    result = service.handle_input("run-1", text="hello")
+
+    assert result == {
+        "accepted": True,
+        "run_id": "run-1",
+        "matched_runs": ["run-1"],
+    }
+    assert run_worker_service.calls == []
+
+
+def test_list_webhooks_returns_registered_channels() -> None:
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service()
+
+    result = service.list_webhooks()
+
+    assert result == [
+        {
+            "webhook": "github-ci",
+            "secret": "secret-1",
+            "enabled": True,
+            "created_at": "2026-03-19 10:00:00",
+        }
+    ]
+
+
+def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
+    get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
+    append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
+    resume_run_use_case = _FakeResumeRunUseCase(status=ResumeRunStatus.RESUMED)
+    run_worker_service = _FakeRunWorkerService(
+        run_status_use_case=get_run_status_use_case,
+        final_status="WAITING",
+    )
+
+    service = RuntimeApplicationService(
+        bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
+            store=SimpleNamespace(init_db=lambda: None),
+            execution_output_store=SimpleNamespace(init_db=lambda: None),
+            webhook_registry=SimpleNamespace(init_db=lambda: None),
+        ),
+        append_runtime_event_use_case=append_runtime_event_use_case,
+        create_run_use_case=_FakeCreateRunUseCase(),
+        delete_run_use_case=_FakeDeleteRunUseCase(),
+        fail_run_use_case=_FakeFailRunUseCase(),
+        get_start_step_use_case=_FakeGetStartStepUseCase(
+            run_status_use_case=get_run_status_use_case
+        ),
+        skill_checker_use_case=_FakeSkillCheckerUseCase(),
+        skill_server_checker_use_case=_FakeSkillServerCheckerUseCase(),
+        handle_input_use_case=_FakeHandleInputUseCase(),
+        handle_webhook_use_case=_FakeHandleWebhookUseCase(),
+        list_webhooks_use_case=_FakeListWebhooksUseCase(),
+        register_webhook_use_case=_FakeRegisterWebhookUseCase(),
+        remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
+        resume_run_use_case=resume_run_use_case,
+        interrupt_agent_use_case=_FakeInterruptAgentUseCase(),
+        get_run_status_use_case=get_run_status_use_case,
+        run_worker_service=run_worker_service,
+    )
+
+    result = service.resume_run("run-1")
+
+    assert result == {
+        "run_id": "run-1",
+        "resume_status": "RESUMED",
+        "status": "WAITING",
+    }
+    assert resume_run_use_case.calls == [{"run_id": "run-1", "source": "manual"}]
+    assert append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_RESUME,
+            "payload": {"source": "manual"},
+        }
+    ]
+    assert run_worker_service.calls == ["run-1"]
+
+
+def test_create_run_fails_when_skill_checker_reports_errors() -> None:
+    checker = _FakeSkillCheckerUseCase(
+        result=SkillCheckResult(
+            status=SkillCheckStatus.INVALID,
+            errors=[
+                SkillCheckError(
+                    code="SKILL_NOTIFY_MESSAGE_MISSING",
+                    message=(
+                        "SKILL_NOTIFY_MESSAGE_MISSING: notify step requires "
+                        "message (step=show_message)"
+                    ),
+                )
+            ],
+        )
+    )
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(skill_checker_use_case=checker)
+
+    with pytest.raises(
+        ValueError,
+        match="SKILL_NOTIFY_MESSAGE_MISSING: notify step requires message",
+    ):
+        service.create_run("notify_test", {}, skill_source="internal")
+
+    assert checker.calls == [{"skill_ref": "notify_test", "skill_source": "internal"}]
+    assert create_run_use_case.calls == []
+    assert append_runtime_event_use_case.calls == []
+
+
+def test_create_run_fails_when_server_checker_reports_errors() -> None:
+    checker = _FakeSkillServerCheckerUseCase(
+        result=SkillServerCheckResult(
+            status=SkillServerCheckStatus.INVALID,
+            errors=[
+                SkillServerCheckError(
+                    code="SKILL_SERVER_UNAVAILABLE",
+                    message=(
+                        "SKILL_SERVER_UNAVAILABLE: skill requires local server "
+                        "for wait_channel (step=listen_whatsapp)"
+                    ),
+                )
+            ],
+        )
+    )
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        skill_checker_use_case,
+        skill_server_checker_use_case,
+    ) = _build_service(skill_server_checker_use_case=checker)
+
+    with pytest.raises(
+        ValueError,
+        match="SKILL_SERVER_UNAVAILABLE: skill requires local server",
+    ):
+        service.create_run("whatsapp_demo", {}, skill_source="internal")
+
+    assert skill_checker_use_case.calls == [
+        {"skill_ref": "whatsapp_demo", "skill_source": "internal"}
+    ]
+    assert skill_server_checker_use_case.calls == [
+        {"skill_ref": "whatsapp_demo", "skill_source": "internal"}
+    ]
+    assert create_run_use_case.calls == []
+    assert append_runtime_event_use_case.calls == []

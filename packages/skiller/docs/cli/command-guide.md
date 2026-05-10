@@ -1,0 +1,431 @@
+# CLI Command Guide
+
+This guide documents the current `skiller` CLI commands and how they fit into the runtime flow.
+
+Terminology used in this guide:
+- transcript = the user-facing execution view rendered by the TUI
+- `/logs` = the raw debug event stream
+
+## Command Overview
+
+### Run lifecycle
+
+```bash
+skiller run <agent>
+skiller run --file <agent.yaml>
+skiller resume <run_id>
+```
+
+### Inspection
+
+```bash
+skiller status <run_id>
+skiller runs [--limit N] [--status WAITING] [--status FAILED]
+skiller logs <run_id>
+skiller watch <run_id>
+skiller delete <run_id>
+```
+
+### Human input
+
+```bash
+skiller input receive <run_id> --text "..."
+```
+
+### Webhooks
+
+```bash
+skiller webhook register <webhook>
+skiller webhook list
+skiller webhook remove <webhook>
+skiller webhook receive <webhook> <key> --json '{"ok": true}'
+skiller webhook receive <webhook> <key> --json-file payload.json
+```
+
+### Worker operations
+
+```bash
+skiller worker start <run_id>
+skiller worker run <run_id>
+skiller worker resume <run_id>
+```
+
+### Agent control
+
+```bash
+skiller agent interrupt <run_id>
+```
+
+### Setup
+
+```bash
+skiller init-db
+```
+
+### Configuration
+
+Skiller reads persistent config from `~/.skiller/settings/config.json`.
+See [`../config/config.md`](../config/config.md).
+
+### Cloudflared
+
+```bash
+skiller cloudflared login start
+skiller cloudflared login status
+skiller cloudflared login stop
+skiller cloudflared ensure --domain <domain>
+skiller cloudflared start
+skiller cloudflared status
+skiller cloudflared stop
+```
+
+### WhatsApp
+
+```bash
+skiller whatsapp pair start
+skiller whatsapp pair status
+skiller whatsapp pair stop
+
+skiller whatsapp start
+skiller whatsapp status
+skiller whatsapp stop
+```
+
+## Typical Flows
+
+## Run an agent
+
+Internal agent:
+
+```bash
+skiller run ant
+```
+
+External file:
+
+```bash
+skiller run --file ./my-agent.yaml
+```
+
+With inputs:
+
+```bash
+skiller run pr --arg owner=my-org --arg repo=my-repo --arg head=feature/demo --arg base=main --arg title="demo" --arg body="demo body"
+```
+
+What it does:
+- creates a run
+- snapshots the agent definition into the database
+- prepares and dispatches the worker
+- returns the created `run_id`
+
+## Inspect a run
+
+Current run state:
+
+```bash
+skiller status <run_id>
+```
+
+Recent runs:
+
+```bash
+skiller runs
+skiller runs --status WAITING
+skiller runs --status FAILED --limit 50
+```
+
+Raw event log:
+
+```bash
+skiller logs <run_id>
+```
+
+Live progress until the run stabilizes:
+
+```bash
+skiller watch <run_id>
+```
+
+Delete a run and all database rows tied to it:
+
+```bash
+skiller delete <run_id>
+```
+
+This is a destructive cleanup command. It removes the run, runtime events, waits, external
+event records, deduplication receipts for those events, and persisted execution output bodies.
+
+`watch`:
+- polls `status`
+- reads new events from `logs`
+- prints progress to `stderr`
+- returns final JSON to `stdout`
+- stops on `WAITING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`
+
+Rule of thumb:
+- use `watch` to follow a run as it evolves
+- use `logs` when you need the raw event payloads
+
+## Interrupt the current agent turn
+
+```bash
+skiller agent interrupt <run_id>
+```
+
+What it does:
+- enqueues an `agent` steering item with action `abort_turn`
+- does not cancel the run
+- is consumed later by the agent loop at its steering checkpoints
+
+## Resume a waiting run with text
+
+```bash
+skiller input receive <run_id> --text "database timeout"
+```
+
+What it does:
+- persists the input event
+- matches it against the waiting run
+- marks the run resumable
+
+If needed, you can resume explicitly:
+
+```bash
+skiller resume <run_id>
+```
+
+Typical inspection flow:
+
+```bash
+skiller status <run_id>
+skiller input receive <run_id> --text "database timeout"
+skiller watch <run_id>
+```
+
+## Resume a waiting run with a webhook
+
+Register a webhook channel:
+
+```bash
+skiller webhook register github-ci
+```
+
+Deliver a payload:
+
+```bash
+skiller webhook receive github-ci 42 --json '{"ok": true}'
+```
+
+Or from file:
+
+```bash
+skiller webhook receive github-ci 42 --json-file payload.json
+```
+
+Optional deduplication:
+
+```bash
+skiller webhook receive github-ci 42 --json '{"ok": true}' --dedup-key ci-42
+```
+
+## Worker commands
+
+These are operational commands. They are useful for debugging or controlled execution.
+
+Prepare a created run and launch the worker:
+
+```bash
+skiller worker start <run_id>
+```
+
+Execute a prepared run directly:
+
+```bash
+skiller worker run <run_id>
+```
+
+Resume a waiting run directly:
+
+```bash
+skiller worker resume <run_id>
+```
+
+In normal usage, `skiller run` already starts the worker, so most users should not need these commands.
+
+## Command Notes
+
+### `run`
+
+Options:
+
+```bash
+skiller run <agent> [--arg key=value] [--logs] [--start-server]
+skiller run --file <path> [--arg key=value] [--logs] [--start-server]
+```
+
+Notes:
+- use `<agent>` for internal agents
+- internal agents resolve from `packages/skiller/agents/<id>/agent.yaml`
+- use `--file` for external YAML files
+- `--logs` includes current logs in the JSON response
+- `--start-server` starts the local webhook server before dispatching the run
+
+### `server`
+
+Operational commands for the local webhook server:
+
+```bash
+skiller server start
+skiller server status
+skiller server stop
+```
+
+Notes:
+- the managed server state is stored under `~/.skiller/webhooks/managed-<port>.json`
+- if `SKILLER_DEBUG_HOME` is set, that directory is used as the effective `HOME`
+- `server start` reports whether the running server is managed by Skiller or just already reachable on the local endpoint
+
+Detailed guide:
+- [`tool-server.md`](tool-server.md)
+
+### `cloudflared`
+
+Operational commands for the Cloudflare tunnel workflow:
+
+```bash
+skiller cloudflared login start
+skiller cloudflared login status
+skiller cloudflared login stop
+skiller cloudflared ensure --domain <domain>
+skiller cloudflared start
+skiller cloudflared status
+skiller cloudflared stop
+```
+
+Use cases:
+- authenticate `cloudflared` in the effective `HOME`
+- ensure the remote tunnel, DNS route, and local tunnel config exist
+- manage the local connector process with explicit Skiller ownership state
+
+Detailed guide:
+- [`tool-cloudflared.md`](tool-cloudflared.md)
+
+### `status`
+
+Returns the current run snapshot, including waiting metadata when present.
+
+Examples:
+
+```bash
+skiller status <run_id>
+```
+
+Useful fields:
+- `status`
+- `current`
+- `wait_type`
+- `prompt`
+- `webhook`
+- `key`
+
+### `logs`
+
+Returns the raw structured event list for a run.
+
+Examples:
+
+```bash
+skiller logs <run_id>
+```
+
+Best used for:
+- debugging
+- inspecting runtime event order
+- understanding failures or branching decisions
+
+Notes:
+- `/logs` is a debug/raw surface, not the user-facing transcript
+- it should expose exact event payloads rather than transcript-style formatting
+
+### `delete`
+
+Deletes the run row and every database row structurally tied to the run:
+
+- runtime events
+- waits
+- external events where `run_id` or `consumed_by_run_id` matches
+- external receipts whose `dedup_key` belongs to those external events
+- persisted execution output bodies
+
+Examples:
+
+```bash
+skiller delete <run_id>
+```
+
+### `watch`
+
+Best used for:
+- following a run live
+- seeing the execution transcript evolve
+- waiting until the run stabilizes
+
+Examples:
+
+```bash
+skiller watch <run_id>
+```
+
+Notes:
+- `watch` returns structured JSON on `stdout`
+- `watch` may print compact progress lines to `stderr` for direct CLI usage
+- the TUI transcript should render from structured `events`, not from `stderr` text
+
+### `input receive`
+
+Used only for runs blocked on `wait_input`.
+
+Examples:
+
+```bash
+skiller input receive <run_id> --text "retry in 5 minutes"
+```
+
+### `webhook receive`
+
+Used only for runs blocked on `wait_webhook`.
+
+Examples:
+
+```bash
+skiller webhook receive github-ci build-42 --json '{"status": "ok"}'
+```
+
+## Recommended Usage
+
+### User flow
+
+```bash
+skiller run ant
+skiller watch <run_id>
+skiller input receive <run_id> --text "hola"
+skiller watch <run_id>
+```
+
+### Debug flow
+
+```bash
+skiller status <run_id>
+skiller logs <run_id>
+skiller watch <run_id>
+```
+
+### Waiting webhook flow
+
+```bash
+skiller run --file ./wait_webhook.yaml --arg key=42
+skiller status <run_id>
+skiller webhook receive github-ci 42 --json '{"ok": true}'
+skiller watch <run_id>
+```

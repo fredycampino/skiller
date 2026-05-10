@@ -1,0 +1,301 @@
+# Context Model
+
+This document defines the persisted runtime model used by `RunContext`.
+
+## Top Level
+
+```python
+RunContext(
+    inputs: dict[str, Any],
+    step_executions: dict[str, StepExecution],
+    steering_queue: list[SteeringItem] = [],
+    cancel_reason: str | None = None,
+)
+```
+
+`SteeringItem`:
+
+```python
+SteeringItem(
+    target: SteeringTarget,
+    action: SteeringAction,
+    text: str | None = None,
+)
+```
+
+Current `agent` actions:
+
+- `abort_turn`
+- `steering_message`
+
+When `abort_turn` is consumed during a running agent tool turn, the runtime also appends
+one control `user_message` to the agent context:
+
+```text
+[Skiller] User interrupted the current tool turn.
+```
+
+That control message belongs to `agent context`, not to `RunContext.step_executions`.
+
+The `agent` step itself still finishes as a normal step result.
+If the agent should wait for the user after that, the following explicit wait step is what
+creates `RunStatus.WAITING` and `RUN_WAITING`.
+
+In `RunContext.step_executions`, the `agent` step is persisted exactly like any other
+step: a normal `StepExecution` with `input`, `evaluation`, and `output`. Its internal
+turn transcript stays in `agent context`; its consolidated step result stays in runtime context.
+
+Each step stores one `StepExecution`:
+
+```python
+StepExecution(
+    step_type: StepType,
+    input: dict[str, Any],
+    evaluation: dict[str, Any],
+    output: OutputBase,
+)
+```
+
+## Persistence Shape
+
+`RunContext.to_dict()` persists:
+
+```json
+{
+  "inputs": {},
+  "step_executions": {
+    "<step_id>": {
+      "step_type": "llm_prompt",
+      "input": {},
+      "evaluation": {},
+      "output": {
+        "text": "hello back",
+        "value": {
+          "data": {
+            "reply": "hello back"
+          }
+        },
+        "body_ref": null
+      }
+    }
+  }
+}
+```
+
+## Output Model
+
+In memory, the runtime uses typed outputs:
+
+- `AssignOutput`
+- `NotifyOutput`
+- `ShellOutput`
+- `SwitchOutput`
+- `WhenOutput`
+- `WaitInputOutput`
+- `WaitWebhookOutput`
+- `LlmPromptOutput`
+- `McpOutput`
+
+Publicly, every output is normalized to:
+
+```json
+{
+  "text": "...",
+  "text_ref": "data.reply",
+  "value": {},
+  "body_ref": null
+}
+```
+
+Rules:
+- `text` is always present.
+- `text_ref` is optional and points to the field inside the full body value that can rebuild the full human text.
+- `value` is always an object or `null`.
+- `body_ref` is always present and may be `null`.
+- if `body_ref` is not `null`, `output.value` is the small persisted summary and the full output body is stored separately.
+
+## Per-Step Output Fields
+
+### `assign`
+
+```json
+{
+  "text": "Values assigned.",
+  "value": {
+    "assigned": {}
+  },
+  "body_ref": null
+}
+```
+
+### `notify`
+
+```json
+{
+  "text": "message body",
+  "value": {
+    "message": "message body"
+  },
+  "body_ref": null
+}
+```
+
+### `shell`
+
+```json
+{
+  "text": "hello",
+  "value": {
+    "ok": true,
+    "exit_code": 0,
+    "stdout": "hello\n",
+    "stderr": ""
+  },
+  "body_ref": null
+}
+```
+
+### `switch`
+
+```json
+{
+  "text": "Route selected: answer.",
+  "value": {
+    "next_step_id": "answer"
+  },
+  "body_ref": null
+}
+```
+
+### `when`
+
+```json
+{
+  "text": "Route selected: good.",
+  "value": {
+    "next_step_id": "good"
+  },
+  "body_ref": null
+}
+```
+
+### `wait_input`
+
+```json
+{
+  "text": "Input received.",
+  "value": {
+    "prompt": "Write a short summary",
+    "payload": {
+      "text": "database timeout"
+    }
+  },
+  "body_ref": null
+}
+```
+
+### `wait_channel`
+
+```json
+{
+  "text": "Channel message received: whatsapp:172584771580071@lid.",
+  "value": {
+    "channel": "whatsapp",
+    "key": "172584771580071@lid",
+    "payload": {
+      "channel": "whatsapp",
+      "message_id": "msg-1",
+      "key": "172584771580071@lid",
+      "sender_id": "172584771580071@lid",
+      "sender_name": "Fede",
+      "text": "hola",
+      "timestamp": 1775388655
+    }
+  },
+  "body_ref": null
+}
+```
+
+### `wait_webhook`
+
+```json
+{
+  "text": "Webhook received: github-pr-merged:42.",
+  "value": {
+    "webhook": "github-pr-merged",
+    "key": "42",
+    "payload": {
+      "merged": true
+    }
+  },
+  "body_ref": null
+}
+```
+
+### `llm_prompt`
+
+Normal:
+
+```json
+{
+  "text": "hello back",
+  "value": {
+    "data": {
+      "reply": "hello back"
+    }
+  },
+  "body_ref": null
+}
+```
+
+With `large_result: true`:
+
+```json
+{
+  "text": "Europe is one of the smallest continents...",
+  "text_ref": "data.reply",
+  "value": {
+    "data": {
+      "reply": "Europe is one of the smallest continents...",
+      "reply_length": 980,
+      "truncated": true
+    }
+  },
+  "body_ref": "execution_output:abc123"
+}
+```
+
+### `mcp`
+
+```json
+{
+  "text": "local-mcp.files_action completed successfully.",
+  "value": {
+    "data": {
+      "ok": true
+    }
+  },
+  "body_ref": null
+}
+```
+
+## Template Access
+
+Templates read step data through two channels:
+
+Examples:
+
+```text
+{{output_value("ask_user").payload.text}}
+{{output_value("answer").data.reply}}
+{{output_value("decide_exit").next_step_id}}
+{{step_executions.answer.output.text}}
+```
+
+Notes:
+- `step_executions` stores the persisted output envelope.
+- `step_executions.<step_id>.output.text` and `step_executions.<step_id>.evaluation` remain directly readable.
+- `output_value("<step_id>")` returns the canonical `output.value` for that step.
+- if `output.body_ref` is present, `output_value(...)` resolves the persisted body lazily from `execution_outputs`.
+- direct template access to `step_executions.<step_id>.output.value...` is not allowed.
+- direct template access to `output.body_ref` is not allowed.

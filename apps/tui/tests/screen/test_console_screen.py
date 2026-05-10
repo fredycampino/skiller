@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import pytest
+from stui.port.runs_port import RunsPortItem
+from stui.screen.console_screen import (
+    _resolve_run_row_mode,
+    _resolve_run_row_status,
+)
+from stui.screen.runs_table_view import RunRowMode, RunRowStatus
+
+pytestmark = pytest.mark.unit
+
+
+def test_resolve_run_row_mode_maps_input_waits_to_chat() -> None:
+    assert (
+        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="input"))
+        == RunRowMode.CHAT
+    )
+    assert (
+        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="webhook"))
+        == RunRowMode.FLOW
+    )
+
+
+def test_resolve_run_row_status_maps_wait_variants() -> None:
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="input"))
+        == RunRowStatus.WAITING_INPUT
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="webhook"))
+        == RunRowStatus.WAITING_WEBHOOK
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="WAITING", wait_type="channel"))
+        == RunRowStatus.WAITING_CHANNEL
+    )
+
+
+def test_resolve_run_row_status_maps_terminal_and_running_statuses() -> None:
+    assert (
+        _resolve_run_row_status(_run_item(status="FAILED", wait_type=None))
+        == RunRowStatus.FAILED
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="SUCCEEDED", wait_type=None))
+        == RunRowStatus.SUCCESS
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None))
+        == RunRowStatus.RUNNING
+    )
+
+
+def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:
+    return RunsPortItem(
+        id="run-1",
+        skill_source="internal",
+        skill_ref="chat",
+        status=status,
+        current="ask_user",
+        created_at="2026-05-04 00:00:00",
+        updated_at="2026-05-04 00:00:01",
+        wait_type=wait_type,
+    )

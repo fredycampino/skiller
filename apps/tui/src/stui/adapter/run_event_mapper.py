@@ -18,6 +18,8 @@ class RunLogRecord:
 class RunStatusRecord:
     status: str
     prompt: str = ""
+    last_event_sequence: int | None = None
+    last_event_type: str = ""
 
 
 class RunEventMapper:
@@ -72,9 +74,17 @@ class RunEventMapper:
         run_id: str,
         status_payload: dict[str, Any],
         last_status: str,
+        last_event_sequence: int | None,
+        last_event_type: str,
     ) -> PollingEvent | None:
         record = _parse_run_status_record(status_payload)
-        if record is None or record.status == last_status:
+        if record is None:
+            return None
+        if (
+            record.status == last_status
+            and record.last_event_sequence == last_event_sequence
+            and record.last_event_type == last_event_type
+        ):
             return None
 
         return PollingEvent(
@@ -82,6 +92,8 @@ class RunEventMapper:
             run_id=run_id,
             status=record.status,
             prompt=record.prompt,
+            last_event_sequence=record.last_event_sequence,
+            last_event_type=record.last_event_type,
             text=f"[{_display_run_id(run_id)}] {record.status}",
         )
 
@@ -109,7 +121,12 @@ def _parse_run_status_record(status_payload: dict[str, Any]) -> RunStatusRecord 
         return None
 
     prompt = str(status_payload.get("prompt", "")).strip()
-    return RunStatusRecord(status=status, prompt=prompt)
+    return RunStatusRecord(
+        status=status,
+        prompt=prompt,
+        last_event_sequence=_coerce_int(status_payload.get("last_event_sequence")),
+        last_event_type=str(status_payload.get("last_event_type", "")).strip().upper(),
+    )
 
 
 def _format_watch_event(run_id: str, record: RunLogRecord) -> str | None:
@@ -201,7 +218,10 @@ def _compact_output(value: Any) -> str:
 
 
 def _int_field(payload: dict[str, Any], name: str) -> int | None:
-    value = payload.get(name)
+    return _coerce_int(payload.get(name))
+
+
+def _coerce_int(value: Any) -> int | None:
     if value is None:
         return None
     try:

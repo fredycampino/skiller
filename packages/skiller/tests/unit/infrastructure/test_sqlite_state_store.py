@@ -88,9 +88,10 @@ def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
     run = store.get_run(run_id)
 
     assert run is not None
-    assert run.context.step_executions["start"].to_persisted_dict() == _switch_execution(
-        "retry_notice", "retry"
-    ).to_persisted_dict()
+    assert (
+        run.context.step_executions["start"].to_persisted_dict()
+        == _switch_execution("retry_notice", "retry").to_persisted_dict()
+    )
 
 
 def test_get_run_uses_persisted_when_result(tmp_path) -> None:
@@ -118,9 +119,10 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     run = store.get_run(run_id)
 
     assert run is not None
-    assert run.context.step_executions["start"].to_persisted_dict() == _when_execution(
-        "good", 85
-    ).to_persisted_dict()
+    assert (
+        run.context.step_executions["start"].to_persisted_dict()
+        == _when_execution("good", 85).to_persisted_dict()
+    )
 
 
 def test_update_run_persists_context_results_without_overwriting_steering_queue(
@@ -153,9 +155,10 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
     run = store.get_run(run_id)
 
     assert run is not None
-    assert run.context.step_executions["start"].to_persisted_dict() == _notify_execution(
-        "ok"
-    ).to_persisted_dict()
+    assert (
+        run.context.step_executions["start"].to_persisted_dict()
+        == _notify_execution("ok").to_persisted_dict()
+    )
     assert run.context.steering_queue == [initial_item]
 
 
@@ -221,9 +224,10 @@ def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     run = store.get_run(run_id)
 
     assert run is not None
-    assert run.context.step_executions["start"].to_persisted_dict() == _wait_input_execution(
-        "Write a message", {"text": "hola"}, "input-1"
-    ).to_persisted_dict()
+    assert (
+        run.context.step_executions["start"].to_persisted_dict()
+        == _wait_input_execution("Write a message", {"text": "hola"}, "input-1").to_persisted_dict()
+    )
 
 
 def test_init_db_creates_normalized_waits_and_external_events_schema(tmp_path) -> None:
@@ -429,6 +433,33 @@ def test_get_latest_external_event_returns_oldest_pending_match_first(tmp_path) 
     assert event["id"] == first_event_id
     assert event["payload"] == {"text": "first"}
     assert second_event_id != first_event_id
+
+
+def test_list_events_exposes_monotonic_sequence(tmp_path) -> None:
+    db_path = tmp_path / "events-sequence.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440030"
+    store.create_run(
+        "internal",
+        "skill",
+        {"start": "done", "steps": [{"notify": "done"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    first_event_id = store.append_event("STEP_STARTED", {"step": "done"}, run_id=run_id)
+    second_event_id = store.append_event("RUN_WAITING", {"step": "done"}, run_id=run_id)
+
+    events = store.list_events(run_id)
+    last_event = store.get_last_event(run_id)
+
+    assert [event["id"] for event in events] == [first_event_id, second_event_id]
+    assert [event["sequence"] for event in events] == sorted(event["sequence"] for event in events)
+    assert events[0]["sequence"] < events[1]["sequence"]
+    assert last_event is not None
+    assert last_event["id"] == second_event_id
+    assert last_event["sequence"] == events[1]["sequence"]
 
 
 def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:

@@ -11,6 +11,7 @@ Every runtime event follows this shape:
 
 ```json
 {
+  "sequence": 4083,
   "id": "f2d2f7ef-5d58-4e2a-a7dd-48a4bb0d3f18",
   "type": "EVENT_NAME",
   "run_id": "e367bf20-7457-4c44-a4be-e48796025e1c0",
@@ -20,11 +21,27 @@ Every runtime event follows this shape:
 ```
 
 Rules:
+- `sequence` is a monotonic event cursor for the local runtime database.
 - `id` uniquely identifies the event.
 - `type` identifies the event contract.
 - `run_id` identifies the run instance.
 - `created_at` records when the event was created.
 - `payload` contains the event-specific data.
+
+`status` responses expose the latest persisted event cursor:
+
+```json
+{
+  "status": "WAITING",
+  "current": "ask_user",
+  "last_event_sequence": 4083,
+  "last_event_type": "RUN_WAITING"
+}
+```
+
+Consumers should keep polling events until they have processed at least
+`last_event_sequence` before stopping on `WAITING`, `FAILED`, `SUCCEEDED`,
+`CANCELLED`, `TIMEOUT`, or `INTERRUPTED`.
 
 ## Output Envelope
 

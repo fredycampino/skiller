@@ -34,6 +34,10 @@ class RunQueryService:
         waiting_metadata = self.get_waiting_metadata_use_case.execute(run_id)
         if waiting_metadata is not None:
             payload.update(waiting_metadata)
+        last_event = self.get_run_logs_use_case.latest(run_id)
+        if last_event is not None:
+            payload["last_event_sequence"] = last_event.get("sequence")
+            payload["last_event_type"] = last_event.get("type")
         return payload
 
     def get_logs(self, run_id: str) -> list[dict[str, Any]]:

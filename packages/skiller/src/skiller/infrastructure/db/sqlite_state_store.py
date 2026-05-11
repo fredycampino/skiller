@@ -345,7 +345,7 @@ class SqliteStateStore(SqliteRepository):
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT id, type, payload_json, created_at
+                SELECT rowid AS sequence, id, type, payload_json, created_at
                 FROM events WHERE run_id = ?
                 ORDER BY rowid ASC
                 """,
@@ -353,6 +353,7 @@ class SqliteStateStore(SqliteRepository):
             ).fetchall()
         return [
             {
+                "sequence": int(row["sequence"]),
                 "id": row["id"],
                 "type": row["type"],
                 "payload": json.loads(row["payload_json"]),
@@ -360,6 +361,27 @@ class SqliteStateStore(SqliteRepository):
             }
             for row in rows
         ]
+
+    def get_last_event(self, run_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT rowid AS sequence, id, type, payload_json, created_at
+                FROM events WHERE run_id = ?
+                ORDER BY rowid DESC
+                LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "sequence": int(row["sequence"]),
+            "id": row["id"],
+            "type": row["type"],
+            "payload": json.loads(row["payload_json"]),
+            "created_at": row["created_at"],
+        }
 
     def create_wait(
         self,

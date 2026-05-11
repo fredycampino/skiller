@@ -9,3 +9,6 @@ class GetRunLogsUseCase:
 
     def execute(self, run_id: str) -> list[dict[str, Any]]:
         return self.store.list_events(run_id)
+
+    def latest(self, run_id: str) -> dict[str, Any] | None:
+        return self.store.get_last_event(run_id)

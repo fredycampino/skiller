@@ -30,7 +30,7 @@ def test_polling_event_observer_subscribes_and_notifies_run_observer(
     status_payloads = iter(
         [
             {"id": "run-1234", "status": "RUNNING"},
-            {"id": "run-1234", "status": "SUCCEEDED"},
+            {"id": "run-1234", "status": "SUCCEEDED", "last_event_sequence": 2},
         ]
     )
     log_payloads = iter(
@@ -105,6 +105,194 @@ def test_polling_event_observer_subscribes_and_notifies_run_observer(
     asyncio.run(run())
 
 
+def test_polling_event_observer_waits_until_logs_reach_terminal_status_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    status_payloads = iter(
+        [
+            {"id": "run-1234", "status": "RUNNING"},
+            {
+                "id": "run-1234",
+                "status": "WAITING",
+                "last_event_sequence": 4,
+                "last_event_type": "RUN_WAITING",
+            },
+            {
+                "id": "run-1234",
+                "status": "WAITING",
+                "last_event_sequence": 4,
+                "last_event_type": "RUN_WAITING",
+            },
+        ]
+    )
+    log_payloads = iter(
+        [
+            [
+                {
+                    "id": "evt-1",
+                    "type": "STEP_STARTED",
+                    "payload": {"step": "ci_agent", "step_type": "agent", "sequence": 1},
+                }
+            ],
+            [
+                {
+                    "id": "evt-2",
+                    "type": "STEP_SUCCESS",
+                    "payload": {
+                        "step": "ci_agent",
+                        "step_type": "agent",
+                        "output": {"text": "done"},
+                        "sequence": 2,
+                    },
+                }
+            ],
+            [
+                {
+                    "id": "evt-3",
+                    "type": "STEP_STARTED",
+                    "payload": {"step": "ask_user", "step_type": "wait_input", "sequence": 3},
+                },
+                {
+                    "id": "evt-4",
+                    "type": "RUN_WAITING",
+                    "payload": {
+                        "step": "ask_user",
+                        "step_type": "wait_input",
+                        "output": {"text": "Write a message."},
+                        "sequence": 4,
+                    },
+                },
+            ],
+        ]
+    )
+
+    def fake_run_json_command(*args: str):  # noqa: ANN001
+        assert args == ("status", "run-1234")
+        return next(status_payloads)
+
+    def fake_run_json_list_command(*args: str):  # noqa: ANN001
+        assert args == ("logs", "run-1234")
+        return next(log_payloads)
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        event_observer = PollingEventObserver(interval_seconds=0.0)
+        monkeypatch.setattr(event_observer, "_run_json_command", fake_run_json_command)
+        monkeypatch.setattr(event_observer, "_run_json_list_command", fake_run_json_list_command)
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        run_observer = FakeRunObserver("run-1234")
+        event_observer.subscribe(run_observer)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert [event.kind for event in run_observer.events] == [
+            PollingEventKind.LOG,
+            PollingEventKind.STATUS,
+            PollingEventKind.LOG,
+            PollingEventKind.STATUS,
+            PollingEventKind.LOG,
+            PollingEventKind.LOG,
+        ]
+        assert run_observer.events[3].status == "WAITING"
+        assert run_observer.events[3].last_event_sequence == 4
+        assert run_observer.events[4].sequence == 3
+        assert run_observer.events[5].sequence == 4
+        event_observer.unsubscribe(run_observer)
+
+    asyncio.run(run())
+
+
+def test_polling_event_observer_waits_for_matching_terminal_event_type_when_sequence_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    status_payloads = iter(
+        [
+            {
+                "id": "run-1234",
+                "status": "WAITING",
+                "last_event_sequence": 4,
+                "last_event_type": "RUN_WAITING",
+            },
+            {
+                "id": "run-1234",
+                "status": "WAITING",
+                "last_event_sequence": 4,
+                "last_event_type": "RUN_WAITING",
+            },
+        ]
+    )
+    log_payloads = iter(
+        [
+            [
+                {
+                    "id": "evt-4a",
+                    "type": "STEP_STARTED",
+                    "payload": {"step": "ask_user", "step_type": "wait_input", "sequence": 4},
+                },
+            ],
+            [
+                {
+                    "id": "evt-4b",
+                    "type": "RUN_WAITING",
+                    "payload": {
+                        "step": "ask_user",
+                        "step_type": "wait_input",
+                        "output": {"text": "Write a message."},
+                        "sequence": 4,
+                    },
+                },
+            ],
+        ]
+    )
+
+    def fake_run_json_command(*args: str):  # noqa: ANN001
+        assert args == ("status", "run-1234")
+        return next(status_payloads)
+
+    def fake_run_json_list_command(*args: str):  # noqa: ANN001
+        assert args == ("logs", "run-1234")
+        return next(log_payloads)
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        event_observer = PollingEventObserver(interval_seconds=0.0)
+        monkeypatch.setattr(event_observer, "_run_json_command", fake_run_json_command)
+        monkeypatch.setattr(event_observer, "_run_json_list_command", fake_run_json_list_command)
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        run_observer = FakeRunObserver("run-1234")
+        event_observer.subscribe(run_observer)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert [event.kind for event in run_observer.events] == [
+            PollingEventKind.LOG,
+            PollingEventKind.STATUS,
+            PollingEventKind.LOG,
+        ]
+        assert run_observer.events[0].event_type == "STEP_STARTED"
+        assert run_observer.events[0].sequence == 4
+        assert run_observer.events[1].last_event_type == "RUN_WAITING"
+        assert run_observer.events[2].event_type == "RUN_WAITING"
+        event_observer.unsubscribe(run_observer)
+
+    asyncio.run(run())
+
+
 def test_run_event_mapper_converts_payloads() -> None:
     mapper = RunEventMapper()
     seen_event_ids = {"evt-1"}
@@ -125,6 +313,8 @@ def test_run_event_mapper_converts_payloads() -> None:
         run_id="run-1234",
         status_payload={"status": "RUNNING", "prompt": "Write a message"},
         last_status="CREATED",
+        last_event_sequence=None,
+        last_event_type="",
     )
 
     assert [event.kind for event in log_events] == [PollingEventKind.LOG]
@@ -137,6 +327,49 @@ def test_run_event_mapper_converts_payloads() -> None:
     assert status_event.kind == PollingEventKind.STATUS
     assert status_event.status == "RUNNING"
     assert status_event.prompt == "Write a message"
+
+
+def test_run_event_mapper_emits_status_when_last_event_sequence_changes() -> None:
+    mapper = RunEventMapper()
+
+    status_event = mapper.status_to_event(
+        run_id="run-1234",
+        status_payload={
+            "status": "WAITING",
+            "prompt": "Write a message",
+            "last_event_sequence": 11,
+            "last_event_type": "RUN_WAITING",
+        },
+        last_status="WAITING",
+        last_event_sequence=10,
+        last_event_type="STEP_STARTED",
+    )
+
+    assert status_event is not None
+    assert status_event.status == "WAITING"
+    assert status_event.last_event_sequence == 11
+    assert status_event.last_event_type == "RUN_WAITING"
+
+
+def test_run_event_mapper_emits_status_when_last_event_type_changes() -> None:
+    mapper = RunEventMapper()
+
+    status_event = mapper.status_to_event(
+        run_id="run-1234",
+        status_payload={
+            "status": "WAITING",
+            "prompt": "Write a message",
+            "last_event_sequence": 11,
+            "last_event_type": "RUN_WAITING",
+        },
+        last_status="WAITING",
+        last_event_sequence=11,
+        last_event_type="STEP_STARTED",
+    )
+
+    assert status_event is not None
+    assert status_event.last_event_sequence == 11
+    assert status_event.last_event_type == "RUN_WAITING"
 
 
 def test_run_event_mapper_keeps_agent_assistant_message_fields() -> None:

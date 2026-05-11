@@ -29,6 +29,8 @@ class PollingEvent:
     run_id: str = ""
     status: str = ""
     prompt: str = ""
+    last_event_sequence: int | None = None
+    last_event_type: str = ""
     text: str = ""
     user_input_text: str = ""
     assistant_text: str = ""

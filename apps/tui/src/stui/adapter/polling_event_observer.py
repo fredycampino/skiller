@@ -24,13 +24,17 @@ _TERMINAL_STATUSES = {
 
 @dataclass
 class PollingEventObserver:
-    interval_seconds: float = 0.1
+    interval_seconds: float = 0.5
     invoker: CliInvoker = field(default_factory=CliInvoker)
     mapper: RunEventMapper = field(default_factory=RunEventMapper)
     _observer: RunObserver | None = field(default=None, init=False, repr=False)
     _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _last_status: str = field(default="", init=False, repr=False)
+    _last_terminal_event_sequence: int | None = field(default=None, init=False, repr=False)
+    _last_terminal_event_type: str = field(default="", init=False, repr=False)
     _seen_event_ids: set[str] = field(default_factory=set, init=False, repr=False)
+    _max_seen_sequence: int = field(default=0, init=False, repr=False)
+    _max_seen_event_type: str = field(default="", init=False, repr=False)
 
     def subscribe(self, observer: RunObserver) -> None:
         if observer.type != ObserverType.RUN:
@@ -42,7 +46,11 @@ class PollingEventObserver:
         self.unsubscribe_current()
         self._observer = observer
         self._last_status = ""
+        self._last_terminal_event_sequence = None
+        self._last_terminal_event_type = ""
         self._seen_event_ids = set()
+        self._max_seen_sequence = 0
+        self._max_seen_event_type = ""
         self._task = asyncio.create_task(self._poll_loop(observer))
 
     def unsubscribe(self, observer: RunObserver) -> None:
@@ -54,7 +62,11 @@ class PollingEventObserver:
     def unsubscribe_current(self) -> None:
         self._observer = None
         self._last_status = ""
+        self._last_terminal_event_sequence = None
+        self._last_terminal_event_type = ""
         self._seen_event_ids = set()
+        self._max_seen_sequence = 0
+        self._max_seen_event_type = ""
         if self._task is None or self._task.done():
             self._task = None
             return
@@ -68,7 +80,8 @@ class PollingEventObserver:
                 events = await self._poll_run_events(observer)
                 if events:
                     observer.notify(events)
-                if self._consume_status_events(events):
+                self._consume_events(events)
+                if self._should_stop_after_events():
                     self._observer = None
                     return
 
@@ -98,6 +111,8 @@ class PollingEventObserver:
             run_id=run_id,
             status_payload=status_payload,
             last_status=self._last_status,
+            last_event_sequence=self._last_terminal_event_sequence,
+            last_event_type=self._last_terminal_event_type,
         )
         if status_event is not None:
             observed.append(status_event)
@@ -108,15 +123,36 @@ class PollingEventObserver:
             return False
         return _is_same_run_observer(self._observer, observer)
 
-    def _consume_status_events(self, events: list[PollingEvent]) -> bool:
-        is_terminal = False
+    def _consume_events(self, events: list[PollingEvent]) -> None:
         for event in events:
+            if event.kind == PollingEventKind.LOG and event.sequence is not None:
+                if event.sequence >= self._max_seen_sequence:
+                    self._max_seen_sequence = event.sequence
+                    self._max_seen_event_type = event.event_type.strip().upper()
+                continue
             if event.kind != PollingEventKind.STATUS:
                 continue
             self._last_status = event.status
             if event.status in _TERMINAL_STATUSES:
-                is_terminal = True
-        return is_terminal
+                self._last_terminal_event_sequence = event.last_event_sequence
+                self._last_terminal_event_type = event.last_event_type.strip().upper()
+            else:
+                self._last_terminal_event_sequence = None
+                self._last_terminal_event_type = ""
+
+    def _should_stop_after_events(self) -> bool:
+        terminal_status = self._last_status.strip().upper()
+        if terminal_status not in _TERMINAL_STATUSES:
+            return False
+        if self._last_terminal_event_sequence is None:
+            return False
+        if self._max_seen_sequence > self._last_terminal_event_sequence:
+            return True
+        if self._max_seen_sequence < self._last_terminal_event_sequence:
+            return False
+        if not self._last_terminal_event_type:
+            return True
+        return self._max_seen_event_type == self._last_terminal_event_type
 
     def _run_json_command(self, *args: str) -> dict[str, Any]:
         completed = self.invoker.run(*args)

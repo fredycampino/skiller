@@ -11,10 +11,6 @@ from skiller.application.use_cases.shared.step_execution_result import (
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
-from skiller.domain.step.execution_output_store_port import (
-    ExecutionOutputStorePort,
-)
 from skiller.domain.step.step_execution_model import LlmPromptOutput, StepExecution
 
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL | re.IGNORECASE)
@@ -26,21 +22,16 @@ class _LlmPromptStepConfig:
     prompt: str
     output: dict[str, Any]
     schema: dict[str, Any]
-    large_result: bool
 
 
 class ExecuteLlmPromptStepUseCase:
     def __init__(
         self,
         store: RunStorePort,
-        execution_output_store: ExecutionOutputStorePort,
         llm: LLMPort,
-        large_result_truncator: LargeResultTruncator,
     ) -> None:
         self.store = store
-        self.execution_output_store = execution_output_store
         self.llm = llm
-        self.large_result_truncator = large_result_truncator
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
@@ -55,19 +46,13 @@ class ExecuteLlmPromptStepUseCase:
 
         parsed = self._parse_response_payload(step_id=step_id, response=response)
         self._validate_schema(schema=config.schema, value=parsed, path="$")
-        output = self._build_output(
-            run_id=current_step.run_id,
-            step_id=step_id,
-            parsed=parsed,
-            large_result=config.large_result,
-        )
+        output = self._build_output(parsed)
         execution = StepExecution(
             step_type=current_step.step_type,
             input={
                 "system": config.system,
                 "prompt": config.prompt,
                 "output": config.output,
-                "large_result": config.large_result,
             },
             evaluation={"model": str(response.get("model", "")).strip() or None},
             output=output,
@@ -83,7 +68,6 @@ class ExecuteLlmPromptStepUseCase:
             prompt=prompt,
             output=output,
             schema=self._parse_schema(step_id=step_id, output=output),
-            large_result=self._parse_large_result(step_id=step_id, value=step.get("large_result")),
         )
 
     def _parse_prompt(self, *, step_id: str, step: dict[str, Any]) -> str:
@@ -108,51 +92,16 @@ class ExecuteLlmPromptStepUseCase:
             raise ValueError(f"Step '{step_id}' requires output.schema object")
         return schema
 
-    def _parse_large_result(self, *, step_id: str, value: object) -> bool:
-        if value is None:
-            return False
-        if isinstance(value, bool):
-            return value
-        raise ValueError(f"Step '{step_id}' requires boolean large_result")
-
     def _raise_if_failed(self, *, step_id: str, response: dict[str, Any]) -> None:
         if response.get("ok") is False:
             error = str(response.get("error", "")).strip() or f"LLM step '{step_id}' failed"
             raise ValueError(error)
 
-    def _build_output(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        parsed: Any,
-        large_result: bool,
-    ) -> LlmPromptOutput:
-        full_text = self._build_result_text(parsed)
-        text_ref = self._build_text_ref(parsed)
-        if not large_result:
-            return LlmPromptOutput(
-                text=full_text,
-                text_ref=text_ref,
-                data=parsed,
-            )
-
-        full_value = {"data": self._clone(parsed)}
-        output_data = self.large_result_truncator.truncate(parsed)
-        output_text = self._build_result_text(output_data)
-
-        body_ref = self.execution_output_store.store_execution_output(
-            run_id=run_id,
-            step_id=step_id,
-            output_body={
-                "value": full_value,
-            },
-        )
+    def _build_output(self, parsed: Any) -> LlmPromptOutput:
         return LlmPromptOutput(
-            text=output_text,
-            text_ref=text_ref,
-            data=output_data,
-            body_ref=body_ref,
+            text=self._build_result_text(parsed),
+            text_ref=self._build_text_ref(parsed),
+            data=parsed,
         )
 
     def _advance(self, *, current_step: CurrentStep, execution: StepExecution) -> StepAdvance:

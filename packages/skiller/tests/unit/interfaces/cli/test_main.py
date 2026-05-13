@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.interfaces.cli import main as cli_main
 
 
@@ -18,9 +19,8 @@ class _FakeController:
         self.receive_channel_calls: list[
             tuple[str, str, dict[str, str], str | None, str | None]
         ] = []
-        self.logs_calls: list[str] = []
-        self.execution_output_calls: list[str] = []
-        self.status_calls: list[str] = []
+        self.logs_calls: list[dict[str, object]] = []
+        self.status_calls: list[dict[str, object]] = []
         self.list_runs_calls: list[tuple[int, list[str] | None]] = []
         self.run_result = {"run_id": "run-1", "status": "CREATED"}
         self.start_worker_result = {
@@ -103,16 +103,34 @@ class _FakeController:
         self.delete_run_calls.append(run_id)
         return {"run_id": run_id, "status": "DELETED", "deleted": True}
 
-    def logs(self, run_id: str) -> list[dict[str, object]]:
-        self.logs_calls.append(run_id)
+    def logs(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
+        self.logs_calls.append(
+            {
+                "run_id": run_id,
+                "after_sequence": after_sequence,
+                "limit": limit,
+            }
+        )
         return list(self.logs_result)
 
-    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
-        self.execution_output_calls.append(body_ref)
-        return {"data": {"reply": "hola"}}
-
-    def status(self, run_id: str) -> dict[str, object] | None:
-        self.status_calls.append(run_id)
+    def status(
+        self,
+        run_id: str,
+        *,
+        include_context: bool = False,
+    ) -> dict[str, object] | None:
+        self.status_calls.append(
+            {
+                "run_id": run_id,
+                "include_context": include_context,
+            }
+        )
         if not self.status_results:
             return None
         if len(self.status_results) == 1:
@@ -161,9 +179,7 @@ class _FakeController:
         external_id: str | None = None,
         dedup_key: str | None = None,
     ) -> dict[str, object]:
-        self.receive_channel_calls.append(
-            (channel, key, payload, external_id, dedup_key)
-        )
+        self.receive_channel_calls.append((channel, key, payload, external_id, dedup_key))
         return {
             "accepted": True,
             "duplicate": False,
@@ -300,7 +316,11 @@ def test_run_can_include_logs_in_response(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert controller.logs_calls[-1] == "run-1"
+    assert controller.logs_calls[-1] == {
+        "run_id": "run-1",
+        "after_sequence": None,
+        "limit": None,
+    }
     assert '"logs": [' in captured.out
     assert '"type": "STEP_SUCCESS"' in captured.out
 
@@ -452,7 +472,13 @@ def test_run_failure_with_start_server_can_include_logs(
 
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert controller.logs_calls == ["run-1"]
+    assert controller.logs_calls == [
+        {
+            "run_id": "run-1",
+            "after_sequence": None,
+            "limit": None,
+        }
+    ]
     assert '"logs": [' in captured.out
 
 
@@ -754,8 +780,7 @@ def test_cloudflared_ensure_command(
     assert '"hostname": "skillerwh.campino.me"' in captured.out
     assert '"dns_status": "created"' in captured.out
     assert (
-        '"config_path": "/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml"'
-        in captured.out
+        '"config_path": "/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml"' in captured.out
     )
 
 
@@ -1244,6 +1269,44 @@ def test_worker_resume_reuses_runtime_resume(
     assert '"resume_status": "RESUMED"' in captured.out
 
 
+def test_logs_accepts_cursor_options(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(["logs", "run-123", "--after", "10", "--limit", "50"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.logs_calls == [
+        {
+            "run_id": "run-123",
+            "after_sequence": 10,
+            "limit": 50,
+        }
+    ]
+    assert '"type": "STEP_SUCCESS"' in captured.out
+
+
+def test_logs_help_describes_raw_events_and_cursor(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli_main.main(["logs", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 0
+    assert "List raw persisted runtime events" in captured.out
+    assert "This is not the user-facing transcript" in captured.out
+    assert "skiller logs <run_id> --after <sequence>" in captured.out
+    assert "status.last_event_sequence" in captured.out
+
+
 def test_watch_prints_progress_and_final_status(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -1258,9 +1321,9 @@ def test_watch_prints_progress_and_final_status(
         {
             "id": "evt-1",
             "type": "RUN_WAITING",
+            "step_id": "wait_signal",
+            "step_type": "wait_webhook",
             "payload": {
-                "step": "wait_signal",
-                "step_type": "wait_webhook",
                 "output": {
                     "text": "Waiting webhook: test:42.",
                     "value": {"webhook": "test", "key": "42"},
@@ -1317,24 +1380,46 @@ def test_status_can_include_waiting_metadata(
     assert '"wait_type": "webhook"' in captured.out
     assert '"webhook": "market-signal"' in captured.out
     assert '"key": "btc-usd"' in captured.out
+    assert controller.status_calls == [
+        {
+            "run_id": "run-1",
+            "include_context": False,
+        }
+    ]
 
 
-def test_execution_output_returns_persisted_body(
+def test_status_can_include_runtime_context(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     controller = _FakeController(None, None, None)
+    controller.status_results = [
+        {
+            "id": "run-1",
+            "status": "WAITING",
+            "current": "ask_user",
+            "context": {
+                "inputs": {},
+                "step_executions": {},
+            },
+        }
+    ]
 
     monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
     monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
 
-    exit_code = cli_main.main(["execution-output", "execution_output:1"])
+    exit_code = cli_main.main(["status", "run-1", "--context"])
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert controller.execution_output_calls == ["execution_output:1"]
-    assert '"reply": "hola"' in captured.out
+    assert controller.status_calls == [
+        {
+            "run_id": "run-1",
+            "include_context": True,
+        }
+    ]
+    assert '"context": {' in captured.out
 
 
 def test_runs_lists_recent_runs(

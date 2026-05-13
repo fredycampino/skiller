@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -12,8 +13,7 @@ class TranscriptMode(StrEnum):
 
 
 class PromptMode(StrEnum):
-    FLOW = "flow"
-    CHAT = "chat"
+    DEFAULT = "default"
     AUTOCOMPLETION = "autocompletion"
     RUNS_TABLE = "runs_table"
     INTERRUPT_PENDING = "interrupt_pending"
@@ -152,7 +152,7 @@ class TranscriptState:
 
 @dataclass
 class PromptState:
-    mode: PromptMode = PromptMode.FLOW
+    mode: PromptMode = PromptMode.DEFAULT
     text: str = ""
     cursor_position: int = 0
     waiting_prompt: str = ""
@@ -179,3 +179,60 @@ class ConsoleScreenState:
     runs_table: RunsTableState = field(default_factory=RunsTableState)
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
+
+    def set_prompt(
+        self,
+        *,
+        text: str = "",
+        cursor_position: int = 0,
+        waiting_prompt: str = "",
+        mode: PromptMode = PromptMode.DEFAULT,
+    ) -> None:
+        self.prompt.text = text
+        self.prompt.cursor_position = cursor_position
+        self.prompt.waiting_prompt = waiting_prompt
+        self.prompt.mode = mode
+
+    def set_transcript(
+        self,
+        *,
+        mode: TranscriptMode = TranscriptMode.FLOW,
+        items: list[TranscriptItem] | None = None,
+    ) -> None:
+        self.transcript = TranscriptState(
+            mode=mode,
+            items=list(items or []),
+        )
+
+    def set_status(
+        self,
+        *,
+        kind: ViewStatusKind = ViewStatusKind.HIDDEN,
+        message: str = "",
+    ) -> None:
+        self.view_status.kind = kind
+        self.view_status.message = message
+
+    def set_autocompletion(
+        self,
+        autocompletion: CompletionState | None = None,
+    ) -> None:
+        self.autocompletion = autocompletion
+
+    def set_runs_table(
+        self,
+        *,
+        visible: bool = False,
+        command: str = "",
+        rows: Sequence[RunsPortItem] = (),
+    ) -> None:
+        self.runs_table.visible = visible
+        self.runs_table.command = command
+        self.runs_table.rows = tuple(rows)
+
+    def load_session(
+        self,
+        *,
+        run_id: str,
+    ) -> None:
+        self.session_key = run_id

@@ -202,6 +202,8 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
     if not isinstance(payload, dict):
         return f"[{_display_run_id(run_id)}] {event_type}"
 
+    step_id = event.get("step_id")
+    step_type = event.get("step_type")
     label = event_type
     parts: list[str] = []
 
@@ -214,26 +216,26 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
         parts = [_format_field("source", payload.get("source"))]
     elif event_type == "STEP_STARTED":
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("step_type", payload.get("step_type")),
+            _format_field("step", step_id),
+            _format_field("step_type", step_type),
         ]
     elif event_type == "STEP_SUCCESS":
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("step_type", payload.get("step_type")),
+            _format_field("step", step_id),
+            _format_field("step_type", step_type),
             _format_field("output", payload.get("output")),
             _format_field("next", payload.get("next")),
         ]
     elif event_type == "STEP_ERROR":
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("step_type", payload.get("step_type")),
+            _format_field("step", step_id),
+            _format_field("step_type", step_type),
             _format_field("error", payload.get("error")),
         ]
     elif event_type == "RUN_WAITING":
         parts = [
-            _format_field("step", payload.get("step")),
-            _format_field("step_type", payload.get("step_type")),
+            _format_field("step", step_id),
+            _format_field("step_type", step_type),
             _format_field("output", payload.get("output")),
         ]
     elif event_type == "RUN_FINISHED":
@@ -341,19 +343,46 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
+    status_parser.add_argument(
+        "--context",
+        action="store_true",
+        help="Include persisted runtime context in the status output",
+    )
 
     runs_parser = sub.add_parser("runs", help="List recent runs")
     runs_parser.add_argument("--limit", type=int, default=20)
     runs_parser.add_argument("--status", action="append", default=[])
 
-    logs_parser = sub.add_parser("logs", help="List run events")
-    logs_parser.add_argument("run_id")
-
-    execution_output_parser = sub.add_parser(
-        "execution-output",
-        help="Get persisted output body by body_ref",
+    logs_parser = sub.add_parser(
+        "logs",
+        help="List raw run events",
+        description=(
+            "List raw persisted runtime events for a run as JSON. "
+            "This is not the user-facing transcript."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  skiller logs <run_id>\n"
+            "  skiller logs <run_id> --after <sequence>\n"
+            "  skiller logs <run_id> --after <sequence> --limit 100\n\n"
+            "Use status.last_event_sequence as the cursor for incremental reads. "
+            "--after returns events with sequence greater than the provided cursor."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    execution_output_parser.add_argument("body_ref")
+    logs_parser.add_argument("run_id")
+    logs_parser.add_argument(
+        "--after",
+        type=int,
+        default=None,
+        help="Return events with sequence greater than this cursor",
+    )
+    logs_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of events to return",
+    )
 
     watch_parser = sub.add_parser("watch", help="Watch a run until it finishes or waits")
     watch_parser.add_argument("run_id")
@@ -944,7 +973,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["deleted"] else 1
 
     if args.command == "status":
-        run = controller.status(args.run_id)
+        run = controller.status(args.run_id, include_context=args.context)
         if run is None:
             print("Run not found")
             return 1
@@ -960,20 +989,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "logs":
-        events = controller.logs(args.run_id)
+        events = controller.logs(
+            args.run_id,
+            after_sequence=args.after,
+            limit=args.limit,
+        )
         print(json.dumps(events, indent=2))
-        return 0
-
-    if args.command == "execution-output":
-        try:
-            output_body = controller.get_execution_output(args.body_ref)
-        except ValueError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        if output_body is None:
-            print("Execution output not found", file=sys.stderr)
-            return 1
-        print(json.dumps(output_body, indent=2))
         return 0
 
     if args.command == "watch":

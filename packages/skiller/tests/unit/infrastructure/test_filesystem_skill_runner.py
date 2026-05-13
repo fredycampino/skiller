@@ -3,17 +3,10 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 
 pytestmark = pytest.mark.unit
-
-
-class _FakeExecutionOutputStore:
-    def __init__(self, payloads: dict[str, dict[str, object]] | None = None) -> None:
-        self.payloads = payloads or {}
-
-    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
-        return self.payloads.get(body_ref)
 
 
 def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
@@ -223,49 +216,6 @@ def test_render_step_can_resolve_output_value_from_persisted_output() -> None:
 
     assert rendered["message"] == "existing_tunnels=tunnel-a\ntunnel-b"
     assert rendered["stderr"] == "tunnel-a\ntunnel-b"
-
-
-def test_render_step_can_resolve_output_value_from_body_ref() -> None:
-    runner = FilesystemSkillRunner(
-        skills_dir="skills",
-        execution_output_store=_FakeExecutionOutputStore(
-            {
-                "execution_output:1": {
-                    "value": {
-                        "ok": True,
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": "full-tunnel-list",
-                    }
-                }
-            }
-        ),
-    )
-
-    rendered = runner.render_step(
-        {
-            "message": '{{output_value("inspect_cloudflared").stderr}}',
-        },
-        {
-            "step_executions": {
-                "inspect_cloudflared": {
-                    "step_type": "shell",
-                    "input": {},
-                    "evaluation": {},
-                    "output": {
-                        "text": "ready",
-                        "value": {
-                            "truncated": True,
-                            "stderr": "preview...",
-                        },
-                        "body_ref": "execution_output:1",
-                    },
-                }
-            }
-        },
-    )
-
-    assert rendered["message"] == "full-tunnel-list"
 
 
 def test_render_step_raises_clear_error_when_output_value_path_is_missing() -> None:

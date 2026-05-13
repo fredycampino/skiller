@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import pytest
+
 from skiller.infrastructure.config.settings import Settings
 from skiller.local.channels.whatsapp.pair_service import WhatsAppPairService
 

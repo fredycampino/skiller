@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
+from rich.console import Group
+from rich.markdown import Markdown
+from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -21,6 +27,7 @@ from stui.screen.runs_table_view import (
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
 from stui.screen.transcript_log import TranscriptLog
+from stui.usecase.run_event_context import RunEventContext
 from stui.viewmodel.console_screen_state import ConsoleScreenState
 from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
 
@@ -139,6 +146,11 @@ class ConsoleScreen(App[str]):
             self.exit(self.state.session_key)
             return
 
+        if _is_local_dev_status_command(normalized_text):
+            self._append_local_dev_status(raw_text=normalized_text)
+            self._prompt().focus()
+            return
+
         await self.viewmodel.prompt_enter()
         self._prompt().focus()
 
@@ -190,12 +202,9 @@ class ConsoleScreen(App[str]):
         runs_table = self._runs_table()
         selected_run = runs_table.selected_run
         self.viewmodel.select_runs_table_row(
-            prompt_text=self._prompt().text(),
-            mode=selected_run.mode if selected_run is not None else RunRowMode.FLOW,
-            status=selected_run.status if selected_run is not None else RunRowStatus.SUCCESS,
+            prompt_text=self.state.runs_table.command,
             run_id=selected_run.run_id if selected_run is not None else "",
             skill_name=selected_run.skill if selected_run is not None else "",
-            is_exit=False,
         )
         self._prompt().focus()
 
@@ -235,6 +244,31 @@ class ConsoleScreen(App[str]):
 
     def _transcript_log(self) -> TranscriptLog:
         return self.query_one("#transcript-log", TranscriptLog)
+
+    def _append_local_dev_status(self, *, raw_text: str) -> None:
+        transcript = self._transcript_log()
+        context_payload = _build_run_event_context_payload(self.viewmodel._run_event_context)  # noqa: SLF001
+        state_payload = _build_console_screen_state_payload(self.state)
+
+        if transcript.lines:
+            transcript.write(Text(""))
+        transcript.write(
+            Text(
+                f"{self.ui_theme.user_icon} {raw_text}",
+                style=self.ui_theme.rich_style(self.ui_theme.color_text_accent),
+            )
+        )
+        transcript.write(
+            Group(
+                Text(""),
+                Text("[dev] RunEventContext"),
+                Markdown(_render_json_markdown_block(context_payload)),
+                Text(""),
+                Text("[dev] ConsoleScreenState"),
+                Markdown(_render_json_markdown_block(state_payload)),
+            ),
+            scroll_end=True,
+        )
 
     def _refresh_from_state(self, force_scroll: bool = False) -> None:
         self._refresh_transcript()
@@ -310,6 +344,7 @@ class ConsoleScreen(App[str]):
             mode=_resolve_run_row_mode(run),
             status=_resolve_run_row_status(run),
             skill=run.skill_ref,
+            updated_at=_format_run_updated_at(run.updated_at),
             run_id=run.id,
         )
 
@@ -355,3 +390,81 @@ def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
     if normalized_status == "succeeded":
         return RunRowStatus.SUCCESS
     return RunRowStatus.RUNNING
+
+
+def _format_run_updated_at(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        return "-"
+
+    parsers = (
+        lambda text: datetime.strptime(text, "%Y-%m-%d %H:%M:%S"),
+        lambda text: datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ"),
+        lambda text: datetime.fromisoformat(text.replace("Z", "+00:00")),
+    )
+    for parse in parsers:
+        try:
+            return parse(normalized).strftime("%m-%d %H:%M")
+        except ValueError:
+            continue
+    return "-"
+
+
+def _is_local_dev_status_command(text: str) -> bool:
+    normalized = text.strip().lower()
+    return normalized == "/dev"
+
+
+def _build_run_event_context_payload(context: RunEventContext) -> dict[str, object]:
+    return {
+        "run_id": context.run_id,
+        "skill_name": context.skill_name,
+        "status": context.status.value,
+        "event_ids_count": len(context.event_ids),
+    }
+
+
+def _build_console_screen_state_payload(state: ConsoleScreenState) -> dict[str, object]:
+    return {
+        "session_key": state.session_key,
+        "transcript": {
+            "mode": state.transcript.mode.value,
+            "items_count": len(state.transcript.items),
+        },
+        "prompt": {
+            "mode": state.prompt.mode.value,
+            "text": state.prompt.text,
+            "cursor_position": state.prompt.cursor_position,
+            "waiting_prompt": state.prompt.waiting_prompt,
+        },
+        "runs_table": {
+            "visible": state.runs_table.visible,
+            "command": state.runs_table.command,
+            "rows_count": len(state.runs_table.rows),
+        },
+        "view_status": {
+            "kind": state.view_status.kind.value,
+            "message": state.view_status.message,
+        },
+        "autocompletion": _build_autocompletion_payload(state),
+    }
+
+
+def _build_autocompletion_payload(
+    state: ConsoleScreenState,
+) -> dict[str, object] | None:
+    completion = state.autocompletion
+    if completion is None:
+        return None
+    return {
+        "visible": completion.visible,
+        "query": completion.query,
+        "items_count": len(completion.items),
+        "selected_index": completion.selected_index,
+        "replace_from": completion.replace_from,
+        "replace_to": completion.replace_to,
+    }
+
+
+def _render_json_markdown_block(payload: dict[str, object]) -> str:
+    return f"```json\n{json.dumps(payload, ensure_ascii=True, indent=2)}\n```"

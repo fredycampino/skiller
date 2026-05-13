@@ -6,7 +6,7 @@ Core runtime responsibilities:
 - `runs` store the persisted state of a run
 - `waits` store active and resolved step waits
 - `external_events` store inbound payloads that may resume a wait
-- `events` store the generic runtime event stream used for observability
+- `log_events` store the generic runtime event stream used for observability
 
 Waiting and resume matching are normalized around:
 - `source_type`
@@ -49,5 +49,5 @@ Main flow:
 Related docs:
 - [`../skills/skill-schema.md`](../skills/skill-schema.md) for the YAML schema used by internal agents and `--file` inputs
 - [`../events/context-model.md`](../events/context-model.md)
-- [`../events/runtime-events.md`](../events/runtime-events.md)
+- [`../events/event.md`](../events/event.md)
 - [`../db/schema.md`](../db/schema.md)

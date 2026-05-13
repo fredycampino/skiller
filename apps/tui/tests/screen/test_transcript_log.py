@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import pytest
 from rich.segment import Segment
-from stui.screen.transcript_log import TranscriptLog
 from textual.geometry import Offset
 from textual.selection import Selection
 from textual.strip import Strip
+
+from stui.screen.transcript_log import TranscriptLog
 
 pytestmark = pytest.mark.unit
 

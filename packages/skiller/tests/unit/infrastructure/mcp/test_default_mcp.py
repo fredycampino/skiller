@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 
 pytestmark = pytest.mark.unit

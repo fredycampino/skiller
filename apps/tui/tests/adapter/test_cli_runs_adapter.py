@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass
 
 import pytest
+
 from stui.adapter.cli_runs_adapter import CliRunsAdapter
 from stui.port.runs_port import RunsPortItem
 

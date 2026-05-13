@@ -1,7 +1,14 @@
 from typing import Any
 
-from skiller.application.use_cases.run.append_runtime_event import (
-    AppendRuntimeEventUseCase,
+from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
+from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessagePayload,
+    AgentToolCallPayload,
+    AgentToolResultPayload,
+)
+from skiller.domain.event.event_model import (
+    AgentEventPayload,
+    AgentLifecyclePayload,
     RuntimeEventType,
 )
 
@@ -26,14 +33,16 @@ class AgentRuntimeEventEmitter:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
-            payload={
-                "step": step_id,
-                "step_type": "agent",
-                "turn_id": turn_id,
-                "sequence": sequence,
-                "message_type": message_type,
-                "text": text,
-            },
+            payload=AgentEventPayload(
+                step_id=step_id,
+                turn_id=turn_id,
+                agent_sequence=sequence,
+                body=AgentAssistantMessagePayload(
+                    turn_id=turn_id,
+                    message_type=message_type,
+                    text=text,
+                ),
+            ),
         )
 
     def emit_tool_call(
@@ -51,23 +60,21 @@ class AgentRuntimeEventEmitter:
         if self.append_runtime_event_use_case is None:
             return
 
-        payload: dict[str, Any] = {
-            "step": step_id,
-            "step_type": "agent",
-            "turn_id": turn_id,
-            "tool_call_id": tool_call_id,
-            "tool": tool,
-            "args": args,
-        }
-        if sequence is not None:
-            payload["sequence"] = sequence
-        if parent_sequence is not None:
-            payload["parent_sequence"] = parent_sequence
-
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.AGENT_TOOL_CALL,
-            payload=payload,
+            payload=AgentEventPayload(
+                step_id=step_id,
+                turn_id=turn_id,
+                agent_sequence=sequence or 0,
+                body=AgentToolCallPayload(
+                    turn_id=turn_id,
+                    parent_sequence=parent_sequence,
+                    tool_call_id=tool_call_id,
+                    tool=tool,
+                    args=args,
+                ),
+            ),
         )
 
     def emit_tool_result(
@@ -80,30 +87,32 @@ class AgentRuntimeEventEmitter:
         parent_sequence: int | None = None,
         tool_call_id: str,
         tool: str,
-        context_ref: str,
-        output: dict[str, Any],
+        status: str,
+        data: dict[str, Any],
+        text: str | None,
+        error: str | None,
     ) -> None:
         if self.append_runtime_event_use_case is None:
             return
 
-        payload: dict[str, Any] = {
-            "step": step_id,
-            "step_type": "agent",
-            "turn_id": turn_id,
-            "tool_call_id": tool_call_id,
-            "tool": tool,
-            "context_ref": context_ref,
-            "output": output,
-        }
-        if sequence is not None:
-            payload["sequence"] = sequence
-        if parent_sequence is not None:
-            payload["parent_sequence"] = parent_sequence
-
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.AGENT_TOOL_RESULT,
-            payload=payload,
+            payload=AgentEventPayload(
+                step_id=step_id,
+                turn_id=turn_id,
+                agent_sequence=sequence or 0,
+                body=AgentToolResultPayload(
+                    turn_id=turn_id,
+                    parent_sequence=parent_sequence,
+                    tool_call_id=tool_call_id,
+                    tool=tool,
+                    status=status,
+                    data=data,
+                    text=text,
+                    error=error,
+                ),
+            ),
         )
 
     def emit_interrupted(
@@ -119,12 +128,12 @@ class AgentRuntimeEventEmitter:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.AGENT_INTERRUPTED,
-            payload={
-                "step": step_id,
-                "step_type": "agent",
-                "turn_id": turn_id,
-                "stop_reason": "interrupted",
-            },
+            step_id=step_id,
+            step_type="agent",
+            payload=AgentLifecyclePayload(
+                turn_id=turn_id,
+                stop_reason="interrupted",
+            ),
         )
 
     def emit_max_turns_exhausted(
@@ -140,10 +149,10 @@ class AgentRuntimeEventEmitter:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
-            payload={
-                "step": step_id,
-                "step_type": "agent",
-                "turn_id": turn_id,
-                "stop_reason": "max_turns_exhausted",
-            },
+            step_id=step_id,
+            step_type="agent",
+            payload=AgentLifecyclePayload(
+                turn_id=turn_id,
+                stop_reason="max_turns_exhausted",
+            ),
         )

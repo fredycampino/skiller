@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.tools.shell.policy import ShellCommandPolicy
 
 pytestmark = pytest.mark.unit

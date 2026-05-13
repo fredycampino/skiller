@@ -1,7 +1,14 @@
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.application.query_service import RunQueryService
+from skiller.domain.event.event_model import (
+    RuntimeEvent,
+    RuntimeEventType,
+    RunWaitingPayload,
+    StepSuccessPayload,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -13,6 +20,10 @@ class _FakeGetRunStatusUseCase:
                 "id": run_id,
                 "status": "WAITING",
                 "current": "ask_user",
+                "context": {
+                    "inputs": {},
+                    "step_executions": {},
+                },
             }
         )
 
@@ -23,23 +34,49 @@ class _FakeGetWaitingMetadataUseCase:
 
 
 class _FakeGetRunLogsUseCase:
-    def execute(self, run_id: str) -> list[dict[str, object]]:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def execute(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        limit: int | None = None,
+    ) -> list[RuntimeEvent]:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "after_sequence": after_sequence,
+                "limit": limit,
+            }
+        )
         return [
-            {
-                "sequence": 10,
-                "id": "evt-1",
-                "type": "STEP_SUCCESS",
-                "payload": {"step": "agent"},
-            },
-            {
-                "sequence": 11,
-                "id": "evt-2",
-                "type": "RUN_WAITING",
-                "payload": {"step": "ask_user"},
-            },
+            RuntimeEvent(
+                sequence=10,
+                id="evt-1",
+                run_id=run_id,
+                type=RuntimeEventType.STEP_SUCCESS,
+                step_id="agent",
+                step_type="agent",
+                agent_sequence=None,
+                created_at="2026-05-12 10:00:00",
+                payload=StepSuccessPayload(output={}),
+            ),
+            RuntimeEvent(
+                sequence=11,
+                id="evt-2",
+                run_id=run_id,
+                type=RuntimeEventType.RUN_WAITING,
+                step_id="ask_user",
+                step_type="wait_input",
+                agent_sequence=None,
+                created_at="2026-05-12 10:00:01",
+                payload=RunWaitingPayload(output={}),
+            ),
         ]
 
-    def latest(self, run_id: str) -> dict[str, object]:
+    def latest(self, run_id: str) -> RuntimeEvent:
         return self.execute(run_id)[-1]
 
 
@@ -50,7 +87,6 @@ class _UnusedUseCase:
 
 def test_query_service_status_includes_last_event_cursor() -> None:
     service = RunQueryService(
-        get_execution_output_use_case=_UnusedUseCase(),
         get_run_status_use_case=_FakeGetRunStatusUseCase(),
         get_run_logs_use_case=_FakeGetRunLogsUseCase(),
         get_runs_use_case=_UnusedUseCase(),
@@ -67,3 +103,67 @@ def test_query_service_status_includes_last_event_cursor() -> None:
         "last_event_sequence": 11,
         "last_event_type": "RUN_WAITING",
     }
+
+
+def test_query_service_status_can_include_runtime_context() -> None:
+    service = RunQueryService(
+        get_run_status_use_case=_FakeGetRunStatusUseCase(),
+        get_run_logs_use_case=_FakeGetRunLogsUseCase(),
+        get_runs_use_case=_UnusedUseCase(),
+        get_waiting_metadata_use_case=_FakeGetWaitingMetadataUseCase(),
+    )
+
+    status = service.get_status("run-1", include_context=True)
+
+    assert status is not None
+    assert status["context"] == {
+        "inputs": {},
+        "step_executions": {},
+    }
+
+
+def test_query_service_logs_returns_public_json() -> None:
+    get_logs = _FakeGetRunLogsUseCase()
+    service = RunQueryService(
+        get_run_status_use_case=_UnusedUseCase(),
+        get_run_logs_use_case=get_logs,
+        get_runs_use_case=_UnusedUseCase(),
+        get_waiting_metadata_use_case=_UnusedUseCase(),
+    )
+
+    logs = service.get_logs("run-1", after_sequence=10, limit=50)
+
+    assert get_logs.calls == [
+        {
+            "run_id": "run-1",
+            "after_sequence": 10,
+            "limit": 50,
+        }
+    ]
+
+    assert logs == [
+        {
+            "sequence": 10,
+            "id": "evt-1",
+            "run_id": "run-1",
+            "type": "STEP_SUCCESS",
+            "created_at": "2026-05-12 10:00:00",
+            "step_id": "agent",
+            "step_type": "agent",
+            "agent_sequence": None,
+            "payload": {"output": {}},
+        },
+        {
+            "sequence": 11,
+            "id": "evt-2",
+            "run_id": "run-1",
+            "type": "RUN_WAITING",
+            "created_at": "2026-05-12 10:00:01",
+            "step_id": "ask_user",
+            "step_type": "wait_input",
+            "agent_sequence": None,
+            "payload": {
+                "output": {},
+            },
+        },
+    ]

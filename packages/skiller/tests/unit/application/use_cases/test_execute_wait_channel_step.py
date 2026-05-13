@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.execute.execute_wait_channel_step import (
     ExecuteWaitChannelStepUseCase,
 )

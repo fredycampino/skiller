@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from skiller.infrastructure.config.settings import Settings
 from skiller.local.server.process_service import WebhookProcessService
 

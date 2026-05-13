@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentStatus
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksResult
-from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunStatus
 from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
@@ -19,6 +19,11 @@ from skiller.application.use_cases.skill.skill_server_checker import (
     SkillServerCheckStatus,
 )
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookStatus
+from skiller.domain.event.event_model import (
+    RuntimeEventPayload,
+    RuntimeEventType,
+    runtime_event_payload_to_dict,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -64,13 +69,13 @@ class _FakeAppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, object],
+        payload: RuntimeEventPayload | dict[str, object],
     ) -> None:
         self.calls.append(
             {
                 "run_id": run_id,
                 "event_type": event_type,
-                "payload": payload,
+                "payload": runtime_event_payload_to_dict(payload),
             }
         )
 
@@ -268,7 +273,6 @@ def _build_service(
     service = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SimpleNamespace(init_db=lambda: None),
-            execution_output_store=SimpleNamespace(init_db=lambda: None),
             webhook_registry=SimpleNamespace(init_db=lambda: None),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -527,7 +531,6 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
     service = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SimpleNamespace(init_db=lambda: None),
-            execution_output_store=SimpleNamespace(init_db=lambda: None),
             webhook_registry=SimpleNamespace(init_db=lambda: None),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,

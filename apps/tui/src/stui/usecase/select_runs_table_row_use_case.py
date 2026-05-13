@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from stui.port.run_port import RunObserver, RunPort
-from stui.screen.runs_table_view import RunRowMode, RunRowStatus
-from stui.usecase.run_event_context import RunEventContext, RunStatus
+from stui.port.event_port import LogEventsListener, LogEventsObserverPort
+from stui.port.run_port import RunPort
+from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     PromptMode,
+    TranscriptMode,
     ViewStatusKind,
 )
+from stui.viewmodel.port_to_viewmodel import to_run_status
 
 
 @dataclass(frozen=True)
@@ -19,60 +21,70 @@ class SelectRunsTableRowResult:
 
 @dataclass(frozen=True)
 class SelectRunsTableRowUseCase:
+    """
+    Selects a run from `/chats` or `/runs`.
+
+    Unknown command: close table only.
+    Empty run id: close table only.
+    Missing runtime status: close table only.
+    Non-waiting runtime status: close table only.
+    Waiting runtime status: load run, activate context, and observe it.
+    """
+
     run_port: RunPort
+    event_observer: LogEventsObserverPort
     context: RunEventContext
 
     def execute(
         self,
-        observer: RunObserver,
+        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         prompt_text: str,
-        mode: RunRowMode,
-        status: RunRowStatus,
         run_id: str,
         skill_name: str,
-        is_exit: bool,
     ) -> SelectRunsTableRowResult:
-        table_command = state.runs_table.command.strip() or prompt_text.strip()
         state.runs_table.visible = False
         state.runs_table.command = ""
+       
 
-        if is_exit:
-            state.prompt.mode = PromptMode.FLOW
+        if prompt_text not in {"/chats", "/runs"}:
+            return SelectRunsTableRowResult(state=state)
+        if not run_id:
             return SelectRunsTableRowResult(state=state)
 
-        normalized_run_id = run_id.strip()
-        if (
-            _is_chats_command(table_command)
-            and mode == RunRowMode.CHAT
-            and status == RunRowStatus.WAITING_INPUT
-            and normalized_run_id
-        ):
-            current_run_id = observer.run_id.strip()
-            if current_run_id:
-                self.run_port.unsubscribe(observer)
-            observer.run_id = normalized_run_id
-            state.autocompletion = None
-            state.prompt.text = ""
-            state.prompt.cursor_position = 0
-            state.prompt.waiting_prompt = ""
-            state.prompt.mode = PromptMode.FLOW
-            state.session_key = normalized_run_id
-            state.view_status.kind = ViewStatusKind.RUNNING
-            state.view_status.message = ""
-            self.context.activate_run(
-                normalized_run_id,
-                skill_name=skill_name.strip() or normalized_run_id,
-                status=RunStatus.RUNNING,
-            )
-            self.run_port.subscribe(observer)
+        runtime_status = self.run_port.status(run_id)
+        if not runtime_status:
             return SelectRunsTableRowResult(state=state)
 
-        state.prompt.mode = PromptMode.FLOW
+        run_mode = RunMode.CHAT
+        transcript_mode = TranscriptMode.CHAT
+        if prompt_text == "/runs":
+            run_mode = RunMode.FLOW
+            transcript_mode = TranscriptMode.FLOW
+
+        run_status = to_run_status(runtime_status)
+        allowed_statuses = {
+            RunStatus.WAITING_INPUT,
+            RunStatus.WAITING_WEBHOOK,
+            RunStatus.WAITING_CHANNEL,
+        }
+        if run_status not in allowed_statuses:
+            return SelectRunsTableRowResult(state=state)
+
+        state.load_session(run_id=run_id)
+        state.set_transcript(mode=transcript_mode)
+        state.set_autocompletion()
+        state.set_prompt(
+            waiting_prompt=runtime_status.prompt,
+            mode=PromptMode.DEFAULT,
+        )
+        state.set_status(kind=ViewStatusKind.WAITING)
+        self.context.activate_run(
+            run_id,
+            skill_name=skill_name,
+            mode=run_mode,
+            status=run_status,
+        )
+        self.event_observer.subscribe(run_id=run_id, listener=observer)
         return SelectRunsTableRowResult(state=state)
-
-
-def _is_chats_command(command_text: str) -> bool:
-    normalized = command_text.strip().lower()
-    return normalized == "/chats" or normalized.startswith("/chats ")

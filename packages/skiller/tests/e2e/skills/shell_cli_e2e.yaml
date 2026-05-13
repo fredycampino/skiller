@@ -11,4 +11,3 @@ inputs:
 steps:
   - shell: run_script
     command: 'sh "{{inputs.script_path}}" "{{inputs.output_path}}" "{{inputs.content}}"'
-    large_result: true

@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from stui.port.run_port import CommandAck, CommandAckStatus
+
+from stui.port.event_models import LogEvent
+from stui.port.waiting_port import WaitingInputAck, WaitingInputStatus
 from stui.usecase import (
     submit_waiting_input_use_case as submit_waiting_input_use_case_module,
 )
 from stui.usecase.run_event_context import (
     RunEventContext,
+    RunMode,
     RunStatus,
 )
 from stui.usecase.submit_waiting_input_use_case import (
@@ -27,31 +30,64 @@ pytestmark = pytest.mark.unit
 
 
 class FakeWaitingPort:
-    def __init__(self, ack: CommandAck) -> None:
+    def __init__(self, ack: WaitingInputAck) -> None:
         self.ack = ack
         self.called_with: list[tuple[str, str]] = []
 
-    def send_input(self, *, run_id: str, text: str) -> CommandAck:
+    def send_input(self, *, run_id: str, text: str) -> WaitingInputAck:
         self.called_with.append((run_id, text))
         return self.ack
 
 
 class FakeRunPort:
     def __init__(self) -> None:
+        self.status_called_with: list[str] = []
+
+    def status(self, run_id: str):  # noqa: ANN001
+        self.status_called_with.append(run_id)
+        raise AssertionError(f"unexpected status call: {run_id}")
+
+
+class FakeEventObserver:
+    def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribed: list[object] = []
         self.unsubscribed: list[object] = []
+        self.current_run_id = current_run_id
+        self.current_listener = current_listener
 
-    def subscribe(self, observer: object) -> None:
-        assert getattr(observer, "run_id", "") == "run-5678"
-        self.subscribed.append(observer)
+    def subscribe(self, *, run_id: str, listener: FakeObserver) -> None:
+        if self.current_listener is not None:
+            previous_listener = self.current_listener
+            self.unsubscribe()
+            self.unsubscribed.append(previous_listener)
+        self.current_listener = listener
+        self.current_run_id = run_id
+        assert self.current_run_id == "run-5678"
+        self.subscribed.append(listener)
 
-    def unsubscribe(self, observer: object) -> None:
-        self.unsubscribed.append(observer)
+    def unsubscribe(self) -> None:
+        self.current_listener = None
+        self.current_run_id = ""
 
 
 class FakeObserver:
-    def __init__(self, run_id: str) -> None:
-        self.run_id = run_id
+    def notify(self, events: list[LogEvent]) -> None:
+        _ = events
+
+
+def _run_context(
+    *,
+    run_id: str = "",
+    skill_name: str = "",
+    mode: RunMode = RunMode.FLOW,
+    status: RunStatus = RunStatus.RUNNING,
+) -> RunEventContext:
+    return RunEventContext(
+        run_id=run_id,
+        skill_name=skill_name,
+        mode=mode,
+        status=status,
+    )
 
 
 def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,25 +102,30 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
 
     async def run() -> None:
         waiting_port = FakeWaitingPort(
-            CommandAck(
-                status=CommandAckStatus.ACCEPTED,
+            WaitingInputAck(
+                status=WaitingInputStatus.ACCEPTED,
                 run_id="run-5678",
-                message="accepted",
+                message="",
             )
         )
         run_port = FakeRunPort()
-        context = RunEventContext()
+        event_observer = FakeEventObserver()
+        context = _run_context()
         context.activate_run(
             "run-1234",
             skill_name="wait_input_test",
+            mode=RunMode.CHAT,
             status=RunStatus.WAITING_INPUT,
         )
         use_case = SubmitWaitingInputUseCase(
             waiting_port=waiting_port,
             run_port=run_port,
+            event_observer=event_observer,
             context=context,
         )
-        observer = FakeObserver(run_id="run-1234")
+        observer = FakeObserver()
+        event_observer.current_run_id = "run-1234"
+        event_observer.current_listener = observer
         state = ConsoleScreenState(
             session_key="main",
             prompt=PromptState(waiting_prompt="Write a message"),
@@ -98,14 +139,16 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         )
 
         assert waiting_port.called_with == [("run-1234", "hello world")]
-        assert run_port.unsubscribed == [observer]
-        assert run_port.subscribed == [observer]
-        assert observer.run_id == "run-5678"
+        assert run_port.status_called_with == []
+        assert event_observer.unsubscribed == [observer]
+        assert event_observer.subscribed == [observer]
+        assert event_observer.current_run_id == "run-5678"
         assert result.state is state
         assert state.session_key == "run-5678"
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert context.run_id == "run-5678"
         assert context.skill_name == "wait_input_test"
+        assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.prompt.waiting_prompt == ""
         assert state.prompt.text == ""
@@ -129,22 +172,28 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
 
     async def run() -> None:
         waiting_port = FakeWaitingPort(
-            CommandAck(
-                status=CommandAckStatus.REJECTED,
+            WaitingInputAck(
+                status=WaitingInputStatus.REJECTED,
+                run_id="run-1234",
                 message="error: input rejected",
             )
         )
         run_port = FakeRunPort()
+        event_observer = FakeEventObserver()
         use_case = SubmitWaitingInputUseCase(
             waiting_port=waiting_port,
             run_port=run_port,
-            context=RunEventContext(
+            event_observer=event_observer,
+            context=_run_context(
                 run_id="run-1234",
                 skill_name="wait_input_test",
+                mode=RunMode.CHAT,
                 status=RunStatus.WAITING_INPUT,
             ),
         )
-        observer = FakeObserver(run_id="run-1234")
+        observer = FakeObserver()
+        event_observer.current_run_id = "run-1234"
+        event_observer.current_listener = observer
         state = ConsoleScreenState(
             session_key="main",
             prompt=PromptState(waiting_prompt="Write a message"),
@@ -157,9 +206,10 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
         )
 
         assert waiting_port.called_with == [("run-1234", "hello")]
-        assert run_port.subscribed == []
-        assert run_port.unsubscribed == []
-        assert observer.run_id == "run-1234"
+        assert run_port.status_called_with == []
+        assert event_observer.subscribed == []
+        assert event_observer.unsubscribed == []
+        assert event_observer.current_run_id == "run-1234"
         assert result.state is state
         assert state.view_status.kind == ViewStatusKind.ERROR
         assert isinstance(state.transcript.items[-1], DispatchErrorItem)
@@ -168,15 +218,66 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
     asyncio.run(run())
 
 
+def test_submit_waiting_input_use_case_normalizes_user_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(
+        submit_waiting_input_use_case_module.asyncio,
+        "to_thread",
+        fake_to_thread,
+    )
+
+    async def run() -> None:
+        waiting_port = FakeWaitingPort(
+            WaitingInputAck(
+                status=WaitingInputStatus.ACCEPTED,
+                run_id="run-5678",
+                message="",
+            )
+        )
+        use_case = SubmitWaitingInputUseCase(
+            waiting_port=waiting_port,
+            run_port=FakeRunPort(),
+            event_observer=FakeEventObserver(),
+            context=_run_context(
+                run_id="run-1234",
+                skill_name="wait_input_test",
+                mode=RunMode.CHAT,
+                status=RunStatus.WAITING_INPUT,
+            ),
+        )
+
+        await use_case.execute(
+            FakeObserver(),
+            state=ConsoleScreenState(session_key="main"),
+            text="  hello world  ",
+        )
+
+        assert waiting_port.called_with == [("run-1234", "hello world")]
+
+    asyncio.run(run())
+
+
 def test_submit_waiting_input_use_case_ignores_missing_waiting_run() -> None:
-    waiting_port = FakeWaitingPort(CommandAck(status=CommandAckStatus.ACCEPTED))
+    waiting_port = FakeWaitingPort(
+        WaitingInputAck(
+            status=WaitingInputStatus.ACCEPTED,
+            run_id="run-5678",
+            message="",
+        )
+    )
     run_port = FakeRunPort()
+    event_observer = FakeEventObserver()
     use_case = SubmitWaitingInputUseCase(
         waiting_port=waiting_port,
         run_port=run_port,
-        context=RunEventContext(),
+        event_observer=event_observer,
+        context=_run_context(),
     )
-    observer = FakeObserver(run_id="")
+    observer = FakeObserver()
     state = ConsoleScreenState(session_key="main")
 
     async def run() -> None:
@@ -188,8 +289,8 @@ def test_submit_waiting_input_use_case_ignores_missing_waiting_run() -> None:
 
         assert result.state is state
         assert waiting_port.called_with == []
-        assert run_port.subscribed == []
-        assert run_port.unsubscribed == []
+        assert event_observer.subscribed == []
+        assert event_observer.unsubscribed == []
         assert state.transcript.items == []
         assert state.view_status.kind == ViewStatusKind.HIDDEN
 

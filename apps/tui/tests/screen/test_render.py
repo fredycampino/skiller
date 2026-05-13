@@ -7,6 +7,7 @@ from rich.padding import Padding
 from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
+
 from stui.screen.render import (
     _TrimLeadingBlankLines,
     render_transcript,

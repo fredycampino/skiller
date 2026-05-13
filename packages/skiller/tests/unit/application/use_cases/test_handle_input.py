@@ -1,7 +1,12 @@
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
+from skiller.domain.event.event_model import (
+    RuntimeEventDraft,
+    runtime_event_payload_to_dict,
+)
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 
@@ -46,10 +51,15 @@ class _FakeStore:
         )
         return "input-1"
 
-    def append_event(
-        self, event_type: str, payload: dict[str, object], run_id: str | None = None
-    ) -> str:
-        self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
+    def append_event(self, event: RuntimeEventDraft) -> str:
+        self.events.append(
+            {
+                "type": event.type.value,
+                "step_id": event.step_id,
+                "payload": runtime_event_payload_to_dict(event.payload),
+                "run_id": event.run_id,
+            }
+        )
         return "event-1"
 
 
@@ -120,7 +130,8 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
     assert store.events == [
         {
             "type": "INPUT_RECEIVED",
-            "payload": {"step": "ask_user", "payload": {"text": "database timeout"}},
+            "step_id": "ask_user",
+            "payload": {"payload": {"text": "database timeout"}},
             "run_id": "run-1",
         }
     ]

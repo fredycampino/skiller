@@ -6,19 +6,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from stui.adapter.cli_invoker import CliInvoker
-from stui.port.run_port import CommandAck, CommandAckStatus
+from stui.port.run_port import (
+    RunDispatch,
+    RunDispatchError,
+    RunDispatchErrorKind,
+    RunRuntimeStatus,
+    RunRuntimeStatusKind,
+    RunRuntimeWaitType,
+)
 
 
 @dataclass(frozen=True)
 class CliRunAdapter:
     invoker: CliInvoker = field(default_factory=CliInvoker)
 
-    def run(self, raw_args: str) -> CommandAck:
+    def run(self, raw_args: str) -> RunDispatch:
         normalized_args = raw_args.strip()
         if not normalized_args:
-            return CommandAck(
-                status=CommandAckStatus.REJECTED,
-                message="error: /run requires arguments",
+            return _dispatch_error(
+                kind=RunDispatchErrorKind.INVALID_ARGS,
+                message="/run requires arguments",
             )
 
         try:
@@ -28,20 +35,59 @@ class CliRunAdapter:
                 *shlex.split(normalized_args),
                 "--detach",
             )
+            run_id = _require_text(payload, "run_id")
+            status = _parse_runtime_status(payload.get("status"))
+            if status is None:
+                raise RuntimeError("runtime command returned invalid status")
+            return RunDispatch(
+                run_id=run_id,
+                status=status,
+                worker_pid=_require_int(payload, "worker_pid"),
+                error=RunDispatchError(
+                    kind=RunDispatchErrorKind.NONE,
+                    message="",
+                ),
+            )
         except RuntimeError as exc:
-            return CommandAck(
-                status=CommandAckStatus.ERROR,
-                message=f"error: {_sanitize_dispatch_error(str(exc), raw_args=normalized_args)}",
+            sanitized_error = _sanitize_dispatch_error(
+                str(exc),
+                raw_args=normalized_args,
+            )
+            if _is_run_not_found_dispatch_error(sanitized_error):
+                return _dispatch_error(
+                    kind=RunDispatchErrorKind.RUN_NOT_FOUND,
+                    message=sanitized_error,
+                )
+            if _is_invalid_args_dispatch_error(sanitized_error):
+                return _dispatch_error(
+                    kind=RunDispatchErrorKind.INVALID_ARGS,
+                    message=sanitized_error,
+                )
+            if _is_worker_start_dispatch_error(sanitized_error):
+                return _dispatch_error(
+                    kind=RunDispatchErrorKind.WORKER_START_FAILED,
+                    message=sanitized_error,
+                )
+            return _dispatch_error(
+                kind=RunDispatchErrorKind.RUNTIME_ERROR,
+                message=sanitized_error,
             )
 
-        run_id = str(payload.get("run_id", "")).strip() or None
-        status = str(payload.get("status", "UNKNOWN")).strip() or "UNKNOWN"
-        short_run_id = run_id[-4:] if run_id else "-"
-        message = f"[run-dispatch] {normalized_args}:{short_run_id}\n  ↳ {status.lower()}"
-        return CommandAck(
-            status=CommandAckStatus.ACCEPTED,
+    def status(self, run_id: str) -> RunRuntimeStatus | None:
+        try:
+            payload = _run_json_command(self.invoker, "status", run_id)
+        except RuntimeError:
+            return None
+        status = _parse_runtime_status(payload.get("status"))
+        if status is None:
+            return None
+        return RunRuntimeStatus(
             run_id=run_id,
-            message=message,
+            status=status,
+            wait_type=_parse_runtime_wait_type(payload.get("wait_type")),
+            prompt=str(payload.get("prompt", "")).strip(),
+            last_event_sequence=_coerce_int(payload.get("last_event_sequence")),
+            last_event_type=str(payload.get("last_event_type", "")).strip().upper(),
         )
 
 
@@ -61,6 +107,75 @@ def _run_json_command(invoker: CliInvoker, *args: str) -> dict[str, Any]:
         raise RuntimeError("runtime command returned invalid payload")
 
     return payload
+
+
+def _coerce_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _require_int(payload: dict[str, Any], key: str) -> int:
+    value = _coerce_int(payload.get(key))
+    if value is None:
+        raise RuntimeError(f"runtime command returned invalid {key}")
+    return value
+
+
+def _require_text(payload: dict[str, Any], key: str) -> str:
+    value = str(payload.get(key, "")).strip()
+    if not value:
+        raise RuntimeError(f"runtime command returned missing {key}")
+    return value
+
+
+def _parse_runtime_status(value: object) -> RunRuntimeStatusKind | None:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return None
+    try:
+        return RunRuntimeStatusKind(normalized)
+    except ValueError:
+        return None
+
+
+def _parse_runtime_wait_type(value: object) -> RunRuntimeWaitType:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return RunRuntimeWaitType.NONE
+    try:
+        return RunRuntimeWaitType(normalized)
+    except ValueError:
+        return RunRuntimeWaitType.NONE
+
+
+def _dispatch_error(*, kind: RunDispatchErrorKind, message: str) -> RunDispatch:
+    return RunDispatch(
+        run_id="",
+        status=RunRuntimeStatusKind.FAILED,
+        worker_pid=0,
+        error=RunDispatchError(kind=kind, message=message),
+    )
+
+
+def _is_run_not_found_dispatch_error(error: str) -> bool:
+    return error.startswith("agent not found") or error.startswith("Invalid skill format")
+
+
+def _is_invalid_args_dispatch_error(error: str) -> bool:
+    return error.startswith("Invalid --arg") or error.startswith("Use either ")
+
+
+def _is_worker_start_dispatch_error(error: str) -> bool:
+    return "worker" in error.lower() and (
+        "start" in error.lower()
+        or "spawn" in error.lower()
+        or "process" in error.lower()
+    )
+
 
 def _sanitize_dispatch_error(raw_error: str, *, raw_args: str) -> str:
     normalized = raw_error.strip()

@@ -43,7 +43,6 @@ steps:
           reply:
             type: string
         additionalProperties: false
-    large_result: true
     next: ask_user
 
   - notify: done

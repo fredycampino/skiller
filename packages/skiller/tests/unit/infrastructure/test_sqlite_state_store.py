@@ -1,6 +1,17 @@
 import sqlite3
 
 import pytest
+
+from skiller.domain.agent.agent_context_model import AgentToolCallPayload
+from skiller.domain.event.event_model import (
+    AgentEventPayload,
+    AgentLifecyclePayload,
+    RunCreatedPayload,
+    RuntimeEventDraft,
+    RuntimeEventType,
+    RunWaitingPayload,
+    StepStartedPayload,
+)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.steering_model import (
@@ -18,7 +29,6 @@ from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
-from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
@@ -448,26 +458,147 @@ def test_list_events_exposes_monotonic_sequence(tmp_path) -> None:
         run_id=run_id,
     )
 
-    first_event_id = store.append_event("STEP_STARTED", {"step": "done"}, run_id=run_id)
-    second_event_id = store.append_event("RUN_WAITING", {"step": "done"}, run_id=run_id)
+    first_event_id = store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.STEP_STARTED,
+            step_id="done",
+            step_type="notify",
+            payload=StepStartedPayload(),
+        )
+    )
+    second_event_id = store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.RUN_WAITING,
+            step_id="done",
+            step_type="notify",
+            payload=RunWaitingPayload(output={}),
+        )
+    )
 
     events = store.list_events(run_id)
     last_event = store.get_last_event(run_id)
 
-    assert [event["id"] for event in events] == [first_event_id, second_event_id]
-    assert [event["sequence"] for event in events] == sorted(event["sequence"] for event in events)
-    assert events[0]["sequence"] < events[1]["sequence"]
+    assert [event.id for event in events] == [first_event_id, second_event_id]
+    assert [event.run_id for event in events] == [run_id, run_id]
+    assert [event.sequence for event in events] == sorted(event.sequence for event in events)
+    assert events[0].sequence < events[1].sequence
     assert last_event is not None
-    assert last_event["id"] == second_event_id
-    assert last_event["sequence"] == events[1]["sequence"]
+    assert last_event.id == second_event_id
+    assert last_event.run_id == run_id
+    assert last_event.sequence == events[1].sequence
+    assert store.list_events(run_id, after_sequence=events[0].sequence) == [events[1]]
+    assert store.list_events(run_id, limit=1) == [events[0]]
+    assert store.list_events(run_id, after_sequence=events[0].sequence, limit=1) == [events[1]]
+
+
+def test_list_events_roundtrips_agent_event_body(tmp_path) -> None:
+    db_path = tmp_path / "agent-log-events.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440031"
+    store.create_run(
+        "internal",
+        "skill",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    event_id = store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.AGENT_TOOL_CALL,
+            payload=AgentEventPayload(
+                step_id="support_agent",
+                turn_id="turn-1",
+                agent_sequence=33,
+                body=AgentToolCallPayload(
+                    turn_id="turn-1",
+                    parent_sequence=32,
+                    tool_call_id="call-1",
+                    tool="shell",
+                    args={"command": "pwd"},
+                ),
+            ),
+        )
+    )
+
+    events = store.list_events(run_id)
+
+    assert len(events) == 1
+    assert events[0].id == event_id
+    assert events[0].step_id == "support_agent"
+    assert events[0].step_type == "agent"
+    assert events[0].agent_sequence == 33
+    assert events[0].payload == AgentEventPayload(
+        step_id="support_agent",
+        turn_id="turn-1",
+        agent_sequence=33,
+        body=AgentToolCallPayload(
+            turn_id="turn-1",
+            parent_sequence=32,
+            tool_call_id="call-1",
+            tool="shell",
+            args={"command": "pwd"},
+        ),
+    )
+    assert events[0].model_dump(mode="json")["payload"] == {
+        "type": "tool_call",
+        "turn_id": "turn-1",
+        "parent_sequence": 32,
+        "tool_call_id": "call-1",
+        "tool": "shell",
+        "args": {"command": "pwd"},
+    }
+
+
+def test_list_events_keeps_agent_lifecycle_metadata_in_envelope(tmp_path) -> None:
+    db_path = tmp_path / "agent-lifecycle-events.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440032"
+    store.create_run(
+        "internal",
+        "skill",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
+            step_id="support_agent",
+            step_type="agent",
+            payload=AgentLifecyclePayload(
+                turn_id="turn-29",
+                stop_reason="max_turns_exhausted",
+            ),
+        )
+    )
+
+    event = store.list_events(run_id)[0]
+
+    assert event.step_id == "support_agent"
+    assert event.step_type == "agent"
+    assert event.agent_sequence is None
+    assert event.payload == AgentLifecyclePayload(
+        turn_id="turn-29",
+        stop_reason="max_turns_exhausted",
+    )
+    assert event.model_dump(mode="json")["payload"] == {
+        "turn_id": "turn-29",
+        "stop_reason": "max_turns_exhausted",
+    }
 
 
 def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     db_path = tmp_path / "delete-run.db"
     store = SqliteStateStore(str(db_path))
-    execution_outputs = SqliteExecutionOutputStore(str(db_path))
     store.init_db()
-    execution_outputs.init_db()
 
     run_id = "550e8400-e29b-41d4-a716-446655440021"
     other_run_id = "550e8400-e29b-41d4-a716-446655440022"
@@ -475,8 +606,20 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     context = RunContext(inputs={}, step_executions={})
     store.create_run("internal", "skill", skill_snapshot, context, run_id=run_id)
     store.create_run("internal", "skill", skill_snapshot, context, run_id=other_run_id)
-    store.append_event("RUN_CREATE", {"skill": "skill"}, run_id=run_id)
-    store.append_event("RUN_CREATE", {"skill": "skill"}, run_id=other_run_id)
+    store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.RUN_CREATE,
+            payload=RunCreatedPayload(skill="skill", skill_source="internal"),
+        )
+    )
+    store.append_event(
+        RuntimeEventDraft(
+            run_id=other_run_id,
+            type=RuntimeEventType.RUN_CREATE,
+            payload=RunCreatedPayload(skill="skill", skill_source="internal"),
+        )
+    )
     store.create_wait(
         run_id,
         step_id="wait",
@@ -553,17 +696,6 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         "chat-3",
         {"text": "other"},
     )
-    execution_outputs.store_execution_output(
-        run_id=run_id,
-        step_id="wait",
-        output_body={"deleted": True},
-    )
-    execution_outputs.store_execution_output(
-        run_id=other_run_id,
-        step_id="wait",
-        output_body={"deleted": False},
-    )
-
     deleted = store.delete_run(run_id)
 
     assert deleted is True
@@ -572,7 +704,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
 
     with sqlite3.connect(db_path) as conn:
         assert _count(conn, "runs", "id = ?", run_id) == 0
-        assert _count(conn, "events", "run_id = ?", run_id) == 0
+        assert _count(conn, "log_events", "run_id = ?", run_id) == 0
         assert _count(conn, "waits", "run_id = ?", run_id) == 0
         assert (
             _count(
@@ -585,13 +717,11 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
             == 0
         )
         assert _count(conn, "external_receipts", "dedup_key IN ('msg-1', 'msg-2')") == 0
-        assert _count(conn, "execution_outputs", "run_id = ?", run_id) == 0
         assert _count(conn, "runs", "id = ?", other_run_id) == 1
-        assert _count(conn, "events", "run_id = ?", other_run_id) == 1
+        assert _count(conn, "log_events", "run_id = ?", other_run_id) == 1
         assert _count(conn, "waits", "run_id = ?", other_run_id) == 1
         assert _count(conn, "external_events", "run_id = ?", other_run_id) == 1
         assert _count(conn, "external_receipts", "dedup_key = 'msg-3'") == 1
-        assert _count(conn, "execution_outputs", "run_id = ?", other_run_id) == 1
 
 
 def test_delete_run_returns_false_for_missing_run(tmp_path) -> None:

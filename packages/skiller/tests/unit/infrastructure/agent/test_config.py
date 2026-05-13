@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from skiller.infrastructure.agent.config import resolve_agent_settings
 
 pytestmark = pytest.mark.unit

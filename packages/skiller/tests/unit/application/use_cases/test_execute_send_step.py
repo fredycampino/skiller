@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus

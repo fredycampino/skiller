@@ -32,18 +32,6 @@ steps:
       content: "{{inputs.content}}"
 ```
 
-Optional:
-
-```yaml
-steps:
-  - mcp: search
-    server: local-mcp
-    tool: search
-    args:
-      query: "{{inputs.query}}"
-    large_result: true
-```
-
 ## Persistence
 
 ```json
@@ -60,8 +48,6 @@ steps:
   }
 }
 ```
-
-With `large_result: true`, the runtime stores the full `output_body` in `execution_outputs`, keeps a small summary in `output.value.data`, marks it with `truncated: true`, and fills `output.body_ref`.
 
 Template access:
 

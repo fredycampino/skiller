@@ -8,8 +8,7 @@ from stui.di.container import build_tui_container
 from stui.port.run_port import (
     CommandAck,
     CommandAckStatus,
-    PollingEvent,
-    PollingEventKind,
+    RunRuntimeStatus,
 )
 from stui.port.runs_port import RunsPortItem
 from stui.viewmodel.console_screen_viewmodel import (
@@ -25,12 +24,15 @@ def build_viewmodel(
     *,
     session_key: str = "main",
     run_port,
+    event_observer=None,
     waiting_port,
     runs_port=None,
     agent_port=None,
 ) -> ConsoleScreenViewModel:
+    resolved_event_observer = event_observer or FakeEventObserver()
     container = build_tui_container(
         run_port=run_port,
+        event_observer=resolved_event_observer,
         runs_port=runs_port,
         waiting_port=waiting_port,
         agent_port=agent_port,
@@ -96,50 +98,9 @@ class NeverCalledRunPort:
     def run(self, raw_args: str):  # noqa: ANN001
         raise AssertionError(f"unexpected run call: {raw_args}")
 
-    def subscribe(self, observer: object) -> None:
-        _ = observer
-
-    def unsubscribe(self, observer: object) -> None:
-        _ = observer
-
-
-class ActivatingRunPort:
-    def __init__(self) -> None:
-        self.subscribed: list[object] = []
-        self.unsubscribed: list[object] = []
-
-    def run(self, raw_args: str):  # noqa: ANN001
-        raise AssertionError(f"unexpected run call: {raw_args}")
-
-    def subscribe(self, observer: object) -> None:
-        self.subscribed.append(observer)
-        notify = getattr(observer, "notify", None)
-        if callable(notify):
-            notify(
-                [
-                    PollingEvent(
-                        kind=PollingEventKind.LOG,
-                        run_id="run-1234",
-                        event_type="RUN_WAITING",
-                        step="ask_user",
-                        step_type="wait_input",
-                        output=(
-                            '{"text":"Write a message.",'
-                            '"value":{"prompt":"Write a message."},"body_ref":null}'
-                        ),
-                    ),
-                    PollingEvent(
-                        kind=PollingEventKind.STATUS,
-                        run_id="run-1234",
-                        status="WAITING",
-                        prompt="Write a message.",
-                    ),
-                ]
-            )
-
-    def unsubscribe(self, observer: object) -> None:
-        self.unsubscribed.append(observer)
-
+    def status(self, run_id: str) -> RunRuntimeStatus | None:
+        _ = run_id
+        return None
 
 class NeverCalledWaitingPort:
     def send_input(self, *, run_id: str, text: str):  # noqa: ANN001
@@ -154,3 +115,23 @@ class FakeAgentPort:
     def interrupt(self, run_id: str) -> CommandAck:
         self.called_with.append(run_id)
         return self.ack
+
+
+class FakeEventObserver:
+    def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
+        self.subscribe_calls: list[str] = []
+        self.unsubscribe_call_count = 0
+        self.current_run_id = current_run_id
+        self.current_listener = current_listener
+
+    def subscribe(self, *, run_id: str, listener: object) -> None:
+        if self.current_listener is not None:
+            self.unsubscribe()
+        self.current_listener = listener
+        self.current_run_id = run_id
+        self.subscribe_calls.append(run_id)
+
+    def unsubscribe(self) -> None:
+        self.unsubscribe_call_count += 1
+        self.current_listener = None
+        self.current_run_id = ""

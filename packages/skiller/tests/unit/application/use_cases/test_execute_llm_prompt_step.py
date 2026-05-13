@@ -1,12 +1,13 @@
 import pytest
+
 from skiller.application.use_cases.execute.execute_llm_prompt_step import (
     ExecuteLlmPromptStepUseCase,
 )
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
+from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.domain.step.step_execution_model import LlmPromptOutput
 
 pytestmark = pytest.mark.unit
@@ -27,10 +28,10 @@ class _FakeStore:
             }
         )
 
-    def append_event(
-        self, event_type: str, payload: dict[str, object], run_id: str | None = None
-    ) -> str:
-        self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
+    def append_event(self, event: RuntimeEventDraft) -> str:
+        self.events.append(
+            {"type": event.type.value, "payload": event.payload, "run_id": event.run_id}
+        )
         return "evt-1"
 
 
@@ -46,42 +47,14 @@ class _FakeLLM:
         return self.response
 
 
-class _FakeExecutionOutputStore:
-    def __init__(self) -> None:
-        self.stored: list[dict[str, object]] = []
-
-    def store_execution_output(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        output_body: dict[str, object],
-    ) -> str:
-        self.stored.append(
-            {
-                "run_id": run_id,
-                "step_id": step_id,
-                "output_body": output_body,
-            }
-        )
-        return "execution_output:1"
-
-    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
-        _ = body_ref
-        return None
-
-
 def _build_use_case(
     *,
     store: _FakeStore | None = None,
     llm: _FakeLLM | None = None,
-    execution_output_store: _FakeExecutionOutputStore | None = None,
 ) -> ExecuteLlmPromptStepUseCase:
     return ExecuteLlmPromptStepUseCase(
         store=store or _FakeStore(),
-        execution_output_store=execution_output_store or _FakeExecutionOutputStore(),
         llm=llm or _FakeLLM(),
-        large_result_truncator=LargeResultTruncator(),
     )
 
 
@@ -311,7 +284,6 @@ def test_execute_llm_prompt_step_rejects_empty_next_when_declared() -> None:
             )
         )
 
-
 @pytest.mark.parametrize(
     ("response", "expected_error"),
     [
@@ -409,85 +381,3 @@ def test_execute_llm_prompt_step_validation_errors(
                 context=context,
             )
         )
-
-
-def test_execute_llm_prompt_step_persists_large_result_body_and_truncates_output_value() -> None:
-    store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
-    llm = _FakeLLM(
-        response={
-            "ok": True,
-            "json": {
-                "summary": "tests failing on auth",
-                "details": "x" * 260,
-                "items": [{"id": "a1"}, {"id": "a2"}],
-            },
-        }
-    )
-    use_case = _build_use_case(
-        store=store,
-        llm=llm,
-        execution_output_store=execution_output_store,
-    )
-    context = RunContext(inputs={}, step_executions={})
-
-    result = use_case.execute(
-        CurrentStep(
-            run_id="run-1",
-            step_index=0,
-            step_id="analyze_issue",
-            step_type=StepType.LLM_PROMPT,
-            step={
-                "prompt": "Analyze",
-                "large_result": True,
-                "next": "done",
-                "output": {
-                    "format": "json",
-                    "schema": {
-                        "type": "object",
-                        "required": ["summary", "details", "items"],
-                        "properties": {
-                            "summary": {"type": "string"},
-                            "details": {"type": "string"},
-                            "items": {"type": "array"},
-                        },
-                    },
-                },
-            },
-            context=context,
-        )
-    )
-
-    assert result.execution is not None
-    assert execution_output_store.stored == [
-        {
-            "run_id": "run-1",
-            "step_id": "analyze_issue",
-            "output_body": {
-                "value": {
-                    "data": {
-                        "summary": "tests failing on auth",
-                        "details": "x" * 260,
-                        "items": [{"id": "a1"}, {"id": "a2"}],
-                    }
-                },
-            },
-        }
-    ]
-    assert result.execution.output == LlmPromptOutput(
-        text='{"details": "'
-        + ("x" * 197)
-        + (
-            '...", "details_length": 260, "items_count": 2, '
-            '"summary": "tests failing on auth", "truncated": true}'
-        ),
-        text_ref=None,
-        data={
-            "truncated": True,
-            "summary": "tests failing on auth",
-            "details": ("x" * 197) + "...",
-            "details_length": 260,
-            "items_count": 2,
-        },
-        body_ref="execution_output:1",
-    )

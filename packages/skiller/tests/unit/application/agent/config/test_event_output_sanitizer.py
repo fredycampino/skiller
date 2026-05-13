@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.config.event_output_sanitizer import (
     AgentEventOutputPolicy,
     AgentEventOutputSanitizer,

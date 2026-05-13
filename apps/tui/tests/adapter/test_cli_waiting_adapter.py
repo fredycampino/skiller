@@ -4,8 +4,9 @@ import subprocess
 from dataclasses import dataclass
 
 import pytest
+
 from stui.adapter.cli_waiting_adapter import CliWaitingAdapter
-from stui.port.run_port import CommandAckStatus
+from stui.port.waiting_port import WaitingInputStatus
 
 pytestmark = pytest.mark.unit
 
@@ -24,7 +25,7 @@ def test_cli_waiting_adapter_rejects_empty_run_id() -> None:
 
     result = adapter.send_input(run_id="", text="hello")
 
-    assert result.status == CommandAckStatus.REJECTED
+    assert result.status == WaitingInputStatus.REJECTED
     assert result.message == "error: run_id is required"
 
 
@@ -33,7 +34,7 @@ def test_cli_waiting_adapter_rejects_empty_text() -> None:
 
     result = adapter.send_input(run_id="run-1234", text="   ")
 
-    assert result.status == CommandAckStatus.REJECTED
+    assert result.status == WaitingInputStatus.REJECTED
     assert result.message == "error: reply text is required"
 
 
@@ -44,13 +45,13 @@ def test_cli_waiting_adapter_accepts_response(monkeypatch: pytest.MonkeyPatch) -
             subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=0,
-            stdout='{"accepted": true, "matched_runs": ["run-1234"]}',
+            stdout='{"accepted": true, "run_id": "run-1234", "matched_runs": ["run-1234"]}',
             stderr="",
         ))
     )
     result = adapter.send_input(run_id="run-1234", text="hello")
 
-    assert result.status == CommandAckStatus.ACCEPTED
+    assert result.status == WaitingInputStatus.ACCEPTED
     assert result.run_id == "run-1234"
 
 
@@ -67,5 +68,5 @@ def test_cli_waiting_adapter_maps_rejection(monkeypatch: pytest.MonkeyPatch) -> 
     )
     result = adapter.send_input(run_id="run-1234", text="hello")
 
-    assert result.status == CommandAckStatus.REJECTED
+    assert result.status == WaitingInputStatus.REJECTED
     assert result.message == "error: no waiting input"

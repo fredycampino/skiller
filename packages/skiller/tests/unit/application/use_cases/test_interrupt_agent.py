@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentStatus,
     InterruptAgentUseCase,

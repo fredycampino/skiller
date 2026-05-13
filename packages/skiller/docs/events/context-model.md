@@ -16,20 +16,25 @@ RunContext(
 `SteeringItem`:
 
 ```python
-SteeringItem(
-    target: SteeringTarget,
-    action: SteeringAction,
-    text: str | None = None,
-)
+SteeringItem =
+    SteeringAgentInterrupt
+    | SteeringStepInterrupt
+    | SteeringAgentMessage
 ```
 
-Current `agent` actions:
+Persisted steering items:
 
-- `abort_turn`
-- `steering_message`
+```json
+{ "type": "agent_interrupt" }
+{ "type": "step_interrupt" }
+{ "type": "agent_message", "text": "be concise" }
+```
 
-When `abort_turn` is consumed during a running agent tool turn, the runtime also appends
-one control `user_message` to the agent context:
+Legacy `{target, action}` steering objects can still be read and normalized by
+the runtime, but new writes use the `type` shape above.
+
+When `agent_interrupt` is consumed during a running agent tool turn, the runtime
+also appends one control `user_message` to the agent context:
 
 ```text
 [Skiller] User interrupted the current tool turn.
@@ -44,6 +49,9 @@ creates `RunStatus.WAITING` and `RUN_WAITING`.
 In `RunContext.step_executions`, the `agent` step is persisted exactly like any other
 step: a normal `StepExecution` with `input`, `evaluation`, and `output`. Its internal
 turn transcript stays in `agent context`; its consolidated step result stays in runtime context.
+
+`RunContext` is not an event log. Historical execution order, repeated executions,
+and transcript observability are stored in `log_events`.
 
 Each step stores one `StepExecution`:
 
@@ -82,11 +90,15 @@ StepExecution(
 }
 ```
 
+`step_executions` is keyed by `step_id`. If the same step id executes more than
+once, the latest `StepExecution` replaces the previous one.
+
 ## Output Model
 
 In memory, the runtime uses typed outputs:
 
 - `AssignOutput`
+- `AgentOutput`
 - `NotifyOutput`
 - `ShellOutput`
 - `SwitchOutput`
@@ -112,7 +124,7 @@ Rules:
 - `text_ref` is optional and points to the field inside the full body value that can rebuild the full human text.
 - `value` is always an object or `null`.
 - `body_ref` is always present and may be `null`.
-- if `body_ref` is not `null`, `output.value` is the small persisted summary and the full output body is stored separately.
+- step outputs are stored inline in `output.value`.
 
 ## Per-Step Output Fields
 
@@ -150,6 +162,27 @@ Rules:
     "exit_code": 0,
     "stdout": "hello\n",
     "stderr": ""
+  },
+  "body_ref": null
+}
+```
+
+### `agent`
+
+```json
+{
+  "text": "Final answer.",
+  "text_ref": "data.final.text",
+  "value": {
+    "data": {
+      "context_id": "default",
+      "final": {
+        "text": "Final answer."
+      },
+      "turn_count": 2,
+      "tool_call_count": 1,
+      "stop_reason": "final"
+    }
   },
   "body_ref": null
 }
@@ -248,23 +281,6 @@ Normal:
 }
 ```
 
-With `large_result: true`:
-
-```json
-{
-  "text": "Europe is one of the smallest continents...",
-  "text_ref": "data.reply",
-  "value": {
-    "data": {
-      "reply": "Europe is one of the smallest continents...",
-      "reply_length": 980,
-      "truncated": true
-    }
-  },
-  "body_ref": "execution_output:abc123"
-}
-```
-
 ### `mcp`
 
 ```json
@@ -296,6 +312,4 @@ Notes:
 - `step_executions` stores the persisted output envelope.
 - `step_executions.<step_id>.output.text` and `step_executions.<step_id>.evaluation` remain directly readable.
 - `output_value("<step_id>")` returns the canonical `output.value` for that step.
-- if `output.body_ref` is present, `output_value(...)` resolves the persisted body lazily from `execution_outputs`.
 - direct template access to `step_executions.<step_id>.output.value...` is not allowed.
-- direct template access to `output.body_ref` is not allowed.

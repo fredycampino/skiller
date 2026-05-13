@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.llm_model import (

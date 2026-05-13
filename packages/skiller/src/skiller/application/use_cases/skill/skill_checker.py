@@ -403,15 +403,6 @@ class SkillCheckerUseCase:
         step_index_by_id: dict[str, int],
         errors: list[SkillCheckError],
     ) -> None:
-        if ".output.body_ref" in expression:
-            self._add(
-                errors,
-                "SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS",
-                "SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS: direct body_ref access is not allowed "
-                f"(step={step_id}, field={field})",
-            )
-            return
-
         if expression.startswith("step_executions.") and ".output.value" in expression:
             self._add(
                 errors,

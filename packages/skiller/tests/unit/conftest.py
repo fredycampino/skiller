@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 
 

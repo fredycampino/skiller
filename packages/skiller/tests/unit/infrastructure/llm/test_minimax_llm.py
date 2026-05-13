@@ -5,6 +5,7 @@ import json
 from urllib.error import HTTPError
 
 import pytest
+
 from skiller.domain.agent.llm_model import LLMMessage, LLMRequest, LLMResponse
 from skiller.infrastructure.llm import minimax_llm
 from skiller.infrastructure.llm.minimax_llm import MinimaxLLM

@@ -38,39 +38,32 @@ class ListRunsUseCase:
                 statuses=statuses,
             )
         except RuntimeError as exc:
-            _clear_prompt_state(state)
             state.transcript.items.append(UserInputItem(text=command.raw_text))
             state.transcript.items.append(
                 DispatchErrorItem(message=f"error: {str(exc).strip() or 'runs query failed'}")
             )
-            state.view_status.kind = ViewStatusKind.ERROR
-            state.view_status.message = "Error"
-            state.prompt.waiting_prompt = ""
-            state.runs_table.rows = tuple()
-            state.runs_table.visible = False
-            state.runs_table.command = ""
-            state.prompt.mode = PromptMode.FLOW
+            state.set_status(kind=ViewStatusKind.ERROR, message="Error")
+            state.set_runs_table()
+            _reset_prompt(state, mode=PromptMode.DEFAULT)
             return ListRunsResult(state=state)
 
         if waiting_input_only:
             runs = [run for run in runs if (run.wait_type or "").strip().lower() == "input"]
 
-        _clear_prompt_state(state)
         state.transcript.items.append(UserInputItem(text=command.raw_text))
-        state.runs_table.rows = tuple(runs)
-        state.runs_table.visible = True
-        state.runs_table.command = command.raw_text
-        state.view_status.kind = ViewStatusKind.HIDDEN
-        state.view_status.message = ""
-        state.prompt.waiting_prompt = ""
-        state.prompt.mode = PromptMode.RUNS_TABLE
+        state.set_runs_table(
+            visible=True,
+            command=command.raw_text,
+            rows=runs,
+        )
+        state.set_status()
+        _reset_prompt(state, mode=PromptMode.RUNS_TABLE)
         return ListRunsResult(state=state)
 
 
-def _clear_prompt_state(state: ConsoleScreenState) -> None:
-    state.autocompletion = None
-    state.prompt.text = ""
-    state.prompt.cursor_position = 0
+def _reset_prompt(state: ConsoleScreenState, *, mode: PromptMode) -> None:
+    state.set_autocompletion()
+    state.set_prompt(mode=mode)
 
 
 def _resolve_runs_query(command: Command) -> tuple[list[str], bool]:

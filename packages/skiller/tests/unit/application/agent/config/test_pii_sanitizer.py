@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.config.pii_sanitizer import PiiSanitizer
 
 pytestmark = pytest.mark.unit

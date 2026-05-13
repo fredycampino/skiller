@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pytest
+
 from skiller.application.run_worker_service import RunWorkerService, RunWorkerStatus
 from skiller.application.use_cases.render.render_current_step import (
     CurrentStep,
@@ -9,10 +10,14 @@ from skiller.application.use_cases.render.render_current_step import (
     StepType,
 )
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigStatus
-from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
+)
+from skiller.domain.event.event_model import (
+    RuntimeEventPayload,
+    RuntimeEventType,
+    runtime_event_payload_to_dict,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.step.step_execution_model import (
@@ -23,7 +28,6 @@ from skiller.domain.step.step_execution_model import (
     WaitInputOutput,
     WaitWebhookOutput,
 )
-from skiller.domain.step.step_type import StepType as DomainStepType
 
 pytestmark = pytest.mark.unit
 
@@ -65,20 +69,15 @@ class _FakeAppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, object] | None = None,
+        payload: RuntimeEventPayload | dict[str, object] | None = None,
         step_id: str | None = None,
-        step_type: DomainStepType | None = None,
+        step_type: str | None = None,
         execution: StepExecution | None = None,
         next_step_id: str | None = None,
         error: str | None = None,
     ) -> None:
-        event_payload = dict(payload or {})
-        if step_id is not None:
-            event_payload["step"] = step_id
-        if step_type is not None:
-            event_payload["step_type"] = step_type.value
+        event_payload = runtime_event_payload_to_dict(payload) if payload is not None else {}
         if execution is not None:
-            event_payload["step_type"] = execution.step_type.value
             event_payload["output"] = execution.to_public_output_dict()
         if next_step_id is not None:
             event_payload["next"] = next_step_id
@@ -88,6 +87,8 @@ class _FakeAppendRuntimeEventUseCase:
             {
                 "run_id": run_id,
                 "event_type": event_type,
+                "step_id": step_id,
+                "step_type": step_type,
                 "payload": event_payload,
             }
         )
@@ -248,14 +249,16 @@ def test_worker_executes_shell_step() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "shell"},
+            "step_id": "start",
+            "step_type": "shell",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_SUCCESS,
+            "step_id": "start",
+            "step_type": "shell",
             "payload": {
-                "step": "start",
-                "step_type": "shell",
                 "output": {
                     "text": "hello",
                     "value": {
@@ -308,14 +311,16 @@ def test_worker_executes_send_step() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "send"},
+            "step_id": "start",
+            "step_type": "send",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_SUCCESS,
+            "step_id": "start",
+            "step_type": "send",
             "payload": {
-                "step": "start",
-                "step_type": "send",
                 "output": {
                     "text": "Message sent: whatsapp:chat-1.",
                     "value": {
@@ -346,6 +351,8 @@ def test_worker_completes_run_when_renderer_reports_done() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_FINISHED,
+            "step_id": None,
+            "step_type": None,
             "payload": {"status": "SUCCEEDED"},
         }
     ]
@@ -383,14 +390,16 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "wait_webhook"},
+            "step_id": "start",
+            "step_type": "wait_webhook",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_WAITING,
+            "step_id": "start",
+            "step_type": "wait_webhook",
             "payload": {
-                "step": "start",
-                "step_type": "wait_webhook",
                 "output": {
                     "text": "Waiting webhook: github:pr-1.",
                     "value": {"webhook": "github", "key": "pr-1", "payload": None},
@@ -432,14 +441,16 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "wait_input"},
+            "step_id": "start",
+            "step_type": "wait_input",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_WAITING,
+            "step_id": "start",
+            "step_type": "wait_input",
             "payload": {
-                "step": "start",
-                "step_type": "wait_input",
                 "output": {
                     "text": "Write a message.",
                     "value": {
@@ -493,14 +504,16 @@ def test_worker_loops_on_next_and_then_completes() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "notify"},
+            "step_id": "start",
+            "step_type": "notify",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_SUCCESS,
+            "step_id": "start",
+            "step_type": "notify",
             "payload": {
-                "step": "start",
-                "step_type": "notify",
                 "output": {
                     "text": "first",
                     "value": {"message": "first"},
@@ -512,14 +525,16 @@ def test_worker_loops_on_next_and_then_completes() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "done", "step_type": "notify"},
+            "step_id": "done",
+            "step_type": "notify",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_SUCCESS,
+            "step_id": "done",
+            "step_type": "notify",
             "payload": {
-                "step": "done",
-                "step_type": "notify",
                 "output": {
                     "text": "done",
                     "value": {"message": "done"},
@@ -530,6 +545,8 @@ def test_worker_loops_on_next_and_then_completes() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_FINISHED,
+            "step_id": None,
+            "step_type": None,
             "payload": {"status": "SUCCEEDED"},
         },
     ]
@@ -574,20 +591,24 @@ def test_worker_fails_when_step_executor_raises() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_STARTED,
-            "payload": {"step": "start", "step_type": "notify"},
+            "step_id": "start",
+            "step_type": "notify",
+            "payload": {},
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.STEP_ERROR,
+            "step_id": "start",
+            "step_type": "notify",
             "payload": {
-                "step": "start",
-                "step_type": "notify",
                 "error": "notify failed",
             },
         },
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_FINISHED,
+            "step_id": None,
+            "step_type": None,
             "payload": {
                 "status": "FAILED",
                 "error": "notify failed",

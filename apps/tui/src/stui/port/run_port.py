@@ -2,13 +2,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Protocol
 
 
 class CommandAckStatus(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     ERROR = "error"
+
+
+class RunRuntimeStatusKind(StrEnum):
+    CREATED = "created"
+    RUNNING = "running"
+    WAITING = "waiting"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class RunRuntimeWaitType(StrEnum):
+    NONE = "none"
+    INPUT = "input"
+    WEBHOOK = "webhook"
+    CHANNEL = "channel"
+
+
+class RunDispatchErrorKind(StrEnum):
+    NONE = "none"
+    RUN_NOT_FOUND = "run_not_found"
+    INVALID_ARGS = "invalid_args"
+    WORKER_START_FAILED = "worker_start_failed"
+    RUNTIME_ERROR = "runtime_error"
 
 
 @dataclass(frozen=True)
@@ -18,57 +42,34 @@ class CommandAck:
     message: str = ""
 
 
-class PollingEventKind(StrEnum):
-    LOG = "log"
-    STATUS = "status"
+@dataclass(frozen=True)
+class RunDispatchError:
+    kind: RunDispatchErrorKind
+    message: str
+
+    def __bool__(self) -> bool:
+        return self.kind != RunDispatchErrorKind.NONE
 
 
 @dataclass(frozen=True)
-class PollingEvent:
-    kind: PollingEventKind
-    run_id: str = ""
-    status: str = ""
+class RunDispatch:
+    run_id: str
+    status: RunRuntimeStatusKind
+    worker_pid: int
+    error: RunDispatchError
+
+
+@dataclass(frozen=True)
+class RunRuntimeStatus:
+    run_id: str
+    status: RunRuntimeStatusKind
+    wait_type: RunRuntimeWaitType = RunRuntimeWaitType.NONE
     prompt: str = ""
     last_event_sequence: int | None = None
     last_event_type: str = ""
-    text: str = ""
-    user_input_text: str = ""
-    assistant_text: str = ""
-    event_type: str = ""
-    skill: str = ""
-    step: str = ""
-    step_type: str = ""
-    turn_id: str = ""
-    message_type: str = ""
-    tool: str = ""
-    tool_call_id: str = ""
-    command: str = ""
-    parent_sequence: int | None = None
-    sequence: int | None = None
-    context_ref: str = ""
-    output: str = ""
-    error: str = ""
-    event_id: str | None = None
-
-
-class ObserverType(StrEnum):
-    RUN = "run"
-
-
-class EventObserver(Protocol):
-    type: ObserverType
-
-    def notify(self, events: list[PollingEvent]) -> None: ...
-
-
-class RunObserver(EventObserver, Protocol):
-    type: Literal[ObserverType.RUN]
-    run_id: str
 
 
 class RunPort(Protocol):
-    def run(self, raw_args: str) -> CommandAck: ...
+    def run(self, raw_args: str) -> RunDispatch: ...
 
-    def subscribe(self, observer: RunObserver) -> None: ...
-
-    def unsubscribe(self, observer: RunObserver) -> None: ...
+    def status(self, run_id: str) -> RunRuntimeStatus | None: ...

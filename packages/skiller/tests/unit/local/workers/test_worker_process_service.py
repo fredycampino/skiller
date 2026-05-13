@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 import pytest
+
 from skiller.local.workers.process_service import WorkerProcessService
 
 pytestmark = pytest.mark.unit

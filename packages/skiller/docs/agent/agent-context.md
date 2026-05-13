@@ -20,7 +20,7 @@ AgentContextEntry(
     context_id: str,
     sequence: int,
     entry_type: str,
-    payload: dict,
+    payload: AgentContextPayload,
     source_step_id: str,
     idempotency_key: str,
     created_at: str,
@@ -34,7 +34,7 @@ Fields:
 - `context_id`: logical agent memory id inside the run.
 - `sequence`: monotonic order within `run_id + context_id`.
 - `entry_type`: one of the supported entry types.
-- `payload`: full entry content used to rebuild the agent prompt. It may be large.
+- `payload`: typed entry content used to rebuild the agent prompt. It is persisted as JSON.
 - `source_step_id`: `agent` step that created the entry.
 - `idempotency_key`: stable key used to avoid duplicate appends.
 - `created_at`: entry creation timestamp.
@@ -45,6 +45,16 @@ Entry types:
 - `assistant_message`
 - `tool_call`
 - `tool_result`
+
+Payload model:
+
+```python
+AgentContextPayload =
+  AgentUserMessagePayload
+  | AgentAssistantMessagePayload
+  | AgentToolCallPayload
+  | AgentToolResultPayload
+```
 
 ## Table
 

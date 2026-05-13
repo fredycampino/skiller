@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.infrastructure.llm.fake_llm import FakeLLM
 
 pytestmark = pytest.mark.unit

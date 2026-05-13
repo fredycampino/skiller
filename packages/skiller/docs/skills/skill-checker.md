@@ -73,7 +73,6 @@ Forbidden patterns:
 
 ```text
 step_executions.<step_id>.output.value
-step_executions.<step_id>.output.body_ref
 body(...)
 output(...)
 outputValue(...)
@@ -90,14 +89,12 @@ output_value(dynamic_var)
 | `SKILL_OUTPUT_VALUE_STEP_NOT_FOUND` | referenced `step_id` does not exist in the file | `SKILL_OUTPUT_VALUE_STEP_NOT_FOUND: referenced step_id does not exist (step={step_id}, ref={ref_step_id})` |
 | `SKILL_OUTPUT_VALUE_FORWARD_REFERENCE` | referenced `step_id` is the current step or is declared after the current step | `SKILL_OUTPUT_VALUE_FORWARD_REFERENCE: output_value must reference a previous step (step={step_id}, ref={ref_step_id})` |
 | `SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS` | template accesses `output.value` directly through `step_executions` | `SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS: direct output.value access is not allowed (step={step_id}, field={field})` |
-| `SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS` | template accesses `output.body_ref` directly | `SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS: direct body_ref access is not allowed (step={step_id}, field={field})` |
 | `SKILL_OUTPUT_VALUE_UNSUPPORTED_HELPER` | template uses an unsupported helper | `SKILL_OUTPUT_VALUE_UNSUPPORTED_HELPER: unsupported template helper (step={step_id}, field={field})` |
 
 ## Runtime Boundary
 
 `SkillCheckerUseCase` does not verify runtime-only conditions such as:
 - whether a referenced step has already executed in a specific run
-- whether a persisted `body_ref` can be resolved from DB
 - whether the resolved output body contains a requested field path
 
 Those checks belong to execution-time rendering.

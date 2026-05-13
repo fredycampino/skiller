@@ -14,7 +14,6 @@
     FOO: bar
   timeout: 60
   check: true
-  large_result: true
   next: done
 ```
 
@@ -45,8 +44,6 @@
   }
 }
 ```
-
-With `large_result: true`, the runtime stores the full output body in `execution_outputs`, keeps a small summary in `output.value`, and fills `output.body_ref`.
 
 ## Rules
 

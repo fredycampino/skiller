@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from rich.text import Text
+
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.viewmodel.console_screen_state import (
     ViewStatusKind,

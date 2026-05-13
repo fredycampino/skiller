@@ -1,8 +1,13 @@
 import json
 from dataclasses import dataclass, field
-from typing import Any
 
-from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
+from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessagePayload,
+    AgentContextEntry,
+    AgentToolCallPayload,
+    AgentToolResultPayload,
+    AgentUserMessagePayload,
+)
 from skiller.domain.agent.llm_model import (
     LLMMessage,
     LLMRequest,
@@ -50,21 +55,19 @@ class AgentPromptBuilder:
 
         for entry in entries:
             turn_id = self._entry_turn_id(entry)
-            if entry.entry_type == AgentContextEntryType.USER_MESSAGE:
+            if isinstance(entry.payload, AgentUserMessagePayload):
                 flush_pending_turn()
-                text = str(entry.payload.get("text", ""))
-                if text:
-                    messages.append(LLMMessage.user(text))
+                if entry.payload.text:
+                    messages.append(LLMMessage.user(entry.payload.text))
                 continue
-            if entry.entry_type == AgentContextEntryType.ASSISTANT_MESSAGE:
-                text = str(entry.payload.get("text", ""))
+            if isinstance(entry.payload, AgentAssistantMessagePayload):
                 if pending_turn is None or pending_turn.turn_id != turn_id:
                     flush_pending_turn()
                     pending_turn = _PendingAssistantTurn(turn_id=turn_id)
-                if text:
-                    pending_turn.content = text
+                if entry.payload.text:
+                    pending_turn.content = entry.payload.text
                 continue
-            if entry.entry_type == AgentContextEntryType.TOOL_CALL:
+            if isinstance(entry.payload, AgentToolCallPayload):
                 if pending_turn is None or pending_turn.turn_id != turn_id:
                     flush_pending_turn()
                     pending_turn = _PendingAssistantTurn(turn_id=turn_id)
@@ -72,7 +75,7 @@ class AgentPromptBuilder:
                 pending_turn.tool_calls.append(tool_call)
                 tool_call_ids_by_turn_id.setdefault(turn_id, []).append(tool_call.id)
                 continue
-            if entry.entry_type == AgentContextEntryType.TOOL_RESULT:
+            if isinstance(entry.payload, AgentToolResultPayload):
                 if pending_turn is None or pending_turn.turn_id != turn_id:
                     flush_pending_turn()
                     pending_turn = _PendingAssistantTurn(turn_id=turn_id)
@@ -93,25 +96,25 @@ class AgentPromptBuilder:
         return messages
 
     def _build_tool_call(self, entry: AgentContextEntry) -> LLMToolCall:
-        tool_name = str(entry.payload.get("tool", "")).strip()
-        args = entry.payload.get("args")
+        payload = entry.payload
+        if not isinstance(payload, AgentToolCallPayload):
+            raise ValueError("Tool call entry requires tool call payload")
         arguments_json = json.dumps(
-            args if isinstance(args, dict) else {},
+            payload.args,
             ensure_ascii=False,
             sort_keys=True,
         )
         return LLMToolCall(
             id=self._tool_call_id_for_entry(entry),
             function=LLMToolCallFunction(
-                name=tool_name,
+                name=payload.tool,
                 arguments_json=arguments_json,
             ),
         )
 
     def _tool_call_id_for_entry(self, entry: AgentContextEntry) -> str:
-        raw_tool_call_id = str(entry.payload.get("tool_call_id", "")).strip()
-        if raw_tool_call_id:
-            return raw_tool_call_id
+        if isinstance(entry.payload, AgentToolCallPayload) and entry.payload.tool_call_id:
+            return entry.payload.tool_call_id
         return entry.id
 
     def _tool_call_id_for_result(
@@ -121,31 +124,29 @@ class AgentPromptBuilder:
         turn_id: str,
         tool_call_ids_by_turn_id: dict[str, list[str]],
     ) -> str:
-        raw_tool_call_id = str(entry.payload.get("tool_call_id", "")).strip()
-        if raw_tool_call_id:
-            return raw_tool_call_id
+        if isinstance(entry.payload, AgentToolResultPayload) and entry.payload.tool_call_id:
+            return entry.payload.tool_call_id
         turn_tool_call_ids = tool_call_ids_by_turn_id.get(turn_id)
         if turn_tool_call_ids:
             return turn_tool_call_ids[0]
         return entry.id
 
-    def _tool_result_content(self, payload: dict[str, Any]) -> str:
-        text = payload.get("text")
-        if isinstance(text, str) and text:
-            return text
+    def _tool_result_content(self, payload: AgentToolResultPayload) -> str:
+        if payload.text:
+            return payload.text
 
-        data = payload.get("data")
-        if data is not None:
-            return json.dumps(data, ensure_ascii=False, sort_keys=True)
+        if payload.data:
+            return json.dumps(payload.data, ensure_ascii=False, sort_keys=True)
 
-        error = payload.get("error")
-        if error is not None:
-            return str(error)
+        if payload.error is not None:
+            return payload.error
 
         return ""
 
     def _entry_turn_id(self, entry: AgentContextEntry) -> str:
-        return str(entry.payload.get("turn_id", "")).strip()
+        if isinstance(entry.payload, AgentUserMessagePayload):
+            return ""
+        return entry.payload.turn_id
 
 
 @dataclass

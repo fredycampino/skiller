@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
 from skiller.application.agent.config.event_output_sanitizer import (
     AgentEventOutputPolicy,
     AgentEventOutputSanitizer,
@@ -20,8 +21,6 @@ from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextToolCall,
-    AgentContextToolResult,
 )
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.llm_model import (
@@ -34,7 +33,7 @@ from skiller.domain.run.steering_model import (
     SteeringItem,
     SteeringItemType,
 )
-from skiller.domain.tool.tool_contract import ToolResultStatus
+from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import (
     ToolExecutionRequest,
     ToolExecutionResult,
@@ -300,7 +299,9 @@ class _FakeAgentContextStore:
         scope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_call: AgentContextToolCall,
+        tool_call_id: str,
+        tool: str,
+        args: dict[str, object],
     ) -> AgentContextEntry:
         return self._append(
             scope=scope,
@@ -309,9 +310,9 @@ class _FakeAgentContextStore:
                 "type": "tool_call",
                 "turn_id": turn_id,
                 "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call.id,
-                "tool": tool_call.tool,
-                "args": tool_call.args,
+                "tool_call_id": tool_call_id,
+                "tool": tool,
+                "args": args,
             },
         )
 
@@ -321,9 +322,9 @@ class _FakeAgentContextStore:
         scope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_result: AgentContextToolResult,
+        tool_call_id: str,
+        result: ToolResult,
     ) -> AgentContextEntry:
-        result = tool_result.result
         return self._append(
             scope=scope,
             entry_type=AgentContextEntryType.TOOL_RESULT,
@@ -331,7 +332,7 @@ class _FakeAgentContextStore:
                 "type": "tool_result",
                 "turn_id": turn_id,
                 "parent_sequence": parent_sequence,
-                "tool_call_id": tool_result.tool_call_id,
+                "tool_call_id": tool_call_id,
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,

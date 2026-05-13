@@ -28,6 +28,7 @@ class RunsTableRow:
     mode: RunRowMode
     status: RunRowStatus
     skill: str
+    updated_at: str
     run_id: str
 
 
@@ -36,24 +37,28 @@ _MOCK_RUN_ROWS: tuple[RunsTableRow, ...] = (
         mode=RunRowMode.CHAT,
         status=RunRowStatus.WAITING_INPUT,
         skill="wait_input_test",
+        updated_at="05-04 00:01",
         run_id="run-2026-05-04-000123",
     ),
     RunsTableRow(
         mode=RunRowMode.FLOW,
         status=RunRowStatus.RUNNING,
         skill="webhook_signal_oracle",
+        updated_at="05-04 00:02",
         run_id="run-2026-05-04-000456",
     ),
     RunsTableRow(
         mode=RunRowMode.CHAT,
         status=RunRowStatus.SUCCESS,
         skill="chat",
+        updated_at="05-04 00:03",
         run_id="run-2026-05-04-000789",
     ),
     RunsTableRow(
         mode=RunRowMode.FLOW,
         status=RunRowStatus.FAILED,
         skill="cleanup_job",
+        updated_at="05-04 00:04",
         run_id="run-2026-05-04-000246",
     ),
 )
@@ -139,12 +144,14 @@ class RunsTableView(DataTable):
             return
 
         self.clear(columns=True)
-        status_width, skill_width, run_id_width = self._column_widths()
+        updated_width, status_width, skill_width, run_id_width = self._column_widths()
+        self.add_column("Updated", width=updated_width)
         self.add_column("Status", width=status_width)
         self.add_column("Skill", width=skill_width)
         self.add_column("Run ID", width=run_id_width)
         for row in self._rows:
             self.add_row(
+                row.updated_at,
                 format_run_row_status(row),
                 row.skill,
                 Text(row.run_id, justify="right"),
@@ -153,7 +160,11 @@ class RunsTableView(DataTable):
         if self._display_rows():
             self.move_cursor(row=self._selected_index)
 
-    def _column_widths(self) -> tuple[int, int, int]:
+    def _column_widths(self) -> tuple[int, int, int, int]:
+        updated_width = max(
+            len("Updated"),
+            max((len(row.updated_at) for row in self._display_rows()), default=0),
+        )
         status_width = max(
             len("Status"),
             max((len(format_run_row_status(row)) for row in self._display_rows()), default=0),
@@ -169,12 +180,12 @@ class RunsTableView(DataTable):
         available_width = max(self.size.width - 6, 0)
         if available_width > 0:
             skill_width = max(
-                available_width - status_width - run_id_width,
+                available_width - status_width - updated_width - run_id_width,
                 skill_min_width,
             )
         else:
             skill_width = skill_min_width
-        return status_width, skill_width, run_id_width
+        return updated_width, status_width, skill_width, run_id_width
 
     def _display_rows(self) -> tuple[RunsTableRow, ...]:
         return self._rows

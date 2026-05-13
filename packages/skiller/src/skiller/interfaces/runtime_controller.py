@@ -85,14 +85,26 @@ class RuntimeController:
     def remove_webhook(self, webhook: str) -> dict[str, Any]:
         return self.runtime_service.remove_webhook(webhook)
 
-    def status(self, run_id: str) -> dict[str, Any] | None:
-        return self.query_service.get_status(run_id)
+    def status(
+        self,
+        run_id: str,
+        *,
+        include_context: bool = False,
+    ) -> dict[str, Any] | None:
+        return self.query_service.get_status(run_id, include_context=include_context)
 
-    def logs(self, run_id: str) -> list[dict[str, Any]]:
-        return self.query_service.get_logs(run_id)
-
-    def get_execution_output(self, body_ref: str) -> dict[str, Any] | None:
-        return self.query_service.get_execution_output(body_ref)
+    def logs(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.query_service.get_logs(
+            run_id,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
 
     def list_runs(
         self,

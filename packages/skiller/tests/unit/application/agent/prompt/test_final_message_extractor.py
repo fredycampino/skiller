@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.prompt.final_message_extractor import (
     AgentFinalMessageExtractor,
 )

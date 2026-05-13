@@ -1,25 +1,11 @@
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any
 
+from skiller.domain.event.event_model import (
+    RuntimeEventDraft,
+    RuntimeEventPayload,
+    RuntimeEventType,
+)
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
-from skiller.domain.step.step_execution_model import StepExecution
-from skiller.domain.step.step_type import StepType
-
-
-class RuntimeEventType(str, Enum):
-    RUN_CREATE = "RUN_CREATE"
-    RUN_RESUME = "RUN_RESUME"
-    STEP_STARTED = "STEP_STARTED"
-    STEP_SUCCESS = "STEP_SUCCESS"
-    STEP_ERROR = "STEP_ERROR"
-    RUN_WAITING = "RUN_WAITING"
-    RUN_FINISHED = "RUN_FINISHED"
-    AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
-    AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
-    AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
-    AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
-    AGENT_MAX_TURNS_EXHAUSTED = "AGENT_MAX_TURNS_EXHAUSTED"
 
 
 @dataclass(frozen=True)
@@ -36,24 +22,19 @@ class AppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, Any] | None = None,
+        payload: RuntimeEventPayload,
         step_id: str | None = None,
-        step_type: StepType | None = None,
-        execution: StepExecution | None = None,
-        next_step_id: str | None = None,
-        error: str | None = None,
+        step_type: str | None = None,
+        agent_sequence: int | None = None,
     ) -> AppendRuntimeEventResult:
-        event_payload = dict(payload or {})
-        if step_id is not None:
-            event_payload["step"] = step_id
-        if step_type is not None:
-            event_payload["step_type"] = step_type.value
-        if execution is not None:
-            event_payload["step_type"] = execution.step_type.value
-            event_payload["output"] = execution.to_public_output_dict()
-        if next_step_id is not None:
-            event_payload["next"] = next_step_id
-        if error is not None:
-            event_payload["error"] = error
-        event_id = self.store.append_event(event_type.value, event_payload, run_id=run_id)
+        event_id = self.store.append_event(
+            RuntimeEventDraft(
+                run_id=run_id,
+                type=event_type,
+                payload=payload,
+                step_id=step_id,
+                step_type=step_type,
+                agent_sequence=agent_sequence,
+            )
+        )
         return AppendRuntimeEventResult(event_id=event_id)

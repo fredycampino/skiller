@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.infrastructure.config.settings import Settings
 from skiller.local.channels.whatsapp.process_service import WhatsAppProcessService
 

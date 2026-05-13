@@ -2,19 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
 
-from stui.port.run_port import (
-    EventObserver,
-    ObserverType,
-    PollingEvent,
-)
-from stui.screen.runs_table_view import RunRowMode, RunRowStatus
+from stui.port.event_models import LogEvent
+from stui.port.event_port import LogEventsListener
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
 from stui.usecase.list_runs_use_case import ListRunsUseCase
+from stui.usecase.log_event_reducer_use_case import (
+    LogEventReducerUseCase,
+)
 from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
@@ -22,15 +20,12 @@ from stui.usecase.normalize_command_use_case import (
     CommandKind,
     NormalizeCommandUseCase,
 )
-from stui.usecase.polling_event_reducer_use_case import (
-    PollingEventReducerUseCase,
-)
 from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
-from stui.usecase.run_event_context import RunEventContext, RunStatus
+from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -49,9 +44,7 @@ from stui.viewmodel.console_screen_state import (
 
 
 @dataclass
-class ConsoleScreenViewModel(EventObserver):
-    type: Literal[ObserverType.RUN] = ObserverType.RUN
-    run_id: str = ""
+class ConsoleScreenViewModel(LogEventsListener):
     _autocomplete_use_case: AutocompleteUseCase = field(init=False, repr=False)
     _interrupt_agent_turn_use_case: InterruptAgentTurnUseCase = field(
         init=False,
@@ -60,7 +53,7 @@ class ConsoleScreenViewModel(EventObserver):
     _move_completion_use_case: MoveCompletionUseCase = field(init=False, repr=False)
     _list_runs_use_case: ListRunsUseCase = field(init=False, repr=False)
     _normalize_command_use_case: NormalizeCommandUseCase = field(init=False, repr=False)
-    _polling_event_reducer_use_case: PollingEventReducerUseCase = field(
+    _log_event_reducer_use_case: LogEventReducerUseCase = field(
         init=False,
         repr=False,
     )
@@ -96,7 +89,7 @@ class ConsoleScreenViewModel(EventObserver):
         move_completion_use_case: MoveCompletionUseCase,
         list_runs_use_case: ListRunsUseCase,
         normalize_command_use_case: NormalizeCommandUseCase,
-        polling_event_reducer_use_case: PollingEventReducerUseCase,
+        log_event_reducer_use_case: LogEventReducerUseCase,
         project_transcript_use_case: ProjectTranscriptUseCase,
         prompt_enter_use_case: PromptEnterUseCase,
         run_command_use_case: RunCommandUseCase,
@@ -109,14 +102,13 @@ class ConsoleScreenViewModel(EventObserver):
         self._move_completion_use_case = move_completion_use_case
         self._list_runs_use_case = list_runs_use_case
         self._normalize_command_use_case = normalize_command_use_case
-        self._polling_event_reducer_use_case = polling_event_reducer_use_case
+        self._log_event_reducer_use_case = log_event_reducer_use_case
         self._project_transcript_use_case = project_transcript_use_case
         self._prompt_enter_use_case = prompt_enter_use_case
         self._run_command_use_case = run_command_use_case
         self._select_runs_table_row_use_case = select_runs_table_row_use_case
         self._submit_waiting_input_use_case = submit_waiting_input_use_case
         self.state = ConsoleScreenState(session_key=session_key)
-        self.run_id = ""
         self._on_state = None
 
     async def submit(self, text: str) -> None:
@@ -173,15 +165,17 @@ class ConsoleScreenViewModel(EventObserver):
         self.state.view_status.kind = ViewStatusKind.HIDDEN
         self.state.view_status.message = ""
         self.state.prompt.waiting_prompt = ""
-        self.state.prompt.mode = PromptMode.FLOW
+        self.state.prompt.mode = PromptMode.DEFAULT
         self._emit_state()
 
     def prompt_change(self, *, text: str, cursor_position: int) -> None:
         self.state.prompt.text = text
         self.state.prompt.cursor_position = cursor_position
-        self.state.autocompletion = self._autocomplete_use_case.execute(
-            text=text,
-            cursor_position=cursor_position,
+        self.state.set_autocompletion(
+            self._autocomplete_use_case.execute(
+                text=text,
+                cursor_position=cursor_position,
+            )
         )
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
@@ -194,7 +188,7 @@ class ConsoleScreenViewModel(EventObserver):
         if completion is None:
             return False
 
-        self.state.autocompletion = completion
+        self.state.set_autocompletion(completion)
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
         return True
@@ -212,17 +206,24 @@ class ConsoleScreenViewModel(EventObserver):
         self._on_state = callback
 
     def _emit_state(self) -> None:
+        self._sync_transcript_mode_from_context()
         if self._on_state is not None:
             self._on_state(self.state)
 
     def _clear_prompt_state(self) -> None:
-        self.state.autocompletion = None
+        self.state.set_autocompletion()
         self.state.prompt.text = ""
         self.state.prompt.cursor_position = 0
         self.state.prompt.mode = self._resolve_prompt_mode()
 
-    def notify(self, events: list[PollingEvent]) -> None:
-        result = self._polling_event_reducer_use_case.execute(
+    def _sync_transcript_mode_from_context(self) -> None:
+        if self._run_event_context.mode == RunMode.CHAT:
+            self.state.transcript.mode = TranscriptMode.CHAT
+            return
+        self.state.transcript.mode = TranscriptMode.FLOW
+
+    def notify(self, events: list[LogEvent]) -> None:
+        result = self._log_event_reducer_use_case.execute(
             state=self.state,
             events=events,
         )
@@ -239,21 +240,15 @@ class ConsoleScreenViewModel(EventObserver):
         self,
         *,
         prompt_text: str,
-        mode: RunRowMode,
-        status: RunRowStatus,
         run_id: str,
         skill_name: str,
-        is_exit: bool,
     ) -> None:
         result = self._select_runs_table_row_use_case.execute(
             self,
             state=self.state,
             prompt_text=prompt_text,
-            mode=mode,
-            status=status,
             run_id=run_id,
             skill_name=skill_name,
-            is_exit=is_exit,
         )
         self.state = result.state
         self._emit_state()
@@ -265,12 +260,13 @@ class ConsoleScreenViewModel(EventObserver):
         self._emit_state()
 
     def visible_transcript_items(self) -> list[TranscriptItem]:
+        self._sync_transcript_mode_from_context()
         return self._project_transcript_use_case.execute(state=self.state)
 
     async def interrupt_running_agent_turn(self) -> bool:
         if self._run_event_context.status != RunStatus.RUNNING:
             return False
-        if self.state.transcript.mode != TranscriptMode.CHAT:
+        if self._run_event_context.mode != RunMode.CHAT:
             return False
         if not self._run_event_context.run_id.strip():
             return False
@@ -301,13 +297,11 @@ class ConsoleScreenViewModel(EventObserver):
             and bool(self.state.autocompletion.items)
         ):
             return PromptMode.AUTOCOMPLETION
-        if self._run_event_context.status == RunStatus.WAITING_INPUT:
-            return PromptMode.CHAT
-        return PromptMode.FLOW
+        return PromptMode.DEFAULT
 
     def _should_keep_interrupt_pending(self) -> bool:
         return (
             self.state.prompt.mode == PromptMode.INTERRUPT_PENDING
             and self._run_event_context.status == RunStatus.RUNNING
-            and self.state.transcript.mode == TranscriptMode.CHAT
+            and self._run_event_context.mode == RunMode.CHAT
         )

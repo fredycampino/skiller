@@ -10,10 +10,7 @@ from skiller.application.use_cases.ingress.handle_input import HandleInputUseCas
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
-from skiller.application.use_cases.run.append_runtime_event import (
-    AppendRuntimeEventUseCase,
-    RuntimeEventType,
-)
+from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.create_run import CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunStatus, DeleteRunUseCase
@@ -32,6 +29,12 @@ from skiller.application.use_cases.webhook.register_webhook import RegisterWebho
 from skiller.application.use_cases.webhook.remove_webhook import (
     RemoveWebhookStatus,
     RemoveWebhookUseCase,
+)
+from skiller.domain.event.event_model import (
+    RunCreatedPayload,
+    RunFinishedPayload,
+    RunResumedPayload,
+    RuntimeEventType,
 )
 from skiller.domain.run.run_model import RunStatus, SkillSource
 
@@ -149,10 +152,7 @@ class RuntimeApplicationService:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_CREATE,
-            payload={
-                "skill": skill_ref,
-                "skill_source": skill_source,
-            },
+            payload=RunCreatedPayload(skill=skill_ref, skill_source=skill_source),
         )
         return {"run_id": run_id, "status": RunStatus.CREATED.value}
 
@@ -165,7 +165,7 @@ class RuntimeApplicationService:
             self.append_runtime_event_use_case.execute(
                 run_id,
                 event_type=RuntimeEventType.RUN_FINISHED,
-                payload={"status": RunStatus.FAILED.value, "error": error},
+                payload=RunFinishedPayload(status=RunStatus.FAILED.value, error=error),
             )
 
     def dispatch_run(self, run_id: str) -> None:
@@ -289,7 +289,7 @@ class RuntimeApplicationService:
             self.append_runtime_event_use_case.execute(
                 run_id,
                 event_type=RuntimeEventType.RUN_RESUME,
-                payload={"source": "manual"},
+                payload=RunResumedPayload(source="manual"),
             )
             self.run_worker_service.run(run_id)
         status_payload = self.get_run_result(run_id)

@@ -15,7 +15,10 @@ from skiller.application.agent.prompt.final_message_extractor import (
 )
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.tool_manager import ToolManager
-from skiller.domain.agent.agent_context_model import AgentContextEntryType
+from skiller.domain.agent.agent_context_model import (
+    AgentContextEntryType,
+    AgentUserMessagePayload,
+)
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
@@ -285,7 +288,8 @@ class AgentRunner:
         if any(
             entry.entry_type == AgentContextEntryType.USER_MESSAGE
             and entry.source_step_id == state.agent_id
-            and entry.payload.get("text") == warning
+            and isinstance(entry.payload, AgentUserMessagePayload)
+            and entry.payload.text == warning
             for entry in entries
         ):
             return

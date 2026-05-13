@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.tools.notify import NotifyTool
 from skiller.domain.tool.tool_contract import ToolInput, ToolResult, ToolResultStatus
 

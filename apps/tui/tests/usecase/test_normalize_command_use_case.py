@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.usecase.normalize_command_use_case import (
     CommandKind,
     NormalizeCommandUseCase,

@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.skill.skill_server_checker import (
     SkillServerCheckError,
     SkillServerCheckerUseCase,

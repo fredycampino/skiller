@@ -57,3 +57,5 @@ src/skiller/local/channels/whatsapp/bridge/package-lock.json
 packages/skiller/src/skiller/local/channels/whatsapp/bridge/node_modules/
 packages/skiller/src/skiller/local/channels/whatsapp/bridge/package-lock.json
 legacy/
+
+apps/tui/docs/todo

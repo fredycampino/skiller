@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from rich.text import Text
+
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.theme import TuiTheme
 from stui.viewmodel.console_screen_state import (
@@ -22,9 +23,9 @@ def test_autocomplete_view_renders_mock_items() -> None:
                 CompletionItem(label="runs", description="Show runs", insert_text="/runs"),
                 CompletionItem(label="run", description="Run a skill", insert_text="/run"),
                 CompletionItem(
-                    label="resume",
-                    description="Resume a waiting run",
-                    insert_text="/resume",
+                    label="quit",
+                    description="Exit the TUI",
+                    insert_text="/quit",
                 ),
             ),
             selected_index=1,
@@ -38,7 +39,7 @@ def test_autocomplete_view_renders_mock_items() -> None:
     assert isinstance(renderable, Text)
     assert (
         renderable.plain
-        == "   runs    Show runs\n-> run     Run a skill\n   resume  Resume a waiting run"
+        == "   runs  Show runs\n-> run   Run a skill\n   quit  Exit the TUI"
     )
 
 
@@ -51,9 +52,9 @@ def test_autocomplete_view_exposes_selected_item_from_state() -> None:
             CompletionItem(label="runs", description="Show runs", insert_text="/runs"),
             CompletionItem(label="run", description="Run a skill", insert_text="/run"),
             CompletionItem(
-                label="resume",
-                description="Resume a waiting run",
-                insert_text="/resume",
+                label="quit",
+                description="Exit the TUI",
+                insert_text="/quit",
             ),
         ),
         selected_index=1,

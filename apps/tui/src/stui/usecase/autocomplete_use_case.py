@@ -15,6 +15,12 @@ _COMPLETION_CATALOG: tuple[CompletionItem, ...] = (
         kind="command",
     ),
     CompletionItem(
+        label="chat",
+        description="Run a skill in chat mode",
+        insert_text="/chat",
+        kind="command",
+    ),
+    CompletionItem(
         label="runs",
         description="Show runs",
         insert_text="/runs",
@@ -27,9 +33,15 @@ _COMPLETION_CATALOG: tuple[CompletionItem, ...] = (
         kind="command",
     ),
     CompletionItem(
-        label="resume",
-        description="Resume a waiting run",
-        insert_text="/resume",
+        label="quit",
+        description="Exit the TUI",
+        insert_text="/quit",
+        kind="command",
+    ),
+    CompletionItem(
+        label="dev",
+        description="Show local debug state",
+        insert_text="/dev",
         kind="command",
     ),
 )

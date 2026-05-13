@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
+from apps.tui.tests.support import FakeAgentPort
 from stui.port.run_port import CommandAck, CommandAckStatus
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
@@ -15,8 +17,6 @@ from stui.viewmodel.console_screen_state import (
     DispatchErrorItem,
     ViewStatusKind,
 )
-
-from apps.tui.tests.support import FakeAgentPort
 
 pytestmark = pytest.mark.unit
 

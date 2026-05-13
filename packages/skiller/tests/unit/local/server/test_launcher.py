@@ -4,15 +4,16 @@ import json
 import subprocess
 
 import pytest
+
 from skiller.local.server import launcher
 
 
 def test_receive_webhook_invokes_runtime_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    recorded: dict[str, object] = {}
+    captured: dict[str, object] = {}
 
     def fake_run(cmd, **kwargs):  # noqa: ANN001
-        recorded["cmd"] = cmd
-        recorded["kwargs"] = kwargs
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(
             cmd,
             0,
@@ -25,7 +26,7 @@ def test_receive_webhook_invokes_runtime_cli(monkeypatch: pytest.MonkeyPatch) ->
     result = launcher.receive_webhook("test", "42", {"ok": True}, dedup_key="delivery-1")
 
     assert result["matched_runs"] == ["run-1"]
-    assert recorded["cmd"] == [
+    assert captured["cmd"] == [
         launcher.sys.executable,
         "-m",
         "skiller",

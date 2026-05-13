@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from helpers.agent_runner import build_agent_runner
+
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
@@ -48,10 +49,9 @@ from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCas
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
+from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
-from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -76,13 +76,10 @@ class _FakeChannelSender:
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
-    execution_output_store = SqliteExecutionOutputStore(store.db_path)
-    execution_output_store.init_db()
     agent_context_store = SqliteAgentContextStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
-        execution_output_store=execution_output_store,
     )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
@@ -105,24 +102,18 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         llm=NullLLM(),
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         shell_tool=shell_tool,
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -157,7 +148,6 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=store,
-            execution_output_store=execution_output_store,
             webhook_registry=webhook_registry,
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -220,68 +210,11 @@ def test_run_external_skill_file_succeeds() -> None:
         assert run.skill_ref == str(skill_path)
         assert run.skill_snapshot["name"] == "external_notify"
         events = store.list_events(run_result["run_id"])
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "show_message"
-        )
-        assert notify_event["payload"]["output"]["value"]["message"] == "external ok"
+        notify_event = _step_success_event(events, step_id="show_message")
+        assert notify_event.payload.output["value"]["message"] == "external ok"
 
 
-def test_external_shell_step_persists_large_result_body() -> None:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test.db")
-        skill_path = Path(tmpdir) / "external_shell.yaml"
-        skill_path.write_text(
-            (
-                "name: external_shell\n"
-                "start: run_command\n"
-                "inputs: {}\n"
-                "steps:\n"
-                "  - shell: run_command\n"
-                "    command: python3 -c \"print('x' * 400)\"\n"
-                "    large_result: true\n"
-            ),
-            encoding="utf-8",
-        )
-
-        store = SqliteStateStore(db_path)
-        store.init_db()
-        runtime = _build_runtime(store)
-
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
-
-        run = store.get_run(run_result["run_id"])
-        assert run_result["status"] == "SUCCEEDED"
-        assert run is not None
-        output = run.context.step_executions["run_command"].output.to_public_dict()
-        body_ref = output["body_ref"]
-        assert isinstance(body_ref, str)
-        assert body_ref.startswith("execution_output:")
-        assert output == {
-            "text": ("x" * 197) + "...",
-            "value": {
-                "ok": True,
-                "exit_code": 0,
-                "stdout": ("x" * 197) + "...",
-                "stderr": "",
-            },
-            "body_ref": body_ref,
-        }
-
-        execution_output_store = SqliteExecutionOutputStore(db_path)
-        execution_output_store.init_db()
-        assert execution_output_store.get_execution_output(body_ref) == {
-            "value": {
-                "ok": True,
-                "exit_code": 0,
-                "stdout": ("x" * 400) + "\n",
-                "stderr": "",
-            }
-        }
-
-
-def test_external_notify_can_read_large_result_output_value() -> None:
+def test_external_notify_can_read_shell_output_value() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "external_shell_notify.yaml"
@@ -293,7 +226,6 @@ def test_external_notify_can_read_large_result_output_value() -> None:
                 "steps:\n"
                 "  - shell: inspect_cloudflared\n"
                 "    command: python3 -c \"print('x' * 400)\"\n"
-                "    large_result: true\n"
                 "    next: summarize_tunnels\n"
                 "  - notify: summarize_tunnels\n"
                 "    message: '{{output_value(\"inspect_cloudflared\").stdout}}'\n"
@@ -398,12 +330,11 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert run.status == "WAITING"
 
         wait_event = next(
-            event
-            for event in store.list_events(run_id)
-            if event["type"] == "RUN_WAITING"
+            event for event in store.list_events(run_id) if event.type == "RUN_WAITING"
         )
-        assert wait_event["payload"]["output"]["value"]["webhook"] == "github-pr-merged"
-        assert wait_event["payload"]["output"]["value"]["key"] == "42"
+        assert isinstance(wait_event.payload, RunWaitingPayload)
+        assert wait_event.payload.output["value"]["webhook"] == "github-pr-merged"
+        assert wait_event.payload.output["value"]["key"] == "42"
 
         resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
@@ -414,9 +345,9 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert resumed_run.status == "WAITING"
 
         events = store.list_events(run_id)
-        assert any(event["type"] == "RUN_RESUME" for event in events)
+        assert any(event.type == "RUN_RESUME" for event in events)
         assert not any(
-            event["type"] == "STEP_SUCCESS" and event["payload"]["step_type"] == "notify"
+            event.type == "STEP_SUCCESS" and event.step_type == "notify"
             for event in events
         )
 
@@ -471,12 +402,8 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         assert resumed_run.status == "SUCCEEDED"
 
         events = store.list_events(run_id)
-        wait_resolved = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "wait_merge"
-        )
-        assert wait_resolved["payload"]["output"] == {
+        wait_resolved = _step_success_event(events, step_id="wait_merge")
+        assert wait_resolved.payload.output == {
             "text": "Webhook received: github-pr-merged:42.",
             "value": {
                 "webhook": "github-pr-merged",
@@ -485,12 +412,8 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
             },
             "body_ref": None,
         }
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
-        )
-        assert notify_event["payload"]["output"]["value"]["message"] == "resumed from webhook"
+        notify_event = _step_success_event(events, step_id="done")
+        assert notify_event.payload.output["value"]["message"] == "resumed from webhook"
 
 
 def test_external_wait_input_file_can_resume_from_cli_input() -> None:
@@ -507,7 +430,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
                 "    prompt: Write a short summary\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                '    message: \'{{output_value("ask_user").payload.text}}\'\n'
+                "    message: '{{output_value(\"ask_user\").payload.text}}'\n"
             ),
             encoding="utf-8",
         )
@@ -545,24 +468,19 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         )
         assert resumed_run.context.step_executions["ask_user"].output.to_public_dict()["value"] == {
             "prompt": "Write a short summary",
-            "payload": {
-                "text": "database timeout"
-            },
+            "payload": {"text": "database timeout"},
         }
         assert resumed_run.context.step_executions["ask_user"].evaluation["input_event_id"]
 
         events = store.list_events(run_id)
-        run_waiting_event = next(event for event in events if event["type"] == "RUN_WAITING")
-        assert run_waiting_event["payload"]["step"] == "ask_user"
-        assert run_waiting_event["payload"]["step_type"] == "wait_input"
-        assert run_waiting_event["payload"]["output"]["value"]["prompt"] == "Write a short summary"
+        run_waiting_event = next(event for event in events if event.type == "RUN_WAITING")
+        assert run_waiting_event.step_id == "ask_user"
+        assert run_waiting_event.step_type == "wait_input"
+        assert isinstance(run_waiting_event.payload, RunWaitingPayload)
+        assert run_waiting_event.payload.output["value"]["prompt"] == "Write a short summary"
 
-        step_success_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "ask_user"
-        )
-        assert step_success_event["payload"]["output"] == {
+        step_success_event = _step_success_event(events, step_id="ask_user")
+        assert step_success_event.payload.output == {
             "text": "Input received.",
             "value": {
                 "prompt": "Write a short summary",
@@ -571,12 +489,8 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
             "body_ref": None,
         }
 
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
-        )
-        assert notify_event["payload"]["output"]["value"]["message"] == "database timeout"
+        notify_event = _step_success_event(events, step_id="done")
+        assert notify_event.payload.output["value"]["message"] == "database timeout"
 
 
 def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
@@ -593,7 +507,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
                 "    prompt: Write a short summary\n"
                 "    next: echo\n"
                 "  - notify: echo\n"
-                '    message: \'{{output_value("ask_user").payload.text}}\'\n'
+                "    message: '{{output_value(\"ask_user\").payload.text}}'\n"
                 "    next: ask_user\n"
             ),
             encoding="utf-8",
@@ -622,11 +536,9 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
         assert run_after_first_resume is not None
         assert run_after_first_resume.status == "WAITING"
         assert run_after_first_resume.current == "ask_user"
-        assert (
-            run_after_first_resume.context.step_executions["ask_user"]
-            .output.to_public_dict()["value"]["payload"]
-            == {"text": "first reply"}
-        )
+        assert run_after_first_resume.context.step_executions["ask_user"].output.to_public_dict()[
+            "value"
+        ]["payload"] == {"text": "first reply"}
 
         second_input = runtime.handle_input(run_id, text="second reply")
         second_resume = runtime.resume_run(run_id)
@@ -642,34 +554,41 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
         assert run_after_second_resume is not None
         assert run_after_second_resume.status == "WAITING"
         assert run_after_second_resume.current == "ask_user"
-        assert (
-            run_after_second_resume.context.step_executions["ask_user"]
-            .output.to_public_dict()["value"]["payload"]
-            == {"text": "second reply"}
-        )
+        assert run_after_second_resume.context.step_executions["ask_user"].output.to_public_dict()[
+            "value"
+        ]["payload"] == {"text": "second reply"}
 
         events = store.list_events(run_id)
         input_resolved_events = [
             event
             for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "ask_user"
+            if event.type == "STEP_SUCCESS" and event.step_id == "ask_user"
         ]
         notify_events = [
             event
             for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "echo"
+            if event.type == "STEP_SUCCESS" and event.step_id == "echo"
         ]
-        input_waiting_events = [event for event in events if event["type"] == "RUN_WAITING"]
+        input_waiting_events = [event for event in events if event.type == "RUN_WAITING"]
 
         assert len(input_resolved_events) == 2
-        assert input_resolved_events[0]["payload"]["output"]["value"]["payload"] == {
+        assert isinstance(input_resolved_events[0].payload, StepSuccessPayload)
+        assert input_resolved_events[0].payload.output["value"]["payload"] == {
             "text": "first reply"
         }
-        assert input_resolved_events[1]["payload"]["output"]["value"]["payload"] == {
+        assert input_resolved_events[1].payload.output["value"]["payload"] == {
             "text": "second reply"
         }
-        assert [event["payload"]["output"]["value"]["message"] for event in notify_events] == [
+        assert [event.payload.output["value"]["message"] for event in notify_events] == [
             "first reply",
             "second reply",
         ]
         assert len(input_waiting_events) == 3
+
+
+def _step_success_event(events: list[object], *, step_id: str):
+    return next(
+        event
+        for event in events
+        if event.type == "STEP_SUCCESS" and event.step_id == step_id
+    )

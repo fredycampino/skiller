@@ -48,9 +48,6 @@ from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenS
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
-from skiller.application.use_cases.query.get_execution_output import (
-    GetExecutionOutputUseCase,
-)
 from skiller.application.use_cases.query.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.query.get_runs import GetRunsUseCase
@@ -76,11 +73,9 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 )
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
-from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
@@ -115,11 +110,9 @@ def build_runtime_container(
     agent_context_store = SqliteAgentContextStore(cfg.db_path)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
-    execution_output_store = SqliteExecutionOutputStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir=skills_dir,
-        execution_output_store=execution_output_store,
     )
     llm = _build_llm(cfg)
     mcp = DefaultMCP()
@@ -127,12 +120,10 @@ def build_runtime_container(
     tool_process_runner = DefaultToolProcessRunner()
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender(cfg)
-    large_result_truncator = LargeResultTruncator()
     tool_manager = _build_agent_tool_manager(cfg)
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         webhook_registry=webhook_registry,
     )
 
@@ -215,15 +206,11 @@ def build_runtime_container(
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         llm=llm,
-        large_result_truncator=large_result_truncator,
     )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=large_result_truncator,
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_send_step_use_case = ExecuteSendStepUseCase(
@@ -232,11 +219,9 @@ def build_runtime_container(
     )
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         shell_tool=shell_tool,
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
-        large_result_truncator=large_result_truncator,
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -263,7 +248,6 @@ def build_runtime_container(
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(store)
     get_runs_use_case = GetRunsUseCase(run_query)
-    get_execution_output_use_case = GetExecutionOutputUseCase(execution_output_store)
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
@@ -284,7 +268,6 @@ def build_runtime_container(
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
     query_service = RunQueryService(
-        get_execution_output_use_case=get_execution_output_use_case,
         get_run_status_use_case=get_run_status_use_case,
         get_run_logs_use_case=get_run_logs_use_case,
         get_runs_use_case=get_runs_use_case,

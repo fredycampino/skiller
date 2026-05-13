@@ -4,6 +4,16 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from skiller.domain.event.event_model import (
+    RuntimeEvent,
+    RuntimeEventDraft,
+    RuntimeEventType,
+    runtime_event_agent_sequence,
+    runtime_event_body_to_dict,
+    runtime_event_payload_from_dict,
+    runtime_event_step_id,
+    runtime_event_step_type,
+)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.wait.match_type import MatchType
@@ -46,12 +56,18 @@ class SqliteStateStore(SqliteRepository):
                   finished_at TEXT
                 );
 
-                CREATE TABLE IF NOT EXISTS events (
+                CREATE TABLE IF NOT EXISTS log_events (
                   id TEXT PRIMARY KEY,
-                  run_id TEXT,
-                  type TEXT NOT NULL,
-                  payload_json TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                  run_id TEXT NOT NULL,
+                  sequence INTEGER NOT NULL,
+                  event_type TEXT NOT NULL,
+                  step_id TEXT,
+                  step_type TEXT,
+                  agent_sequence INTEGER,
+                  body_json TEXT NOT NULL,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE(run_id, sequence),
+                  FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
                 );
 
                 CREATE TABLE IF NOT EXISTS external_receipts (
@@ -65,8 +81,12 @@ class SqliteStateStore(SqliteRepository):
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_runs_status_updated_at ON runs(status, updated_at);
-                CREATE INDEX IF NOT EXISTS idx_events_run_created_at
-                  ON events(run_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_log_events_run_sequence
+                  ON log_events(run_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_log_events_run_type
+                  ON log_events(run_id, event_type);
+                CREATE INDEX IF NOT EXISTS idx_log_events_agent_sequence
+                  ON log_events(run_id, agent_sequence);
                 CREATE INDEX IF NOT EXISTS idx_external_receipts_source_match_created_at
                   ON external_receipts(source_type, source_name, match_type, match_key, created_at);
                 """
@@ -227,8 +247,6 @@ class SqliteStateStore(SqliteRepository):
             if row is None:
                 return False
 
-            if self._table_exists(conn, "execution_outputs"):
-                conn.execute("DELETE FROM execution_outputs WHERE run_id = ?", (run_id,))
             if self._table_exists(conn, "agent_context_entries"):
                 conn.execute("DELETE FROM agent_context_entries WHERE run_id = ?", (run_id,))
             conn.execute(
@@ -251,7 +269,7 @@ class SqliteStateStore(SqliteRepository):
                 (run_id, run_id),
             )
             conn.execute("DELETE FROM waits WHERE run_id = ?", (run_id,))
-            conn.execute("DELETE FROM events WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM log_events WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
         return True
 
@@ -330,58 +348,126 @@ class SqliteStateStore(SqliteRepository):
         ).fetchone()
         return row is not None
 
-    def append_event(
-        self, event_type: str, payload: dict[str, Any], run_id: str | None = None
-    ) -> str:
+    def append_event(self, event: RuntimeEventDraft) -> str:
         event_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO events (id, run_id, type, payload_json) VALUES (?, ?, ?, ?)",
-                (event_id, run_id, event_type, json.dumps(payload)),
-            )
-        return event_id
-
-    def list_events(self, run_id: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT rowid AS sequence, id, type, payload_json, created_at
-                FROM events WHERE run_id = ?
-                ORDER BY rowid ASC
-                """,
-                (run_id,),
-            ).fetchall()
-        return [
-            {
-                "sequence": int(row["sequence"]),
-                "id": row["id"],
-                "type": row["type"],
-                "payload": json.loads(row["payload_json"]),
-                "created_at": row["created_at"],
-            }
-            for row in rows
-        ]
-
-    def get_last_event(self, run_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT rowid AS sequence, id, type, payload_json, created_at
-                FROM events WHERE run_id = ?
-                ORDER BY rowid DESC
+                SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence
+                FROM log_events
+                WHERE run_id = ?
+                """,
+                (event.run_id,),
+            ).fetchone()
+            sequence = int(row["next_sequence"]) if row is not None else 1
+            conn.execute(
+                """
+                INSERT INTO log_events (
+                  id,
+                  run_id,
+                  sequence,
+                  event_type,
+                  step_id,
+                  step_type,
+                  agent_sequence,
+                  body_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    event.run_id,
+                    sequence,
+                    event.type.value,
+                    event.step_id
+                    if event.step_id is not None
+                    else runtime_event_step_id(event.payload),
+                    event.step_type
+                    if event.step_type is not None
+                    else runtime_event_step_type(event.payload),
+                    event.agent_sequence
+                    if event.agent_sequence is not None
+                    else runtime_event_agent_sequence(event.payload),
+                    json.dumps(runtime_event_body_to_dict(event.payload)),
+                ),
+            )
+        return event_id
+
+    def list_events(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        limit: int | None = None,
+    ) -> list[RuntimeEvent]:
+        query = """
+            SELECT
+              sequence,
+              id,
+              run_id,
+              event_type,
+              step_id,
+              step_type,
+              agent_sequence,
+              body_json,
+              created_at
+            FROM log_events WHERE run_id = ?
+        """
+        params: list[Any] = [run_id]
+        if after_sequence is not None:
+            query += " AND sequence > ?"
+            params.append(after_sequence)
+        query += " ORDER BY sequence ASC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._build_runtime_event(row) for row in rows]
+
+    def get_last_event(self, run_id: str) -> RuntimeEvent | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                  sequence,
+                  id,
+                  run_id,
+                  event_type,
+                  step_id,
+                  step_type,
+                  agent_sequence,
+                  body_json,
+                  created_at
+                FROM log_events WHERE run_id = ?
+                ORDER BY sequence DESC
                 LIMIT 1
                 """,
                 (run_id,),
             ).fetchone()
         if row is None:
             return None
-        return {
-            "sequence": int(row["sequence"]),
-            "id": row["id"],
-            "type": row["type"],
-            "payload": json.loads(row["payload_json"]),
-            "created_at": row["created_at"],
-        }
+        return self._build_runtime_event(row)
+
+    def _build_runtime_event(self, row: sqlite3.Row) -> RuntimeEvent:
+        return RuntimeEvent(
+            sequence=int(row["sequence"]),
+            id=row["id"],
+            run_id=row["run_id"],
+            type=RuntimeEventType(row["event_type"]),
+            step_id=row["step_id"],
+            step_type=row["step_type"],
+            agent_sequence=row["agent_sequence"],
+            created_at=row["created_at"],
+            payload=runtime_event_payload_from_dict(
+                event_type=RuntimeEventType(row["event_type"]),
+                value={
+                    **json.loads(row["body_json"]),
+                    "step_id": row["step_id"],
+                    "step_type": row["step_type"],
+                    "agent_sequence": row["agent_sequence"],
+                },
+            ),
+        )
 
     def create_wait(
         self,

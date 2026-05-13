@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.screen.prompt import PromptTextArea, compact_pasted_prompt_text
 
 pytestmark = pytest.mark.unit

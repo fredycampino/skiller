@@ -4,7 +4,6 @@ Current SQLite schema used by Skiller.
 
 Source of truth:
 - [`sqlite_state_store.py`](../../packages/skiller/src/skiller/infrastructure/db/sqlite_state_store.py)
-- [`sqlite_execution_output_store.py`](../../packages/skiller/src/skiller/infrastructure/db/sqlite_execution_output_store.py)
 - [`sqlite_webhook_registry.py`](../../packages/skiller/src/skiller/infrastructure/db/sqlite_webhook_registry.py)
 - [`bootstrap_runtime.py`](../../packages/skiller/src/skiller/application/use_cases/run/bootstrap_runtime.py)
 
@@ -64,8 +63,7 @@ It is a JSON object indexed by `step_id`:
     "step_type": "llm_prompt",
     "input": {
       "system": "You are a support assistant.",
-      "prompt": "hello",
-      "large_result": false
+      "prompt": "hello"
     },
     "evaluation": {
       "model": "fake-llm"
@@ -92,6 +90,15 @@ Templates read this data through `output_value(...)`:
 
 Because the object is indexed by `step_id`, a loop that executes the same `step_id` more than once
 keeps only the latest execution for that step id.
+
+This means `step_executions_json` is not an execution history. It does not grow with the number of
+iterations or runtime events. Its size grows mainly with:
+
+- the number of distinct `step_id` values that have executed
+- the size of the latest output stored for each executed step
+
+Historical execution order and repeated step activity belong to `log_events`, not to
+`step_executions_json`.
 
 Indexes:
 
@@ -137,7 +144,7 @@ idx_waits_run_step_type_status(run_id, step_id, wait_type, status)
 idx_waits_source_match_type_status(source_type, source_name, match_type, match_key, wait_type, status)
 ```
 
-## `events`
+## `log_events`
 
 Represents:
 - the generic runtime event stream
@@ -147,84 +154,24 @@ Represents:
 +--------------+-------+--------------------------------------+
 | column       | type  | notes                                |
 +--------------+-------+--------------------------------------+
-| id           | TEXT  | PK                                   |
-| run_id       | TEXT  | nullable                             |
-| type         | TEXT  | NOT NULL                             |
-| payload_json | TEXT  | NOT NULL                             |
-| created_at   | TEXT  | NOT NULL, default CURRENT_TIMESTAMP  |
+| id             | TEXT    | PK                                  |
+| run_id         | TEXT    | NOT NULL                            |
+| sequence       | INTEGER | NOT NULL, ordered per run           |
+| event_type     | TEXT    | NOT NULL                            |
+| step_id        | TEXT    | nullable                            |
+| step_type      | TEXT    | nullable                            |
+| agent_sequence | INTEGER | nullable                            |
+| body_json      | TEXT    | NOT NULL                            |
+| created_at     | TEXT    | NOT NULL, default CURRENT_TIMESTAMP |
 +--------------+-------+--------------------------------------+
 ```
 
 Indexes:
 
 ```text
-idx_events_run_created_at(run_id, created_at)
-```
-
-## `execution_outputs`
-
-Represents:
-- full output bodies stored for steps with `large_result: true`
-- durable payloads addressed by `output.body_ref`
-
-```text
-+------------------+-------+--------------------------------------+
-| column           | type  | notes                                |
-+------------------+-------+--------------------------------------+
-| id               | TEXT  | PK                                   |
-| run_id           | TEXT  | NOT NULL                             |
-| step_id          | TEXT  | NOT NULL                             |
-| output_body_json | TEXT  | NOT NULL                             |
-| created_at       | TEXT  | NOT NULL, default CURRENT_TIMESTAMP  |
-+------------------+-------+--------------------------------------+
-```
-
-`output_body_json` stores the full output body for a step whose public output was reduced in
-`runs.step_executions_json`. The step output keeps a durable pointer in `output.body_ref`:
-
-```json
-{
-  "text": "Europe is one of the smallest continents...",
-  "text_ref": "data.reply",
-  "value": {
-    "data": {
-      "reply": "Europe is one of the smallest continents...",
-      "reply_length": 980,
-      "truncated": true
-    }
-  },
-  "body_ref": "execution_output:abc123"
-}
-```
-
-The `body_ref` prefix is stripped and matched against `execution_outputs.id`:
-
-```text
-runs.step_executions_json.<step_id>.output.body_ref = "execution_output:abc123"
-execution_outputs.id = "abc123"
-```
-
-For `llm_prompt` with `large_result: true`, `output_body_json` stores the full effective
-`output.value`:
-
-```json
-{
-  "value": {
-    "data": {
-      "reply": "full long text..."
-    }
-  }
-}
-```
-
-When a template calls `output_value("answer")` and the step output has a `body_ref`, the renderer
-loads `execution_outputs.output_body_json` and resolves fields against its `value` instead of the
-truncated `runs.step_executions_json` value.
-
-Indexes:
-
-```text
-idx_execution_outputs_run_step_created_at(run_id, step_id, created_at)
+idx_log_events_run_sequence(run_id, sequence)
+idx_log_events_run_type(run_id, event_type)
+idx_log_events_agent_sequence(run_id, agent_sequence)
 ```
 
 ## `external_receipts`
@@ -307,9 +254,7 @@ Represents:
 ## Notes
 
 - `runs.step_executions_json` is the source of truth for persisted step execution data.
-- `events.payload_json` is the observability stream used by `/logs`, `watch`, and the UI transcript.
-- `execution_outputs.output_body_json` stores the full output body behind `output.body_ref`.
-- for `llm_prompt`, that body currently stores the full `value` used to rebuild the final text through `text_ref`.
+- `log_events.body_json` is the observability stream body used by `/logs`, `watch`, and the UI transcript.
 - `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
 - `wait_type` remains the step-level discriminator for wait semantics.
 - `source_*` models where an external event came from.
@@ -325,11 +270,10 @@ Represents:
 `skiller delete <run_id>` deletes the run row and the database rows tied to that run in one
 SQLite transaction:
 
-- `execution_outputs` where `run_id` matches
 - `external_receipts` whose `dedup_key` belongs to an `external_events` row tied to the run
 - `external_events` where `run_id` or `consumed_by_run_id` matches
 - `waits` where `run_id` matches
-- `events` where `run_id` matches
+- `log_events` where `run_id` matches
 - `runs` where `id` matches
 
 `webhook_registrations` are global channel configuration and are not deleted by run cleanup.

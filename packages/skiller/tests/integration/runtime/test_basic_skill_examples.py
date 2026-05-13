@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from helpers.agent_runner import build_agent_runner
+
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
@@ -39,10 +40,9 @@ from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCas
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
+from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
-from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -65,13 +65,10 @@ class _FakeChannelSender:
 
 
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
-    execution_output_store = SqliteExecutionOutputStore(store.db_path)
-    execution_output_store.init_db()
     agent_context_store = SqliteAgentContextStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
-        execution_output_store=execution_output_store,
     )
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
@@ -94,24 +91,18 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         llm=NullLLM(),
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         shell_tool=shell_tool,
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
-        large_result_truncator=LargeResultTruncator(),
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -140,7 +131,6 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=store,
-            execution_output_store=execution_output_store,
             webhook_registry=webhook_registry,
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -189,24 +179,19 @@ def test_basic_skill_examples_succeed(
         assert run.status == "SUCCEEDED"
 
         events = store.list_events(run_id)
-        assert any(event["type"] == "RUN_FINISHED" for event in events)
-        assert any(event["type"] == "STEP_STARTED" for event in events)
-        assert any(event["type"] == "STEP_SUCCESS" for event in events)
+        assert any(event.type == "RUN_FINISHED" for event in events)
+        assert any(event.type == "STEP_STARTED" for event in events)
+        assert any(event.type == "STEP_SUCCESS" for event in events)
 
-        main_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "show_message"
-        )
-        assert main_event["payload"] == {
-            "step": "show_message",
-            "step_type": "notify",
-            "output": {
+        main_event = _step_success_event(events, step_id="show_message")
+        assert main_event.step_type == "notify"
+        assert main_event.payload == StepSuccessPayload(
+            output={
                 "text": "notify smoke ok",
                 "value": {"message": "notify smoke ok"},
                 "body_ref": None,
             },
-        }
+        )
 
 
 def test_assign_step_succeeds_from_external_skill_file() -> None:
@@ -228,7 +213,7 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
                 "        source: assign\n"
                 "    next: done\n"
                 "  - notify: done\n"
-                '    message: \'{{output_value("prepare_action").assigned.action}}\'\n'
+                "    message: '{{output_value(\"prepare_action\").assigned.action}}'\n"
             ),
             encoding="utf-8",
         )
@@ -257,34 +242,25 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
         }
 
         events = store.list_events(run_result["run_id"])
-        assign_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "prepare_action"
-        )
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "done"
-        )
+        assign_event = _step_success_event(events, step_id="prepare_action")
+        notify_event = _step_success_event(events, step_id="done")
 
-        assert assign_event["payload"] == {
-            "step": "prepare_action",
-            "step_type": "assign",
-            "output": {
+        assert assign_event.step_type == "assign"
+        assert assign_event.payload == StepSuccessPayload(
+            output={
                 "text": "Values assigned.",
                 "value": {
                     "assigned": {
                         "action": "retry",
                         "summary": "dependency timeout",
                         "meta": {"source": "assign"},
-                    }
-                },
-                "body_ref": None,
+                }
             },
-            "next": "done",
-        }
-        assert notify_event["payload"]["output"]["value"]["message"] == "retry"
+            "body_ref": None,
+            },
+            next="done",
+        )
+        assert notify_event.payload.output["value"]["message"] == "retry"
 
 
 def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> None:
@@ -301,7 +277,7 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
                 "      action: retry\n"
                 "    next: decide_action\n"
                 "  - switch: decide_action\n"
-                '    value: \'{{output_value("prepare_action").assigned.action}}\'\n'
+                "    value: '{{output_value(\"prepare_action\").assigned.action}}'\n"
                 "    cases:\n"
                 "      retry: retry_notice\n"
                 "      ask_human: human_notice\n"
@@ -332,28 +308,19 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
         }
 
         events = store.list_events(run_result["run_id"])
-        switch_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "decide_action"
-        )
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "retry_notice"
-        )
+        switch_event = _step_success_event(events, step_id="decide_action")
+        notify_event = _step_success_event(events, step_id="retry_notice")
 
-        assert switch_event["payload"] == {
-            "step": "decide_action",
-            "step_type": "switch",
-            "output": {
+        assert switch_event.step_type == "switch"
+        assert switch_event.payload == StepSuccessPayload(
+            output={
                 "text": "Route selected: retry_notice.",
                 "value": {"next_step_id": "retry_notice"},
                 "body_ref": None,
             },
-            "next": "retry_notice",
-        }
-        assert notify_event["payload"]["output"]["value"]["message"] == "retry chosen"
+            next="retry_notice",
+        )
+        assert notify_event.payload.output["value"]["message"] == "retry chosen"
 
 
 def test_when_step_routes_to_first_matching_branch_from_external_skill_file() -> None:
@@ -370,7 +337,7 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
                 "      score: 85\n"
                 "    next: decide_score\n"
                 "  - when: decide_score\n"
-                '    value: \'{{output_value("prepare_score").assigned.score}}\'\n'
+                "    value: '{{output_value(\"prepare_score\").assigned.score}}'\n"
                 "    branches:\n"
                 "      - gt: 90\n"
                 "        then: excellent\n"
@@ -403,25 +370,24 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
         }
 
         events = store.list_events(run_result["run_id"])
-        when_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "decide_score"
-        )
-        notify_event = next(
-            event
-            for event in events
-            if event["type"] == "STEP_SUCCESS" and event["payload"]["step"] == "good"
-        )
+        when_event = _step_success_event(events, step_id="decide_score")
+        notify_event = _step_success_event(events, step_id="good")
 
-        assert when_event["payload"] == {
-            "step": "decide_score",
-            "step_type": "when",
-            "output": {
+        assert when_event.step_type == "when"
+        assert when_event.payload == StepSuccessPayload(
+            output={
                 "text": "Route selected: good.",
                 "value": {"next_step_id": "good"},
                 "body_ref": None,
             },
-            "next": "good",
-        }
-        assert notify_event["payload"]["output"]["value"]["message"] == "good chosen"
+            next="good",
+        )
+        assert notify_event.payload.output["value"]["message"] == "good chosen"
+
+
+def _step_success_event(events: list[object], *, step_id: str):
+    return next(
+        event
+        for event in events
+        if event.type == "STEP_SUCCESS" and event.step_id == step_id
+    )

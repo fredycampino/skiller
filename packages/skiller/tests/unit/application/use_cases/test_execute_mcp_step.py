@@ -1,11 +1,12 @@
 import pytest
+
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
+from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.domain.step.step_execution_model import McpOutput
 
 pytestmark = pytest.mark.unit
@@ -26,10 +27,10 @@ class _FakeStore:
             }
         )
 
-    def append_event(
-        self, event_type: str, payload: dict[str, object], run_id: str | None = None
-    ) -> str:
-        self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
+    def append_event(self, event: RuntimeEventDraft) -> str:
+        self.events.append(
+            {"type": event.type.value, "payload": event.payload, "run_id": event.run_id}
+        )
         return "evt-1"
 
 
@@ -68,40 +69,12 @@ class _FakeMCP:
         return {"ok": True, "server": server_name, "uri": uri}
 
 
-class _FakeExecutionOutputStore:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
-
-    def store_execution_output(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        output_body: dict[str, object],
-    ) -> str:
-        self.calls.append(
-            {
-                "run_id": run_id,
-                "step_id": step_id,
-                "output_body": output_body,
-            }
-        )
-        return "execution_output:1"
-
-    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
-        _ = body_ref
-        return None
-
-
 def test_execute_mcp_step_moves_current_to_explicit_next() -> None:
     store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
     mcp = _FakeMCP()
     use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
     )
 
     context = RunContext(inputs={}, step_executions={})
@@ -149,18 +122,14 @@ def test_execute_mcp_step_moves_current_to_explicit_next() -> None:
     assert store.updated[0]["status"] == RunStatus.RUNNING
     assert store.updated[0]["current"] == "done"
     assert store.events == []
-    assert execution_output_store.calls == []
 
 
 def test_execute_mcp_step_marks_completed_when_next_is_missing() -> None:
     store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
     mcp = _FakeMCP()
     use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
     )
     context = RunContext(inputs={}, step_executions={})
 
@@ -193,18 +162,14 @@ def test_execute_mcp_step_marks_completed_when_next_is_missing() -> None:
         },
     )
     assert store.updated[0]["current"] is None
-    assert execution_output_store.calls == []
 
 
 def test_execute_mcp_step_raises_and_does_not_advance_on_mcp_error() -> None:
     store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
     mcp = _FakeMCP(result={"ok": False, "error": "Access denied"})
     use_case = ExecuteMcpStepUseCase(
         store=store,
-        execution_output_store=execution_output_store,
         mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
     )
     context = RunContext(inputs={}, step_executions={})
 
@@ -228,76 +193,6 @@ def test_execute_mcp_step_raises_and_does_not_advance_on_mcp_error() -> None:
     assert store.updated == []
     assert store.events == []
     assert context.step_executions == {}
-    assert execution_output_store.calls == []
-
-
-def test_execute_mcp_step_persists_large_result_body_and_truncates_output_value() -> None:
-    store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
-    mcp = _FakeMCP(
-        result={
-            "ok": True,
-            "total": 248,
-            "items": [{"id": "a1"}, {"id": "a2"}],
-            "meta": {"source": "search", "region": "eu"},
-        }
-    )
-    use_case = ExecuteMcpStepUseCase(
-        store=store,
-        execution_output_store=execution_output_store,
-        mcp=mcp,
-        large_result_truncator=LargeResultTruncator(),
-    )
-    context = RunContext(inputs={}, step_executions={})
-
-    result = use_case.execute(
-        CurrentStep(
-            run_id="run-1",
-            step_index=2,
-            step_id="search",
-            step_type=StepType.MCP,
-            step={
-                "server": "local-mcp",
-                "tool": "search",
-                "args": {"query": "auth"},
-                "large_result": True,
-                "next": "done",
-            },
-            context=context,
-        ),
-        RenderedMcpConfig(name="local-mcp", transport="stdio", command="/usr/bin/python3"),
-    )
-
-    assert result.execution is not None
-    assert result.execution.output == McpOutput(
-        text="local-mcp.search completed successfully.",
-        data={
-            "truncated": True,
-            "server": "local-mcp",
-            "tool": "search",
-            "args_keys": ["query"],
-            "ok": True,
-            "total": 248,
-            "items_count": 2,
-            "meta_keys": ["region", "source"],
-        },
-        body_ref="execution_output:1",
-    )
-    assert execution_output_store.calls == [
-        {
-            "run_id": "run-1",
-            "step_id": "search",
-            "output_body": {
-                "server": "local-mcp",
-                "tool": "search",
-                "args": {"query": "auth"},
-                "ok": True,
-                "total": 248,
-                "items": [{"id": "a1"}, {"id": "a2"}],
-                "meta": {"source": "search", "region": "eu"},
-            },
-        }
-    ]
 
 
 @pytest.mark.parametrize(
@@ -331,9 +226,7 @@ def test_execute_mcp_step_persists_large_result_body_and_truncates_output_value(
 def test_execute_mcp_step_validation_errors(step: dict[str, object], expected_error: str) -> None:
     use_case = ExecuteMcpStepUseCase(
         store=_FakeStore(),
-        execution_output_store=_FakeExecutionOutputStore(),
         mcp=_FakeMCP(),
-        large_result_truncator=LargeResultTruncator(),
     )
     context = RunContext(inputs={}, step_executions={})
 

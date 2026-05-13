@@ -1,7 +1,9 @@
 import pytest
+
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
+from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.step.step_execution_model import NotifyOutput
@@ -24,10 +26,10 @@ class _FakeStore:
             }
         )
 
-    def append_event(
-        self, event_type: str, payload: dict[str, object], run_id: str | None = None
-    ) -> str:
-        self.events.append({"type": event_type, "payload": payload, "run_id": run_id})
+    def append_event(self, event: RuntimeEventDraft) -> str:
+        self.events.append(
+            {"type": event.type.value, "payload": event.payload, "run_id": event.run_id}
+        )
         return "event-1"
 
 

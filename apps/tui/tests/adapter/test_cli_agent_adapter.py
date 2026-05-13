@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass
 
 import pytest
+
 from stui.adapter.cli_agent_adapter import CliAgentAdapter
 from stui.port.run_port import CommandAckStatus
 

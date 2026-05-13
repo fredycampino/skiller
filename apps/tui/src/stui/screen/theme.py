@@ -30,7 +30,7 @@ class TuiTheme:
     status_icon_error: str = "×"
     status_animation_interval: float = 0.1
     slash_command_name_width: int = 8
-    autocomplete_visible_lines: int = 3
+    autocomplete_visible_lines: int = 6
     horizontal_padding: int = 1
     status_margin_top: int = 1
     prompt_prefix_width: int = 2

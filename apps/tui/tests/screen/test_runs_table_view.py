@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.screen.runs_table_view import (
     RunRowMode,
     RunRowStatus,
@@ -27,12 +28,14 @@ def test_runs_table_view_uses_mock_rows_and_selection() -> None:
                 mode=RunRowMode.CHAT,
                 status=RunRowStatus.WAITING_INPUT,
                 skill="wait_input_test",
+                updated_at="05-04 00:01",
                 run_id="run-1234",
             ),
             RunsTableRow(
                 mode=RunRowMode.FLOW,
                 status=RunRowStatus.RUNNING,
                 skill="webhook_signal_oracle",
+                updated_at="05-04 00:02",
                 run_id="run-4567",
             ),
         ]

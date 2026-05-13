@@ -114,7 +114,6 @@ steps:
         properties:
           reply:
             type: string
-    large_result: true
     next: ask_user
 
   - notify: done
@@ -135,7 +134,6 @@ Templates may read:
 Notes:
 - use `output_value("<step_id>")` to read another step's canonical `output.value`
 - do not read `step_executions.<step_id>.output.value...` directly in templates
-- do not read `output.body_ref` directly in templates
 
 ## Root `mcp`
 
@@ -160,7 +158,6 @@ steps:
       FOO: bar
     timeout: 60
     check: true
-    large_result: true
     next: done
 ```
 

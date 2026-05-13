@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 
 pytestmark = pytest.mark.unit
@@ -47,4 +48,20 @@ def test_autocomplete_use_case_suggests_chats_command() -> None:
     state = use_case.execute(text="/ch", cursor_position=3)
 
     assert state is not None
-    assert [item.label for item in state.items] == ["chats"]
+    assert [item.label for item in state.items] == ["chat", "chats"]
+
+
+def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text="/", cursor_position=1)
+
+    assert state is not None
+    assert [item.label for item in state.items] == [
+        "run",
+        "chat",
+        "runs",
+        "chats",
+        "quit",
+        "dev",
+    ]

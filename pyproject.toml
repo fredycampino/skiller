@@ -22,7 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2.0",
-  "ruff>=0.5.0",
+  "ruff==0.15.4",
 ]
 
 [project.scripts]
@@ -54,3 +54,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["skiller", "stui"]

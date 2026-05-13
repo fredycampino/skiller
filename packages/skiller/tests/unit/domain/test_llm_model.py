@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.domain.agent.llm_model import LLMResponse
 
 pytestmark = pytest.mark.unit

@@ -41,7 +41,18 @@ PR command rules:
 - Feature PR: `head=feature/<topic>`, `base=main`, title from the single PR commit.
 - Release PR: `head=release/<version>`, `base=main`, title `release: <version>`.
 - The PR body must include a short summary and the validation commands/results.
+- Before opening a PR, verify the head branch exists in `origin`:
+  `git ls-remote --heads origin <head-branch>`.
+- If the branch is missing in `origin`, push it first:
+  `git push -u origin <head-branch>`.
 - If `skiller run pr` cannot authenticate, report it as a blocker.
+- If `skiller run pr` returns `FAILED`, inspect the run with:
+  `./.venv/bin/skiller logs <run_id>`.
+- Do not use `skiller run logs`; `logs` is a CLI command, not a runnable.
+- If logs contain `422`, `Field: head`, and `Code: invalid`, the PR branch is not
+  available to GitHub. Publish or fix the head branch and retry.
+- Only report `pr` as missing when the logs explicitly say the runnable or skill
+  does not exist.
 
 Feature PR command:
 

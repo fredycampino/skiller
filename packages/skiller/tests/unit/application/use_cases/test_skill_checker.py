@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase, SkillCheckStatus
 
 pytestmark = pytest.mark.unit
@@ -89,30 +90,6 @@ def test_skill_checker_rejects_direct_output_value_access() -> None:
     assert result.status == SkillCheckStatus.INVALID
     assert [item.code for item in result.errors] == [
         "SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"
-    ]
-
-
-def test_skill_checker_rejects_direct_body_ref_access() -> None:
-    use_case = SkillCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
-            {
-                "name": "demo",
-                "start": "show_message",
-                "steps": [
-                    {"shell": "inspect", "command": "printf ok"},
-                    {
-                        "notify": "show_message",
-                        "message": "{{step_executions.inspect.output.body_ref}}",
-                    },
-                ],
-            }
-        )
-    )
-    result = use_case.execute("demo", skill_source="internal")
-
-    assert result.status == SkillCheckStatus.INVALID
-    assert [item.code for item in result.errors] == [
-        "SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS"
     ]
 
 

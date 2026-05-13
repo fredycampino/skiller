@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.viewmodel.console_screen_state import (
     CompletionItem,
@@ -37,8 +38,8 @@ def test_prompt_enter_use_case_applies_visible_completion() -> None:
     assert result.should_submit is False
     assert result.submit_text == ""
     assert result.state is state
-    assert state.prompt.text == "/runs "
-    assert state.prompt.cursor_position == 6
+    assert state.prompt.text == "/runs"
+    assert state.prompt.cursor_position == 5
     assert state.autocompletion is None
 
 

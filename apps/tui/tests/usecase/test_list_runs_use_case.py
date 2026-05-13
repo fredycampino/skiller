@@ -3,7 +3,13 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
 import stui.usecase.list_runs_use_case as list_runs_use_case_module
+from apps.tui.tests.support import (
+    FakeRunsPort,
+    make_runs_port_item,
+    patched_to_thread,
+)
 from stui.usecase.list_runs_use_case import ListRunsUseCase
 from stui.usecase.normalize_command_use_case import (
     NormalizeCommandUseCase,
@@ -13,12 +19,6 @@ from stui.viewmodel.console_screen_state import (
     DispatchErrorItem,
     UserInputItem,
     ViewStatusKind,
-)
-
-from apps.tui.tests.support import (
-    FakeRunsPort,
-    make_runs_port_item,
-    patched_to_thread,
 )
 
 pytestmark = pytest.mark.unit

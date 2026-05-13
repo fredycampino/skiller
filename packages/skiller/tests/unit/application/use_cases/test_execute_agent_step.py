@@ -1,5 +1,6 @@
 import pytest
 from helpers.agent_runner import build_agent_runner
+
 from skiller.application.agent.config.event_output_sanitizer import (
     AgentEventOutputPolicy,
     AgentEventOutputSanitizer,
@@ -11,13 +12,10 @@ from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
 from skiller.application.use_cases.render.render_current_step import CurrentStep
-from skiller.application.use_cases.run.append_runtime_event import RuntimeEventType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextToolCall,
-    AgentContextToolResult,
 )
 from skiller.domain.agent.llm_model import (
     LLMMessage,
@@ -25,6 +23,11 @@ from skiller.domain.agent.llm_model import (
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
+)
+from skiller.domain.event.event_model import (
+    RuntimeEventPayload,
+    RuntimeEventType,
+    runtime_event_payload_to_dict,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
@@ -118,7 +121,9 @@ class _FakeAgentContextStore:
         scope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_call: AgentContextToolCall,
+        tool_call_id: str,
+        tool: str,
+        args: dict[str, object],
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
@@ -128,12 +133,12 @@ class _FakeAgentContextStore:
                 "type": "tool_call",
                 "turn_id": turn_id,
                 "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call.id,
-                "tool": tool_call.tool,
-                "args": tool_call.args,
+                "tool_call_id": tool_call_id,
+                "tool": tool,
+                "args": args,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call.id}",
+            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def append_tool_result(
@@ -142,9 +147,9 @@ class _FakeAgentContextStore:
         scope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_result: AgentContextToolResult,
+        tool_call_id: str,
+        result: ToolResult,
     ) -> AgentContextEntry:
-        result = tool_result.result
         return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
@@ -153,7 +158,7 @@ class _FakeAgentContextStore:
                 "type": "tool_result",
                 "turn_id": turn_id,
                 "parent_sequence": parent_sequence,
-                "tool_call_id": tool_result.tool_call_id,
+                "tool_call_id": tool_call_id,
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,
@@ -161,7 +166,7 @@ class _FakeAgentContextStore:
                 "error": result.error,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_result.tool_call_id}",
+            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def _append_entry(
@@ -332,7 +337,7 @@ class _FakeAppendRuntimeEventUseCase:
         run_id: str,
         *,
         event_type: RuntimeEventType,
-        payload: dict[str, object] | None = None,
+        payload: RuntimeEventPayload | dict[str, object] | None = None,
         step_id: str | None = None,
         step_type=None,  # noqa: ANN001
         execution=None,  # noqa: ANN001
@@ -343,7 +348,11 @@ class _FakeAppendRuntimeEventUseCase:
             {
                 "run_id": run_id,
                 "event_type": event_type,
-                "payload": payload,
+                "payload": (
+                    runtime_event_payload_to_dict(payload)
+                    if payload is not None
+                    else None
+                ),
                 "step_id": step_id,
                 "step_type": step_type,
                 "execution": execution,
@@ -746,18 +755,16 @@ def test_execute_agent_step_sanitizes_agent_tool_events() -> None:
     assert append_event.calls[0]["event_type"] == RuntimeEventType.AGENT_TOOL_CALL
     tool_call_payload = append_event.calls[0]["payload"]
     assert isinstance(tool_call_payload, dict)
-    assert tool_call_payload["tool_call_id"] == "openai-call-1"
-    assert tool_call_payload["args"]["command"].startswith("Authorizat")
+    assert tool_call_payload["body"]["tool_call_id"] == "openai-call-1"
+    assert tool_call_payload["body"]["args"]["command"].startswith("Authorizat")
 
     assert append_event.calls[1]["event_type"] == RuntimeEventType.AGENT_TOOL_RESULT
     tool_result_payload = append_event.calls[1]["payload"]
     assert isinstance(tool_result_payload, dict)
-    assert tool_result_payload["tool_call_id"] == "openai-call-1"
-    output = tool_result_payload["output"]
-    assert isinstance(output, dict)
-    assert output["text"] == "abcdefghij..."
-    assert output["value"]["password"] == "***REDACTED***"
-    assert output["value"]["logs"] == ["line1", "line2"]
+    assert tool_result_payload["body"]["tool_call_id"] == "openai-call-1"
+    assert tool_result_payload["body"]["text"] == "abcdefghij..."
+    assert tool_result_payload["body"]["data"]["password"] == "***REDACTED***"
+    assert tool_result_payload["body"]["data"]["logs"] == ["line1", "line2"]
 
 
 def test_execute_agent_step_fails_when_llm_fails() -> None:

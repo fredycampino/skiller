@@ -1,19 +1,16 @@
 from pathlib import Path
 
 import pytest
+
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase, SkillCheckStatus
-from skiller.infrastructure.db.sqlite_execution_output_store import SqliteExecutionOutputStore
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 
 pytestmark = pytest.mark.integration
 
 
-def test_all_builtin_agents_pass_skill_checker(tmp_path: Path) -> None:
-    execution_output_store = SqliteExecutionOutputStore(str(tmp_path / "test.db"))
-    execution_output_store.init_db()
+def test_all_builtin_agents_pass_skill_checker() -> None:
     skill_runner = FilesystemSkillRunner(
         skills_dir="packages/skiller/agents",
-        execution_output_store=execution_output_store,
     )
     checker = SkillCheckerUseCase(skill_runner=skill_runner)
 

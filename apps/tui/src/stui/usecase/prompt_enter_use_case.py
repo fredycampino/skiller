@@ -27,9 +27,9 @@ class PromptEnterUseCase:
         completion_text = selected_item.insert_text or selected_item.label
         if not completion_text:
             completion_text = state.prompt.text[: state.prompt.cursor_position]
-        completion_text = completion_text.rstrip() + " "
+        completion_text = completion_text.rstrip()
 
         state.prompt.text = completion_text
         state.prompt.cursor_position = len(completion_text)
-        state.autocompletion = None
+        state.set_autocompletion()
         return PromptEnterResult(state=state, should_submit=False)

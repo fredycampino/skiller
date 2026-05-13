@@ -5,12 +5,18 @@ from pathlib import Path
 from typing import Any
 
 from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextToolCall,
-    AgentContextToolResult,
+    AgentContextPayload,
+    AgentToolCallPayload,
+    AgentToolResultPayload,
+    AgentUserMessagePayload,
+    agent_context_payload_from_dict,
+    agent_context_payload_to_dict,
 )
 from skiller.domain.agent.agent_run_scope import AgentRunScope
+from skiller.domain.tool.tool_contract import ToolResult
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
@@ -31,7 +37,7 @@ class SqliteAgentContextStore(SqliteRepository):
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.USER_MESSAGE,
-            payload={"type": "user_message", "text": text},
+            payload=AgentUserMessagePayload(text=text),
             source_step_id=scope.agent_id,
             idempotency_key=f"user:{scope.agent_id}:{turn_id}",
         )
@@ -48,12 +54,11 @@ class SqliteAgentContextStore(SqliteRepository):
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            payload={
-                "type": "assistant_message",
-                "turn_id": turn_id,
-                "message_type": message_type,
-                "text": text,
-            },
+            payload=AgentAssistantMessagePayload(
+                turn_id=turn_id,
+                message_type=message_type,
+                text=text,
+            ),
             source_step_id=scope.agent_id,
             idempotency_key=f"assistant:{scope.agent_id}:{turn_id}",
         )
@@ -64,22 +69,23 @@ class SqliteAgentContextStore(SqliteRepository):
         scope: AgentRunScope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_call: AgentContextToolCall,
+        tool_call_id: str,
+        tool: str,
+        args: dict[str, object],
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.TOOL_CALL,
-            payload={
-                "type": "tool_call",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call.id,
-                "tool": tool_call.tool,
-                "args": tool_call.args,
-            },
+            payload=AgentToolCallPayload(
+                turn_id=turn_id,
+                parent_sequence=parent_sequence,
+                tool_call_id=tool_call_id,
+                tool=tool,
+                args=args,
+            ),
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call.id}",
+            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def append_tool_result(
@@ -88,26 +94,25 @@ class SqliteAgentContextStore(SqliteRepository):
         scope: AgentRunScope,
         turn_id: str,
         parent_sequence: int | None,
-        tool_result: AgentContextToolResult,
+        tool_call_id: str,
+        result: ToolResult,
     ) -> AgentContextEntry:
-        result = tool_result.result
         return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
-            payload={
-                "type": "tool_result",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_result.tool_call_id,
-                "tool": result.name,
-                "status": result.status.value,
-                "data": result.data,
-                "text": result.text,
-                "error": result.error,
-            },
+            payload=AgentToolResultPayload(
+                turn_id=turn_id,
+                parent_sequence=parent_sequence,
+                tool_call_id=tool_call_id,
+                tool=result.name,
+                status=result.status.value,
+                data=result.data,
+                text=result.text,
+                error=result.error,
+            ),
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_result.tool_call_id}",
+            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def _append_entry(
@@ -116,7 +121,7 @@ class SqliteAgentContextStore(SqliteRepository):
         run_id: str,
         context_id: str,
         entry_type: AgentContextEntryType,
-        payload: dict[str, object],
+        payload: AgentContextPayload,
         source_step_id: str,
         idempotency_key: str,
     ) -> AgentContextEntry:
@@ -155,7 +160,7 @@ class SqliteAgentContextStore(SqliteRepository):
                     context_id,
                     sequence,
                     entry_type.value,
-                    json.dumps(payload),
+                    json.dumps(agent_context_payload_to_dict(payload)),
                     source_step_id,
                     idempotency_key,
                 ),
@@ -254,16 +259,20 @@ def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
 
 
 def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
-    payload = json.loads(row["payload_json"])
-    if not isinstance(payload, dict):
-        payload = {}
+    raw_payload = json.loads(row["payload_json"])
+    if not isinstance(raw_payload, dict):
+        raw_payload = {}
+    entry_type = AgentContextEntryType(str(row["entry_type"]))
     return AgentContextEntry(
         id=str(row["id"]),
         run_id=str(row["run_id"]),
         context_id=str(row["context_id"]),
         sequence=int(row["sequence"]),
-        entry_type=AgentContextEntryType(str(row["entry_type"])),
-        payload=_clone(payload),
+        entry_type=entry_type,
+        payload=agent_context_payload_from_dict(
+            entry_type=entry_type,
+            value=_clone(raw_payload),
+        ),
         source_step_id=str(row["source_step_id"]),
         idempotency_key=str(row["idempotency_key"]),
         created_at=str(row["created_at"]),

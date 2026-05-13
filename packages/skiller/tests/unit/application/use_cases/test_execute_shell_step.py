@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
@@ -6,7 +7,6 @@ from skiller.application.use_cases.shared.step_execution_result import StepExecu
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType, SteeringStepInterrupt
-from skiller.domain.shared.large_result_truncator import LargeResultTruncator
 from skiller.domain.step.step_execution_model import ShellOutput
 from skiller.domain.tool.tool_process_model import (
     ToolProcessHandle,
@@ -102,45 +102,17 @@ class _FakeAgentSteeringStore:
         return []
 
 
-class _FakeExecutionOutputStore:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
-
-    def store_execution_output(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        output_body: dict[str, object],
-    ) -> str:
-        self.calls.append(
-            {
-                "run_id": run_id,
-                "step_id": step_id,
-                "output_body": output_body,
-            }
-        )
-        return "execution_output:1"
-
-    def get_execution_output(self, body_ref: str) -> dict[str, object] | None:
-        _ = body_ref
-        return None
-
-
 def _build_use_case(
     *,
     store: _FakeStore | None = None,
     process_runner: _FakeProcessRunner | None = None,
     agent_steering_store: _FakeAgentSteeringStore | None = None,
-    execution_output_store: _FakeExecutionOutputStore | None = None,
 ) -> ExecuteShellStepUseCase:
     return ExecuteShellStepUseCase(
         store=store or _FakeStore(),
-        execution_output_store=execution_output_store or _FakeExecutionOutputStore(),
         shell_tool=ShellProcessTool(shell="/bin/bash", workspace_root="/workspace"),
         process_runner=process_runner or _FakeProcessRunner(),
         agent_steering_store=agent_steering_store or _FakeAgentSteeringStore(),
-        large_result_truncator=LargeResultTruncator(),
     )
 
 
@@ -291,60 +263,6 @@ def test_execute_shell_step_keeps_non_zero_exit_in_output_when_check_is_false() 
         stdout="",
         stderr="boom\n",
     )
-
-
-def test_execute_shell_step_persists_large_result_body_and_truncates_output_value() -> None:
-    store = _FakeStore()
-    execution_output_store = _FakeExecutionOutputStore()
-    process_runner = _FakeProcessRunner(
-        output=ToolProcessOutput(
-            exit_code=0,
-            stdout="x" * 400,
-            stderr="",
-        )
-    )
-    use_case = _build_use_case(
-        store=store,
-        process_runner=process_runner,
-        execution_output_store=execution_output_store,
-    )
-    context = RunContext(inputs={}, step_executions={})
-
-    result = use_case.execute(
-        CurrentStep(
-            run_id="run-1",
-            step_index=0,
-            step_id="run_tests",
-            step_type=StepType.SHELL,
-            step={"command": "python -c 'print()'", "large_result": True},
-            context=context,
-        )
-    )
-
-    expected_stdout = LargeResultTruncator().truncate({"stdout": "x" * 400})["stdout"]
-    assert result.execution is not None
-    assert result.execution.output == ShellOutput(
-        text=str(expected_stdout),
-        ok=True,
-        exit_code=0,
-        stdout=str(expected_stdout),
-        stderr="",
-        body_ref="execution_output:1",
-    )
-    assert execution_output_store.calls == [
-        {
-            "run_id": "run-1",
-            "step_id": "run_tests",
-            "output_body": {
-                "value": {
-                    "ok": True,
-                    "exit_code": 0,
-                    "stdout": "x" * 400,
-                    "stderr": "",
-                }
-            },
-        }
-    ]
 
 
 def test_execute_shell_step_raises_clear_timeout_error() -> None:

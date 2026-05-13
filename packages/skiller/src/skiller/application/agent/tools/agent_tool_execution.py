@@ -17,11 +17,7 @@ from skiller.application.agent.tools.tool_manager import (
     ToolPrepareFailure,
 )
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
-from skiller.domain.agent.agent_context_model import (
-    AgentContextEntry,
-    AgentContextToolCall,
-    AgentContextToolResult,
-)
+from skiller.domain.agent.agent_context_model import AgentContextEntry
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.llm_model import LLMToolCall
 from skiller.domain.run.steering_model import SteeringAgentInterrupt, SteeringAgentMessage
@@ -92,9 +88,9 @@ class AgentToolExecution(ToolProcessInterruptSignal):
             execution = _ToolCallExecution(state=state, tool_call=tool_call)
             # Invalid tool-call JSON is feedback for the agent, then continue.
             if not tool_call.is_valid:
-                self.agent_context_store.append_user_message(
-                    scope=execution.request,
-                    turn_id=self._control_turn_id(state, suffix="tool-format"),
+                self._append_agent_feedback(
+                    state,
+                    suffix="tool-format",
                     text=self.feedback.invalid_tool_call_arguments(
                         step_id=execution.step_id,
                         tool_call=tool_call.raw,
@@ -192,10 +188,8 @@ class AgentToolExecution(ToolProcessInterruptSignal):
                 scope=execution.request,
                 turn_id=execution.turn_id,
                 parent_sequence=execution.parent_sequence,
-                tool_result=AgentContextToolResult(
-                    tool_call_id=tool_call.id,
-                    result=tool_result,
-                ),
+                tool_call_id=tool_call.id,
+                result=tool_result,
             )
             self._emit_tool_result(execution, tool_result_entry, tool_result)
             state.add(
@@ -217,11 +211,9 @@ class AgentToolExecution(ToolProcessInterruptSignal):
             scope=execution.request,
             turn_id=execution.turn_id,
             parent_sequence=execution.parent_sequence,
-            tool_call=AgentContextToolCall(
-                id=tool_call.id,
-                tool=tool_call.name,
-                args=tool_call.args,
-            ),
+            tool_call_id=tool_call.id,
+            tool=tool_call.name,
+            args=tool_call.args,
         )
 
     def _emit_tool_call(
@@ -247,6 +239,15 @@ class AgentToolExecution(ToolProcessInterruptSignal):
         entry: AgentContextEntry,
         result: ToolResult,
     ) -> None:
+        output = self.event_output_sanitizer.sanitize_output(
+            {
+                "text": result.text or "",
+                "value": result.data,
+                "body_ref": None,
+            }
+        )
+        data = output.get("value") if isinstance(output.get("value"), dict) else {}
+        text = output.get("text") if isinstance(output.get("text"), str) else None
         self.event_emitter.emit_tool_result(
             run_id=execution.run_id,
             step_id=execution.step_id,
@@ -255,14 +256,10 @@ class AgentToolExecution(ToolProcessInterruptSignal):
             parent_sequence=execution.parent_sequence,
             tool_call_id=execution.tool_call.id,
             tool=result.name,
-            context_ref=f"agent_context:{entry.id}",
-            output=self.event_output_sanitizer.sanitize_output(
-                {
-                    "text": result.text or "",
-                    "value": result.data,
-                    "body_ref": None,
-                }
-            ),
+            status=result.status.value,
+            data=data,
+            text=text,
+            error=result.error,
         )
 
     def _execute_process_tool(
@@ -326,9 +323,9 @@ class AgentToolExecution(ToolProcessInterruptSignal):
         tool_call_count = len(request.response.tool_calls)
         if tool_call_count <= request.max_tool_calls:
             return None
-        self.agent_context_store.append_user_message(
-            scope=request,
-            turn_id=self._control_turn_id(state, suffix="tool-limit"),
+        self._append_agent_feedback(
+            state,
+            suffix="tool-limit",
             text=self.feedback.too_many_tool_calls(
                 step_id=request.step_id,
                 max_tool_calls=request.max_tool_calls,
@@ -368,10 +365,23 @@ class AgentToolExecution(ToolProcessInterruptSignal):
         )
         return assistant_message_entry.sequence
 
-    def _append_interrupt_feedback(self, state: "_ToolExecutionState") -> None:
+    def _append_agent_feedback(
+        self,
+        state: "_ToolExecutionState",
+        *,
+        suffix: str,
+        text: str,
+    ) -> None:
         self.agent_context_store.append_user_message(
             scope=state.request,
-            turn_id=self._control_turn_id(state, suffix="interrupt"),
+            turn_id=self._control_turn_id(state, suffix=suffix),
+            text=text,
+        )
+
+    def _append_interrupt_feedback(self, state: "_ToolExecutionState") -> None:
+        self._append_agent_feedback(
+            state,
+            suffix="interrupt",
             text=self.feedback.user_interrupted_turn(),
         )
 

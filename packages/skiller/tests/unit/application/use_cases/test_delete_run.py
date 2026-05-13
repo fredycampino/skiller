@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+
 from skiller.application.use_cases.run.delete_run import DeleteRunStatus, DeleteRunUseCase
 
 pytestmark = pytest.mark.unit

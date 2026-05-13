@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.config.output_truncator import OutputTruncator
 
 pytestmark = pytest.mark.unit

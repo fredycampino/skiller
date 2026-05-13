@@ -1,5 +1,10 @@
 from dataclasses import dataclass
 
+from skiller.domain.event.event_model import (
+    InputReceivedPayload,
+    RuntimeEventDraft,
+    RuntimeEventType,
+)
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
@@ -79,9 +84,12 @@ class HandleInputUseCase:
             payload=payload,
         )
         self.runtime_event_store.append_event(
-            "INPUT_RECEIVED",
-            {"step": run.current, "payload": payload},
-            run_id=run_id,
+            RuntimeEventDraft(
+                run_id=run_id,
+                type=RuntimeEventType.INPUT_RECEIVED,
+                step_id=run.current,
+                payload=InputReceivedPayload(payload=payload),
+            )
         )
         return HandleInputResult(
             accepted=True,

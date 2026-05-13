@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.agent.config.secret_sanitizer import SecretSanitizer
 
 pytestmark = pytest.mark.unit

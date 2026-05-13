@@ -43,7 +43,7 @@ To revive the run in a way that works for event-driven consumers, update all thr
   - `match_type = run`
   - `match_key = <run_id>`
 
-3. `events`
+3. `log_events`
 - append:
   - `STEP_STARTED` for `ask_user`
   - `RUN_WAITING` for `ask_user`
@@ -88,25 +88,46 @@ INSERT INTO waits (
   'ACTIVE'
 );
 
-INSERT INTO events (id, run_id, type, payload_json)
+INSERT INTO log_events (
+  id,
+  run_id,
+  sequence,
+  event_type,
+  step_id,
+  step_type,
+  agent_sequence,
+  body_json
+)
 VALUES (
   lower(hex(randomblob(16))),
   '<run_id>',
+  (SELECT COALESCE(MAX(sequence), 0) + 1 FROM log_events WHERE run_id = '<run_id>'),
   'STEP_STARTED',
-  json_object(
-    'step', 'ask_user',
-    'step_type', 'wait_input'
-  )
+  'ask_user',
+  'wait_input',
+  NULL,
+  json_object()
 );
 
-INSERT INTO events (id, run_id, type, payload_json)
+INSERT INTO log_events (
+  id,
+  run_id,
+  sequence,
+  event_type,
+  step_id,
+  step_type,
+  agent_sequence,
+  body_json
+)
 VALUES (
   lower(hex(randomblob(16))),
   '<run_id>',
+  (SELECT COALESCE(MAX(sequence), 0) + 1 FROM log_events WHERE run_id = '<run_id>'),
   'RUN_WAITING',
+  'ask_user',
+  'wait_input',
+  NULL,
   json_object(
-    'step', 'ask_user',
-    'step_type', 'wait_input',
     'output',
     json_object(
       'text', 'Write a message. Type exit, quit, or bye to stop.',
@@ -152,10 +173,10 @@ Expected:
 - `ACTIVE`
 
 ```sql
-SELECT type, payload_json, created_at
-FROM events
+SELECT event_type, step_id, step_type, body_json, created_at
+FROM log_events
 WHERE run_id = '<run_id>'
-ORDER BY rowid DESC
+ORDER BY sequence DESC
 LIMIT 2;
 ```
 
@@ -167,7 +188,7 @@ Expected last events:
 
 This does not erase the original failure.
 
-The old events remain:
+The old log events remain:
 - `STEP_ERROR`
 - `RUN_FINISHED`
 

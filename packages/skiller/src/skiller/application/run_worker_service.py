@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
@@ -36,15 +35,20 @@ from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
-from skiller.application.use_cases.run.append_runtime_event import (
-    AppendRuntimeEventUseCase,
-    RuntimeEventType,
-)
+from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
+)
+from skiller.domain.event.event_model import (
+    RunFinishedPayload,
+    RuntimeEventType,
+    RunWaitingPayload,
+    StepErrorPayload,
+    StepStartedPayload,
+    StepSuccessPayload,
 )
 
 
@@ -236,7 +240,8 @@ class RunWorkerService:
             run_id,
             event_type=RuntimeEventType.STEP_STARTED,
             step_id=current_step.step_id,
-            step_type=current_step.step_type,
+            step_type=current_step.step_type.value,
+            payload=StepStartedPayload(),
         )
 
     def _append_step_success(
@@ -249,8 +254,11 @@ class RunWorkerService:
             run_id,
             event_type=RuntimeEventType.STEP_SUCCESS,
             step_id=current_step.step_id,
-            execution=execution_result.execution,
-            next_step_id=execution_result.next_step_id,
+            step_type=execution_result.execution.step_type.value,
+            payload=StepSuccessPayload(
+                output=execution_result.execution.to_public_output_dict(),
+                next=execution_result.next_step_id,
+            ),
         )
 
     def _append_run_waiting(
@@ -263,7 +271,10 @@ class RunWorkerService:
             run_id,
             event_type=RuntimeEventType.RUN_WAITING,
             step_id=current_step.step_id,
-            execution=execution_result.execution,
+            step_type=execution_result.execution.step_type.value,
+            payload=RunWaitingPayload(
+                output=execution_result.execution.to_public_output_dict(),
+            ),
         )
 
     def _append_step_error(self, run_id: str, current_step: CurrentStep, error: str) -> None:
@@ -271,8 +282,10 @@ class RunWorkerService:
             run_id,
             event_type=RuntimeEventType.STEP_ERROR,
             step_id=current_step.step_id,
-            step_type=current_step.step_type,
-            error=error,
+            step_type=current_step.step_type.value,
+            payload=StepErrorPayload(
+                error=error,
+            ),
         )
 
     def _append_run_finished(
@@ -282,11 +295,8 @@ class RunWorkerService:
         status: RunWorkerStatus,
         error: str | None = None,
     ) -> None:
-        payload: dict[str, Any] = {"status": status.value}
-        if error is not None:
-            payload["error"] = error
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_FINISHED,
-            payload=payload,
+            payload=RunFinishedPayload(status=status.value, error=error),
         )

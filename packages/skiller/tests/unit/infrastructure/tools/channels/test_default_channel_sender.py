@@ -3,6 +3,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 import pytest
+
 from skiller.infrastructure.config.settings import Settings
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 

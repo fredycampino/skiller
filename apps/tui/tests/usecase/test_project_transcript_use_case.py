@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )

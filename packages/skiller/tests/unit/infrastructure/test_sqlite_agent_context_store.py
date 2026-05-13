@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 
 import pytest
+
 from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessagePayload,
     AgentContextEntryType,
-    AgentContextToolCall,
-    AgentContextToolResult,
+    AgentToolCallPayload,
+    AgentUserMessagePayload,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
@@ -51,9 +53,13 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
 
     assert [entry.id for entry in entries] == [first.id, second.id]
     assert [entry.sequence for entry in entries] == [1, 2]
-    assert entries[0].payload == {"type": "user_message", "text": "Hi"}
+    assert entries[0].payload == AgentUserMessagePayload(text="Hi")
     assert entries[1].entry_type == AgentContextEntryType.ASSISTANT_MESSAGE
-    assert entries[1].payload["message_type"] == "final"
+    assert entries[1].payload == AgentAssistantMessagePayload(
+        turn_id="turn-1",
+        message_type="final",
+        text="Hello",
+    )
 
 
 def test_sqlite_agent_context_store_uses_idempotency_key(tmp_path) -> None:
@@ -85,7 +91,7 @@ def test_sqlite_agent_context_store_uses_idempotency_key(tmp_path) -> None:
 
     assert duplicate == first
     assert len(entries) == 1
-    assert entries[0].payload == {"type": "user_message", "text": "Hi"}
+    assert entries[0].payload == AgentUserMessagePayload(text="Hi")
 
 
 def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
@@ -106,50 +112,42 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         scope=scope,
         turn_id="turn-1",
         parent_sequence=None,
-        tool_call=AgentContextToolCall(
-            id="call-1",
-            tool="notify",
-            args={"message": "hello"},
-        ),
+        tool_call_id="call-1",
+        tool="notify",
+        args={"message": "hello"},
     )
     second = store.append_tool_call(
         scope=scope,
         turn_id="turn-1",
         parent_sequence=None,
-        tool_call=AgentContextToolCall(
-            id="call-2",
-            tool="notify",
-            args={"message": "world"},
-        ),
+        tool_call_id="call-2",
+        tool="notify",
+        args={"message": "world"},
     )
     duplicate = store.append_tool_result(
         scope=scope,
         turn_id="turn-1",
         parent_sequence=None,
-        tool_result=AgentContextToolResult(
-            tool_call_id="call-2",
-            result=ToolResult(
-                name="notify",
-                status=ToolResultStatus.COMPLETED,
-                data={"message": "world"},
-                text="world",
-                error=None,
-            ),
+        tool_call_id="call-2",
+        result=ToolResult(
+            name="notify",
+            status=ToolResultStatus.COMPLETED,
+            data={"message": "world"},
+            text="world",
+            error=None,
         ),
     )
     duplicate_again = store.append_tool_result(
         scope=scope,
         turn_id="turn-1",
         parent_sequence=None,
-        tool_result=AgentContextToolResult(
-            tool_call_id="call-2",
-            result=ToolResult(
-                name="notify",
-                status=ToolResultStatus.COMPLETED,
-                data={"message": "ignored"},
-                text="ignored",
-                error=None,
-            ),
+        tool_call_id="call-2",
+        result=ToolResult(
+            name="notify",
+            status=ToolResultStatus.COMPLETED,
+            data={"message": "ignored"},
+            text="ignored",
+            error=None,
         ),
     )
 
@@ -157,9 +155,21 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
 
     assert [entry.id for entry in entries] == [first.id, second.id, duplicate.id]
     assert duplicate_again == duplicate
-    assert entries[0].payload["tool_call_id"] == "call-1"
-    assert entries[1].payload["tool_call_id"] == "call-2"
-    assert entries[2].payload["tool_call_id"] == "call-2"
+    assert entries[0].payload == AgentToolCallPayload(
+        turn_id="turn-1",
+        parent_sequence=None,
+        tool_call_id="call-1",
+        tool="notify",
+        args={"message": "hello"},
+    )
+    assert entries[1].payload == AgentToolCallPayload(
+        turn_id="turn-1",
+        parent_sequence=None,
+        tool_call_id="call-2",
+        tool="notify",
+        args={"message": "world"},
+    )
+    assert entries[2].payload.tool_call_id == "call-2"
 
 
 def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
@@ -197,10 +207,8 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         scope=scope,
         turn_id="turn-1",
         parent_sequence=2,
-        tool_call=AgentContextToolCall(
-            id="call-1",
-            tool="notify",
-            args={"message": "hello"},
-        ),
+        tool_call_id="call-1",
+        tool="notify",
+        args={"message": "hello"},
     )
     assert store.next_turn_id(scope=scope) == "turn-3"

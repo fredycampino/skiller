@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
+
 from stui.port.runs_port import RunsPortItem
 from stui.screen.console_screen import (
+    _format_run_updated_at,
     _resolve_run_row_mode,
     _resolve_run_row_status,
 )
@@ -50,6 +52,13 @@ def test_resolve_run_row_status_maps_terminal_and_running_statuses() -> None:
         _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None))
         == RunRowStatus.RUNNING
     )
+
+
+def test_format_run_updated_at_uses_short_month_day_and_time() -> None:
+    assert _format_run_updated_at("2026-05-04 00:00:01") == "05-04 00:00"
+    assert _format_run_updated_at("2026-05-04T17:29:08Z") == "05-04 17:29"
+    assert _format_run_updated_at("") == "-"
+    assert _format_run_updated_at("invalid") == "-"
 
 
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:

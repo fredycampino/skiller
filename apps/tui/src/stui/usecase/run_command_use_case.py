@@ -3,14 +3,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from stui.port.event_port import LogEventsListener, LogEventsObserverPort
 from stui.port.run_port import (
-    CommandAck,
-    CommandAckStatus,
-    RunObserver,
     RunPort,
+    RunRuntimeStatusKind,
 )
 from stui.usecase.normalize_command_use_case import Command, CommandKind
-from stui.usecase.run_event_context import RunEventContext, RunStatus
+from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
@@ -26,54 +25,81 @@ from stui.viewmodel.console_screen_state import (
 class RunCommandResult:
     state: ConsoleScreenState
     raw_args: str
-    ack: CommandAck
 
 
 @dataclass(frozen=True)
 class RunCommandUseCase:
+    """
+    Runs `/run` or `/chat` through the runtime.
+
+    Runtime dispatch fails: record a dispatch error only.
+    Runtime dispatch succeeds: activate run context and observe the new run.
+    Runtime subscription: delegate replacement of the observed run to the port.
+    `/chat`: activate the run in chat mode.
+    `/run`: activate the run in flow mode.
+    """
+
     run_port: RunPort
+    event_observer: LogEventsObserverPort
     context: RunEventContext
 
     async def execute(
         self,
-        observer: RunObserver,
+        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         command: Command,
     ) -> RunCommandResult:
         raw_args = command.args_text
         state.transcript.items.append(UserInputItem(text=command.raw_text))
-        if command.kind == CommandKind.CHAT:
-            state.transcript.mode = TranscriptMode.CHAT
-        state.view_status.kind = ViewStatusKind.RUNNING
-        state.view_status.message = ""
-        state.prompt.waiting_prompt = ""
-        state.prompt.mode = PromptMode.FLOW
-        state.autocompletion = None
         state.prompt.text = ""
         state.prompt.cursor_position = 0
-        ack = await asyncio.to_thread(self.run_port.run, raw_args)
-        if ack.status == CommandAckStatus.ACCEPTED and ack.run_id:
-            current_run_id = observer.run_id.strip()
-            next_run_id = ack.run_id.strip()
-            if current_run_id:
-                self.run_port.unsubscribe(observer)
-            observer.run_id = next_run_id
-            if next_run_id:
-                self.run_port.subscribe(observer)
-            self.context.activate_run(
-                ack.run_id,
-                skill_name=raw_args,
-                status=RunStatus.RUNNING,
-            )
-            state.session_key = ack.run_id
-            state.transcript.items.append(RunAckItem(skill=raw_args, run_id=ack.run_id))
-            state.view_status.kind = ViewStatusKind.RUNNING
-            return RunCommandResult(state=state, raw_args=raw_args, ack=ack)
 
-        state.transcript.items.append(
-            DispatchErrorItem(message=ack.message or "error: command returned no response")
+        ack = await asyncio.to_thread(self.run_port.run, raw_args)
+        if ack.error:
+            state.transcript.items.append(
+                DispatchErrorItem(message=f"error: {ack.error.message}")
+            )
+            state.set_status(kind=ViewStatusKind.ERROR, message=ack.error.message)
+            self.context.status = RunStatus.FAILED
+            return RunCommandResult(state=state, raw_args=raw_args)
+
+        if ack.status != RunRuntimeStatusKind.CREATED:
+            state.transcript.items.append(
+                DispatchErrorItem(message=f"error: unexpected run status: {ack.status}")
+            )
+            state.set_status(
+                kind=ViewStatusKind.ERROR,
+                message=f"Unexpected run status: {ack.status}",
+            )
+            self.context.status = RunStatus.FAILED
+            return RunCommandResult(state=state, raw_args=raw_args)
+
+        self.context.activate_run(
+            ack.run_id,
+            skill_name=raw_args,
+            mode=_resolve_run_mode(command.kind),
+            status=RunStatus.RUNNING,
         )
-        state.view_status.kind = ViewStatusKind.ERROR
-        state.view_status.message = "Error"
-        return RunCommandResult(state=state, raw_args=raw_args, ack=ack)
+        state.load_session(run_id=ack.run_id)
+        state.set_transcript(
+            mode=_resolve_transcript_mode(command.kind),
+            items=[RunAckItem(skill=raw_args, run_id=ack.run_id)],
+        )
+        state.set_autocompletion()
+        state.set_prompt(mode=PromptMode.DEFAULT)
+        state.set_status(kind=ViewStatusKind.RUNNING)
+        self.event_observer.subscribe(run_id=ack.run_id, listener=observer)
+        return RunCommandResult(state=state, raw_args=raw_args)
+
+
+def _resolve_run_mode(command_kind: CommandKind) -> RunMode:
+    if command_kind == CommandKind.CHAT:
+        return RunMode.CHAT
+    return RunMode.FLOW
+
+
+def _resolve_transcript_mode(command_kind: CommandKind) -> TranscriptMode:
+    if command_kind == CommandKind.CHAT:
+        return TranscriptMode.CHAT
+    return TranscriptMode.FLOW

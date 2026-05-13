@@ -26,7 +26,6 @@
           type: string
         next_action:
           type: string
-  large_result: true  # optional
   next: done
 ```
 
@@ -48,25 +47,6 @@
 }
 ```
 
-With `large_result: true`:
-
-```json
-{
-  "output": {
-    "text": "Europe is one of the smallest continents...",
-    "text_ref": "data.reply",
-    "value": {
-      "data": {
-        "reply": "Europe is one of the smallest continents...",
-        "reply_length": 980,
-        "truncated": true
-      }
-    },
-    "body_ref": "execution_output:abc123"
-  }
-}
-```
-
 Template access:
 
 ```text
@@ -78,8 +58,5 @@ Template access:
 The selected model is stored in `evaluation.model`.
 
 Notes:
-- without `large_result`, `output.text` and `output.value.data` contain the full parsed result.
-- with `large_result: true`, `output.text` and `output.value` are reduced to a small observable summary.
-- the full body is stored behind `output.body_ref`.
 - `text_ref` tells the UI how to rebuild the full human text from the persisted body.
-- templates should read the canonical value through `output_value("analyze_issue")`, which resolves `body_ref` lazily when needed.
+- templates should read the canonical value through `output_value("analyze_issue")`.

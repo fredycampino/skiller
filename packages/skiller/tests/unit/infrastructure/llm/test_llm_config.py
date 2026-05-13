@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from skiller.infrastructure.llm.config import resolve_llm_settings
 
 pytestmark = pytest.mark.unit

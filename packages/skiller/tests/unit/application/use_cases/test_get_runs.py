@@ -1,4 +1,5 @@
 import pytest
+
 from skiller.application.use_cases.query.get_runs import GetRunsUseCase
 from skiller.domain.run.run_list_item_model import RunListItem
 

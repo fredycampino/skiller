@@ -4,8 +4,13 @@ import subprocess
 from dataclasses import dataclass
 
 import pytest
+
 from stui.adapter.cli_run_adapter import CliRunAdapter
-from stui.port.run_port import CommandAckStatus
+from stui.port.run_port import (
+    RunDispatchErrorKind,
+    RunRuntimeStatusKind,
+    RunRuntimeWaitType,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -24,29 +29,116 @@ def test_cli_run_adapter_rejects_empty_args() -> None:
 
     result = adapter.run("")
 
-    assert result.status == CommandAckStatus.REJECTED
-    assert result.message == "error: /run requires arguments"
+    assert result.error.kind == RunDispatchErrorKind.INVALID_ARGS
+    assert result.error.message == "/run requires arguments"
 
 
-def test_cli_run_adapter_returns_dispatch_ack(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_run_adapter_returns_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
         invoker=FakeInvoker(
             subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=0,
-            stdout='{"run_id": "run-1234", "status": "CREATED"}',
+            stdout='{"run_id": "run-1234", "status": "CREATED", "worker_pid": 3}',
             stderr="",
         ))
     )
     result = adapter.run("ant")
 
-    assert result.status == CommandAckStatus.ACCEPTED
     assert result.run_id == "run-1234"
-    assert result.message == "[run-dispatch] ant:1234\n  ↳ created"
+    assert result.status == RunRuntimeStatusKind.CREATED
+    assert result.worker_pid == 3
 
 
-def test_cli_run_adapter_returns_error_ack(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_run_adapter_returns_runtime_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=0,
+                stdout=(
+                    '{"status": "WAITING", "wait_type": "input", '
+                    '"prompt": "Write a message", '
+                    '"last_event_sequence": "42", "last_event_type": "RUN_WAITING"}'
+                ),
+                stderr="",
+            )
+        )
+    )
+
+    result = adapter.status("run-1234")
+
+    assert result.run_id == "run-1234"
+    assert result.status == RunRuntimeStatusKind.WAITING
+    assert result.wait_type == RunRuntimeWaitType.INPUT
+    assert result.prompt == "Write a message"
+    assert result.last_event_sequence == 42
+    assert result.last_event_type == "RUN_WAITING"
+
+
+def test_cli_run_adapter_returns_none_when_status_command_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=1,
+                stdout="",
+                stderr="boom",
+            )
+        )
+    )
+
+    result = adapter.status("run-1234")
+
+    assert result is None
+
+
+def test_cli_run_adapter_returns_none_when_status_payload_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=0,
+                stdout="not-json",
+                stderr="",
+            )
+        )
+    )
+
+    result = adapter.status("run-1234")
+
+    assert result is None
+
+
+def test_cli_run_adapter_returns_none_when_status_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=0,
+                stdout='{"status": "BOGUS"}',
+                stderr="",
+            )
+        )
+    )
+
+    result = adapter.status("run-1234")
+
+    assert result is None
+
+
+def test_cli_run_adapter_returns_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
         invoker=FakeInvoker(
@@ -57,13 +149,14 @@ def test_cli_run_adapter_returns_error_ack(monkeypatch: pytest.MonkeyPatch) -> N
             stderr="boom",
         ))
     )
+
     result = adapter.run("ant")
 
-    assert result.status == CommandAckStatus.ERROR
-    assert result.message == "error: boom"
+    assert result.error.kind == RunDispatchErrorKind.RUNTIME_ERROR
+    assert result.error.message == "boom"
 
 
-def test_cli_run_adapter_sanitizes_skill_not_found_traceback(
+def test_cli_run_adapter_returns_dispatch_error_when_skill_is_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = monkeypatch
@@ -82,5 +175,69 @@ def test_cli_run_adapter_sanitizes_skill_not_found_traceback(
     )
     result = adapter.run("av")
 
-    assert result.status == CommandAckStatus.ERROR
-    assert result.message == "error: agent not found: av"
+    assert result.error.kind == RunDispatchErrorKind.RUN_NOT_FOUND
+    assert result.error.message == "agent not found: av"
+
+
+def test_cli_run_adapter_returns_run_not_found_when_skill_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=1,
+                stdout="",
+                stderr="Invalid skill format for 'broken'. Skill requires non-empty root 'start'",
+            )
+        )
+    )
+
+    result = adapter.run("broken")
+
+    assert result.error.kind == RunDispatchErrorKind.RUN_NOT_FOUND
+    assert (
+        result.error.message
+        == "Invalid skill format for 'broken'. Skill requires non-empty root 'start'"
+    )
+
+
+def test_cli_run_adapter_returns_invalid_args_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=1,
+                stdout="",
+                stderr="Invalid --arg 'foo'. Expected key=value.",
+            )
+        )
+    )
+
+    result = adapter.run("ant --arg foo")
+
+    assert result.error.kind == RunDispatchErrorKind.INVALID_ARGS
+    assert result.error.message == "Invalid --arg 'foo'. Expected key=value."
+
+
+def test_cli_run_adapter_returns_worker_start_failed_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    adapter = CliRunAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=1,
+                stdout="",
+                stderr="worker process did not start",
+            )
+        )
+    )
+
+    result = adapter.run("ant")
+
+    assert result.error.kind == RunDispatchErrorKind.WORKER_START_FAILED
+    assert result.error.message == "worker process did not start"

@@ -7,10 +7,6 @@ from typing import Any
 
 import yaml
 
-from skiller.domain.step.execution_output_store_port import (
-    ExecutionOutputStorePort,
-)
-
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
 _FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")
 _OUTPUT_VALUE_RE = re.compile(
@@ -23,12 +19,10 @@ class FilesystemSkillRunner:
     def __init__(
         self,
         skills_dir: str | None = None,
-        execution_output_store: ExecutionOutputStorePort | None = None,
     ) -> None:
         self.skills_dir = (
             Path(skills_dir) if skills_dir is not None else _find_default_internal_agents_dir()
         )
-        self.execution_output_store = execution_output_store
 
     def load_skill(self, skill_source: str, skill_ref: str) -> dict[str, Any]:
         if skill_source == "internal":
@@ -122,11 +116,6 @@ class FilesystemSkillRunner:
         return _TEMPLATE_RE.sub(replace, template)
 
     def _resolve_expression(self, context: dict[str, Any], expression: str) -> tuple[bool, Any]:
-        if ".output.body_ref" in expression:
-            raise ValueError(
-                "SKILL_OUTPUT_VALUE_BODY_REF_DIRECT_ACCESS: direct body_ref access is not allowed "
-                f"(expression={expression})"
-            )
         if ".output.value" in expression and expression.startswith("step_executions."):
             raise ValueError(
                 "SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS: direct output.value "
@@ -192,28 +181,6 @@ class FilesystemSkillRunner:
         return self._resolve_field_path(value=value, step_id=step_id, path=path)
 
     def _load_effective_output_value(self, *, output: dict[str, Any], step_id: str) -> Any:
-        raw_body_ref = output.get("body_ref")
-        body_ref = raw_body_ref.strip() if isinstance(raw_body_ref, str) else ""
-        if body_ref:
-            if self.execution_output_store is None:
-                raise ValueError(
-                    "OUTPUT_VALUE_RENDER_ERROR: failed to resolve output_value "
-                    f"(step_id={step_id}, path=<body_ref>)"
-                )
-
-            output_body = self.execution_output_store.get_execution_output(body_ref)
-            if not isinstance(output_body, dict):
-                raise ValueError(
-                    "OUTPUT_VALUE_BODY_NOT_FOUND: persisted output body was not found "
-                    f"(step_id={step_id}, body_ref={body_ref})"
-                )
-            if "value" not in output_body:
-                raise ValueError(
-                    "OUTPUT_VALUE_BODY_INVALID: persisted output body is invalid "
-                    f"(step_id={step_id}, body_ref={body_ref})"
-                )
-            return output_body.get("value")
-
         if "value" not in output:
             raise ValueError(
                 "OUTPUT_VALUE_OUTPUT_MISSING: referenced step has no usable output "

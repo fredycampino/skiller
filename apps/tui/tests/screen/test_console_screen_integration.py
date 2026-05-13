@@ -3,31 +3,10 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-import stui.usecase.list_runs_use_case as list_runs_use_case_module
-from stui.screen.autocomplete_view import AutoCompleteView
-from stui.screen.console_screen import ConsoleScreen
-from stui.screen.runs_table_view import RunsTableView
-from stui.screen.screen_status_view import ScreenStatusView
-from stui.screen.transcript_log import TranscriptLog
-from stui.usecase import (
-    interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
-)
-from stui.usecase.run_event_context import RunStatus
-from stui.viewmodel.console_screen_state import (
-    InfoItem,
-    OutputFormat,
-    RunOutputItem,
-    RunResumeItem,
-    RunStepItem,
-    TranscriptMode,
-    UserInputItem,
-    ViewStatusKind,
-)
 from textual import events
 from textual.widgets import Static, TextArea
 
 from apps.tui.tests.support import (
-    ActivatingRunPort,
     FakeAgentPort,
     FakeRunsPort,
     NeverCalledRunPort,
@@ -35,6 +14,24 @@ from apps.tui.tests.support import (
     build_viewmodel,
     make_runs_port_item,
     patched_to_thread,
+)
+from stui.screen.autocomplete_view import AutoCompleteView
+from stui.screen.console_screen import ConsoleScreen
+from stui.screen.transcript_log import TranscriptLog
+from stui.usecase import (
+    interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
+)
+from stui.usecase.run_event_context import RunMode, RunStatus
+from stui.viewmodel.console_screen_state import (
+    InfoItem,
+    OutputFormat,
+    PromptMode,
+    RunOutputItem,
+    RunResumeItem,
+    RunStepItem,
+    TranscriptMode,
+    UserInputItem,
+    ViewStatusKind,
 )
 
 pytestmark = pytest.mark.unit
@@ -187,91 +184,6 @@ def test_console_screen_shows_icon_when_session_is_main() -> None:
     asyncio.run(run())
 
 
-def test_console_screen_closes_runs_table_with_enter_on_selected_row() -> None:
-    async def run() -> None:
-        viewmodel = build_viewmodel(
-            session_key="main",
-            run_port=NeverCalledRunPort(),
-            waiting_port=NeverCalledWaitingPort(),
-            runs_port=FakeRunsPort(
-                runs=[make_runs_port_item(run_id="run-1234", wait_type="input")]
-            ),
-        )
-        app = ConsoleScreen(viewmodel=viewmodel)
-        async with app.run_test(size=(80, 24)) as pilot:
-            await pilot.pause()
-
-            status = app.query_one("#status", ScreenStatusView)
-            runs_table_area = app.query_one("#runs-table-area")
-            runs_table = app.query_one("#runs-table", RunsTableView)
-
-            assert status.display is True
-            assert runs_table_area.display is False
-            assert runs_table.display is False
-
-            for key in ("/", "r", "u", "n", "s"):
-                await pilot.press(key)
-            await pilot.pause()
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert status.display is False
-            assert runs_table_area.display is True
-            assert runs_table.display is True
-            assert runs_table.selected_run is not None
-            assert runs_table.selected_run.run_id == "run-1234"
-            assert runs_table.selected_run.status.name == "WAITING_INPUT"
-
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert status.display is True
-            assert runs_table_area.display is False
-            assert runs_table.display is False
-
-    with patched_to_thread(list_runs_use_case_module):
-        asyncio.run(run())
-
-
-def test_console_screen_activates_waiting_input_row_from_chats_command() -> None:
-    async def run() -> None:
-        viewmodel = build_viewmodel(
-            session_key="main",
-            run_port=ActivatingRunPort(),
-            waiting_port=NeverCalledWaitingPort(),
-            runs_port=FakeRunsPort(
-                runs=[make_runs_port_item(run_id="run-1234", wait_type="input")]
-            ),
-        )
-        app = ConsoleScreen(viewmodel=viewmodel)
-        async with app.run_test(size=(80, 24)) as pilot:
-            await pilot.pause()
-
-            for key in ("/", "c", "h", "a", "t", "s"):
-                await pilot.press(key)
-            await pilot.pause()
-            await pilot.press("enter")
-            await pilot.pause()
-
-            runs_table_area = app.query_one("#runs-table-area")
-            runs_table = app.query_one("#runs-table", RunsTableView)
-            assert runs_table_area.display is True
-            assert runs_table.display is True
-            assert runs_table.selected_run is not None
-            assert runs_table.selected_run.status.name == "WAITING_INPUT"
-
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert app.state.runs_table.visible is False
-            assert app.state.session_key == "run-1234"
-            assert app.state.view_status.kind == ViewStatusKind.WAITING
-            assert app.state.prompt.waiting_prompt == "Write a message."
-
-    with patched_to_thread(list_runs_use_case_module):
-        asyncio.run(run())
-
-
 def test_console_screen_escape_interrupts_running_chat_agent() -> None:
     async def run() -> None:
         agent_port = FakeAgentPort()
@@ -282,8 +194,8 @@ def test_console_screen_escape_interrupts_running_chat_agent() -> None:
             runs_port=FakeRunsPort(),
             agent_port=agent_port,
         )
-        viewmodel.state.transcript.mode = TranscriptMode.CHAT
         viewmodel._run_event_context.run_id = "run-1234"  # noqa: SLF001
+        viewmodel._run_event_context.mode = RunMode.CHAT  # noqa: SLF001
         viewmodel._run_event_context.status = RunStatus.RUNNING  # noqa: SLF001
         app = ConsoleScreen(viewmodel=viewmodel)
         async with app.run_test(size=(80, 24)) as pilot:
@@ -487,7 +399,7 @@ def test_console_screen_hides_resume_and_switch_steps_in_chat_mode() -> None:
             waiting_port=NeverCalledWaitingPort(),
             runs_port=FakeRunsPort(),
         )
-        viewmodel.state.transcript.mode = TranscriptMode.CHAT
+        viewmodel._run_event_context.mode = RunMode.CHAT  # noqa: SLF001
         viewmodel.state.transcript.items.extend(
             [
                 UserInputItem(text="hola"),
@@ -527,5 +439,73 @@ def test_console_screen_hides_resume_and_switch_steps_in_chat_mode() -> None:
                 "› hola",
                 "[agent] support_agent",
             ]
+
+    asyncio.run(run())
+
+
+def test_console_screen_renders_local_dev_status_without_mutating_state() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="run-1234",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.transcript.mode = TranscriptMode.CHAT
+        viewmodel.state.prompt.mode = PromptMode.DEFAULT
+        viewmodel.state.prompt.waiting_prompt = "Write a message."
+        viewmodel.state.view_status.kind = ViewStatusKind.WAITING
+        viewmodel._run_event_context.activate_run(  # noqa: SLF001
+            "run-1234",
+            skill_name="ant",
+            mode=RunMode.CHAT,
+            status=RunStatus.WAITING_INPUT,
+        )
+        viewmodel._run_event_context.event_ids = {"evt-1", "evt-2"}  # noqa: SLF001
+
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            for key in ("/", "d", "e", "v"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            baseline_state = {
+                "prompt_text": app.state.prompt.text,
+                "prompt_mode": app.state.prompt.mode,
+                "cursor_position": app.state.prompt.cursor_position,
+                "waiting_prompt": app.state.prompt.waiting_prompt,
+                "view_status": app.state.view_status.kind,
+                "transcript_count": len(app.state.transcript.items),
+            }
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            transcript = app.query_one("#transcript-log", TranscriptLog)
+            rendered_lines = [
+                strip.text.rstrip()
+                for strip in transcript.lines
+                if strip.text.rstrip()
+            ]
+
+            assert "› /dev" in rendered_lines
+            assert "[dev] RunEventContext" in rendered_lines
+            assert any('"run_id": "run-1234"' in line for line in rendered_lines)
+            assert any('"skill_name": "ant"' in line for line in rendered_lines)
+            assert "[dev] ConsoleScreenState" in rendered_lines
+            assert any('"mode": "chat"' in line for line in rendered_lines)
+            assert any('"items_count": 0' in line for line in rendered_lines)
+
+            assert app.state.prompt.text == baseline_state["prompt_text"]
+            assert app.state.prompt.mode == baseline_state["prompt_mode"]
+            assert app.state.prompt.cursor_position == baseline_state["cursor_position"]
+            assert app.state.prompt.waiting_prompt == baseline_state["waiting_prompt"]
+            assert app.state.view_status.kind == baseline_state["view_status"]
+            assert len(app.state.transcript.items) == baseline_state["transcript_count"]
+
+            prompt = app.query_one("#prompt", TextArea)
+            assert prompt.text == "/dev"
 
     asyncio.run(run())

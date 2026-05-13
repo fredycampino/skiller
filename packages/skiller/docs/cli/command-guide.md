@@ -11,8 +11,8 @@ Terminology used in this guide:
 ### Run lifecycle
 
 ```bash
-skiller run <agent>
-skiller run --file <agent.yaml>
+skiller run <runnable>
+skiller run --file <runnable.yaml>
 skiller resume <run_id>
 ```
 
@@ -94,6 +94,8 @@ skiller whatsapp stop
 ## Typical Flows
 
 ## Run an agent
+
+Command contract: [`commands/run.md`](./commands/run.md).
 
 Internal agent:
 
@@ -260,12 +262,12 @@ In normal usage, `skiller run` already starts the worker, so most users should n
 Options:
 
 ```bash
-skiller run <agent> [--arg key=value] [--logs] [--start-server]
+skiller run <runnable> [--arg key=value] [--logs] [--start-server]
 skiller run --file <path> [--arg key=value] [--logs] [--start-server]
 ```
 
 Notes:
-- use `<agent>` for internal agents
+- use `<runnable>` for built-in runnable ids
 - internal agents resolve from `packages/skiller/agents/<id>/agent.yaml`
 - use `--file` for external YAML files
 - `--logs` includes current logs in the JSON response
@@ -313,12 +315,15 @@ Detailed guide:
 
 ### `status`
 
+Command contract: [`commands/status.md`](./commands/status.md).
+
 Returns the current run snapshot, including waiting metadata when present.
 
 Examples:
 
 ```bash
 skiller status <run_id>
+skiller status <run_id> --context
 ```
 
 Useful fields:
@@ -331,12 +336,16 @@ Useful fields:
 
 ### `logs`
 
+Command contract: [`commands/logs.md`](./commands/logs.md).
+
 Returns the raw structured event list for a run.
 
 Examples:
 
 ```bash
 skiller logs <run_id>
+skiller logs <run_id> --after <sequence>
+skiller logs <run_id> --after <sequence> --limit 100
 ```
 
 Best used for:
@@ -347,6 +356,8 @@ Best used for:
 Notes:
 - `/logs` is a debug/raw surface, not the user-facing transcript
 - it should expose exact event payloads rather than transcript-style formatting
+- `--after` returns events with `sequence` greater than the provided cursor
+- `--limit` caps the number of returned events
 
 ### `delete`
 

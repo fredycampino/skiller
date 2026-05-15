@@ -1,8 +1,9 @@
 import pytest
 from helpers.agent_runner import build_agent_runner
 
-from skiller.application.agent.agent_runner import AgentRunner, AgentRunnerRequest
+from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.step_config_reader import AgentStepConfig
+from skiller.application.agent.runner_state import AgentRunnerRequest
 from skiller.application.agent.tools.tool_manager import (
     PreparedTool,
     ToolPrepareFailure,
@@ -287,6 +288,7 @@ class _FakeAppendRuntimeEventUseCase:
         payload: RuntimeEventPayload | dict[str, object] | None = None,
         step_id: str | None = None,
         step_type=None,  # noqa: ANN001
+        agent_sequence: int | None = None,
         execution=None,  # noqa: ANN001
         next_step_id: str | None = None,
         error: str | None = None,
@@ -302,6 +304,7 @@ class _FakeAppendRuntimeEventUseCase:
                 ),
                 "step_id": step_id,
                 "step_type": step_type,
+                "agent_sequence": agent_sequence,
                 "execution": execution,
                 "next_step_id": next_step_id,
                 "error": error,
@@ -551,6 +554,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             },
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "execution": None,
             "next_step_id": None,
             "error": None,
@@ -576,6 +580,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             },
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "execution": None,
             "next_step_id": None,
             "error": None,
@@ -596,6 +601,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             },
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "execution": None,
             "next_step_id": None,
             "error": None,
@@ -1089,3 +1095,39 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
         AgentContextEntryType.USER_MESSAGE,
         AgentContextEntryType.TOOL_CALL,
     ]
+
+
+def test_agent_runner_returns_invalid_final_message_finish() -> None:
+    context_store = _FakeAgentContextStore()
+    llm = _FakeLLM(
+        responses=[
+            LLMResponse(
+                ok=True,
+                content="   ",
+                model="fake-model",
+            )
+        ]
+    )
+    runner = _build_runner(
+        context_store=context_store,
+        llm=llm,
+        tool_manager=None,
+    )
+
+    result = runner.execute(
+        AgentRunnerRequest(
+            run_id="run-1",
+            step_id="support_agent",
+            config=AgentStepConfig(
+                system="Be useful.",
+                task="Hi",
+                context_id="thread-1",
+                max_turns=3,
+                tools=[],
+            ),
+        )
+    )
+
+    assert result.final_text is None
+    assert result.finish == AgentRunnerFinish.INVALID_FINAL_MESSAGE
+    assert result.error == "Agent step 'support_agent' returned no final answer"

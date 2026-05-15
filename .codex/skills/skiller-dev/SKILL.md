@@ -17,6 +17,13 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - Put state changes and side effects in dedicated use cases.
 - Prefer closed contracts with enums for finite domains like statuses and step types.
 - Keep result objects minimal. Prefer `status + payload + error` over many optional fields.
+- Prefer typed contracts at port boundaries. Do not model stable operations as long scalar
+  parameter lists or generic `dict[str, object]` bags when the domain concept is known.
+- Prefer predictive flow over defensive flow. If a case is expected in normal execution,
+  model it in the contract or result type instead of rediscovering it through scattered
+  `None` checks or generic exceptions.
+- Avoid adding `__init__.py` files by default. Use namespace packages unless a package needs
+  real initialization logic, explicit re-exports, or tooling compatibility that requires it.
 - Trust the contract of a use case. Do not add defensive checks for states that should be impossible.
 - Prefer one clear error message over many overly specific status variants.
 

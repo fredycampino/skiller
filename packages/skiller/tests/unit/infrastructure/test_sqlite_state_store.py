@@ -2,15 +2,10 @@ import sqlite3
 
 import pytest
 
-from skiller.domain.agent.agent_context_model import AgentToolCallPayload
 from skiller.domain.event.event_model import (
-    AgentEventPayload,
-    AgentLifecyclePayload,
     RunCreatedPayload,
     RuntimeEventDraft,
     RuntimeEventType,
-    RunWaitingPayload,
-    StepStartedPayload,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
@@ -29,6 +24,8 @@ from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
@@ -343,262 +340,13 @@ def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
     assert row[1] is not None
 
 
-def test_external_event_is_created_pending_and_removed_from_pending_lookup_when_consumed(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "external-events.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-
-    run_id = store.create_run(
-        "internal",
-        "skill",
-        {"start": "done", "steps": [{"notify": "done", "message": "ok"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id="550e8400-e29b-41d4-a716-446655440011",
-    )
-    event_id = store.create_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-        payload={"text": "hola"},
-        external_id="msg-1",
-        dedup_key="msg-1",
-    )
-
-    event = store.get_latest_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-    )
-
-    assert event is not None
-    assert event["id"] == event_id
-    assert event["status"] == "pending"
-    assert event["consumed_by_run_id"] is None
-    assert event["consumed_at"] is None
-
-    consumed = store.consume_external_event(event_id, run_id=run_id)
-
-    event_after_consume = store.get_latest_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-    )
-
-    assert consumed is True
-    assert event_after_consume is None
-
-    with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT status, consumed_by_run_id, consumed_at
-            FROM external_events
-            WHERE id = ?
-            """,
-            (event_id,),
-        ).fetchone()
-
-    assert row is not None
-    assert row[0] == "consumed"
-    assert row[1] == run_id
-    assert row[2] is not None
-
-
-def test_get_latest_external_event_returns_oldest_pending_match_first(tmp_path) -> None:
-    db_path = tmp_path / "external-events-order.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-
-    first_event_id = store.create_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-        payload={"text": "first"},
-        external_id="msg-1",
-        dedup_key="msg-1",
-    )
-    second_event_id = store.create_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-        payload={"text": "second"},
-        external_id="msg-2",
-        dedup_key="msg-2",
-    )
-
-    event = store.get_latest_external_event(
-        source_type=SourceType.CHANNEL,
-        source_name="whatsapp",
-        match_type=MatchType.CHANNEL_KEY,
-        match_key="chat-1",
-    )
-
-    assert event is not None
-    assert event["id"] == first_event_id
-    assert event["payload"] == {"text": "first"}
-    assert second_event_id != first_event_id
-
-
-def test_list_events_exposes_monotonic_sequence(tmp_path) -> None:
-    db_path = tmp_path / "events-sequence.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-    run_id = "550e8400-e29b-41d4-a716-446655440030"
-    store.create_run(
-        "internal",
-        "skill",
-        {"start": "done", "steps": [{"notify": "done"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=run_id,
-    )
-
-    first_event_id = store.append_event(
-        RuntimeEventDraft(
-            run_id=run_id,
-            type=RuntimeEventType.STEP_STARTED,
-            step_id="done",
-            step_type="notify",
-            payload=StepStartedPayload(),
-        )
-    )
-    second_event_id = store.append_event(
-        RuntimeEventDraft(
-            run_id=run_id,
-            type=RuntimeEventType.RUN_WAITING,
-            step_id="done",
-            step_type="notify",
-            payload=RunWaitingPayload(output={}),
-        )
-    )
-
-    events = store.list_events(run_id)
-    last_event = store.get_last_event(run_id)
-
-    assert [event.id for event in events] == [first_event_id, second_event_id]
-    assert [event.run_id for event in events] == [run_id, run_id]
-    assert [event.sequence for event in events] == sorted(event.sequence for event in events)
-    assert events[0].sequence < events[1].sequence
-    assert last_event is not None
-    assert last_event.id == second_event_id
-    assert last_event.run_id == run_id
-    assert last_event.sequence == events[1].sequence
-    assert store.list_events(run_id, after_sequence=events[0].sequence) == [events[1]]
-    assert store.list_events(run_id, limit=1) == [events[0]]
-    assert store.list_events(run_id, after_sequence=events[0].sequence, limit=1) == [events[1]]
-
-
-def test_list_events_roundtrips_agent_event_body(tmp_path) -> None:
-    db_path = tmp_path / "agent-log-events.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-    run_id = "550e8400-e29b-41d4-a716-446655440031"
-    store.create_run(
-        "internal",
-        "skill",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=run_id,
-    )
-
-    event_id = store.append_event(
-        RuntimeEventDraft(
-            run_id=run_id,
-            type=RuntimeEventType.AGENT_TOOL_CALL,
-            payload=AgentEventPayload(
-                step_id="support_agent",
-                turn_id="turn-1",
-                agent_sequence=33,
-                body=AgentToolCallPayload(
-                    turn_id="turn-1",
-                    parent_sequence=32,
-                    tool_call_id="call-1",
-                    tool="shell",
-                    args={"command": "pwd"},
-                ),
-            ),
-        )
-    )
-
-    events = store.list_events(run_id)
-
-    assert len(events) == 1
-    assert events[0].id == event_id
-    assert events[0].step_id == "support_agent"
-    assert events[0].step_type == "agent"
-    assert events[0].agent_sequence == 33
-    assert events[0].payload == AgentEventPayload(
-        step_id="support_agent",
-        turn_id="turn-1",
-        agent_sequence=33,
-        body=AgentToolCallPayload(
-            turn_id="turn-1",
-            parent_sequence=32,
-            tool_call_id="call-1",
-            tool="shell",
-            args={"command": "pwd"},
-        ),
-    )
-    assert events[0].model_dump(mode="json")["payload"] == {
-        "type": "tool_call",
-        "turn_id": "turn-1",
-        "parent_sequence": 32,
-        "tool_call_id": "call-1",
-        "tool": "shell",
-        "args": {"command": "pwd"},
-    }
-
-
-def test_list_events_keeps_agent_lifecycle_metadata_in_envelope(tmp_path) -> None:
-    db_path = tmp_path / "agent-lifecycle-events.db"
-    store = SqliteStateStore(str(db_path))
-    store.init_db()
-    run_id = "550e8400-e29b-41d4-a716-446655440032"
-    store.create_run(
-        "internal",
-        "skill",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=run_id,
-    )
-
-    store.append_event(
-        RuntimeEventDraft(
-            run_id=run_id,
-            type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
-            step_id="support_agent",
-            step_type="agent",
-            payload=AgentLifecyclePayload(
-                turn_id="turn-29",
-                stop_reason="max_turns_exhausted",
-            ),
-        )
-    )
-
-    event = store.list_events(run_id)[0]
-
-    assert event.step_id == "support_agent"
-    assert event.step_type == "agent"
-    assert event.agent_sequence is None
-    assert event.payload == AgentLifecyclePayload(
-        turn_id="turn-29",
-        stop_reason="max_turns_exhausted",
-    )
-    assert event.model_dump(mode="json")["payload"] == {
-        "turn_id": "turn-29",
-        "stop_reason": "max_turns_exhausted",
-    }
-
-
 def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     db_path = tmp_path / "delete-run.db"
     store = SqliteStateStore(str(db_path))
+    external_event_store = SqliteExternalEventStore(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     store.init_db()
+    runtime_event_store.init_db()
 
     run_id = "550e8400-e29b-41d4-a716-446655440021"
     other_run_id = "550e8400-e29b-41d4-a716-446655440022"
@@ -606,14 +354,14 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     context = RunContext(inputs={}, step_executions={})
     store.create_run("internal", "skill", skill_snapshot, context, run_id=run_id)
     store.create_run("internal", "skill", skill_snapshot, context, run_id=other_run_id)
-    store.append_event(
+    runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=run_id,
             type=RuntimeEventType.RUN_CREATE,
             payload=RunCreatedPayload(skill="skill", skill_source="internal"),
         )
     )
-    store.append_event(
+    runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=other_run_id,
             type=RuntimeEventType.RUN_CREATE,
@@ -638,7 +386,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         match_type=MatchType.CHANNEL_KEY,
         match_key="chat-2",
     )
-    store.create_external_event(
+    external_event_store.create_external_event(
         source_type=SourceType.CHANNEL,
         source_name="whatsapp",
         match_type=MatchType.CHANNEL_KEY,
@@ -649,7 +397,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         external_id="msg-1",
         dedup_key="msg-1",
     )
-    store.register_external_receipt(
+    external_event_store.register_external_receipt(
         "msg-1",
         SourceType.CHANNEL,
         "whatsapp",
@@ -657,7 +405,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         "chat-1",
         {"text": "run scoped"},
     )
-    consumed_event_id = store.create_external_event(
+    consumed_event_id = external_event_store.create_external_event(
         source_type=SourceType.CHANNEL,
         source_name="whatsapp",
         match_type=MatchType.CHANNEL_KEY,
@@ -668,7 +416,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         external_id="msg-2",
         dedup_key="msg-2",
     )
-    store.register_external_receipt(
+    external_event_store.register_external_receipt(
         "msg-2",
         SourceType.CHANNEL,
         "whatsapp",
@@ -676,8 +424,8 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         "chat-2",
         {"text": "consumed by deleted run"},
     )
-    store.consume_external_event(consumed_event_id, run_id=run_id)
-    store.create_external_event(
+    external_event_store.consume_external_event(consumed_event_id, run_id=run_id)
+    external_event_store.create_external_event(
         source_type=SourceType.CHANNEL,
         source_name="whatsapp",
         match_type=MatchType.CHANNEL_KEY,
@@ -688,7 +436,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         external_id="msg-3",
         dedup_key="msg-3",
     )
-    store.register_external_receipt(
+    external_event_store.register_external_receipt(
         "msg-3",
         SourceType.CHANNEL,
         "whatsapp",

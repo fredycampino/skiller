@@ -52,6 +52,8 @@ from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUs
 from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -75,7 +77,13 @@ class _FakeChannelSender:
         return True
 
 
+def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
+    return SqliteRuntimeEventStore(store.db_path)
+
+
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
+    runtime_event_store = SqliteRuntimeEventStore(store.db_path)
+    external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
@@ -86,7 +94,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     shell_tool = ShellProcessTool()
     tool_process_runner = DefaultToolProcessRunner()
     fail_run_use_case = FailRunUseCase(store)
-    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -120,12 +128,12 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
         run_store=store,
         wait_store=store,
-        external_event_store=store,
+        external_event_store=external_event_store,
     )
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
         wait_store=store,
-        external_event_store=store,
+        external_event_store=external_event_store,
     )
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
@@ -163,11 +171,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         ),
         handle_input_use_case=HandleInputUseCase(
             run_store=store,
-            external_event_store=store,
-            runtime_event_store=store,
+            external_event_store=external_event_store,
+            runtime_event_store=runtime_event_store,
         ),
         handle_webhook_use_case=HandleWebhookUseCase(
-            external_event_store=store,
+            external_event_store=external_event_store,
             wait_store=store,
         ),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
@@ -209,7 +217,7 @@ def test_run_external_skill_file_succeeds() -> None:
         assert run.skill_source == "file"
         assert run.skill_ref == str(skill_path)
         assert run.skill_snapshot["name"] == "external_notify"
-        events = store.list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result["run_id"])
         notify_event = _step_success_event(events, step_id="show_message")
         assert notify_event.payload.output["value"]["message"] == "external ok"
 
@@ -330,8 +338,8 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert run.status == "WAITING"
 
         wait_event = next(
-            event for event in store.list_events(run_id) if event.type == "RUN_WAITING"
-        )
+            event for event in _event_store(store).list_events(run_id)
+            if event.type == "RUN_WAITING")
         assert isinstance(wait_event.payload, RunWaitingPayload)
         assert wait_event.payload.output["value"]["webhook"] == "github-pr-merged"
         assert wait_event.payload.output["value"]["key"] == "42"
@@ -344,7 +352,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert resumed_run is not None
         assert resumed_run.status == "WAITING"
 
-        events = store.list_events(run_id)
+        events = _event_store(store).list_events(run_id)
         assert any(event.type == "RUN_RESUME" for event in events)
         assert not any(
             event.type == "STEP_SUCCESS" and event.step_type == "notify"
@@ -401,7 +409,7 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         assert resumed_run is not None
         assert resumed_run.status == "SUCCEEDED"
 
-        events = store.list_events(run_id)
+        events = _event_store(store).list_events(run_id)
         wait_resolved = _step_success_event(events, step_id="wait_merge")
         assert wait_resolved.payload.output == {
             "text": "Webhook received: github-pr-merged:42.",
@@ -472,7 +480,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         }
         assert resumed_run.context.step_executions["ask_user"].evaluation["input_event_id"]
 
-        events = store.list_events(run_id)
+        events = _event_store(store).list_events(run_id)
         run_waiting_event = next(event for event in events if event.type == "RUN_WAITING")
         assert run_waiting_event.step_id == "ask_user"
         assert run_waiting_event.step_type == "wait_input"
@@ -558,7 +566,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
             "value"
         ]["payload"] == {"text": "second reply"}
 
-        events = store.list_events(run_id)
+        events = _event_store(store).list_events(run_id)
         input_resolved_events = [
             event
             for event in events

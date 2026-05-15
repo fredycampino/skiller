@@ -70,12 +70,18 @@ class _FakeAppendRuntimeEventUseCase:
         *,
         event_type: RuntimeEventType,
         payload: RuntimeEventPayload | dict[str, object],
+        step_id: str | None = None,
+        step_type: str | None = None,
+        agent_sequence: int | None = None,
     ) -> None:
         self.calls.append(
             {
                 "run_id": run_id,
                 "event_type": event_type,
                 "payload": runtime_event_payload_to_dict(payload),
+                "step_id": step_id,
+                "step_type": step_type,
+                "agent_sequence": agent_sequence,
             }
         )
 
@@ -336,6 +342,9 @@ def test_create_run_only_creates_run() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_CREATE,
+            "step_id": None,
+            "step_type": None,
+            "agent_sequence": None,
             "payload": {"skill": "notify_test", "skill_source": "internal"},
         }
     ]
@@ -565,6 +574,9 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         {
             "run_id": "run-1",
             "event_type": RuntimeEventType.RUN_RESUME,
+            "step_id": None,
+            "step_type": None,
+            "agent_sequence": None,
             "payload": {"source": "manual"},
         }
     ]

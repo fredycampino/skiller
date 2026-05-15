@@ -1,5 +1,6 @@
-from skiller.application.agent.agent_runner import AgentRunner, AgentRunnerRequest
+from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
+from skiller.application.agent.runner_state import AgentRunnerRequest
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
@@ -39,6 +40,7 @@ class ExecuteAgentStepUseCase:
         if runner_result.finish in {
             AgentRunnerFinish.LLM_REQUEST_FAILED,
             AgentRunnerFinish.TOOL_EXECUTION_FAILED,
+            AgentRunnerFinish.INVALID_FINAL_MESSAGE,
         }:
             raise ValueError(runner_result.error or f"Agent step '{step_id}' failed")
 

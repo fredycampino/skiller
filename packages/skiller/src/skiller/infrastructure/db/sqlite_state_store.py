@@ -1,19 +1,8 @@
 import json
 import sqlite3
-import uuid
 from pathlib import Path
 from typing import Any
 
-from skiller.domain.event.event_model import (
-    RuntimeEvent,
-    RuntimeEventDraft,
-    RuntimeEventType,
-    runtime_event_agent_sequence,
-    runtime_event_body_to_dict,
-    runtime_event_payload_from_dict,
-    runtime_event_step_id,
-    runtime_event_step_type,
-)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.wait.match_type import MatchType
@@ -23,7 +12,6 @@ from skiller.infrastructure.db.sqlite_agent_context_store import ensure_agent_co
 from skiller.infrastructure.db.sqlite_agent_steering_store import (
     ensure_runs_steering_queue_column,
 )
-from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
@@ -33,7 +21,6 @@ class SqliteStateStore(SqliteRepository):
     def __init__(self, db_path: str) -> None:
         super().__init__(db_path)
         self.wait_store = SqliteWaitStore(db_path)
-        self.external_event_store = SqliteExternalEventStore(db_path)
 
     def init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -348,127 +335,6 @@ class SqliteStateStore(SqliteRepository):
         ).fetchone()
         return row is not None
 
-    def append_event(self, event: RuntimeEventDraft) -> str:
-        event_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence
-                FROM log_events
-                WHERE run_id = ?
-                """,
-                (event.run_id,),
-            ).fetchone()
-            sequence = int(row["next_sequence"]) if row is not None else 1
-            conn.execute(
-                """
-                INSERT INTO log_events (
-                  id,
-                  run_id,
-                  sequence,
-                  event_type,
-                  step_id,
-                  step_type,
-                  agent_sequence,
-                  body_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event_id,
-                    event.run_id,
-                    sequence,
-                    event.type.value,
-                    event.step_id
-                    if event.step_id is not None
-                    else runtime_event_step_id(event.payload),
-                    event.step_type
-                    if event.step_type is not None
-                    else runtime_event_step_type(event.payload),
-                    event.agent_sequence
-                    if event.agent_sequence is not None
-                    else runtime_event_agent_sequence(event.payload),
-                    json.dumps(runtime_event_body_to_dict(event.payload)),
-                ),
-            )
-        return event_id
-
-    def list_events(
-        self,
-        run_id: str,
-        *,
-        after_sequence: int | None = None,
-        limit: int | None = None,
-    ) -> list[RuntimeEvent]:
-        query = """
-            SELECT
-              sequence,
-              id,
-              run_id,
-              event_type,
-              step_id,
-              step_type,
-              agent_sequence,
-              body_json,
-              created_at
-            FROM log_events WHERE run_id = ?
-        """
-        params: list[Any] = [run_id]
-        if after_sequence is not None:
-            query += " AND sequence > ?"
-            params.append(after_sequence)
-        query += " ORDER BY sequence ASC"
-        if limit is not None:
-            query += " LIMIT ?"
-            params.append(limit)
-        with self._connect() as conn:
-            rows = conn.execute(query, tuple(params)).fetchall()
-        return [self._build_runtime_event(row) for row in rows]
-
-    def get_last_event(self, run_id: str) -> RuntimeEvent | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT
-                  sequence,
-                  id,
-                  run_id,
-                  event_type,
-                  step_id,
-                  step_type,
-                  agent_sequence,
-                  body_json,
-                  created_at
-                FROM log_events WHERE run_id = ?
-                ORDER BY sequence DESC
-                LIMIT 1
-                """,
-                (run_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        return self._build_runtime_event(row)
-
-    def _build_runtime_event(self, row: sqlite3.Row) -> RuntimeEvent:
-        return RuntimeEvent(
-            sequence=int(row["sequence"]),
-            id=row["id"],
-            run_id=row["run_id"],
-            type=RuntimeEventType(row["event_type"]),
-            step_id=row["step_id"],
-            step_type=row["step_type"],
-            agent_sequence=row["agent_sequence"],
-            created_at=row["created_at"],
-            payload=runtime_event_payload_from_dict(
-                event_type=RuntimeEventType(row["event_type"]),
-                value={
-                    **json.loads(row["body_json"]),
-                    "step_id": row["step_id"],
-                    "step_type": row["step_type"],
-                    "agent_sequence": row["agent_sequence"],
-                },
-            ),
-        )
-
     def create_wait(
         self,
         run_id: str,
@@ -518,73 +384,6 @@ class SqliteStateStore(SqliteRepository):
             match_type=match_type,
             match_key=match_key,
         )
-
-    def create_external_event(
-        self,
-        *,
-        source_type: SourceType,
-        source_name: str,
-        match_type: MatchType,
-        match_key: str,
-        payload: dict[str, Any],
-        run_id: str | None = None,
-        step_id: str | None = None,
-        external_id: str | None = None,
-        dedup_key: str | None = None,
-    ) -> str:
-        return self.external_event_store.create_external_event(
-            source_type=source_type,
-            source_name=source_name,
-            match_type=match_type,
-            match_key=match_key,
-            payload=payload,
-            run_id=run_id,
-            step_id=step_id,
-            external_id=external_id,
-            dedup_key=dedup_key,
-        )
-
-    def get_latest_external_event(
-        self,
-        *,
-        source_type: SourceType,
-        source_name: str,
-        match_type: MatchType,
-        match_key: str,
-        run_id: str | None = None,
-        step_id: str | None = None,
-        since_created_at: str | None = None,
-    ) -> dict[str, Any] | None:
-        return self.external_event_store.get_latest_external_event(
-            source_type=source_type,
-            source_name=source_name,
-            match_type=match_type,
-            match_key=match_key,
-            run_id=run_id,
-            step_id=step_id,
-            since_created_at=since_created_at,
-        )
-
-    def register_external_receipt(
-        self,
-        dedup_key: str,
-        source_type: SourceType,
-        source_name: str,
-        match_type: MatchType,
-        match_key: str,
-        payload: dict[str, Any],
-    ) -> bool:
-        return self.external_event_store.register_external_receipt(
-            dedup_key,
-            source_type,
-            source_name,
-            match_type,
-            match_key,
-            payload,
-        )
-
-    def consume_external_event(self, event_id: str, *, run_id: str) -> bool:
-        return self.external_event_store.consume_external_event(event_id, run_id=run_id)
 
     def expire_active_waits_for_run(self, run_id: str) -> int:
         return self.wait_store.expire_active_waits_for_run(run_id)

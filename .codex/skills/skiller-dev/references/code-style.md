@@ -71,6 +71,24 @@ if is_ready and current_step.step_type == StepType.MCP:
 - Do not create a mutable mega-state object just to reduce argument count.
 - Do not hide operation state in singleton services just to make a call site shorter.
 - The top-level method should read as a flow, not as repeated plumbing of primitive fields.
+- If a port or use case method needs more than a few business parameters, stop and check whether
+  the operation already has a domain concept that should cross the boundary as a typed object.
+- If the shape is stable, do not use `dict[str, object]` as a convenience transport type. Model
+  the request or payload explicitly and let adapters convert to or from raw JSON at the boundary.
+- Do not rebuild the same domain fact from primitive fields in multiple layers. Persist or emit
+  from the typed object that already represents that fact whenever possible.
+
+## Predictive Contracts
+
+- Inside `application` and `domain`, prefer explicit result types and typed states for expected
+  outcomes over defensive branching on `None`, raw dicts, or generic exceptions.
+- If a failure is part of the normal flow, model it in the contract. Do not hide it behind
+  ad hoc `ValueError` paths discovered late in the execution.
+- Keep defensive validation at real boundaries: external input, parsing, configuration, and
+  infrastructure responses. Do not repeat it across internal typed flows.
+- When a state object exposes transition methods such as `finish_*` or `fail_*`, do not write
+  its transition fields directly from the outside. Prefer the transition methods over scattered
+  assignments to fields like `finish`, `error`, or `final_text`.
 
 Preferred:
 
@@ -138,6 +156,16 @@ wait_result = process_runner.wait(handle, interrupt_signal=self)
 - Avoid `context` as a generic suffix. In Skiller, `context` is already overloaded by runtime context, agent context, and LLM context.
 - Prefer precise names like `run`, `turn`, `agent_id`, `context_id`, `agent_context_entries`, `tool_request`, or `current_step`.
 - If an outer layer uses a broader term like `step_id`, translate it at the boundary when the inner component has a better domain term like `agent_id`.
+
+## Package Files
+
+- Do not add `__init__.py` files by default.
+- Prefer namespace packages for new directories.
+- Add `__init__.py` only when it has a concrete purpose:
+  - package initialization logic
+  - explicit public re-exports
+  - proven tooling or runtime compatibility requirement
+- A docstring-only `__init__.py` is noise and should be avoided.
 
 ## Avoid
 

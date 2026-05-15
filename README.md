@@ -2,15 +2,18 @@
 
 Declarative runtime for small operational workflows.
 
-`skiller` runs YAML-defined skills with a simple execution loop, built-in persistence, MCP tool calls, and webhook-based resume. It is designed for flows that need to mix deterministic steps, external tools, and waiting states without turning the whole system into ad hoc glue code.
+`skiller` runs YAML-defined agents and workflow files with a simple execution loop, built-in persistence, MCP tool calls, and webhook-based resume. It is designed for flows that need to mix deterministic steps, external tools, and waiting states without turning the whole system into ad hoc glue code.
 
 Current step types:
+- `agent`
 - `assign`
+- `send`
 - `notify`
 - `shell`
 - `llm_prompt`
 - `mcp`
 - `switch`
+- `wait_channel`
 - `wait_input`
 - `when`
 - `wait_webhook`
@@ -25,8 +28,9 @@ Current step types:
 - resume from persistence
 
 The core model is intentionally small:
-- skills live in `skills/*.yaml`
-- the runtime snapshots a skill into the DB when a run starts
+- internal catalog entries live in `packages/skiller/agents/<id>/agent.yaml`
+- external workflow files can be run with `skiller run --file <path>`
+- the runtime snapshots the selected definition into the DB when a run starts
 - each step decides the next transition
 - waiting is persisted, not simulated in memory
 
@@ -38,10 +42,10 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-Run a minimal skill:
+Run an internal catalog agent:
 
 ```bash
-skiller run notify_test
+skiller run ant
 ```
 
 Persistent configuration lives outside the current working directory:
@@ -52,12 +56,12 @@ Persistent configuration lives outside the current working directory:
 
 Use `AGENT_CONFIG_FILE=/path/to/config.json` to point Skiller at another JSON config.
 Environment variables override the JSON file for one-off runs. Skiller does not load `.env` files.
-See [`docs/configuration.md`](docs/configuration.md) for the full JSON format.
+See [`packages/skiller/docs/config/config.md`](packages/skiller/docs/config/config.md) for the full JSON format.
 
-Run a demo with branching:
+Run an external workflow file:
 
 ```bash
-skiller run story_router --arg path=cave --arg mood=curious
+skiller run --file skills/story_router.yaml --arg path=cave --arg mood=curious
 ```
 
 Inspect a run:
@@ -71,31 +75,56 @@ skiller delete <run_id>
 `delete` removes the run and database rows tied to it, including runtime events, waits,
 external event records, deduplication receipts for those events, and persisted output bodies.
 
-Run a skill file directly:
+Run a workflow file directly:
 
 ```bash
 skiller run --file skills/notify_test.yaml
 ```
 
-## Example Skill
+## Example Internal Catalog Entry
 
 ```yaml
-name: notify_test
-description: "Minimal single-step notify test"
+name: ant
+description: "Terminal agent chat with tool access"
 version: "0.1"
-start: show_message
+start: ask_user
 
 inputs: {}
 
 steps:
-  - notify: show_message
-    message: "notify smoke ok"
+  - wait_input: ask_user
+    prompt: "Write a message. Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: support_agent
+
+  - agent: support_agent
+    system: |
+      You are a helpful assistant in a terminal chat.
+      Reply in the same language as the user.
+      Be concise, clear, and direct.
+      Use tools only when they genuinely help.
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - notify
+      - shell
+    max_turns: 10
+    next: ask_user
+
+  - notify: done
+    message: "Chat closed."
 ```
 
 Run it with:
 
 ```bash
-skiller run notify_test
+skiller run ant
 ```
 
 ## What The Runtime Supports
@@ -107,6 +136,11 @@ skiller run notify_test
 - `switch`
 - `when`
 
+### Runtime-mediated steps
+
+- `agent`
+- `send`
+
 ### External execution
 
 - `shell`
@@ -115,6 +149,7 @@ skiller run notify_test
 
 ### Persistent waiting
 
+- `wait_channel`
 - `wait_input`
 - `wait_webhook`
 
@@ -131,17 +166,17 @@ notify -> shell -> when -> wait_input -> notify
 Minimal examples already in the repo:
 - [`skills/stdio_mcp_test.yaml`](skills/stdio_mcp_test.yaml)
 - [`skills/http_mcp_test.yaml`](skills/http_mcp_test.yaml)
-- [`skills/pull_request.yaml`](skills/pull_request.yaml)
+- [`packages/skiller/agents/pr/agent.yaml`](packages/skiller/agents/pr/agent.yaml)
 
-The source of truth for MCP connection settings lives in the skill YAML under `mcp:`.
-For GitHub PR flow, `skills/pull_request.yaml` uses:
+The source of truth for MCP connection settings lives in the selected YAML definition under `mcp:`.
+For the internal GitHub PR flow, [`packages/skiller/agents/pr/agent.yaml`](packages/skiller/agents/pr/agent.yaml) uses:
 
 - URL: `https://api.githubcopilot.com/mcp/`
 - Token: `~/.skiller/secrets/github_mcp_token`
 
 ## Webhooks And Waiting
 
-`wait_webhook` and `wait_input` are first-class runtime primitives:
+`wait_channel`, `wait_webhook`, and `wait_input` are first-class runtime primitives:
 - the run moves to `WAITING`
 - the current step stays on the same waiting step
 - a matching webhook event or input event resolves the wait
@@ -177,20 +212,20 @@ skiller cloudflared start
 ## Project Layout
 
 - `packages/skiller/src/skiller`: product runtime and CLI code
+- `packages/skiller/agents`: internal catalog entries resolved by `skiller run <id>`
 - `apps/tui`: extracted Textual UI app (`stui`)
-- `skills`: internal YAML skills
-- `docs`: repo and monorepo documentation
-- `tests`: runtime, CLI, and shared verification
+- `skills`: external examples, demos, and legacy/manual test fixtures
+- `packages/skiller/docs`: runtime and CLI documentation
+- `packages/skiller/tests`: runtime, CLI, and shared verification
 
 ## Documentation
 
 Core guides:
-- [`docs/README.md`](docs/README.md)
 - [`packages/skiller/docs/cli/command-guide.md`](packages/skiller/docs/cli/command-guide.md)
 - [`packages/skiller/docs/cli/tool-server.md`](packages/skiller/docs/cli/tool-server.md)
 - [`packages/skiller/docs/cli/tool-cloudflared.md`](packages/skiller/docs/cli/tool-cloudflared.md)
 - [`packages/skiller/docs/skills/skill-schema.md`](packages/skiller/docs/skills/skill-schema.md)
-- [`docs/db/schema.md`](docs/db/schema.md)
+- [`packages/skiller/docs/db/schema.md`](packages/skiller/docs/db/schema.md)
 - [`packages/skiller/docs/runtime/execution-model.md`](packages/skiller/docs/runtime/execution-model.md)
 - [`packages/skiller/docs/steps/mcp.md`](packages/skiller/docs/steps/mcp.md)
 - [`packages/skiller/docs/steps/wait_input.md`](packages/skiller/docs/steps/wait_input.md)
@@ -209,8 +244,8 @@ Step references:
 Run the main checks:
 
 ```bash
-./.venv/bin/python -m ruff check src apps/tui/src tests apps/tui/tests scripts/ci
-./.venv/bin/python -m pytest tests apps/tui/tests
+./.venv/bin/python -m ruff check packages/skiller/src apps/tui/src packages/skiller/tests apps/tui/tests
+./.venv/bin/python -m pytest packages/skiller/tests apps/tui/tests
 ./.venv/bin/python -m build --no-isolation
 ```
 

@@ -2,7 +2,46 @@
 
 All notable changes to this project should be summarized here before a version is cut from a `feature/*` branch into `main`.
 
+## 1.0.0-beta.2 - 2026-05-16
+
+### Added
+- Add history feature for agent conversation (PR #26)
+- Add agent context and run event observer refactor (PR #25)
+- Add WhatsApp channel runtime and bridge support (PR #23)
+- Add chat mode and ESC to interrupt agent tools
+- Add agent runtime and TUI integration
+
+### Changed
+- Clean tool executor and event publishers (PR #27)
+- Restructure project into monorepo (PR #23)
+- Improve event type tracking in polling observer
+
+
+
+### Removed
+- Nothing yet.
+
+### Notes
+- Release version bump.
+
 ## Unreleased
+
+### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+### Fixed
+- Nothing yet.
+
+### Removed
+- Nothing yet.
+
+### Notes
+- Update this section when a branch is ready for release.
+
+
 
 ### Added
 - Nothing yet.

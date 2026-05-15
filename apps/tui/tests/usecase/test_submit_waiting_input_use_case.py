@@ -48,7 +48,7 @@ class FakeRunPort:
         raise AssertionError(f"unexpected status call: {run_id}")
 
 
-class FakeEventObserver:
+class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribed: list[object] = []
         self.unsubscribed: list[object] = []
@@ -73,6 +73,9 @@ class FakeEventObserver:
 class FakeObserver:
     def notify(self, events: list[LogEvent]) -> None:
         _ = events
+
+    def get_max_page(self) -> int:
+        return 100
 
 
 def _run_context(
@@ -109,7 +112,7 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
             )
         )
         run_port = FakeRunPort()
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         context = _run_context()
         context.activate_run(
             "run-1234",
@@ -120,12 +123,12 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         use_case = SubmitWaitingInputUseCase(
             waiting_port=waiting_port,
             run_port=run_port,
-            event_observer=event_observer,
+            events_port=events_port,
             context=context,
         )
         observer = FakeObserver()
-        event_observer.current_run_id = "run-1234"
-        event_observer.current_listener = observer
+        events_port.current_run_id = "run-1234"
+        events_port.current_listener = observer
         state = ConsoleScreenState(
             session_key="main",
             prompt=PromptState(waiting_prompt="Write a message"),
@@ -140,9 +143,9 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
 
         assert waiting_port.called_with == [("run-1234", "hello world")]
         assert run_port.status_called_with == []
-        assert event_observer.unsubscribed == [observer]
-        assert event_observer.subscribed == [observer]
-        assert event_observer.current_run_id == "run-5678"
+        assert events_port.unsubscribed == [observer]
+        assert events_port.subscribed == [observer]
+        assert events_port.current_run_id == "run-5678"
         assert result.state is state
         assert state.session_key == "run-5678"
         assert state.view_status.kind == ViewStatusKind.RUNNING
@@ -179,11 +182,11 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
             )
         )
         run_port = FakeRunPort()
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         use_case = SubmitWaitingInputUseCase(
             waiting_port=waiting_port,
             run_port=run_port,
-            event_observer=event_observer,
+            events_port=events_port,
             context=_run_context(
                 run_id="run-1234",
                 skill_name="wait_input_test",
@@ -192,8 +195,8 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
             ),
         )
         observer = FakeObserver()
-        event_observer.current_run_id = "run-1234"
-        event_observer.current_listener = observer
+        events_port.current_run_id = "run-1234"
+        events_port.current_listener = observer
         state = ConsoleScreenState(
             session_key="main",
             prompt=PromptState(waiting_prompt="Write a message"),
@@ -207,9 +210,9 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
 
         assert waiting_port.called_with == [("run-1234", "hello")]
         assert run_port.status_called_with == []
-        assert event_observer.subscribed == []
-        assert event_observer.unsubscribed == []
-        assert event_observer.current_run_id == "run-1234"
+        assert events_port.subscribed == []
+        assert events_port.unsubscribed == []
+        assert events_port.current_run_id == "run-1234"
         assert result.state is state
         assert state.view_status.kind == ViewStatusKind.ERROR
         assert isinstance(state.transcript.items[-1], DispatchErrorItem)
@@ -241,7 +244,7 @@ def test_submit_waiting_input_use_case_normalizes_user_text(
         use_case = SubmitWaitingInputUseCase(
             waiting_port=waiting_port,
             run_port=FakeRunPort(),
-            event_observer=FakeEventObserver(),
+            events_port=FakeEventsPort(),
             context=_run_context(
                 run_id="run-1234",
                 skill_name="wait_input_test",
@@ -270,11 +273,11 @@ def test_submit_waiting_input_use_case_ignores_missing_waiting_run() -> None:
         )
     )
     run_port = FakeRunPort()
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
     use_case = SubmitWaitingInputUseCase(
         waiting_port=waiting_port,
         run_port=run_port,
-        event_observer=event_observer,
+        events_port=events_port,
         context=_run_context(),
     )
     observer = FakeObserver()
@@ -289,8 +292,8 @@ def test_submit_waiting_input_use_case_ignores_missing_waiting_run() -> None:
 
         assert result.state is state
         assert waiting_port.called_with == []
-        assert event_observer.subscribed == []
-        assert event_observer.unsubscribed == []
+        assert events_port.subscribed == []
+        assert events_port.unsubscribed == []
         assert state.transcript.items == []
         assert state.view_status.kind == ViewStatusKind.HIDDEN
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from stui.port.event_port import LogEventsListener, LogEventsObserverPort
+from stui.port.event_port import EventsPort, LogEventsListener
 from stui.port.run_port import RunPort
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -32,7 +32,7 @@ class SelectRunsTableRowUseCase:
     """
 
     run_port: RunPort
-    event_observer: LogEventsObserverPort
+    events_port: EventsPort
     context: RunEventContext
 
     def execute(
@@ -86,5 +86,5 @@ class SelectRunsTableRowUseCase:
             mode=run_mode,
             status=run_status,
         )
-        self.event_observer.subscribe(run_id=run_id, listener=observer)
+        self.events_port.subscribe(run_id=run_id, listener=observer)
         return SelectRunsTableRowResult(state=state)

@@ -8,25 +8,24 @@ from stui.adapter.cli_run_adapter import CliRunAdapter
 from stui.adapter.cli_runs_adapter import CliRunsAdapter
 from stui.adapter.cli_waiting_adapter import CliWaitingAdapter
 from stui.adapter.default_agent_port import DefaultAgentPort
+from stui.adapter.default_events_port import DefaultEventsPort
 from stui.adapter.default_run_port import DefaultRunPort
 from stui.adapter.default_runs_port import DefaultRunsPort
 from stui.adapter.default_waiting_port import DefaultWaitingPort
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.logs_event_observer import LogsEventObserver
 from stui.port.agent_port import AgentPort
-from stui.port.event_port import LogEventsObserverPort
+from stui.port.event_port import EventsPort
 from stui.port.run_port import RunPort
 from stui.port.runs_port import RunsPort
 from stui.port.waiting_port import WaitingPort
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
+from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
 from stui.usecase.list_runs_use_case import ListRunsUseCase
-from stui.usecase.log_event_reducer_use_case import (
-    LogEventReducerUseCase,
-)
 from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
@@ -57,7 +56,7 @@ class TuiUseCases:
     move_completion_use_case: MoveCompletionUseCase
     list_runs_use_case: ListRunsUseCase
     normalize_command_use_case: NormalizeCommandUseCase
-    log_event_reducer_use_case: LogEventReducerUseCase
+    event_state_use_case: EventStateUseCase
     project_transcript_use_case: ProjectTranscriptUseCase
     prompt_enter_use_case: PromptEnterUseCase
     run_command_use_case: RunCommandUseCase
@@ -69,7 +68,7 @@ class TuiUseCases:
 class TuiContainer:
     theme: TuiTheme
     run_port: RunPort
-    event_observer: LogEventsObserverPort
+    events_port: EventsPort
     runs_port: RunsPort
     waiting_port: WaitingPort
     agent_port: AgentPort
@@ -85,7 +84,7 @@ class TuiContainer:
             move_completion_use_case=self.use_cases.move_completion_use_case,
             list_runs_use_case=self.use_cases.list_runs_use_case,
             normalize_command_use_case=self.use_cases.normalize_command_use_case,
-            log_event_reducer_use_case=self.use_cases.log_event_reducer_use_case,
+            event_state_use_case=self.use_cases.event_state_use_case,
             project_transcript_use_case=self.use_cases.project_transcript_use_case,
             prompt_enter_use_case=self.use_cases.prompt_enter_use_case,
             run_command_use_case=self.use_cases.run_command_use_case,
@@ -98,7 +97,7 @@ def build_tui_container(
     *,
     theme: TuiTheme = DEFAULT_TUI_THEME,
     run_port: RunPort | None = None,
-    event_observer: LogEventsObserverPort | None = None,
+    events_port: EventsPort | None = None,
     runs_port: RunsPort | None = None,
     waiting_port: WaitingPort | None = None,
     agent_port: AgentPort | None = None,
@@ -108,9 +107,11 @@ def build_tui_container(
     resolved_run_port = run_port or DefaultRunPort(
         command_adapter=CliRunAdapter(invoker=resolved_cli_invoker),
     )
-    resolved_event_observer = event_observer or LogsEventObserver(
-        logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
-        run_port=resolved_run_port,
+    resolved_events_port = events_port or DefaultEventsPort(
+        event_observer=LogsEventObserver(
+            logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
+            run_port=resolved_run_port,
+        ),
     )
     resolved_runs_port = runs_port or DefaultRunsPort(
         command_adapter=CliRunsAdapter(invoker=resolved_cli_invoker),
@@ -135,32 +136,30 @@ def build_tui_container(
         move_completion_use_case=MoveCompletionUseCase(),
         list_runs_use_case=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command_use_case=NormalizeCommandUseCase(),
-        log_event_reducer_use_case=LogEventReducerUseCase(
-            context=run_event_context,
-        ),
+        event_state_use_case=EventStateUseCase(context=run_event_context),
         project_transcript_use_case=ProjectTranscriptUseCase(),
         prompt_enter_use_case=PromptEnterUseCase(),
         run_command_use_case=RunCommandUseCase(
             run_port=resolved_run_port,
-            event_observer=resolved_event_observer,
+            events_port=resolved_events_port,
             context=run_event_context,
         ),
         select_runs_table_row_use_case=SelectRunsTableRowUseCase(
             run_port=resolved_run_port,
-            event_observer=resolved_event_observer,
+            events_port=resolved_events_port,
             context=run_event_context,
         ),
         submit_waiting_input_use_case=SubmitWaitingInputUseCase(
             waiting_port=resolved_waiting_port,
             run_port=resolved_run_port,
-            event_observer=resolved_event_observer,
+            events_port=resolved_events_port,
             context=run_event_context,
         ),
     )
     return TuiContainer(
         theme=theme,
         run_port=resolved_run_port,
-        event_observer=resolved_event_observer,
+        events_port=resolved_events_port,
         runs_port=resolved_runs_port,
         waiting_port=resolved_waiting_port,
         agent_port=resolved_agent_port,

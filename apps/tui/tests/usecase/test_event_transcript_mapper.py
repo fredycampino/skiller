@@ -20,34 +20,26 @@ from stui.port.event_models import (
     StepStartedPayload,
     StepSuccessPayload,
 )
-from stui.usecase.log_event_reducer_use_case import LogEventReducerUseCase
-from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
+from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     AgentSystemNoticeItem,
     AgentToolCallItem,
     AgentToolResultItem,
-    ConsoleScreenState,
     DispatchErrorItem,
-    OutputFormat,
-    RunOutputItem,
     RunStepItem,
-    TranscriptMode,
+    RunWaitingInputItem,
     UserInputItem,
-    ViewStatusKind,
 )
 
 pytestmark = pytest.mark.unit
 
 
-def test_log_event_reducer_renders_agent_tool_turn() -> None:
-    state = ConsoleScreenState()
-    context = _context(mode=RunMode.CHAT)
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.AGENT_ASSISTANT_MESSAGE,
                 step_id="support_agent",
@@ -93,22 +85,18 @@ def test_log_event_reducer_renders_agent_tool_turn() -> None:
         ],
     )
 
-    assert isinstance(state.transcript.items[0], AgentAssistantMessageItem)
-    assert isinstance(state.transcript.items[1], AgentToolCallItem)
-    assert isinstance(state.transcript.items[2], AgentToolResultItem)
-    assert state.transcript.items[1].command == "git status --short"
-    assert state.transcript.items[2].preview == "Command completed successfully."
-    assert state.transcript.mode == TranscriptMode.CHAT
+    assert isinstance(items[0], AgentAssistantMessageItem)
+    assert isinstance(items[1], AgentToolCallItem)
+    assert isinstance(items[2], AgentToolResultItem)
+    assert items[1].command == "git status --short"
+    assert items[2].preview == "Command completed successfully."
 
 
-def test_log_event_reducer_uses_step_success_as_agent_final_output() -> None:
-    state = ConsoleScreenState()
-    context = _context(mode=RunMode.CHAT)
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_uses_step_success_as_agent_final_output() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.AGENT_ASSISTANT_MESSAGE,
                 payload=AgentAssistantMessagePayload(
@@ -134,23 +122,17 @@ def test_log_event_reducer_uses_step_success_as_agent_final_output() -> None:
         ],
     )
 
-    assert len(state.transcript.items) == 1
-    assert isinstance(state.transcript.items[0], RunOutputItem)
-    assert state.transcript.items[0].output == (
-        '{"text":"Hecho completo.","value":{"data":{"final":{"text":"Hecho completo."}}},'
-        '"body_ref":null}'
-    )
-    assert state.transcript.items[0].format == OutputFormat.MARKDOWN
+    assert len(items) == 1
+    assert isinstance(items[0], AgentAssistantMessageItem)
+    assert items[0].message_type == "final"
+    assert items[0].text == "Hecho completo."
 
 
-def test_log_event_reducer_renders_input_received() -> None:
-    state = ConsoleScreenState()
-    context = _context()
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_renders_input_received() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.INPUT_RECEIVED,
                 payload=InputReceivedPayload(payload={"text": "hola mundo"}),
@@ -158,19 +140,49 @@ def test_log_event_reducer_renders_input_received() -> None:
         ],
     )
 
-    assert len(state.transcript.items) == 1
-    assert isinstance(state.transcript.items[0], UserInputItem)
-    assert state.transcript.items[0].text == "hola mundo"
+    assert len(items) == 1
+    assert isinstance(items[0], UserInputItem)
+    assert items[0].text == "hola mundo"
 
 
-def test_log_event_reducer_renders_agent_interrupted_notice_and_skips_step_success() -> None:
-    state = ConsoleScreenState()
-    context = _context(mode=RunMode.CHAT)
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_orders_events_by_created_at_and_sequence() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.INPUT_RECEIVED,
+                sequence=3,
+                payload=InputReceivedPayload(payload={"text": "third"}),
+                created_at="2026-05-12T10:30:16Z",
+            ),
+            _event(
+                LogEventType.INPUT_RECEIVED,
+                sequence=2,
+                payload=InputReceivedPayload(payload={"text": "second"}),
+                created_at="2026-05-12T10:30:15Z",
+            ),
+            _event(
+                LogEventType.INPUT_RECEIVED,
+                sequence=1,
+                payload=InputReceivedPayload(payload={"text": "first"}),
+                created_at="2026-05-12T10:30:15Z",
+            ),
+        ],
+    )
+
+    assert [item.text for item in items if isinstance(item, UserInputItem)] == [
+        "first",
+        "second",
+        "third",
+    ]
+
+
+def test_event_transcript_mapper_renders_agent_interrupted_notice_and_skips_step_success() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.AGENT_INTERRUPTED,
                 step_id="support_agent",
@@ -196,19 +208,16 @@ def test_log_event_reducer_renders_agent_interrupted_notice_and_skips_step_succe
         ],
     )
 
-    assert len(state.transcript.items) == 1
-    assert isinstance(state.transcript.items[0], AgentSystemNoticeItem)
-    assert state.transcript.items[0].text == "Interrupted by user"
+    assert len(items) == 1
+    assert isinstance(items[0], AgentSystemNoticeItem)
+    assert items[0].text == "Interrupted by user"
 
 
-def test_log_event_reducer_waiting_input_sets_prompt() -> None:
-    state = ConsoleScreenState()
-    context = _context()
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_renders_waiting_output() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.STEP_STARTED,
                 step_id="ask_user",
@@ -231,20 +240,19 @@ def test_log_event_reducer_waiting_input_sets_prompt() -> None:
         ],
     )
 
-    assert isinstance(state.transcript.items[0], RunStepItem)
-    assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == "Write a message."
-    assert context.status == RunStatus.WAITING_INPUT
+    assert len(items) == 2
+    assert isinstance(items[0], RunStepItem)
+    assert isinstance(items[1], RunWaitingInputItem)
+    assert items[1].step_type == "wait_input"
+    assert items[1].step_id == "ask_user"
+    assert items[1].prompt == "Write a message."
 
 
-def test_log_event_reducer_surfaces_observer_loop_error() -> None:
-    state = ConsoleScreenState()
-    context = _context()
-    use_case = LogEventReducerUseCase(context=context)
+def test_event_transcript_mapper_surfaces_observer_loop_error() -> None:
+    mapper = EventTranscriptMapper()
 
-    use_case.execute(
-        state=state,
-        events=[
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.OBSERVER_LOOP_ERROR,
                 payload=ErrorPayload(error="RuntimeError: boom"),
@@ -252,20 +260,9 @@ def test_log_event_reducer_surfaces_observer_loop_error() -> None:
         ],
     )
 
-    assert len(state.transcript.items) == 1
-    assert isinstance(state.transcript.items[0], DispatchErrorItem)
-    assert state.transcript.items[0].message == "RuntimeError: boom"
-    assert state.view_status.kind == ViewStatusKind.ERROR
-    assert state.view_status.message == "Observer error"
-
-
-def _context(*, mode: RunMode = RunMode.FLOW) -> RunEventContext:
-    return RunEventContext(
-        run_id="",
-        skill_name="",
-        mode=mode,
-        status=RunStatus.RUNNING,
-    )
+    assert len(items) == 1
+    assert isinstance(items[0], DispatchErrorItem)
+    assert items[0].message == "RuntimeError: boom"
 
 
 def _event(
@@ -274,6 +271,7 @@ def _event(
     sequence: int = 1,
     step_id: str | None = None,
     step_type: str | None = None,
+    created_at: str = "2026-05-12T10:30:15Z",
     payload: LogEventPayload,
 ) -> LogEvent:
     return LogEvent(
@@ -284,6 +282,6 @@ def _event(
         step_id=step_id,
         step_type=step_type,
         agent_sequence=None,
-        created_at="2026-05-12T10:30:15Z",
+        created_at=created_at,
         payload=payload,
     )

@@ -6,13 +6,11 @@ from dataclasses import dataclass, field
 from stui.port.event_models import LogEvent
 from stui.port.event_port import LogEventsListener
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
+from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
 from stui.usecase.list_runs_use_case import ListRunsUseCase
-from stui.usecase.log_event_reducer_use_case import (
-    LogEventReducerUseCase,
-)
 from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
@@ -32,11 +30,11 @@ from stui.usecase.select_runs_table_row_use_case import (
 from stui.usecase.submit_waiting_input_use_case import (
     SubmitWaitingInputUseCase,
 )
+from stui.viewmodel.console_screen_event import InspectRunContextEvent
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     InfoItem,
     PromptMode,
-    TranscriptItem,
     TranscriptMode,
     UserInputItem,
     ViewStatusKind,
@@ -53,10 +51,7 @@ class ConsoleScreenViewModel(LogEventsListener):
     _move_completion_use_case: MoveCompletionUseCase = field(init=False, repr=False)
     _list_runs_use_case: ListRunsUseCase = field(init=False, repr=False)
     _normalize_command_use_case: NormalizeCommandUseCase = field(init=False, repr=False)
-    _log_event_reducer_use_case: LogEventReducerUseCase = field(
-        init=False,
-        repr=False,
-    )
+    _event_state_use_case: EventStateUseCase = field(init=False, repr=False)
     _prompt_enter_use_case: PromptEnterUseCase = field(init=False, repr=False)
     _project_transcript_use_case: ProjectTranscriptUseCase = field(
         init=False,
@@ -78,6 +73,11 @@ class ConsoleScreenViewModel(LogEventsListener):
         init=False,
         repr=False,
     )
+    _on_event: Callable[[InspectRunContextEvent], None] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def __init__(
         self,
@@ -89,7 +89,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         move_completion_use_case: MoveCompletionUseCase,
         list_runs_use_case: ListRunsUseCase,
         normalize_command_use_case: NormalizeCommandUseCase,
-        log_event_reducer_use_case: LogEventReducerUseCase,
+        event_state_use_case: EventStateUseCase,
         project_transcript_use_case: ProjectTranscriptUseCase,
         prompt_enter_use_case: PromptEnterUseCase,
         run_command_use_case: RunCommandUseCase,
@@ -102,7 +102,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._move_completion_use_case = move_completion_use_case
         self._list_runs_use_case = list_runs_use_case
         self._normalize_command_use_case = normalize_command_use_case
-        self._log_event_reducer_use_case = log_event_reducer_use_case
+        self._event_state_use_case = event_state_use_case
         self._project_transcript_use_case = project_transcript_use_case
         self._prompt_enter_use_case = prompt_enter_use_case
         self._run_command_use_case = run_command_use_case
@@ -110,6 +110,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._submit_waiting_input_use_case = submit_waiting_input_use_case
         self.state = ConsoleScreenState(session_key=session_key)
         self._on_state = None
+        self._on_event = None
 
     async def submit(self, text: str) -> None:
         command = self._normalize_command_use_case.execute(text=text)
@@ -204,11 +205,53 @@ class ConsoleScreenViewModel(LogEventsListener):
 
     def bind_on_state(self, callback: Callable[[ConsoleScreenState], None]) -> None:
         self._on_state = callback
+        self._emit_state()
+
+    def bind_on_event(self, callback: Callable[[InspectRunContextEvent], None]) -> None:
+        self._on_event = callback
 
     def _emit_state(self) -> None:
-        self._sync_transcript_mode_from_context()
         if self._on_state is not None:
-            self._on_state(self.state)
+            self._on_state(self._build_screen_state())
+
+    def inspect_run_context(self) -> None:
+        if self._on_event is None:
+            return
+
+        self._on_event(
+            InspectRunContextEvent(
+                run_id=self._run_event_context.run_id,
+                skill_name=self._run_event_context.skill_name,
+                mode=self._run_event_context.mode,
+                status=self._run_event_context.status,
+                max_page=self._run_event_context.max_page,
+            )
+        )
+
+    def _build_screen_state(self) -> ConsoleScreenState:
+        self._sync_transcript_mode_from_context()
+        state = ConsoleScreenState(session_key=self.state.session_key)
+        state.set_transcript(
+            mode=self.state.transcript.mode,
+            items=self._project_transcript_use_case.execute(state=self.state),
+        )
+        state.set_prompt(
+            text=self.state.prompt.text,
+            cursor_position=self.state.prompt.cursor_position,
+            waiting_prompt=self.state.prompt.waiting_prompt,
+            mode=self.state.prompt.mode,
+        )
+        state.set_status(
+            kind=self.state.view_status.kind,
+            message=self.state.view_status.message,
+        )
+        state.set_runs_table(
+            visible=self.state.runs_table.visible,
+            command=self.state.runs_table.command,
+            rows=self.state.runs_table.rows,
+        )
+        state.set_autocompletion(self.state.autocompletion)
+        return state
 
     def _clear_prompt_state(self) -> None:
         self.state.set_autocompletion()
@@ -223,13 +266,15 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.transcript.mode = TranscriptMode.FLOW
 
     def notify(self, events: list[LogEvent]) -> None:
-        result = self._log_event_reducer_use_case.execute(
+        result = self._event_state_use_case.execute(
             state=self.state,
             events=events,
         )
         self.state = result.state
-        self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
+
+    def get_max_page(self) -> int:
+        return self._run_event_context.max_page
 
     def show_runs_table(self) -> None:
         self.state.runs_table.visible = True
@@ -258,10 +303,6 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.runs_table.command = ""
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
-
-    def visible_transcript_items(self) -> list[TranscriptItem]:
-        self._sync_transcript_mode_from_context()
-        return self._project_transcript_use_case.execute(state=self.state)
 
     async def interrupt_running_agent_turn(self) -> bool:
         if self._run_event_context.status != RunStatus.RUNNING:

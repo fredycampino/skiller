@@ -37,11 +37,15 @@ class FakeLogEventAdapter:
 
 
 class FakeLogEventsListener:
-    def __init__(self) -> None:
+    def __init__(self, *, max_page: int = 100) -> None:
         self.events: list[LogEvent] = []
+        self.max_page = max_page
 
     def notify(self, events: list[LogEvent]) -> None:
         self.events.extend(events)
+
+    def get_max_page(self) -> int:
+        return self.max_page
 
 
 class FakeRunPort:
@@ -73,7 +77,7 @@ def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, limit=100, logs=adapter)
+        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
         observer.subscribe(run_id="run-1", listener=listener)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -85,6 +89,31 @@ def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
             ("run-1", 1, 100),
             ("run-1", 2, 100),
         ]
+
+    asyncio.run(run())
+
+
+def test_logs_event_observer_uses_listener_max_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    adapter = FakeLogEventAdapter([[_step_started_event(sequence=1)]])
+    listener = FakeLogEventsListener(max_page=25)
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
+        observer.subscribe(run_id="run-1", listener=listener)
+        await asyncio.sleep(0)
+
+        assert adapter.called_with[0] == ("run-1", None, 25)
 
     asyncio.run(run())
 
@@ -110,7 +139,7 @@ def test_logs_event_observer_keeps_cursor_when_resubscribing_same_run(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, limit=100, logs=adapter)
+        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
 
         observer.subscribe(run_id="run-1", listener=listener)
         await asyncio.sleep(0)
@@ -149,7 +178,7 @@ def test_logs_event_observer_does_not_stop_on_historical_waiting(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, limit=100, logs=adapter)
+        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
 
         observer.subscribe(run_id="run-1", listener=listener)
         await asyncio.sleep(0)

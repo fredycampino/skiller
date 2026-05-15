@@ -27,7 +27,6 @@ from stui.viewmodel.console_screen_state import (
     OutputFormat,
     PromptMode,
     RunOutputItem,
-    RunResumeItem,
     RunStepItem,
     TranscriptMode,
     UserInputItem,
@@ -339,11 +338,11 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
 
             transcript = app.query_one("#transcript-log", TranscriptLog)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+            agent_index = rendered_lines.index("[agent] support_agent")
 
-            assert rendered_lines[0] == "[agent] support_agent"
-            assert rendered_lines[1] == "‹ Hola mundo"
-            assert rendered_lines[3] == "   • uno"
-            assert rendered_lines[4] == "   • dos"
+            assert rendered_lines[agent_index + 1] == "‹ Hola mundo"
+            assert rendered_lines[agent_index + 3] == "   • uno"
+            assert rendered_lines[agent_index + 4] == "   • dos"
             assert all("**" not in line for line in rendered_lines)
 
     asyncio.run(run())
@@ -381,64 +380,12 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
 
             transcript = app.query_one("#transcript-log", TranscriptLog)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+            agent_index = rendered_lines.index("[agent] support_agent")
 
-            assert rendered_lines[0] == "[agent] support_agent"
-            assert rendered_lines[1] == "‹  @@ -1 +1 @@"
+            assert rendered_lines[agent_index + 1] == "‹  @@ -1 +1 @@"
             assert all("```" not in line for line in rendered_lines)
             assert any(line == "‹  @@ -1 +1 @@" for line in rendered_lines)
             assert any(line == "  Cambios:" for line in rendered_lines)
-
-    asyncio.run(run())
-
-
-def test_console_screen_hides_resume_and_switch_steps_in_chat_mode() -> None:
-    async def run() -> None:
-        viewmodel = build_viewmodel(
-            session_key="main",
-            run_port=NeverCalledRunPort(),
-            waiting_port=NeverCalledWaitingPort(),
-            runs_port=FakeRunsPort(),
-        )
-        viewmodel._run_event_context.mode = RunMode.CHAT  # noqa: SLF001
-        viewmodel.state.transcript.items.extend(
-            [
-                UserInputItem(text="hola"),
-                RunResumeItem(run_id="run-1", skill="agent_tools"),
-                RunStepItem(
-                    run_id="run-1",
-                    step_type="switch",
-                    step_id="decide_exit",
-                ),
-                RunOutputItem(
-                    run_id="run-1",
-                    step_type="switch",
-                    output=(
-                        '{"text":"Route selected: support_agent.",'
-                        '"value":{"next_step_id":"support_agent"}}'
-                    ),
-                ),
-                RunStepItem(
-                    run_id="run-1",
-                    step_type="agent",
-                    step_id="support_agent",
-                ),
-            ]
-        )
-        app = ConsoleScreen(viewmodel=viewmodel)
-        async with app.run_test(size=(80, 24)) as pilot:
-            await pilot.pause()
-
-            transcript = app.query_one("#transcript-log", TranscriptLog)
-            rendered_lines = [
-                strip.text.rstrip()
-                for strip in transcript.lines
-                if strip.text.rstrip()
-            ]
-
-            assert rendered_lines == [
-                "› hola",
-                "[agent] support_agent",
-            ]
 
     asyncio.run(run())
 
@@ -461,7 +408,6 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
             mode=RunMode.CHAT,
             status=RunStatus.WAITING_INPUT,
         )
-        viewmodel._run_event_context.event_ids = {"evt-1", "evt-2"}  # noqa: SLF001
 
         app = ConsoleScreen(viewmodel=viewmodel)
         async with app.run_test(size=(80, 24)) as pilot:
@@ -491,12 +437,19 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
             ]
 
             assert "› /dev" in rendered_lines
-            assert "[dev] RunEventContext" in rendered_lines
+            assert "[inspect] RunContext" in rendered_lines
             assert any('"run_id": "run-1234"' in line for line in rendered_lines)
             assert any('"skill_name": "ant"' in line for line in rendered_lines)
-            assert "[dev] ConsoleScreenState" in rendered_lines
+            assert any('"status": "waiting_input"' in line for line in rendered_lines)
+            assert any('"max_page": 100' in line for line in rendered_lines)
+            assert "[inspect] ScreenStatus" in rendered_lines
+            assert any('"session_key": "run-1234"' in line for line in rendered_lines)
             assert any('"mode": "chat"' in line for line in rendered_lines)
             assert any('"items_count": 0' in line for line in rendered_lines)
+            assert any('"text": "/dev"' in line for line in rendered_lines)
+            assert any('"cursor_position": 4' in line for line in rendered_lines)
+            assert any('"waiting_prompt": "Write a message."' in line for line in rendered_lines)
+            assert any('"kind": "waiting"' in line for line in rendered_lines)
 
             assert app.state.prompt.text == baseline_state["prompt_text"]
             assert app.state.prompt.mode == baseline_state["prompt_mode"]

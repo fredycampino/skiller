@@ -16,8 +16,7 @@ from textual.widgets import DataTable, Static, TextArea
 from stui.di.container import build_tui_container
 from stui.port.runs_port import RunsPortItem
 from stui.screen.autocomplete_view import AutoCompleteView
-from stui.screen.prompt import PromptController, PromptTextArea
-from stui.screen.render import render_transcript
+from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
     RunRowMode,
     RunRowStatus,
@@ -26,8 +25,9 @@ from stui.screen.runs_table_view import (
 )
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
+from stui.screen.transcript import RenderTranscript
 from stui.screen.transcript_log import TranscriptLog
-from stui.usecase.run_event_context import RunEventContext
+from stui.viewmodel.console_screen_event import InspectRunContextEvent
 from stui.viewmodel.console_screen_state import ConsoleScreenState
 from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
 
@@ -57,8 +57,8 @@ class ConsoleScreen(App[str]):
         super().__init__(ansi_color=True)
         self.ui_theme = theme
         self.viewmodel = viewmodel
-        self.state: ConsoleScreenState = viewmodel.state
-        self._suppress_next_prompt_change = False
+        self.state = ConsoleScreenState()
+        self._render_transcript = RenderTranscript()
         self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
@@ -69,19 +69,7 @@ class ConsoleScreen(App[str]):
                 id="runs-table-area",
             ),
             ScreenStatusView(id="status", theme=self.ui_theme),
-            Horizontal(
-                Static(self.ui_theme.cursor, id="prompt-prefix"),
-                PromptTextArea(
-                    "",
-                    id="prompt",
-                    placeholder=self.ui_theme.prompt_placeholder,
-                    soft_wrap=True,
-                    compact=True,
-                    show_line_numbers=False,
-                    highlight_cursor_line=False,
-                ),
-                id="prompt-row",
-            ),
+            PromptView(theme=self.ui_theme),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             Horizontal(
                 Static(self._build_footer_left_text(), id="footer-left"),
@@ -93,8 +81,8 @@ class ConsoleScreen(App[str]):
 
     def on_mount(self) -> None:
         self.viewmodel.bind_on_state(self._on_state_changed)
-        self._refresh_from_state(force_scroll=True)
-        self._prompt().focus()
+        self.viewmodel.bind_on_event(self._on_viewmodel_event)
+        self._prompt_view().focus_prompt()
 
     def on_key(self, event: events.Key) -> None:
         if event.key == "up":
@@ -126,8 +114,7 @@ class ConsoleScreen(App[str]):
 
     @on(TextArea.Changed, "#prompt")
     def on_prompt_changed(self, message: TextArea.Changed) -> None:
-        if getattr(self, "_suppress_next_prompt_change", False):
-            self._suppress_next_prompt_change = False
+        if self._prompt_view().consume_programmatic_change():
             return
         prompt = self._prompt()
         self.viewmodel.prompt_change(
@@ -147,21 +134,21 @@ class ConsoleScreen(App[str]):
             return
 
         if _is_local_dev_status_command(normalized_text):
-            self._append_local_dev_status(raw_text=normalized_text)
-            self._prompt().focus()
+            self.viewmodel.inspect_run_context()
+            self._prompt_view().focus_prompt()
             return
 
         await self.viewmodel.prompt_enter()
-        self._prompt().focus()
+        self._prompt_view().focus_prompt()
 
     async def action_handle_escape(self) -> None:
         if self.state.runs_table.visible:
             self.viewmodel.hide_runs_table()
-            self._prompt().focus()
+            self._prompt_view().focus_prompt()
             return
 
         await self.viewmodel.interrupt_running_agent_turn()
-        self._prompt().focus()
+        self._prompt_view().focus_prompt()
 
     def action_transcript_page_up(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_selection(-3):
@@ -206,38 +193,42 @@ class ConsoleScreen(App[str]):
             run_id=selected_run.run_id if selected_run is not None else "",
             skill_name=selected_run.skill if selected_run is not None else "",
         )
-        self._prompt().focus()
+        self._prompt_view().focus_prompt()
 
-    def _refresh_status(self) -> None:
+    def _refresh_status(self, *, new_state: ConsoleScreenState) -> None:
         try:
             status = self.query_one("#status", ScreenStatusView)
         except NoMatches:
             return
         status.set_state(
-            self.state.view_status,
-            waiting_prompt=self.state.prompt.waiting_prompt,
+            new_state.view_status,
+            waiting_prompt=new_state.prompt.waiting_prompt,
         )
 
-    def _refresh_footer(self) -> None:
+    def _refresh_footer(self, *, new_state: ConsoleScreenState) -> None:
         try:
             footer_left = self.query_one("#footer-left", Static)
             footer_right = self.query_one("#footer-right", Static)
         except NoMatches:
             return
         footer_left.update(self._build_footer_left_text())
-        footer_right.update(self._build_footer_right_text())
+        footer_right.update(self._build_footer_right_text(state=new_state))
 
     def _build_footer_left_text(self) -> str:
         return "/ for commands"
 
-    def _build_footer_right_text(self) -> str:
-        session_key = self.state.session_key.strip()
+    def _build_footer_right_text(self, *, state: ConsoleScreenState | None = None) -> str:
+        screen_state = state or self.state
+        session_key = screen_state.session_key.strip()
         if not session_key or session_key == "main":
             return self.ui_theme.session_empty_icon
         return session_key
 
     def _prompt(self) -> PromptController:
-        return PromptController(self.query_one("#prompt", TextArea))
+        return self._prompt_view().controller()
+
+    def _prompt_view(self) -> PromptView:
+        return self.query_one("#prompt-row", PromptView)
 
     def _autocomplete_view(self) -> AutoCompleteView:
         return self.query_one("#autocomplete", AutoCompleteView)
@@ -245,86 +236,81 @@ class ConsoleScreen(App[str]):
     def _transcript_log(self) -> TranscriptLog:
         return self.query_one("#transcript-log", TranscriptLog)
 
-    def _append_local_dev_status(self, *, raw_text: str) -> None:
+    def _append_run_context_inspection(self, *, event: InspectRunContextEvent) -> None:
         transcript = self._transcript_log()
-        context_payload = _build_run_event_context_payload(self.viewmodel._run_event_context)  # noqa: SLF001
-        state_payload = _build_console_screen_state_payload(self.state)
 
         if transcript.lines:
             transcript.write(Text(""))
         transcript.write(
             Text(
-                f"{self.ui_theme.user_icon} {raw_text}",
+                f"{self.ui_theme.user_icon} /dev",
                 style=self.ui_theme.rich_style(self.ui_theme.color_text_accent),
             )
         )
         transcript.write(
             Group(
                 Text(""),
-                Text("[dev] RunEventContext"),
-                Markdown(_render_json_markdown_block(context_payload)),
+                Text("[inspect] RunContext"),
+                Markdown(_render_json_markdown_block(_build_run_context_payload(event))),
                 Text(""),
-                Text("[dev] ConsoleScreenState"),
-                Markdown(_render_json_markdown_block(state_payload)),
+                Text("[inspect] ScreenStatus"),
+                Markdown(_render_json_markdown_block(_build_screen_state_payload(self.state))),
             ),
             scroll_end=True,
         )
 
-    def _refresh_from_state(self, force_scroll: bool = False) -> None:
-        self._refresh_transcript()
-        self._refresh_runs_table()
-        self._refresh_runs_visibility()
-        self._refresh_prompt()
-        self._refresh_status()
-        self._refresh_autocomplete()
-        self._refresh_footer()
+    def _refresh_from_state(
+        self,
+        *,
+        new_state: ConsoleScreenState,
+    ) -> None:
+        self._refresh_transcript(new_state=new_state)
+        self._refresh_runs_table(new_state=new_state)
+        self._refresh_runs_visibility(new_state=new_state)
+        self._refresh_prompt(new_state=new_state)
+        self._refresh_status(new_state=new_state)
+        self._refresh_autocomplete(new_state=new_state)
+        self._refresh_footer(new_state=new_state)
 
-    def _refresh_prompt(self) -> None:
-        prompt = self._prompt()
-        if (
-            prompt.text() == self.state.prompt.text
-            and prompt.cursor_position() == self.state.prompt.cursor_position
-        ):
-            return
+    def _refresh_prompt(self, *, new_state: ConsoleScreenState) -> None:
+        self._prompt_view().set_prompt_state(state=new_state.prompt)
 
-        self._suppress_next_prompt_change = True
-        prompt.set_text(
-            self.state.prompt.text,
-            cursor_position=self.state.prompt.cursor_position,
-        )
-
-    def _refresh_autocomplete(self) -> None:
+    def _refresh_autocomplete(self, *, new_state: ConsoleScreenState) -> None:
         autocomplete = self._autocomplete_view()
-        autocomplete.set_state(self.state.autocompletion)
+        autocomplete.set_state(new_state.autocompletion)
 
-    def _refresh_transcript(self) -> None:
+    def _refresh_transcript(self, *, new_state: ConsoleScreenState) -> None:
         transcript = self._transcript_log()
         transcript.clear()
-        renderables = render_transcript(
-            items=self.viewmodel.visible_transcript_items(),
-            mode=self.state.transcript.mode,
+        renderables = self._render_transcript.render(
+            items=new_state.transcript.items,
+            mode=new_state.transcript.mode,
             theme=self.ui_theme,
             prompt_placeholder="",
         )
         for index, renderable in enumerate(renderables):
-            transcript.write(renderable, scroll_end=index == len(renderables) - 1)
+            transcript.write(
+                renderable,
+                expand=True,
+                scroll_end=index == len(renderables) - 1,
+            )
 
-    def _refresh_runs_table(self) -> None:
+    def _refresh_runs_table(self, *, new_state: ConsoleScreenState) -> None:
         if (
             self._last_runs_snapshot is not None
-            and self.state.runs_table.rows == self._last_runs_snapshot
+            and new_state.runs_table.rows == self._last_runs_snapshot
         ):
             return
         runs_table = self._runs_table()
         runs_table.set_rows(
             [
                 self._run_list_item_to_row(run)
-                for run in self.state.runs_table.rows
+                for run in new_state.runs_table.rows
             ]
         )
-        self._last_runs_snapshot = self.state.runs_table.rows
+        self._last_runs_snapshot = new_state.runs_table.rows
 
-    def _refresh_runs_visibility(self) -> None:
+    def _refresh_runs_visibility(self, *, new_state: ConsoleScreenState) -> None:
         try:
             runs_table_area = self.query_one("#runs-table-area", Container)
             runs_table = self.query_one("#runs-table", RunsTableView)
@@ -332,9 +318,9 @@ class ConsoleScreen(App[str]):
         except NoMatches:
             return
 
-        runs_table_area.display = self.state.runs_table.visible
-        runs_table.display = self.state.runs_table.visible
-        status.display = not self.state.runs_table.visible
+        runs_table_area.display = new_state.runs_table.visible
+        runs_table.display = new_state.runs_table.visible
+        status.display = not new_state.runs_table.visible
 
     def _runs_table(self) -> RunsTableView:
         return self.query_one("#runs-table", RunsTableView)
@@ -349,8 +335,11 @@ class ConsoleScreen(App[str]):
         )
 
     def _on_state_changed(self, state: ConsoleScreenState) -> None:
+        self._refresh_from_state(new_state=state)
         self.state = state
-        self._refresh_from_state()
+
+    def _on_viewmodel_event(self, event: InspectRunContextEvent) -> None:
+        self._append_run_context_inspection(event=event)
 
 
 def run_console_screen(
@@ -415,16 +404,16 @@ def _is_local_dev_status_command(text: str) -> bool:
     return normalized == "/dev"
 
 
-def _build_run_event_context_payload(context: RunEventContext) -> dict[str, object]:
+def _build_run_context_payload(event: InspectRunContextEvent) -> dict[str, object]:
     return {
-        "run_id": context.run_id,
-        "skill_name": context.skill_name,
-        "status": context.status.value,
-        "event_ids_count": len(context.event_ids),
+        "run_id": event.run_id,
+        "skill_name": event.skill_name,
+        "status": event.status.value,
+        "max_page": event.max_page,
     }
 
 
-def _build_console_screen_state_payload(state: ConsoleScreenState) -> dict[str, object]:
+def _build_screen_state_payload(state: ConsoleScreenState) -> dict[str, object]:
     return {
         "session_key": state.session_key,
         "transcript": {

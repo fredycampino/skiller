@@ -24,15 +24,15 @@ def build_viewmodel(
     *,
     session_key: str = "main",
     run_port,
-    event_observer=None,
+    events_port=None,
     waiting_port,
     runs_port=None,
     agent_port=None,
 ) -> ConsoleScreenViewModel:
-    resolved_event_observer = event_observer or FakeEventObserver()
+    resolved_events_port = events_port or FakeEventsPort()
     container = build_tui_container(
         run_port=run_port,
-        event_observer=resolved_event_observer,
+        events_port=resolved_events_port,
         runs_port=runs_port,
         waiting_port=waiting_port,
         agent_port=agent_port,
@@ -117,7 +117,7 @@ class FakeAgentPort:
         return self.ack
 
 
-class FakeEventObserver:
+class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribe_calls: list[str] = []
         self.unsubscribe_call_count = 0

@@ -28,6 +28,9 @@ class FakeLogEventsListener(LogEventsListener):
     def notify(self, events: list[LogEvent]) -> None:
         _ = events
 
+    def get_max_page(self) -> int:
+        return 100
+
 
 class FakeRunPort:
     def __init__(self, runtime_status: RunRuntimeStatus | None = None) -> None:
@@ -43,7 +46,7 @@ class FakeRunPort:
         self.status_calls.append(run_id)
         return self.runtime_status
 
-class FakeEventObserver:
+class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribe_calls: list[str] = []
         self.unsubscribe_calls = 0
@@ -68,9 +71,9 @@ def test_unknown_command_only_closes_table() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status())
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/agents",
@@ -82,8 +85,8 @@ def test_unknown_command_only_closes_table() -> None:
     assert result.state.runs_table.command == ""
     assert run_port.status_calls == []
     assert context.run_id == "old-run"
-    assert event_observer.subscribe_calls == []
-    assert event_observer.unsubscribe_calls == 0
+    assert events_port.subscribe_calls == []
+    assert events_port.unsubscribe_calls == 0
 
 
 def test_empty_run_id_only_closes_table() -> None:
@@ -91,9 +94,9 @@ def test_empty_run_id_only_closes_table() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status())
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/chats",
@@ -105,7 +108,7 @@ def test_empty_run_id_only_closes_table() -> None:
     assert result.state.runs_table.command == ""
     assert run_port.status_calls == []
     assert context.run_id == "old-run"
-    assert event_observer.subscribe_calls == []
+    assert events_port.subscribe_calls == []
 
 
 def test_missing_runtime_status_only_closes_table() -> None:
@@ -113,9 +116,9 @@ def test_missing_runtime_status_only_closes_table() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(runtime_status=None)
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/chats",
@@ -127,8 +130,8 @@ def test_missing_runtime_status_only_closes_table() -> None:
     assert result.state.runs_table.command == ""
     assert run_port.status_calls == ["run-1234"]
     assert context.run_id == "old-run"
-    assert event_observer.subscribe_calls == []
-    assert event_observer.unsubscribe_calls == 0
+    assert events_port.subscribe_calls == []
+    assert events_port.unsubscribe_calls == 0
 
 
 def test_non_waiting_runtime_status_only_closes_table() -> None:
@@ -138,9 +141,9 @@ def test_non_waiting_runtime_status_only_closes_table() -> None:
     run_port = FakeRunPort(
         RunRuntimeStatus(run_id="run-1234", status=RunRuntimeStatusKind.SUCCEEDED)
     )
-    event_observer = FakeEventObserver(current_run_id="old-run", current_listener=observer)
+    events_port = FakeEventsPort(current_run_id="old-run", current_listener=observer)
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/chats",
@@ -151,9 +154,9 @@ def test_non_waiting_runtime_status_only_closes_table() -> None:
     assert result.state.runs_table.visible is False
     assert result.state.session_key == "main"
     assert context.run_id == "old-run"
-    assert event_observer.current_run_id == "old-run"
-    assert event_observer.subscribe_calls == []
-    assert event_observer.unsubscribe_calls == 0
+    assert events_port.current_run_id == "old-run"
+    assert events_port.subscribe_calls == []
+    assert events_port.unsubscribe_calls == 0
 
 
 def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> None:
@@ -161,9 +164,9 @@ def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> N
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status())
-    event_observer = FakeEventObserver(current_run_id="old-run", current_listener=observer)
+    events_port = FakeEventsPort(current_run_id="old-run", current_listener=observer)
 
-    _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/chats",
@@ -171,9 +174,9 @@ def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> N
         skill_name="ant",
     )
 
-    assert event_observer.unsubscribe_calls == 1
-    assert event_observer.current_run_id == "run-1234"
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.unsubscribe_calls == 1
+    assert events_port.current_run_id == "run-1234"
+    assert events_port.subscribe_calls == ["run-1234"]
 
 
 def test_chats_selection_loads_waiting_run_in_chat_mode() -> None:
@@ -181,9 +184,9 @@ def test_chats_selection_loads_waiting_run_in_chat_mode() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.INPUT))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/chats",
@@ -199,7 +202,7 @@ def test_chats_selection_loads_waiting_run_in_chat_mode() -> None:
     assert context.skill_name == "ant"
     assert context.mode == RunMode.CHAT
     assert context.status == RunStatus.WAITING_INPUT
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.subscribe_calls == ["run-1234"]
 
 
 def test_runs_selection_loads_waiting_run_in_flow_mode() -> None:
@@ -207,9 +210,9 @@ def test_runs_selection_loads_waiting_run_in_flow_mode() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.INPUT))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    result = _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/runs",
@@ -221,7 +224,7 @@ def test_runs_selection_loads_waiting_run_in_flow_mode() -> None:
     assert result.state.transcript.mode == TranscriptMode.FLOW
     assert context.mode == RunMode.FLOW
     assert context.status == RunStatus.WAITING_INPUT
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.subscribe_calls == ["run-1234"]
 
 
 def test_waiting_webhook_status_loads_run() -> None:
@@ -229,9 +232,9 @@ def test_waiting_webhook_status_loads_run() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.WEBHOOK))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/runs",
@@ -241,7 +244,7 @@ def test_waiting_webhook_status_loads_run() -> None:
 
     assert context.status == RunStatus.WAITING_WEBHOOK
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.subscribe_calls == ["run-1234"]
 
 
 def test_waiting_channel_status_loads_run() -> None:
@@ -249,9 +252,9 @@ def test_waiting_channel_status_loads_run() -> None:
     context = _context()
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.CHANNEL))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
 
-    _use_case(run_port=run_port, event_observer=event_observer, context=context).execute(
+    _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
         prompt_text="/runs",
@@ -261,18 +264,18 @@ def test_waiting_channel_status_loads_run() -> None:
 
     assert context.status == RunStatus.WAITING_CHANNEL
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.subscribe_calls == ["run-1234"]
 
 
 def _use_case(
     *,
     run_port: FakeRunPort,
-    event_observer: FakeEventObserver,
+    events_port: FakeEventsPort,
     context: RunEventContext,
 ) -> SelectRunsTableRowUseCase:
     return SelectRunsTableRowUseCase(
         run_port=run_port,
-        event_observer=event_observer,
+        events_port=events_port,
         context=context,
     )
 

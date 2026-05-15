@@ -39,8 +39,11 @@ class FakeObserver:
     def notify(self, events: list[LogEvent]) -> None:
         _ = events
 
+    def get_max_page(self) -> int:
+        return 100
 
-class FakeEventObserver:
+
+class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribed: list[object] = []
         self.unsubscribed: list[object] = []
@@ -68,9 +71,9 @@ def test_run_command_use_case_missing_agent_records_error(
 
     async def run() -> None:
         port = FakeRunPort(_dispatch_error())
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, event_observer=event_observer, context=context)
+        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
 
@@ -81,9 +84,9 @@ def test_run_command_use_case_missing_agent_records_error(
         )
 
         assert port.called_with == ["chat"]
-        assert event_observer.unsubscribed == []
-        assert event_observer.subscribed == []
-        assert event_observer.current_run_id == ""
+        assert events_port.unsubscribed == []
+        assert events_port.subscribed == []
+        assert events_port.current_run_id == ""
         assert result.state is state
         assert result.raw_args == "chat"
         assert context.run_id == ""
@@ -107,9 +110,9 @@ def test_run_command_use_case_dispatch_success_loads_run(
 
     async def run() -> None:
         port = FakeRunPort(_dispatch())
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, event_observer=event_observer, context=context)
+        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
 
@@ -120,9 +123,9 @@ def test_run_command_use_case_dispatch_success_loads_run(
         )
 
         assert port.called_with == ["chat"]
-        assert event_observer.subscribed == [observer]
-        assert event_observer.unsubscribed == []
-        assert event_observer.current_run_id == "run-1234"
+        assert events_port.subscribed == [observer]
+        assert events_port.unsubscribed == []
+        assert events_port.current_run_id == "run-1234"
         assert result.state is state
         assert result.raw_args == "chat"
         assert context.run_id == "run-1234"
@@ -148,13 +151,13 @@ def test_run_command_use_case_unexpected_status_records_error(
 
     async def run() -> None:
         port = FakeRunPort(_dispatch(status=RunRuntimeStatusKind.RUNNING))
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, event_observer=event_observer, context=context)
+        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
-        event_observer.current_run_id = "old-run"
-        event_observer.current_listener = observer
+        events_port.current_run_id = "old-run"
+        events_port.current_listener = observer
 
         await use_case.execute(
             observer,
@@ -162,9 +165,9 @@ def test_run_command_use_case_unexpected_status_records_error(
             command=NormalizeCommandUseCase().execute(text="/run chat"),
         )
 
-        assert event_observer.unsubscribed == []
-        assert event_observer.subscribed == []
-        assert event_observer.current_run_id == "old-run"
+        assert events_port.unsubscribed == []
+        assert events_port.subscribed == []
+        assert events_port.current_run_id == "old-run"
         assert context.run_id == ""
         assert context.status == RunStatus.FAILED
         assert state.session_key == "main"
@@ -183,15 +186,15 @@ def test_run_command_use_case_unsubscribes_existing_observer(
 
     async def run() -> None:
         port = FakeRunPort(_dispatch())
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         use_case = RunCommandUseCase(
             run_port=port,
-            event_observer=event_observer,
+            events_port=events_port,
             context=_run_context()
         )
         observer = FakeObserver()
-        event_observer.current_run_id = "old-run"
-        event_observer.current_listener = observer
+        events_port.current_run_id = "old-run"
+        events_port.current_listener = observer
 
         await use_case.execute(
             observer,
@@ -199,9 +202,9 @@ def test_run_command_use_case_unsubscribes_existing_observer(
             command=NormalizeCommandUseCase().execute(text="/run chat"),
         )
 
-        assert event_observer.unsubscribed == [observer]
-        assert event_observer.current_run_id == "run-1234"
-        assert event_observer.subscribed == [observer]
+        assert events_port.unsubscribed == [observer]
+        assert events_port.current_run_id == "run-1234"
+        assert events_port.subscribed == [observer]
 
     asyncio.run(run())
 
@@ -215,7 +218,7 @@ def test_run_command_use_case_sets_chat_mode_for_chat_command(
         context = _run_context()
         use_case = RunCommandUseCase(
             run_port=FakeRunPort(_dispatch()),
-            event_observer=FakeEventObserver(),
+            events_port=FakeEventsPort(),
             context=context,
         )
 

@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from textual import events
-from textual.widgets import TextArea
+from textual.containers import Horizontal
+from textual.widgets import Static, TextArea
+
+from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
+from stui.viewmodel.console_screen_state import PromptState
 
 
 class PromptTextArea(TextArea):
@@ -57,6 +61,55 @@ class PromptTextArea(TextArea):
         ]
         for token in stale_tokens:
             self._multiline_paste_payloads.pop(token, None)
+
+
+class PromptView(Horizontal):
+    def __init__(
+        self,
+        *,
+        theme: TuiTheme = DEFAULT_TUI_THEME,
+        id: str = "prompt-row",
+    ) -> None:
+        self._ignore_next_change = False
+        super().__init__(
+            Static(theme.cursor, id="prompt-prefix"),
+            PromptTextArea(
+                "",
+                id="prompt",
+                placeholder=theme.prompt_placeholder,
+                soft_wrap=True,
+                compact=True,
+                show_line_numbers=False,
+                highlight_cursor_line=False,
+            ),
+            id=id,
+        )
+
+    def controller(self) -> "PromptController":
+        return PromptController(self.query_one("#prompt", TextArea))
+
+    def focus_prompt(self) -> None:
+        self.controller().focus()
+
+    def set_prompt_state(self, *, state: PromptState) -> None:
+        prompt = self.controller()
+        if (
+            prompt.text() == state.text
+            and prompt.cursor_position() == state.cursor_position
+        ):
+            return
+
+        self._ignore_next_change = True
+        prompt.set_text(
+            state.text,
+            cursor_position=state.cursor_position,
+        )
+
+    def consume_programmatic_change(self) -> bool:
+        if not self._ignore_next_change:
+            return False
+        self._ignore_next_change = False
+        return True
 
 
 @dataclass(frozen=True)

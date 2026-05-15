@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from stui.port.event_port import LogEventsListener, LogEventsObserverPort
+from stui.port.event_port import EventsPort, LogEventsListener
 from stui.port.run_port import (
     RunPort,
     RunRuntimeStatusKind,
@@ -40,7 +40,7 @@ class RunCommandUseCase:
     """
 
     run_port: RunPort
-    event_observer: LogEventsObserverPort
+    events_port: EventsPort
     context: RunEventContext
 
     async def execute(
@@ -89,7 +89,7 @@ class RunCommandUseCase:
         state.set_autocompletion()
         state.set_prompt(mode=PromptMode.DEFAULT)
         state.set_status(kind=ViewStatusKind.RUNNING)
-        self.event_observer.subscribe(run_id=ack.run_id, listener=observer)
+        self.events_port.subscribe(run_id=ack.run_id, listener=observer)
         return RunCommandResult(state=state, raw_args=raw_args)
 
 

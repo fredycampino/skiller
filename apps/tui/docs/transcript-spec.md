@@ -224,6 +224,7 @@ Rules:
 - the `▪` marker is muted
 - the marker is only for agent tool calls
 - tool output lines stay visually attached below the tool call
+- the latest tool call stays visually active while it is the last item, or while only its tool output follows it
 
 ### Agent Tool Output
 

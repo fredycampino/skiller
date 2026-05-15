@@ -34,7 +34,7 @@ class OutputFormat(StrEnum):
 
 @dataclass(frozen=True)
 class TranscriptItem:
-    pass
+    sequence: int | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -116,6 +116,14 @@ class RunStatusItem(TranscriptItem):
     run_id: str
     status: str
     message: str = ""
+
+
+@dataclass(frozen=True)
+class RunWaitingInputItem(TranscriptItem):
+    run_id: str
+    step_type: str
+    step_id: str
+    prompt: str = ""
 
 
 @dataclass(frozen=True)

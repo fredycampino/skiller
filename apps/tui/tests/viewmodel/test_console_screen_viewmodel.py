@@ -9,7 +9,7 @@ import stui.usecase.list_runs_use_case as list_runs_use_case_module
 import stui.usecase.run_command_use_case as run_command_use_case_module
 from apps.tui.tests.support import (
     FakeAgentPort,
-    FakeEventObserver,
+    FakeEventsPort,
     FakeRunsPort,
     build_viewmodel,
     make_runs_port_item,
@@ -66,6 +66,7 @@ from stui.viewmodel.console_screen_state import (
     RunResumeItem,
     RunStatusItem,
     RunStepItem,
+    RunWaitingInputItem,
     UserInputItem,
     ViewStatusKind,
 )
@@ -188,10 +189,10 @@ class FakeWaitingPort:
 
 def attach_run_observer(
     viewmodel: ConsoleScreenViewModel,
-    event_observer: FakeEventObserver,
+    events_port: FakeEventsPort,
     run_id: str,
 ) -> None:
-    event_observer.subscribe(run_id=run_id, listener=viewmodel)
+    events_port.subscribe(run_id=run_id, listener=viewmodel)
 
 
 def test_console_screen_state_defaults_to_idle_main_session() -> None:
@@ -225,6 +226,30 @@ def test_completion_state_exposes_selected_item() -> None:
 
     assert state.selected_item is not None
     assert state.selected_item.label == "run"
+
+
+def test_inspect_run_context_emits_current_context() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+    viewmodel._run_event_context.activate_run(  # noqa: SLF001
+        "run-1234",
+        skill_name="ant",
+        mode=RunMode.CHAT,
+        status=RunStatus.WAITING_INPUT,
+    )
+    events = []
+    viewmodel.bind_on_event(events.append)
+
+    viewmodel.inspect_run_context()
+
+    assert len(events) == 1
+    assert events[0].run_id == "run-1234"
+    assert events[0].skill_name == "ant"
+    assert events[0].mode == RunMode.CHAT
+    assert events[0].status == RunStatus.WAITING_INPUT
 
 
 def test_interrupt_running_agent_turn_calls_agent_port_only_in_running_chat_mode(
@@ -657,15 +682,15 @@ def test_console_screen_viewmodel_maps_dispatch_error() -> None:
 
 def test_console_screen_viewmodel_subscribes_and_applies_log_events() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
     viewmodel = build_viewmodel(
         session_key="main",
         run_port=run_port,
-        event_observer=event_observer,
+        events_port=events_port,
         waiting_port=FakeWaitingPort(),
     )
 
-    attach_run_observer(viewmodel, event_observer, "run-1234")
+    attach_run_observer(viewmodel, events_port, "run-1234")
     viewmodel.notify([
         _event(
             LogEventType.STEP_STARTED,
@@ -682,7 +707,7 @@ def test_console_screen_viewmodel_subscribes_and_applies_log_events() -> None:
         ),
     ])
 
-    assert event_observer.subscribe_calls == ["run-1234"]
+    assert events_port.subscribe_calls == ["run-1234"]
     assert viewmodel.state.view_status.kind == ViewStatusKind.HIDDEN
     assert isinstance(viewmodel.state.transcript.items[0], RunStepItem)
     assert isinstance(viewmodel.state.transcript.items[1], RunStatusItem)
@@ -702,14 +727,14 @@ def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> N
     )
 
     async def run() -> None:
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         viewmodel = build_viewmodel(
             session_key="main",
             run_port=run_port,
-            event_observer=event_observer,
+            events_port=events_port,
             waiting_port=waiting_port,
         )
-        attach_run_observer(viewmodel, event_observer, "run-1234")
+        attach_run_observer(viewmodel, events_port, "run-1234")
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
             skill_name="run-1234",
@@ -745,14 +770,14 @@ def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> N
 
 def test_console_screen_viewmodel_does_not_send_plain_text_when_waiting_not_input() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
-    event_observer = FakeEventObserver()
+    events_port = FakeEventsPort()
     viewmodel = build_viewmodel(
         session_key="main",
         run_port=run_port,
-        event_observer=event_observer,
+        events_port=events_port,
         waiting_port=FakeWaitingPort(),
     )
-    attach_run_observer(viewmodel, event_observer, "run-1234")
+    attach_run_observer(viewmodel, events_port, "run-1234")
     viewmodel.notify(
         [
             _event(
@@ -782,14 +807,20 @@ def test_console_screen_viewmodel_maps_waiting_input_rejection() -> None:
     )
 
     async def run() -> None:
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         viewmodel = build_viewmodel(
             session_key="main",
             run_port=run_port,
-            event_observer=event_observer,
+            events_port=events_port,
             waiting_port=waiting_port,
         )
-        attach_run_observer(viewmodel, event_observer, "run-1234")
+        attach_run_observer(viewmodel, events_port, "run-1234")
+        viewmodel._run_event_context.activate_run(  # noqa: SLF001
+            "run-1234",
+            skill_name="run-1234",
+            mode=RunMode.CHAT,
+            status=RunStatus.RUNNING,
+        )
         viewmodel.notify(
             [
                 _event(
@@ -812,7 +843,8 @@ def test_console_screen_viewmodel_maps_waiting_input_rejection() -> None:
         asyncio.run(run())
 
 
-def test_console_screen_viewmodel_infers_waiting_input_without_run_waiting_step_type() -> None:
+def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiting_step_type(
+) -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     waiting_port = FakeWaitingPort(
         WaitingInputAck(
@@ -823,14 +855,20 @@ def test_console_screen_viewmodel_infers_waiting_input_without_run_waiting_step_
     )
 
     async def run() -> None:
-        event_observer = FakeEventObserver()
+        events_port = FakeEventsPort()
         viewmodel = build_viewmodel(
             session_key="main",
             run_port=run_port,
-            event_observer=event_observer,
+            events_port=events_port,
             waiting_port=waiting_port,
         )
-        attach_run_observer(viewmodel, event_observer, "run-1234")
+        attach_run_observer(viewmodel, events_port, "run-1234")
+        viewmodel._run_event_context.activate_run(  # noqa: SLF001
+            "run-1234",
+            skill_name="run-1234",
+            mode=RunMode.CHAT,
+            status=RunStatus.RUNNING,
+        )
         viewmodel.notify(
             [
                 _event(
@@ -849,18 +887,23 @@ def test_console_screen_viewmodel_infers_waiting_input_without_run_waiting_step_
                 ),
             ]
         )
-        assert viewmodel.state.prompt.waiting_prompt == "Write a short summary"
+        assert viewmodel.state.prompt.waiting_prompt == ""
+        assert viewmodel._run_event_context.status == RunStatus.WAITING_WEBHOOK  # noqa: SLF001
 
         await viewmodel.submit("hola mundo")
 
-        assert waiting_port.called_with == [("run-1234", "hola mundo")]
+        assert waiting_port.called_with == []
         outputs = [
             item for item in viewmodel.state.transcript.items if isinstance(item, RunOutputItem)
         ]
+        waiting_items = [
+            item
+            for item in viewmodel.state.transcript.items
+            if isinstance(item, RunWaitingInputItem)
+        ]
         assert outputs == []
+        assert waiting_items == []
         assert viewmodel.state.prompt.waiting_prompt == ""
-        assert viewmodel.state.prompt.text == ""
-        assert viewmodel.state.prompt.cursor_position == 0
 
     with patched_to_thread(submit_waiting_input_use_case_module):
         asyncio.run(run())
@@ -944,7 +987,7 @@ def test_console_screen_viewmodel_reconstructs_input_received_and_ignores_run_re
     assert viewmodel.state.transcript.items[0].text == "hola"
 
 
-def test_console_screen_viewmodel_dedupes_replayed_waiting_event_by_event_id() -> None:
+def test_console_screen_viewmodel_renders_waiting_event_output() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     viewmodel = build_viewmodel(
         session_key="main",
@@ -977,7 +1020,14 @@ def test_console_screen_viewmodel_dedupes_replayed_waiting_event_by_event_id() -
     outputs = [
         item for item in viewmodel.state.transcript.items if isinstance(item, RunOutputItem)
     ]
+    waiting_items = [
+        item
+        for item in viewmodel.state.transcript.items
+        if isinstance(item, RunWaitingInputItem)
+    ]
     assert outputs == []
+    assert len(waiting_items) == 1
+    assert waiting_items[0].prompt == "Write a short summary"
     assert viewmodel.state.prompt.waiting_prompt == "Write a short summary"
 
 
@@ -1004,10 +1054,17 @@ def test_console_screen_viewmodel_skips_input_received_wait_output_block() -> No
     outputs = [
         item for item in viewmodel.state.transcript.items if isinstance(item, RunOutputItem)
     ]
+    waiting_items = [
+        item
+        for item in viewmodel.state.transcript.items
+        if isinstance(item, RunWaitingInputItem)
+    ]
     assert outputs == []
+    assert len(waiting_items) == 1
+    assert waiting_items[0].prompt == "Input received."
 
 
-def test_console_screen_viewmodel_dedupes_wait_input_step_by_step_id() -> None:
+def test_console_screen_viewmodel_renders_wait_input_steps_as_received() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     viewmodel = build_viewmodel(
         session_key="main",
@@ -1036,7 +1093,7 @@ def test_console_screen_viewmodel_dedupes_wait_input_step_by_step_id() -> None:
     )
 
     steps = [item for item in viewmodel.state.transcript.items if isinstance(item, RunStepItem)]
-    assert len(steps) == 1
+    assert len(steps) == 2
 
 
 def test_console_screen_viewmodel_skips_step_success_wait_input_input_received_output() -> None:
@@ -1101,9 +1158,16 @@ def test_console_screen_viewmodel_maps_output_format_by_step_type() -> None:
     outputs = [
         item for item in viewmodel.state.transcript.items if isinstance(item, RunOutputItem)
     ]
-    assert len(outputs) == 2
-    assert outputs[0].format == OutputFormat.MARKDOWN
-    assert outputs[1].format == OutputFormat.STRUCTURED
+    agent_messages = [
+        item
+        for item in viewmodel.state.transcript.items
+        if isinstance(item, AgentAssistantMessageItem)
+    ]
+    assert len(agent_messages) == 1
+    assert agent_messages[0].message_type == "final"
+    assert agent_messages[0].text == "hola"
+    assert len(outputs) == 1
+    assert outputs[0].format == OutputFormat.STRUCTURED
 
 
 def test_console_screen_viewmodel_appends_agent_tool_call_and_result_items() -> None:
@@ -1223,9 +1287,9 @@ def test_console_screen_viewmodel_uses_step_success_as_only_agent_final_output()
     )
 
     assert len(viewmodel.state.transcript.items) == 1
-    assert isinstance(viewmodel.state.transcript.items[0], RunOutputItem)
-    assert viewmodel.state.transcript.items[0].output == "Hecho completo."
-    assert viewmodel.state.transcript.items[0].format == OutputFormat.MARKDOWN
+    assert isinstance(viewmodel.state.transcript.items[0], AgentAssistantMessageItem)
+    assert viewmodel.state.transcript.items[0].message_type == "final"
+    assert viewmodel.state.transcript.items[0].text == "Hecho completo."
 
 
 def test_console_screen_viewmodel_moves_wait_prompt_to_status_instead_of_transcript_output(
@@ -1252,7 +1316,14 @@ def test_console_screen_viewmodel_moves_wait_prompt_to_status_instead_of_transcr
     outputs = [
         item for item in viewmodel.state.transcript.items if isinstance(item, RunOutputItem)
     ]
+    waiting_items = [
+        item
+        for item in viewmodel.state.transcript.items
+        if isinstance(item, RunWaitingInputItem)
+    ]
     assert outputs == []
+    assert len(waiting_items) == 1
+    assert waiting_items[0].prompt == "Write a message. Type exit, quit, or bye to stop."
     assert (
         viewmodel.state.prompt.waiting_prompt
         == "Write a message. Type exit, quit, or bye to stop."

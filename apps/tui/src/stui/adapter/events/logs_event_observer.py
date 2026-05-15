@@ -9,7 +9,7 @@ from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.log_event_mapper import LogEventMapper
 from stui.port.event_models import ErrorPayload, LogEvent, LogEventType
-from stui.port.event_port import LogEventsListener
+from stui.port.event_port import LogEventsListener, LogEventsObserver
 from stui.port.run_port import RunPort, RunRuntimeStatus
 
 _STOP_EVENT_TYPES = {
@@ -29,9 +29,8 @@ class CliLogEventSource(Protocol):
 
 
 @dataclass
-class LogsEventObserver:
+class LogsEventObserver(LogEventsObserver):
     interval_seconds: float = 0.5
-    limit: int = 100
     logs: CliLogEventSource = field(default_factory=CliLogEventAdapter)
     mapper: LogEventMapper = field(default_factory=LogEventMapper)
     run_port: RunPort | None = None
@@ -78,7 +77,7 @@ class LogsEventObserver:
     async def _poll_loop(self, listener: LogEventsListener) -> None:
         try:
             while self._listener is listener:
-                events = await asyncio.to_thread(self._list_next_events)
+                events = await asyncio.to_thread(self._list_next_events, listener)
                 if events:
                     listener.notify(events)
                     self._last_seen_sequence = max(event.sequence for event in events)
@@ -96,11 +95,11 @@ class LogsEventObserver:
         finally:
             self._task = None
 
-    def _list_next_events(self) -> list[LogEvent]:
+    def _list_next_events(self, listener: LogEventsListener) -> list[LogEvent]:
         events = self.logs.list(
             self._run_id,
             after_sequence=self._last_seen_sequence or None,
-            limit=self.limit,
+            limit=listener.get_max_page(),
         )
         return [self.mapper.map(event) for event in events]
 

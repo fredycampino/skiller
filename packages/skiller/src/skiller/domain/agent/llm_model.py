@@ -147,6 +147,7 @@ class LLMResponse:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "content", _clean_optional_string(self.content))
         object.__setattr__(self, "model", _clean_optional_string(self.model))
         object.__setattr__(
             self,
@@ -155,6 +156,18 @@ class LLMResponse:
         )
         object.__setattr__(self, "error", _clean_optional_string(self.error))
         object.__setattr__(self, "error_code", _clean_optional_string(self.error_code))
+
+    @property
+    def has_text_content(self) -> bool:
+        return self.content is not None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        return bool(self.tool_calls)
+
+    @property
+    def is_error(self) -> bool:
+        return self.ok is False
 
 
 def _clean_optional_string(value: str | None) -> str | None:

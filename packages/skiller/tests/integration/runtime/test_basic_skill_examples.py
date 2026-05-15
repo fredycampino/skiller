@@ -43,6 +43,8 @@ from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUs
 from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -64,7 +66,13 @@ class _FakeChannelSender:
         return True
 
 
+def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
+    return SqliteRuntimeEventStore(store.db_path)
+
+
 def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
+    runtime_event_store = SqliteRuntimeEventStore(store.db_path)
+    external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
@@ -75,7 +83,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     shell_tool = ShellProcessTool()
     tool_process_runner = DefaultToolProcessRunner()
     fail_run_use_case = FailRunUseCase(store)
-    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -109,7 +117,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
         wait_store=store,
-        external_event_store=store,
+        external_event_store=external_event_store,
     )
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
@@ -145,7 +153,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
             channel_sender=_FakeChannelSender(),
         ),
         handle_webhook_use_case=HandleWebhookUseCase(
-            external_event_store=store,
+            external_event_store=external_event_store,
             wait_store=store,
         ),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
@@ -178,7 +186,7 @@ def test_basic_skill_examples_succeed(
         assert run_result["status"] == "SUCCEEDED"
         assert run.status == "SUCCEEDED"
 
-        events = store.list_events(run_id)
+        events = _event_store(store).list_events(run_id)
         assert any(event.type == "RUN_FINISHED" for event in events)
         assert any(event.type == "STEP_STARTED" for event in events)
         assert any(event.type == "STEP_SUCCESS" for event in events)
@@ -241,7 +249,7 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
             "body_ref": None,
         }
 
-        events = store.list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result["run_id"])
         assign_event = _step_success_event(events, step_id="prepare_action")
         notify_event = _step_success_event(events, step_id="done")
 
@@ -307,7 +315,7 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
             "body_ref": None,
         }
 
-        events = store.list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result["run_id"])
         switch_event = _step_success_event(events, step_id="decide_action")
         notify_event = _step_success_event(events, step_id="retry_notice")
 
@@ -369,7 +377,7 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
             "body_ref": None,
         }
 
-        events = store.list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result["run_id"])
         when_event = _step_success_event(events, step_id="decide_score")
         notify_event = _step_success_event(events, step_id="good")
 

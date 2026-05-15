@@ -5,7 +5,7 @@
 Pending design.
 
 This document describes the YAML shape used by:
-- internal agents shipped with Skiller
+- internal catalog entries shipped with Skiller under `packages/skiller/agents/<id>/agent.yaml`
 - external files passed through `skiller run --file ...`
 
 ## Root Shape
@@ -175,8 +175,8 @@ steps:
     next: ask_user
 ```
 
-`system.file` is resolved relative to the skill file directory. Absolute paths
-and paths escaping that directory are rejected.
+`system.file` is resolved relative to the selected YAML file directory. Absolute
+paths and paths escaping that directory are rejected.
 
 ## Validation Rules
 

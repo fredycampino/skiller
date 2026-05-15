@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.application.agent.error_mapper import AgentErrorMapper
+from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.domain.agent.llm_model import LLMResponse
 
 pytestmark = pytest.mark.unit
@@ -34,3 +34,9 @@ def test_llm_request_falls_back_to_generic_detail() -> None:
     )
 
     assert message == "Agent 'support_agent' LLM request failed: ok=false without error"
+
+
+def test_invalid_final_message_is_explicit() -> None:
+    message = AgentErrorMapper().invalid_final_message(agent_id="support_agent")
+
+    assert message == "Agent step 'support_agent' returned no final answer"

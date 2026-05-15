@@ -62,6 +62,8 @@ from skiller.domain.event.event_model import (
 from skiller.infrastructure.config.settings import Settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
+from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
@@ -93,6 +95,10 @@ class _FakeChannelSender:
     def is_available(self, *, channel: str) -> bool:
         _ = channel
         return True
+
+
+def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
+    return SqliteRuntimeEventStore(store.db_path)
 
 
 class _FakeLLM:
@@ -132,6 +138,8 @@ class _FakeLLM:
 
 
 def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplicationService:
+    runtime_event_store = SqliteRuntimeEventStore(store.db_path)
+    external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
@@ -148,7 +156,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
         ],
     )
     fail_run_use_case = FailRunUseCase(store)
-    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
@@ -182,7 +190,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
         wait_store=store,
-        external_event_store=store,
+        external_event_store=external_event_store,
     )
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,
@@ -218,7 +226,7 @@ def _build_runtime(store: SqliteStateStore, llm: _FakeLLM) -> RuntimeApplication
             channel_sender=_FakeChannelSender(),
         ),
         handle_webhook_use_case=HandleWebhookUseCase(
-            external_event_store=store,
+            external_event_store=external_event_store,
             wait_store=store,
         ),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
@@ -299,7 +307,7 @@ def test_llm_prompt_step_succeeds_and_persists_json_result() -> None:
             "body_ref": None,
         }
 
-        events = store.list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result["run_id"])
         llm_event = _step_success_event(events, step_id="analyze_issue")
         notify_event = _step_success_event(events, step_id="done")
 

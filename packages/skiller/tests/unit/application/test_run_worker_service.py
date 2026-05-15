@@ -72,6 +72,7 @@ class _FakeAppendRuntimeEventUseCase:
         payload: RuntimeEventPayload | dict[str, object] | None = None,
         step_id: str | None = None,
         step_type: str | None = None,
+        agent_sequence: int | None = None,
         execution: StepExecution | None = None,
         next_step_id: str | None = None,
         error: str | None = None,
@@ -89,6 +90,7 @@ class _FakeAppendRuntimeEventUseCase:
                 "event_type": event_type,
                 "step_id": step_id,
                 "step_type": step_type,
+                "agent_sequence": agent_sequence,
                 "payload": event_payload,
             }
         )
@@ -251,6 +253,7 @@ def test_worker_executes_shell_step() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "shell",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -258,6 +261,7 @@ def test_worker_executes_shell_step() -> None:
             "event_type": RuntimeEventType.STEP_SUCCESS,
             "step_id": "start",
             "step_type": "shell",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "hello",
@@ -313,6 +317,7 @@ def test_worker_executes_send_step() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "send",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -320,6 +325,7 @@ def test_worker_executes_send_step() -> None:
             "event_type": RuntimeEventType.STEP_SUCCESS,
             "step_id": "start",
             "step_type": "send",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "Message sent: whatsapp:chat-1.",
@@ -353,6 +359,7 @@ def test_worker_completes_run_when_renderer_reports_done() -> None:
             "event_type": RuntimeEventType.RUN_FINISHED,
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "payload": {"status": "SUCCEEDED"},
         }
     ]
@@ -392,6 +399,7 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "wait_webhook",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -399,6 +407,7 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
             "event_type": RuntimeEventType.RUN_WAITING,
             "step_id": "start",
             "step_type": "wait_webhook",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "Waiting webhook: github:pr-1.",
@@ -443,6 +452,7 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "wait_input",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -450,6 +460,7 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
             "event_type": RuntimeEventType.RUN_WAITING,
             "step_id": "start",
             "step_type": "wait_input",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "Write a message.",
@@ -506,6 +517,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -513,6 +525,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "event_type": RuntimeEventType.STEP_SUCCESS,
             "step_id": "start",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "first",
@@ -527,6 +540,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "done",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -534,6 +548,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "event_type": RuntimeEventType.STEP_SUCCESS,
             "step_id": "done",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {
                 "output": {
                     "text": "done",
@@ -547,6 +562,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "event_type": RuntimeEventType.RUN_FINISHED,
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "payload": {"status": "SUCCEEDED"},
         },
     ]
@@ -593,6 +609,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
             "event_type": RuntimeEventType.STEP_STARTED,
             "step_id": "start",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {},
         },
         {
@@ -600,6 +617,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
             "event_type": RuntimeEventType.STEP_ERROR,
             "step_id": "start",
             "step_type": "notify",
+            "agent_sequence": None,
             "payload": {
                 "error": "notify failed",
             },
@@ -609,6 +627,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
             "event_type": RuntimeEventType.RUN_FINISHED,
             "step_id": None,
             "step_type": None,
+            "agent_sequence": None,
             "payload": {
                 "status": "FAILED",
                 "error": "notify failed",

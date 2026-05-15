@@ -1,19 +1,20 @@
 from dataclasses import dataclass
 
 from skiller.application.agent.agent_runner import AgentRunner
-from skiller.application.agent.config.event_output_sanitizer import (
-    AgentEventOutputPolicy,
-    AgentEventOutputSanitizer,
-)
+from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
-from skiller.application.agent.error_mapper import AgentErrorMapper
-from skiller.application.agent.feedback import AgentRunnerFeedback
-from skiller.application.agent.observer.runtime_event_emitter import AgentRuntimeEventEmitter
-from skiller.application.agent.prompt.final_message_extractor import (
-    AgentFinalMessageExtractor,
+from skiller.application.agent.context.agent_context_publisher import (
+    AgentContextPublisher,
 )
+from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
+from skiller.application.agent.event.agent_event_truncator import (
+    AgentEventOutputPolicy,
+    AgentEventTruncator,
+)
+from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
+from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
-from skiller.application.agent.tools.agent_tool_execution import AgentToolExecution
+from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.query_service import RunQueryService
 from skiller.application.run_worker_service import RunWorkerService
@@ -78,6 +79,7 @@ from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentCont
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -107,6 +109,7 @@ def build_runtime_container(
     store = SqliteStateStore(cfg.db_path)
     wait_store = SqliteWaitStore(cfg.db_path)
     external_event_store = SqliteExternalEventStore(cfg.db_path)
+    runtime_event_store = SqliteRuntimeEventStore(cfg.db_path)
     agent_context_store = SqliteAgentContextStore(cfg.db_path)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
@@ -129,14 +132,14 @@ def build_runtime_container(
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)
     delete_run_use_case = DeleteRunUseCase(store)
-    append_runtime_event_use_case = AppendRuntimeEventUseCase(store)
+    append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
     handle_input_use_case = HandleInputUseCase(
         run_store=store,
         external_event_store=external_event_store,
-        runtime_event_store=store,
+        runtime_event_store=runtime_event_store,
     )
     handle_channel_use_case = HandleChannelUseCase(
         external_event_store=external_event_store,
@@ -162,20 +165,23 @@ def build_runtime_container(
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
-    agent_event_output_sanitizer = AgentEventOutputSanitizer(
-        AgentEventOutputPolicy(
-            truncate_enabled=cfg.agent_event_output_truncate_enabled,
-            pii_enabled=cfg.agent_event_output_pii_enabled,
-            secrets_enabled=cfg.agent_event_output_secrets_enabled,
-            max_text_chars=cfg.agent_event_output_max_text_chars,
-            max_json_chars=cfg.agent_event_output_max_json_chars,
-            max_array_items=cfg.agent_event_output_max_array_items,
-        )
-    )
-    agent_event_emitter = AgentRuntimeEventEmitter(
-        append_runtime_event_use_case=append_runtime_event_use_case
+    agent_event_output_policy = AgentEventOutputPolicy(
+        truncate_enabled=cfg.agent_event_output_truncate_enabled,
+        pii_enabled=cfg.agent_event_output_pii_enabled,
+        secrets_enabled=cfg.agent_event_output_secrets_enabled,
+        max_text_chars=cfg.agent_event_output_max_text_chars,
+        max_json_chars=cfg.agent_event_output_max_json_chars,
+        max_array_items=cfg.agent_event_output_max_array_items,
     )
     agent_feedback = AgentRunnerFeedback()
+    agent_context_publisher = AgentContextPublisher(agent_context_store, agent_feedback)
+    agent_event_publisher = AgentEventPublisher(
+        runtime_event_store,
+        AgentEventTruncator(
+            agent_event_output_policy,
+            OutputTruncator(),
+        ),
+    )
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
         runner=AgentRunner(
@@ -183,19 +189,17 @@ def build_runtime_container(
             llm=llm,
             tool_manager=tool_manager,
             prompt_builder=AgentPromptBuilder(),
-            final_message_extractor=AgentFinalMessageExtractor(),
             error_mapper=AgentErrorMapper(),
             feedback=agent_feedback,
-            event_output_sanitizer=agent_event_output_sanitizer,
-            event_emitter=agent_event_emitter,
-            tool_execution=AgentToolExecution(
-                agent_context_store=agent_context_store,
+            context_publisher=agent_context_publisher,
+            event_publisher=agent_event_publisher,
+            tool_execution=AgentToolExecutor(
+                context_publisher=agent_context_publisher,
+                event_publisher=agent_event_publisher,
                 steering=agent_steering_store,
                 tool_manager=tool_manager,
                 process_runner=tool_process_runner,
                 feedback=agent_feedback,
-                event_output_sanitizer=agent_event_output_sanitizer,
-                event_emitter=agent_event_emitter,
             ),
         ),
         config_reader=AgentStepConfigReader(
@@ -246,7 +250,7 @@ def build_runtime_container(
         skill_runner=skill_runner,
     )
     get_run_status_use_case = GetRunStatusUseCase(store)
-    get_run_logs_use_case = GetRunLogsUseCase(store)
+    get_run_logs_use_case = GetRunLogsUseCase(runtime_event_store)
     get_runs_use_case = GetRunsUseCase(run_query)
     run_worker_service = RunWorkerService(
         complete_run_use_case=complete_run_use_case,

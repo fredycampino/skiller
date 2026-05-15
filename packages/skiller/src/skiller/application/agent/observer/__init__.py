@@ -1,1 +1,0 @@
-"""Agent runtime observation components."""

@@ -1,10 +1,6 @@
 import pytest
 from helpers.agent_runner import build_agent_runner
 
-from skiller.application.agent.config.event_output_sanitizer import (
-    AgentEventOutputPolicy,
-    AgentEventOutputSanitizer,
-)
 from skiller.application.agent.config.step_config_reader import AGENT_RUNTIME_SYSTEM
 from skiller.application.agent.tools.tool_manager import PreparedTool, ToolPrepareResult
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
@@ -340,6 +336,7 @@ class _FakeAppendRuntimeEventUseCase:
         payload: RuntimeEventPayload | dict[str, object] | None = None,
         step_id: str | None = None,
         step_type=None,  # noqa: ANN001
+        agent_sequence: int | None = None,
         execution=None,  # noqa: ANN001
         next_step_id: str | None = None,
         error: str | None = None,
@@ -355,6 +352,7 @@ class _FakeAppendRuntimeEventUseCase:
                 ),
                 "step_id": step_id,
                 "step_type": step_type,
+                "agent_sequence": agent_sequence,
                 "execution": execution,
                 "next_step_id": next_step_id,
                 "error": error,
@@ -370,7 +368,6 @@ def _build_use_case(
     steering: _FakeSteering | None = None,
     tool_manager: _FakeToolManager | None = None,
     append_runtime_event_use_case: _FakeAppendRuntimeEventUseCase | None = None,
-    event_output_sanitizer: AgentEventOutputSanitizer | None = None,
 ) -> ExecuteAgentStepUseCase:
     runner = build_agent_runner(
         agent_context_store=context_store,
@@ -378,7 +375,6 @@ def _build_use_case(
         llm=llm,
         tool_manager=tool_manager,
         append_runtime_event_use_case=append_runtime_event_use_case,
-        event_output_sanitizer=event_output_sanitizer,
     )
     return ExecuteAgentStepUseCase(store=store, runner=runner)
 
@@ -694,7 +690,47 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     ]
 
 
-def test_execute_agent_step_sanitizes_agent_tool_events() -> None:
+def test_execute_agent_step_fails_when_agent_returns_invalid_final_message() -> None:
+    store = _FakeStore()
+    context_store = _FakeAgentContextStore()
+    llm = _FakeLLM(
+        responses=[
+            LLMResponse(
+                ok=True,
+                content="   ",
+                model="fake",
+            )
+        ]
+    )
+    use_case = _build_use_case(
+        store=store,
+        context_store=context_store,
+        llm=llm,
+        tool_manager=_FakeToolManager(),
+    )
+    context = RunContext(inputs={}, step_executions={})
+
+    with pytest.raises(ValueError, match="returned no final answer"):
+        use_case.execute(
+            CurrentStep(
+                run_id="run-1",
+                step_index=0,
+                step_id="support_agent",
+                step_type=StepType.AGENT,
+                step={
+                    "system": "Be useful.",
+                    "task": "Hi",
+                    "context_id": "thread-1",
+                    "max_turns": 2,
+                    "tools": [],
+                    "next": "send_reply",
+                },
+                context=context,
+            )
+        )
+
+
+def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries() -> None:
     llm = _FakeLLM(
         responses=[
             LLMResponse(
@@ -724,16 +760,12 @@ def test_execute_agent_step_sanitizes_agent_tool_events() -> None:
         )
     )
     append_event = _FakeAppendRuntimeEventUseCase()
-    sanitizer = AgentEventOutputSanitizer(
-        AgentEventOutputPolicy(max_text_chars=10, max_json_chars=80, max_array_items=2)
-    )
     use_case = _build_use_case(
         store=_FakeStore(),
         context_store=_FakeAgentContextStore(),
         llm=llm,
         tool_manager=tool_manager,
         append_runtime_event_use_case=append_event,
-        event_output_sanitizer=sanitizer,
     )
 
     use_case.execute(
@@ -756,15 +788,19 @@ def test_execute_agent_step_sanitizes_agent_tool_events() -> None:
     tool_call_payload = append_event.calls[0]["payload"]
     assert isinstance(tool_call_payload, dict)
     assert tool_call_payload["body"]["tool_call_id"] == "openai-call-1"
-    assert tool_call_payload["body"]["args"]["command"].startswith("Authorizat")
+    assert tool_call_payload["body"]["args"]["command"] == "Authorization: Bearer abc"
 
     assert append_event.calls[1]["event_type"] == RuntimeEventType.AGENT_TOOL_RESULT
     tool_result_payload = append_event.calls[1]["payload"]
     assert isinstance(tool_result_payload, dict)
     assert tool_result_payload["body"]["tool_call_id"] == "openai-call-1"
-    assert tool_result_payload["body"]["text"] == "abcdefghij..."
-    assert tool_result_payload["body"]["data"]["password"] == "***REDACTED***"
-    assert tool_result_payload["body"]["data"]["logs"] == ["line1", "line2"]
+    assert tool_result_payload["body"]["text"] == "abcdefghijklmnopqrstuvwxyz"
+    assert tool_result_payload["body"]["data"]["password"] == "raw-secret"
+    assert tool_result_payload["body"]["data"]["logs"] == [
+        "line1",
+        "line2",
+        "line3",
+    ]
 
 
 def test_execute_agent_step_fails_when_llm_fails() -> None:

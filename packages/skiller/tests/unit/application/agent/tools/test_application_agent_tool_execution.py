@@ -5,12 +5,19 @@ from pathlib import Path
 
 import pytest
 
-from skiller.application.agent.config.event_output_sanitizer import (
-    AgentEventOutputPolicy,
-    AgentEventOutputSanitizer,
+from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.application.agent.context.agent_context_publisher import (
+    AgentContextPublisher,
 )
-from skiller.application.agent.feedback import AgentRunnerFeedback
-from skiller.application.agent.tools.agent_tool_execution import AgentToolExecution
+from skiller.application.agent.event.agent_event_publisher import (
+    AgentEventPublisher,
+)
+from skiller.application.agent.event.agent_event_truncator import (
+    AgentEventOutputPolicy,
+    AgentEventTruncator,
+)
+from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
+from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import (
     ToolManager,
     ToolPrepareFailure,
@@ -19,8 +26,11 @@ from skiller.application.agent.tools.tool_manager import (
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentToolCallPayload,
+    AgentToolResultPayload,
 )
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.llm_model import (
@@ -28,6 +38,8 @@ from skiller.domain.agent.llm_model import (
     LLMToolCall,
     LLMToolCallFunction,
 )
+from skiller.domain.event.event_model import RuntimeEventType
+from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.steering_model import (
     SteeringAgentInterrupt,
     SteeringItem,
@@ -57,11 +69,11 @@ def test_agent_tool_execution_runs_process_tool() -> None:
         output=ToolProcessOutput(exit_code=0, stdout="ok\n", stderr="")
     )
     context_store = _FakeAgentContextStore()
-    events = _FakeEventEmitter()
+    runtime_events = _FakeRuntimeEventStore()
     executor = _build_executor(
         context_store=context_store,
-        event_emitter=events,
         process_runner=process_runner,
+        runtime_event_store=runtime_events,
     )
 
     results = executor.execute(_request_with_tool("shell", '{"command":"pwd"}'))
@@ -87,7 +99,10 @@ def test_agent_tool_execution_runs_process_tool() -> None:
         AgentContextEntryType.TOOL_RESULT,
     ]
     assert context_store.appended[-1]["payload"]["text"] == "ok"
-    assert [event["type"] for event in events.calls] == ["tool_call", "tool_result"]
+    assert [event["type"] for event in runtime_events.calls] == [
+        "tool_call",
+        "tool_result",
+    ]
 
 
 def test_agent_tool_execution_interrupts_process_tool() -> None:
@@ -203,11 +218,20 @@ def _build_executor(
     context_store: "_FakeAgentContextStore",
     process_runner: "_FakeProcessRunner" | None = None,
     steering: "_FakeSteering" | None = None,
-    event_emitter: "_FakeEventEmitter" | None = None,
+    runtime_event_store: "_FakeRuntimeEventStore" | None = None,
     tool_manager=None,
-) -> AgentToolExecution:
-    return AgentToolExecution(
-        agent_context_store=context_store,
+) -> AgentToolExecutor:
+    context_publisher = AgentContextPublisher(context_store, AgentRunnerFeedback())
+    store = runtime_event_store or _FakeRuntimeEventStore()
+    return AgentToolExecutor(
+        context_publisher=context_publisher,
+        event_publisher=AgentEventPublisher(
+            store,
+            AgentEventTruncator(
+                AgentEventOutputPolicy(),
+                OutputTruncator(),
+            ),
+        ),
         steering=steering or _FakeSteering(),
         tool_manager=tool_manager or ToolManager(
             tools=[
@@ -217,8 +241,6 @@ def _build_executor(
         ),
         process_runner=process_runner or _FakeProcessRunner(),
         feedback=AgentRunnerFeedback(),
-        event_output_sanitizer=AgentEventOutputSanitizer(AgentEventOutputPolicy()),
-        event_emitter=event_emitter or _FakeEventEmitter(),
     )
 
 
@@ -423,17 +445,89 @@ class _FakeSteering:
 
 
 @dataclass
-class _FakeEventEmitter:
+class _FakeRuntimeEventStore(RuntimeEventStorePort):
     calls: list[dict[str, object]]
 
     def __init__(self) -> None:
         self.calls = []
 
-    def emit_assistant_message(self, **kwargs) -> None:  # noqa: ANN003
-        self.calls.append({"type": "assistant_message", **kwargs})
+    def emit_max_turns_exhausted(
+        self,
+        *,
+        run_id: str,
+        step_id: str,
+        turn_id: str,
+    ) -> None:
+        self.calls.append(
+            {
+                "type": "max_turns_exhausted",
+                "run_id": run_id,
+                "step_id": step_id,
+                "turn_id": turn_id,
+            }
+        )
 
-    def emit_tool_call(self, **kwargs) -> None:  # noqa: ANN003
-        self.calls.append({"type": "tool_call", **kwargs})
+    def emit_interrupted(
+        self,
+        *,
+        run_id: str,
+        step_id: str,
+        turn_id: str,
+    ) -> None:
+        self.calls.append(
+            {
+                "type": "interrupted",
+                "run_id": run_id,
+                "step_id": step_id,
+                "turn_id": turn_id,
+            }
+        )
 
-    def emit_tool_result(self, **kwargs) -> None:  # noqa: ANN003
-        self.calls.append({"type": "tool_result", **kwargs})
+    def emit_assistant_message(
+        self,
+        *,
+        entry: AgentContextEntry,
+    ) -> None:
+        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
+            raise ValueError("Assistant event requires assistant_message entry")
+        if not isinstance(entry.payload, AgentAssistantMessagePayload):
+            raise ValueError("Assistant event requires AgentAssistantMessagePayload")
+        self.calls.append({"type": "assistant_message", "entry": entry})
+
+    def emit_tool_call(
+        self,
+        *,
+        entry: AgentContextEntry,
+    ) -> None:
+        if entry.entry_type != AgentContextEntryType.TOOL_CALL:
+            raise ValueError("Tool call event requires tool_call entry")
+        if not isinstance(entry.payload, AgentToolCallPayload):
+            raise ValueError("Tool call event requires AgentToolCallPayload")
+        self.calls.append({"type": "tool_call", "entry": entry})
+
+    def emit_tool_result(
+        self,
+        *,
+        entry: AgentContextEntry,
+    ) -> None:
+        if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
+            raise ValueError("Tool result event requires tool_result entry")
+        if not isinstance(entry.payload, AgentToolResultPayload):
+            raise ValueError("Tool result event requires AgentToolResultPayload")
+        self.calls.append({"type": "tool_result", "entry": entry})
+
+    def append_event(self, event):  # noqa: ANN001
+        event_type_map = {
+            RuntimeEventType.AGENT_ASSISTANT_MESSAGE: "assistant_message",
+            RuntimeEventType.AGENT_TOOL_CALL: "tool_call",
+            RuntimeEventType.AGENT_TOOL_RESULT: "tool_result",
+            RuntimeEventType.AGENT_INTERRUPTED: "interrupted",
+            RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED: "max_turns_exhausted",
+        }
+        self.calls.append({"type": event_type_map.get(event.type, str(event.type)), "event": event})
+
+    def list_events(self, run_id: str, *, after_sequence=None, limit=None):  # noqa: ANN001
+        raise NotImplementedError
+
+    def get_last_event(self, run_id: str):  # noqa: ANN201
+        raise NotImplementedError

@@ -59,6 +59,14 @@ interfaces -> application -> domain <- infrastructure
 
 - The service orchestrates; it does not persist directly.
 - Use cases own state transitions and emitted events.
+- Ports must expose semantic contracts. If an operation represents a known domain fact,
+  command, entry, payload, or request, pass a typed model instead of rebuilding the same
+  concept from many scalar arguments.
+- Do not use `dict[str, object]` in port signatures when the shape is stable and part of the
+  domain. Reserve raw dict payloads for truly dynamic boundaries such as arbitrary external JSON
+  or schemaless metadata that cannot be modeled yet.
+- Infrastructure adapters should translate between storage and domain models, not reconstruct
+  stable domain concepts from repeated primitive parameter lists.
 - Ports live in the domain feature they belong to, for example:
   - `domain/agent/*_port.py`
   - `domain/run/*_port.py`

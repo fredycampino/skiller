@@ -6,6 +6,9 @@ class AgentErrorMapper:
         detail = self._llm_error_detail(response)
         return f"Agent '{agent_id}' LLM request failed: {detail}"
 
+    def invalid_final_message(self, *, agent_id: str) -> str:
+        return f"Agent step '{agent_id}' returned no final answer"
+
     def _llm_error_detail(self, response: LLMResponse) -> str:
         if response.error and response.error_code:
             return f"{response.error} (error_code={response.error_code})"

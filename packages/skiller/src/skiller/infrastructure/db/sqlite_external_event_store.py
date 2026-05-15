@@ -3,12 +3,13 @@ import sqlite3
 import uuid
 from typing import Any
 
+from skiller.domain.wait.external_event_store_port import ExternalEventStorePort
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
-class SqliteExternalEventStore(SqliteRepository):
+class SqliteExternalEventStore(SqliteRepository, ExternalEventStorePort):
     PENDING_STATUS = "pending"
     CONSUMED_STATUS = "consumed"
 

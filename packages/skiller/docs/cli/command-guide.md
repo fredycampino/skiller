@@ -267,7 +267,7 @@ skiller run --file <path> [--arg key=value] [--logs] [--start-server]
 ```
 
 Notes:
-- use `<runnable>` for built-in runnable ids
+- use `<runnable>` for internal catalog ids
 - internal agents resolve from `packages/skiller/agents/<id>/agent.yaml`
 - use `--file` for external YAML files
 - `--logs` includes current logs in the JSON response

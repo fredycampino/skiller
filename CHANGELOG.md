@@ -2,28 +2,6 @@
 
 All notable changes to this project should be summarized here before a version is cut from a `feature/*` branch into `main`.
 
-## 1.0.0-beta.2 - 2026-05-16
-
-### Added
-- Add history feature for agent conversation (PR #26)
-- Add agent context and run event observer refactor (PR #25)
-- Add WhatsApp channel runtime and bridge support (PR #23)
-- Add chat mode and ESC to interrupt agent tools
-- Add agent runtime and TUI integration
-
-### Changed
-- Clean tool executor and event publishers (PR #27)
-- Restructure project into monorepo (PR #23)
-- Improve event type tracking in polling observer
-
-
-
-### Removed
-- Nothing yet.
-
-### Notes
-- Release version bump.
-
 ## Unreleased
 
 ### Added
@@ -41,22 +19,50 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
-
+## 1.0.0-beta.3 - 2026-05-17
 
 ### Added
-- Nothing yet.
+- Added typed agent runtime configuration through `AgentConfigPort` and `agent.json`.
+- Added agent context usage persistence, context stats, and `skiller agent stats`.
+- Added live agent E2E coverage for final-answer and tool-call loop scenarios.
 
 ### Changed
-- Nothing yet.
+- Changed Minimax to use the OpenAI-compatible client path via `openai_chat_completions`.
+- Changed agent step execution to use typed `AgentStep` and `AgentRunnerConfig` contracts.
+- Changed agent config resolution to select `AGENT_AGENT_CONFIG_FILE`, then `./agent.json`,
+  then `~/.skiller/settings/agent.json`.
 
 ### Fixed
 - Nothing yet.
 
 ### Removed
+- Removed the legacy `llm_prompt` step and tests.
+- Removed the legacy Minimax LLM client and legacy LLM config loader.
+- Removed unused sanitizer classes and empty package `__init__.py` files.
+
+### Notes
+- This release consolidates the agent runtime config and context-statistics refactor from PR #29.
+
+## 1.0.0-beta.2 - 2026-05-16
+
+### Added
+- Add history feature for agent conversation (PR #26)
+- Add agent context and run event observer refactor (PR #25)
+- Add WhatsApp channel runtime and bridge support (PR #23)
+- Add chat mode and ESC to interrupt agent tools
+- Add agent runtime and TUI integration
+
+### Changed
+- Clean tool executor and event publishers (PR #27)
+- Restructure project into monorepo (PR #23)
+- Improve event type tracking in polling observer
+
+
+### Removed
 - Nothing yet.
 
 ### Notes
-- Update this section when a branch is ready for release.
+- Release version bump.
 
 ## 1.0.0-beta.1 - 2026-04-26
 

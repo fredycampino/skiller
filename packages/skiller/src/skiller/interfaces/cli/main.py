@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,13 @@ def _find_repo_root() -> Path | None:
         if (parent / "pyproject.toml").is_file() and (parent / "apps" / "tui" / "src").is_dir():
             return parent
     return None
+
+
+def _get_package_version() -> str:
+    try:
+        return version("skiller")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def _ensure_stui_on_sys_path() -> None:
@@ -209,8 +217,8 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
 
     if event_type == "RUN_CREATE":
         parts = [
-            _format_field("skill", payload.get("skill")),
-            _format_field("skill_source", payload.get("skill_source")),
+            _format_field("ref", payload.get("ref")),
+            _format_field("source", payload.get("source")),
         ]
     elif event_type == "RUN_RESUME":
         parts = [_format_field("source", payload.get("source"))]
@@ -288,9 +296,12 @@ def _compact_value(value: Any) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="skiller", description="Skiller Runtime CLI")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_get_package_version()}",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("init-db", help="Initialize SQLite schema")
 
     run_parser = sub.add_parser("run", help="Start a run with a skill")
     run_parser.add_argument("skill", nargs="?", help="Internal skill name (without extension)")
@@ -340,6 +351,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Interrupt the current agent turn for a run",
     )
     agent_interrupt_parser.add_argument("run_id")
+    agent_stats_parser = agent_sub.add_parser(
+        "stats",
+        help="Get persisted context stats for an agent in a run",
+    )
+    agent_stats_parser.add_argument("run_id")
+    agent_stats_parser.add_argument("--agent", required=True)
 
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
@@ -383,9 +400,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Maximum number of events to return",
     )
-
-    watch_parser = sub.add_parser("watch", help="Watch a run until it finishes or waits")
-    watch_parser.add_argument("run_id")
 
     input_parser = sub.add_parser("input", help="Human input operations")
     input_sub = input_parser.add_subparsers(dest="input_command", required=True)
@@ -505,10 +519,6 @@ def main(argv: list[str] | None = None) -> int:
         query_service=container.query_service,
     )
     controller.initialize()
-
-    if args.command == "init-db":
-        print(f"DB initialized: {container.settings.db_path}")
-        return 0
 
     if args.command == "run":
         try:
@@ -967,6 +977,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0 if result["enqueued"] else 1
 
+    if args.command == "agent" and args.agent_command == "stats":
+        result = controller.agent_stats(args.run_id, args.agent)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "OK" else 1
+
     if args.command == "delete":
         result = controller.delete_run(args.run_id)
         print(json.dumps(result, indent=2))
@@ -996,15 +1011,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(events, indent=2))
         return 0
-
-    if args.command == "watch":
-        try:
-            result = _watch_run(controller, args.run_id, initial_status="")
-        except RuntimeError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        print(json.dumps(result, indent=2))
-        return 0 if result["status"] != RunStatus.FAILED.value else 1
 
     if args.command == "input" and args.input_command == "receive":
         result = controller.receive_input(args.run_id, text=args.text)

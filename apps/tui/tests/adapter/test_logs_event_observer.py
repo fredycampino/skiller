@@ -246,7 +246,7 @@ def _step_started_event(*, sequence: int) -> CliLogEvent:
         run_id="run-1",
         type=LogEventType.STEP_STARTED,
         step_id="answer",
-        step_type="llm_prompt",
+        step_type="agent",
         agent_sequence=None,
         created_at="2026-05-12T10:30:12Z",
         payload={},

@@ -187,7 +187,6 @@ def _build_service(
         render_mcp_config_use_case=_FakeRenderMcpConfigUseCase(mcp_render_result),
         execute_agent_step_use_case=_FakeStepUseCase(agent_results),
         execute_assign_step_use_case=_FakeStepUseCase(),
-        execute_llm_prompt_step_use_case=_FakeStepUseCase(),
         execute_mcp_step_use_case=_FakeMcpStepUseCase(
             StepAdvance(status=StepExecutionStatus.COMPLETED)
         ),

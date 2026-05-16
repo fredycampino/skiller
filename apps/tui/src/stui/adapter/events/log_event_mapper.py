@@ -43,8 +43,8 @@ class OutputModel(BaseModel):
 class RunCreateModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    skill: str
-    skill_source: str
+    ref: str
+    source: str
 
 
 class RunResumeModel(BaseModel):
@@ -150,7 +150,7 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_CREATE:
             model = _validate_model(RunCreateModel, payload, "payload")
-            return RunCreatePayload(skill=model.skill, skill_source=model.skill_source)
+            return RunCreatePayload(ref=model.ref, source=model.source)
 
         if event_type == LogEventType.RUN_RESUME:
             model = _validate_model(RunResumeModel, payload, "payload")

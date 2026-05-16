@@ -73,6 +73,9 @@ class RuntimeController:
     def interrupt_agent(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.interrupt_agent(run_id.strip())
 
+    def agent_stats(self, run_id: str, agent_id: str) -> dict[str, Any]:
+        return self.runtime_service.get_agent_stats(run_id.strip(), agent_id.strip())
+
     def delete_run(self, run_id: str) -> dict[str, Any]:
         return self.runtime_service.delete_run(run_id.strip())
 

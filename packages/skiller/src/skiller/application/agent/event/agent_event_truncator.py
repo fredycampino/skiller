@@ -14,8 +14,6 @@ from skiller.domain.agent.agent_context_model import (
 @dataclass(frozen=True)
 class AgentEventOutputPolicy:
     truncate_enabled: bool = True
-    pii_enabled: bool = True
-    secrets_enabled: bool = True
     max_text_chars: int = 600
     max_json_chars: int = 4000
     max_array_items: int = 20

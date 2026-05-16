@@ -194,14 +194,45 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
     db_path = tmp_path / "duplicate-id.db"
     store = SqliteStateStore(str(db_path))
     store.init_db()
-    skill_snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
+    snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
     context = RunContext(inputs={}, step_executions={})
     run_id = "550e8400-e29b-41d4-a716-446655440004"
 
-    store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)
+    store.create_run("internal", "demo", snapshot, context, run_id=run_id)
 
     with pytest.raises(ValueError, match=f"Run '{run_id}' already exists"):
-        store.create_run("internal", "demo", skill_snapshot, context, run_id=run_id)
+        store.create_run("internal", "demo", snapshot, context, run_id=run_id)
+
+
+def test_attach_agent_creates_and_reads_run_agent_context(tmp_path) -> None:
+    db_path = tmp_path / "run-agents.db"
+    store = SqliteStateStore(str(db_path))
+    store.init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440006"
+    store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    assert store.get_agent(run_id=run_id, agent_id="support_agent") is None
+
+    store.attach_agent(
+        run_id=run_id,
+        agent_id="support_agent",
+        context_id="thread-123",
+    )
+
+    agent = store.get_agent(run_id=run_id, agent_id="support_agent")
+    run = store.get_run(run_id)
+
+    assert agent is not None
+    assert agent.agent_id == "support_agent"
+    assert agent.context_id == "thread-123"
+    assert run is not None
+    assert run.agents["support_agent"].context_id == "thread-123"
 
 
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
@@ -350,22 +381,22 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
 
     run_id = "550e8400-e29b-41d4-a716-446655440021"
     other_run_id = "550e8400-e29b-41d4-a716-446655440022"
-    skill_snapshot = {"start": "wait", "steps": [{"wait_channel": "wait"}]}
+    snapshot = {"start": "wait", "steps": [{"wait_channel": "wait"}]}
     context = RunContext(inputs={}, step_executions={})
-    store.create_run("internal", "skill", skill_snapshot, context, run_id=run_id)
-    store.create_run("internal", "skill", skill_snapshot, context, run_id=other_run_id)
+    store.create_run("internal", "skill", snapshot, context, run_id=run_id)
+    store.create_run("internal", "skill", snapshot, context, run_id=other_run_id)
     runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=run_id,
             type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(skill="skill", skill_source="internal"),
+            payload=RunCreatedPayload(ref="skill", source="internal"),
         )
     )
     runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=other_run_id,
             type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(skill="skill", skill_source="internal"),
+            payload=RunCreatedPayload(ref="skill", source="internal"),
         )
     )
     store.create_wait(

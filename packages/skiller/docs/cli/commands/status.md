@@ -46,8 +46,8 @@ Output:
 ```json
 {
   "id": "run-uuid",
-  "skill_source": "internal",
-  "skill_ref": "ci",
+  "source": "internal",
+  "ref": "ci",
   "status": "RUNNING",
   "current": "support_agent",
   "created_at": "2026-05-12T10:30:10Z",

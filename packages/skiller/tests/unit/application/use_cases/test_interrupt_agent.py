@@ -35,9 +35,9 @@ class _FakeSteering:
 def _build_run() -> Run:
     return Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="demo",
-        skill_snapshot={"start": "agent", "steps": []},
+        source="internal",
+        ref="demo",
+        snapshot={"start": "agent", "steps": []},
         status="RUNNING",
         current="agent",
         context=RunContext(inputs={}, step_executions={}),

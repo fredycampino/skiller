@@ -2,7 +2,8 @@ from typing import Protocol
 
 from skiller.domain.agent.agent_context_model import AgentContextEntry
 from skiller.domain.agent.agent_run_scope import AgentRunScope
-from skiller.domain.tool.tool_contract import ToolResult
+from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 
 class AgentContextStorePort(Protocol):
@@ -12,7 +13,6 @@ class AgentContextStorePort(Protocol):
         self,
         *,
         scope: AgentRunScope,
-        turn_id: str,
         text: str,
     ) -> AgentContextEntry: ...
 
@@ -23,27 +23,21 @@ class AgentContextStorePort(Protocol):
         turn_id: str,
         message_type: str,
         text: str,
+        usage: LLMUsage | None = None,
     ) -> AgentContextEntry: ...
 
     def append_tool_call(
         self,
         *,
         scope: AgentRunScope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        tool: str,
-        args: dict[str, object],
+        tool_call: AgentToolCall,
     ) -> AgentContextEntry: ...
 
     def append_tool_result(
         self,
         *,
         scope: AgentRunScope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        result: ToolResult,
+        tool_result: AgentToolResult,
     ) -> AgentContextEntry: ...
 
     def list_entries(self, *, scope: AgentRunScope) -> list[AgentContextEntry]: ...

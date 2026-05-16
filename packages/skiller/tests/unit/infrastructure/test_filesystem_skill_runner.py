@@ -134,7 +134,7 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
         {
             "step_executions": {
                 "analysis": {
-                    "step_type": "llm_prompt",
+                    "step_type": "agent",
                     "input": {},
                     "evaluation": {},
                     "output": {

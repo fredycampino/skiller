@@ -5,8 +5,8 @@ from typing import Any
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.run_step_model import find_run_step
 from skiller.domain.step.skill_runner_port import SkillRunnerPort
-from skiller.domain.step.skill_step_model import find_skill_step
 from skiller.domain.step.step_type import StepType
 
 
@@ -61,7 +61,7 @@ class RenderCurrentStepUseCase:
         if run.status == RunStatus.FAILED.value:
             return RenderCurrentStepResult(status=CurrentStepStatus.FAILED)
 
-        skill = run.skill_snapshot
+        skill = run.snapshot
         if not isinstance(skill, dict):
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
@@ -72,7 +72,7 @@ class RenderCurrentStepUseCase:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
         try:
-            step_index, parsed_step = find_skill_step(raw_steps, current)
+            step_index, parsed_step = find_run_step(raw_steps, current)
         except ValueError:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
@@ -81,8 +81,8 @@ class RenderCurrentStepUseCase:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_STEP)
         if parsed_step.step_type == StepType.AGENT:
             step = self._resolve_agent_system_file(
-                skill_source=run.skill_source,
-                skill_ref=run.skill_ref,
+                skill_source=run.source,
+                skill_ref=run.ref,
                 step=step,
             )
 

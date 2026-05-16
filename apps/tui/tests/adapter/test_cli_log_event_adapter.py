@@ -14,6 +14,7 @@ from stui.port.event_models import (
     AgentToolResultPayload,
     AgentToolResultStatus,
     LogEventType,
+    RunCreatePayload,
     StepSuccessPayload,
 )
 
@@ -47,6 +48,32 @@ def test_cli_log_event_adapter_passes_cursor_and_limit() -> None:
     ]
 
 
+def test_cli_log_event_adapter_parses_run_create_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 1,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "RUN_CREATE",
+                "step_id": None,
+                "step_type": None,
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "ref": "ant",
+                    "source": "internal",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.RUN_CREATE
+    assert isinstance(event.payload, RunCreatePayload)
+    assert event.payload.ref == "ant"
+    assert event.payload.source == "internal"
+
+
 def test_cli_log_event_adapter_parses_step_success_payload() -> None:
     event = _mapped_event(
         [
@@ -56,7 +83,7 @@ def test_cli_log_event_adapter_parses_step_success_payload() -> None:
                 "run_id": "run-1",
                 "type": "STEP_SUCCESS",
                 "step_id": "answer",
-                "step_type": "llm_prompt",
+                "step_type": "agent",
                 "agent_sequence": None,
                 "created_at": "2026-05-12T10:30:15Z",
                 "payload": {
@@ -75,7 +102,7 @@ def test_cli_log_event_adapter_parses_step_success_payload() -> None:
     assert event.sequence == 10
     assert event.event_type == LogEventType.STEP_SUCCESS
     assert event.step_id == "answer"
-    assert event.step_type == "llm_prompt"
+    assert event.step_type == "agent"
     assert isinstance(event.payload, StepSuccessPayload)
     assert event.payload.output.text == "hello"
     assert event.payload.output.text_ref == "data.reply"
@@ -153,7 +180,7 @@ def test_cli_log_event_adapter_rejects_invalid_payload() -> None:
                     "run_id": "run-1",
                     "type": "STEP_SUCCESS",
                     "step_id": "answer",
-                    "step_type": "llm_prompt",
+                    "step_type": "agent",
                     "agent_sequence": None,
                     "created_at": "2026-05-12T10:30:15Z",
                     "payload": {},

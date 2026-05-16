@@ -40,8 +40,8 @@ def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
     runs = query_store.list_runs(limit=20)
 
     assert [run.id for run in runs] == [second_run_id, first_run_id]
-    assert runs[0].skill_ref == "wait_input_test"
-    assert runs[1].skill_ref == "notify_test"
+    assert runs[0].ref == "wait_input_test"
+    assert runs[1].ref == "notify_test"
     assert runs[0].wait_type is None
 
 

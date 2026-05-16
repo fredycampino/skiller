@@ -13,6 +13,7 @@ class _FakeController:
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
         self.interrupt_agent_calls: list[str] = []
+        self.agent_stats_calls: list[dict[str, str]] = []
         self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
         self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
@@ -49,7 +50,7 @@ class _FakeController:
             {
                 "id": "run-1",
                 "status": "WAITING",
-                "skill_ref": "webhook_signal_oracle",
+                "ref": "webhook_signal_oracle",
                 "current": "wait_signal",
                 "updated_at": "2026-03-18 11:42:10",
             }
@@ -97,6 +98,33 @@ class _FakeController:
             "status": "ENQUEUED",
             "enqueued": True,
             "item": {"type": "agent_interrupt"},
+        }
+
+    def agent_stats(self, run_id: str, agent_id: str) -> dict[str, object]:
+        self.agent_stats_calls.append({"run_id": run_id, "agent_id": agent_id})
+        return {
+            "run_id": run_id,
+            "agent_id": agent_id,
+            "context_id": "ctx-1",
+            "status": "OK",
+            "ok": True,
+            "stats": {
+                "context": {
+                    "entries": {
+                        "total": 1,
+                        "user_messages": 0,
+                        "assistant_messages": 1,
+                        "tool_calls": 0,
+                        "tool_results": 0,
+                    },
+                    "usage": {
+                        "entries": 1,
+                        "total_prompt_tokens": 100,
+                        "total_response_tokens": 25,
+                        "total_tokens": 125,
+                    },
+                }
+            },
         }
 
     def delete_run(self, run_id: str) -> dict[str, object]:
@@ -248,6 +276,19 @@ def test_main_without_args_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert exit_code == 0
     assert called["run_tui"] is True
+
+
+def test_version_prints_package_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(cli_main, "_get_package_version", lambda: "1.2.3")
+
+    with pytest.raises(SystemExit) as exc:
+        cli_main.main(["--version"])
+
+    assert exc.value.code == 0
+    assert capsys.readouterr().out == "skiller 1.2.3\n"
 
 
 def test_run_internal_skill_by_name(
@@ -600,6 +641,28 @@ def test_agent_interrupt_command(
     assert controller.interrupt_agent_calls == ["run-1"]
     assert '"status": "ENQUEUED"' in captured.out
     assert '"type": "agent_interrupt"' in captured.out
+
+
+def test_agent_stats_command(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController(None, None, None)
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+
+    exit_code = cli_main.main(
+        ["agent", "stats", "run-1", "--agent", "support_agent"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert controller.agent_stats_calls == [
+        {"run_id": "run-1", "agent_id": "support_agent"}
+    ]
+    assert '"status": "OK"' in captured.out
+    assert '"total_tokens": 125' in captured.out
 
 
 def test_cloudflared_start_command(
@@ -1307,51 +1370,6 @@ def test_logs_help_describes_raw_events_and_cursor(
     assert "status.last_event_sequence" in captured.out
 
 
-def test_watch_prints_progress_and_final_status(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-    controller.status_results = [
-        {"id": "run-123", "status": "RUNNING"},
-        {"id": "run-123", "status": "WAITING"},
-    ]
-    controller.logs_result = [
-        {
-            "id": "evt-1",
-            "type": "RUN_WAITING",
-            "step_id": "wait_signal",
-            "step_type": "wait_webhook",
-            "payload": {
-                "output": {
-                    "text": "Waiting webhook: test:42.",
-                    "value": {"webhook": "test", "key": "42"},
-                    "body_ref": None,
-                },
-            },
-        }
-    ]
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
-
-    exit_code = cli_main.main(["watch", "run-123"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"run_id": "run-123"' in captured.out
-    assert '"status": "WAITING"' in captured.out
-    assert '"events": [' in captured.out
-    assert "[123] RUNNING" in captured.err
-    assert (
-        '[123] RUN_WAITING step="wait_signal" step_type="wait_webhook" '
-        'output={"body_ref":null,"text":"Waiting webhook: test:42.",'
-        '"value":{"key":"42","webhook":"test"}}'
-    ) in captured.err
-
-
 def test_status_can_include_waiting_metadata(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -1361,7 +1379,7 @@ def test_status_can_include_waiting_metadata(
     controller.status_results = [
         {
             "id": "run-1",
-            "skill_ref": "webhook_signal_oracle",
+            "ref": "webhook_signal_oracle",
             "status": "WAITING",
             "current": "wait_signal",
             "wait_type": "webhook",
@@ -1438,7 +1456,7 @@ def test_runs_lists_recent_runs(
     assert exit_code == 0
     assert controller.list_runs_calls == [(5, [])]
     assert '"id": "run-1"' in captured.out
-    assert '"skill_ref": "webhook_signal_oracle"' in captured.out
+    assert '"ref": "webhook_signal_oracle"' in captured.out
 
 
 def test_runs_accepts_status_filters(

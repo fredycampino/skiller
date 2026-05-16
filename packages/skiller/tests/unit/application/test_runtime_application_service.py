@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsStatus
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentStatus
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksResult
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
@@ -19,6 +20,12 @@ from skiller.application.use_cases.skill.skill_server_checker import (
     SkillServerCheckStatus,
 )
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookStatus
+from skiller.domain.agent.agent_stats_model import (
+    AgentContextEntryStats,
+    AgentContextStats,
+    AgentContextUsageStats,
+    AgentStats,
+)
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,
@@ -202,6 +209,47 @@ class _FakeInterruptAgentUseCase:
         )
 
 
+class _FakeGetAgentStatsUseCase:
+    def __init__(self, *, status: GetAgentStatsStatus = GetAgentStatsStatus.OK) -> None:
+        self.status = status
+        self.calls: list[dict[str, str]] = []
+
+    def execute(self, run_id: str, agent_id: str):  # noqa: ANN201
+        self.calls.append({"run_id": run_id, "agent_id": agent_id})
+        stats = None
+        error = None
+        if self.status == GetAgentStatsStatus.OK:
+            stats = AgentStats(
+                run_id=run_id,
+                agent_id=agent_id,
+                context_id="ctx-1",
+                context=AgentContextStats(
+                    entries=AgentContextEntryStats(
+                        total=3,
+                        user_messages=1,
+                        assistant_messages=1,
+                        tool_calls=1,
+                        tool_results=0,
+                    ),
+                    usage=AgentContextUsageStats(
+                        entries=1,
+                        total_prompt_tokens=100,
+                        total_response_tokens=25,
+                        total_tokens=125,
+                    ),
+                ),
+            )
+        else:
+            error = f"Agent '{agent_id}' not found in run '{run_id}'"
+        return SimpleNamespace(
+            status=self.status,
+            run_id=run_id,
+            agent_id=agent_id,
+            stats=stats,
+            error=error,
+        )
+
+
 class _FakeGetRunStatusUseCase:
     def __init__(self, status: str = "CREATED", current: str | None = None) -> None:
         self.status = status
@@ -254,6 +302,7 @@ def _build_service(
     skill_server_checker_use_case: _FakeSkillServerCheckerUseCase | None = None,
     delete_run_use_case: _FakeDeleteRunUseCase | None = None,
     interrupt_agent_use_case: _FakeInterruptAgentUseCase | None = None,
+    get_agent_stats_use_case: _FakeGetAgentStatsUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RuntimeApplicationService,
@@ -295,6 +344,7 @@ def _build_service(
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
         resume_run_use_case=_FakeResumeRunUseCase(),
         interrupt_agent_use_case=interrupt_agent_use_case or _FakeInterruptAgentUseCase(),
+        get_agent_stats_use_case=get_agent_stats_use_case or _FakeGetAgentStatsUseCase(),
         get_run_status_use_case=status_use_case,
         run_worker_service=run_worker_service,
     )
@@ -345,7 +395,7 @@ def test_create_run_only_creates_run() -> None:
             "step_id": None,
             "step_type": None,
             "agent_sequence": None,
-            "payload": {"skill": "notify_test", "skill_source": "internal"},
+            "payload": {"ref": "notify_test", "source": "internal"},
         }
     ]
 
@@ -416,6 +466,49 @@ def test_interrupt_agent_returns_enqueued_result() -> None:
         "item": {"type": "agent_interrupt"},
     }
     assert interrupt_agent_use_case.calls == ["run-1"]
+
+
+def test_get_agent_stats_returns_context_stats() -> None:
+    get_agent_stats_use_case = _FakeGetAgentStatsUseCase()
+    (
+        service,
+        _append_runtime_event_use_case,
+        _create_run_use_case,
+        _get_start_step_use_case,
+        _run_worker_service,
+        _skill_checker_use_case,
+        _skill_server_checker_use_case,
+    ) = _build_service(get_agent_stats_use_case=get_agent_stats_use_case)
+
+    result = service.get_agent_stats("run-1", "support_agent")
+
+    assert result == {
+        "run_id": "run-1",
+        "agent_id": "support_agent",
+        "status": "OK",
+        "ok": True,
+        "context_id": "ctx-1",
+        "stats": {
+            "context": {
+                "entries": {
+                    "total": 3,
+                    "user_messages": 1,
+                    "assistant_messages": 1,
+                    "tool_calls": 1,
+                    "tool_results": 0,
+                },
+                "usage": {
+                    "entries": 1,
+                    "total_prompt_tokens": 100,
+                    "total_response_tokens": 25,
+                    "total_tokens": 125,
+                },
+            }
+        },
+    }
+    assert get_agent_stats_use_case.calls == [
+        {"run_id": "run-1", "agent_id": "support_agent"}
+    ]
 
 
 def test_start_worker_prepares_created_run() -> None:
@@ -558,6 +651,7 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         remove_webhook_use_case=_FakeRemoveWebhookUseCase(),
         resume_run_use_case=resume_run_use_case,
         interrupt_agent_use_case=_FakeInterruptAgentUseCase(),
+        get_agent_stats_use_case=_FakeGetAgentStatsUseCase(),
         get_run_status_use_case=get_run_status_use_case,
         run_worker_service=run_worker_service,
     )

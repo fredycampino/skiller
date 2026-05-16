@@ -8,7 +8,7 @@ from skiller.domain.event.event_model import (
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.step.skill_step_model import find_skill_step
+from skiller.domain.step.run_step_model import find_run_step
 from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.external_event_store_port import ExternalEventStorePort
 from skiller.domain.wait.match_type import MatchType
@@ -56,9 +56,9 @@ class HandleInputUseCase:
                 error=f"Run '{run_id}' does not have a current step",
             )
 
-        raw_steps = run.skill_snapshot.get("steps", [])
+        raw_steps = run.snapshot.get("steps", [])
         try:
-            _, current_step = find_skill_step(raw_steps, run.current)
+            _, current_step = find_run_step(raw_steps, run.current)
         except ValueError:
             return HandleInputResult(
                 accepted=False,

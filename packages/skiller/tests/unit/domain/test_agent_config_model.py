@@ -1,0 +1,117 @@
+import pytest
+
+from skiller.domain.agent.agent_config_model import (
+    AgentConfig,
+    AgentContextCompactionConfig,
+    AgentContextConfig,
+    AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
+    AgentLLMClientType,
+    AgentLLMConfig,
+    AgentLLMProviderConfig,
+    AgentLLMProviderType,
+    AgentLoopConfig,
+)
+
+pytestmark = pytest.mark.unit
+
+
+def test_agent_config_uses_runtime_defaults_for_agent_sections() -> None:
+    config = AgentConfig(
+        llm=AgentLLMConfig(
+            default_provider="minimax-main",
+            providers={
+                "minimax-main": AgentLLMProviderConfig(
+                    provider=AgentLLMProviderType.MINIMAX,
+                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+                    api_key="secret",
+                    base_url="https://api.minimax.io/v1",
+                    model="MiniMax-M2.5",
+                    timeout_seconds=30.0,
+                    context_window_tokens=1_000_000,
+                ),
+            },
+        ),
+    )
+
+    assert config.llm.default_provider == "minimax-main"
+    assert config.llm.default().api_key == "secret"
+    assert config.loop.max_turns == 10
+    assert config.loop.max_tool_calls == 5
+    assert config.context.compaction.enabled is False
+    assert config.context.compaction.max_total_tokens_ratio == 0.8
+    assert config.event_output.truncate.enabled is True
+    assert config.event_output.truncate.max_text_chars == 600
+    assert config.event_output.truncate.max_json_chars == 4000
+    assert config.event_output.truncate.max_array_items == 20
+
+
+def test_agent_config_accepts_explicit_sections() -> None:
+    config = AgentConfig(
+        llm=AgentLLMConfig(
+            default_provider="minimax-main",
+            providers={
+                "minimax-main": AgentLLMProviderConfig(
+                    provider=AgentLLMProviderType.MINIMAX,
+                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+                    api_key="secret",
+                    base_url="https://api.minimax.io/v1",
+                    model="MiniMax-M2.5",
+                    timeout_seconds=30.0,
+                    context_window_tokens=1_000_000,
+                ),
+            },
+        ),
+        loop=AgentLoopConfig(max_turns=20, max_tool_calls=7),
+        context=AgentContextConfig(
+            compaction=AgentContextCompactionConfig(
+                enabled=True,
+                max_total_tokens_ratio=0.9,
+            ),
+        ),
+        event_output=AgentEventOutputConfig(
+            truncate=AgentEventOutputTruncateConfig(
+                enabled=False,
+                max_text_chars=300,
+                max_json_chars=2000,
+                max_array_items=8,
+            ),
+        ),
+    )
+
+    provider = config.llm.default()
+
+    assert config.llm.default_provider == "minimax-main"
+    assert provider.provider == AgentLLMProviderType.MINIMAX
+    assert provider.client_type == AgentLLMClientType.OPENAI_CHAT_COMPLETIONS
+    assert provider.api_key == "secret"
+    assert provider.base_url == "https://api.minimax.io/v1"
+    assert provider.model == "MiniMax-M2.5"
+    assert provider.timeout_seconds == 30.0
+    assert provider.context_window_tokens == 1_000_000
+    assert config.loop.max_turns == 20
+    assert config.loop.max_tool_calls == 7
+    assert config.context.compaction.enabled is True
+    assert config.context.compaction.max_total_tokens_ratio == 0.9
+    assert config.event_output.truncate.enabled is False
+    assert config.event_output.truncate.max_text_chars == 300
+    assert config.event_output.truncate.max_json_chars == 2000
+    assert config.event_output.truncate.max_array_items == 8
+
+
+def test_agent_llm_config_requires_default_provider_config() -> None:
+    with pytest.raises(RuntimeError, match="Missing default LLM provider config: missing"):
+        AgentLLMConfig(
+            default_provider="missing",
+            providers={
+                "minimax-main": AgentLLMProviderConfig(
+                    provider=AgentLLMProviderType.MINIMAX,
+                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+                    api_key="secret",
+                    base_url="https://api.minimax.io/v1",
+                    model="MiniMax-M2.5",
+                    timeout_seconds=30.0,
+                    context_window_tokens=1_000_000,
+                ),
+            },
+        )

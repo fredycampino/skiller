@@ -1,8 +1,12 @@
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from skiller.application.agent.agent_runner import AgentRunner
+from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
+from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -21,14 +25,12 @@ from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsUseCase
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute.execute_llm_prompt_step import (
-    ExecuteLlmPromptStepUseCase,
-)
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import (
     ExecuteNotifyStepUseCase,
@@ -74,6 +76,9 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 )
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.domain.agent.agent_config_model import AgentLLMClientType
+from skiller.domain.agent.agent_config_port import AgentConfigPort
+from skiller.infrastructure.config.json_agent_config_provider import JsonAgentConfigProvider
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
@@ -84,12 +89,12 @@ from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.fake_llm import FakeLLM
-from skiller.infrastructure.llm.minimax_llm import MinimaxLLM
 from skiller.infrastructure.llm.null_llm import NullLLM
+from skiller.infrastructure.llm.openai_llm import OpenAILLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
-from skiller.infrastructure.tools.process import DefaultToolProcessRunner
+from skiller.infrastructure.tools.process.default_tool_process import DefaultToolProcessRunner
 from skiller.infrastructure.tools.webhooks.default_server_status import DefaultServerStatus
 
 
@@ -117,7 +122,11 @@ def build_runtime_container(
     skill_runner = FilesystemSkillRunner(
         skills_dir=skills_dir,
     )
-    llm = _build_llm(cfg)
+    agent_config = JsonAgentConfigProvider(
+        config_path=Path(cfg.agent_config_path),
+        env=os.environ,
+    )
+    llm = _build_llm(agent_config)
     mcp = DefaultMCP()
     shell_tool = _build_shell_tool(cfg)
     tool_process_runner = DefaultToolProcessRunner()
@@ -167,14 +176,24 @@ def build_runtime_container(
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
     agent_event_output_policy = AgentEventOutputPolicy(
         truncate_enabled=cfg.agent_event_output_truncate_enabled,
-        pii_enabled=cfg.agent_event_output_pii_enabled,
-        secrets_enabled=cfg.agent_event_output_secrets_enabled,
         max_text_chars=cfg.agent_event_output_max_text_chars,
         max_json_chars=cfg.agent_event_output_max_json_chars,
         max_array_items=cfg.agent_event_output_max_array_items,
     )
     agent_feedback = AgentRunnerFeedback()
-    agent_context_publisher = AgentContextPublisher(agent_context_store, agent_feedback)
+    agent_context_publisher = AgentContextPublisher(
+        agent_context_store,
+        store,
+        agent_feedback,
+    )
+    agent_context_manager = AgentContextManager(
+        agent_context_store=agent_context_store,
+        prompt_builder=AgentPromptBuilder(),
+    )
+    get_agent_stats_use_case = GetAgentStatsUseCase(
+        store=store,
+        context_stats=agent_context_store,
+    )
     agent_event_publisher = AgentEventPublisher(
         runtime_event_store,
         AgentEventTruncator(
@@ -188,7 +207,7 @@ def build_runtime_container(
             agent_context_store=agent_context_store,
             llm=llm,
             tool_manager=tool_manager,
-            prompt_builder=AgentPromptBuilder(),
+            context_manager=agent_context_manager,
             error_mapper=AgentErrorMapper(),
             feedback=agent_feedback,
             context_publisher=agent_context_publisher,
@@ -202,16 +221,12 @@ def build_runtime_container(
                 feedback=agent_feedback,
             ),
         ),
+        step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
-            default_max_turns=cfg.agent_loop_max_turns,
-            default_max_tool_calls=cfg.agent_loop_max_tool_calls,
+            agent_config=agent_config,
         ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
-        store=store,
-        llm=llm,
-    )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
         mcp=mcp,
@@ -260,7 +275,6 @@ def build_runtime_container(
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
-        execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
         execute_send_step_use_case=execute_send_step_use_case,
@@ -295,6 +309,7 @@ def build_runtime_container(
         remove_webhook_use_case=remove_webhook_use_case,
         resume_run_use_case=resume_run_use_case,
         interrupt_agent_use_case=interrupt_agent_use_case,
+        get_agent_stats_use_case=get_agent_stats_use_case,
         get_run_status_use_case=get_run_status_use_case,
         run_worker_service=run_worker_service,
     )
@@ -305,29 +320,28 @@ def build_runtime_container(
     )
 
 
-def _build_llm(settings: Settings) -> NullLLM | FakeLLM | MinimaxLLM:
-    provider = settings.llm_provider.strip().lower()
+def _build_llm(agent_config: AgentConfigPort) -> NullLLM | FakeLLM | OpenAILLM:
+    provider = agent_config.get_config().llm.default()
 
-    if provider == "null":
+    if provider.client_type == AgentLLMClientType.NULL:
         return NullLLM()
 
-    if provider == "fake":
+    if provider.client_type == AgentLLMClientType.FAKE:
         return FakeLLM(
-            response_json=settings.fake_llm_response_json,
-            model=settings.fake_llm_model,
+            model=provider.model,
         )
 
-    if provider == "minimax":
-        return MinimaxLLM(
-            api_key=settings.minimax_api_key,
-            base_url=settings.minimax_base_url,
-            model=settings.minimax_model,
-            timeout_seconds=settings.minimax_timeout_seconds,
+    if provider.client_type == AgentLLMClientType.OPENAI_CHAT_COMPLETIONS:
+        return OpenAILLM(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            model=provider.model,
+            timeout_seconds=provider.timeout_seconds,
         )
 
     raise ValueError(
-        f"Unsupported AGENT_LLM_PROVIDER='{settings.llm_provider}'. "
-        "Use 'null', 'fake' or 'minimax'."
+        f"Unsupported LLM client type='{provider.client_type.value}'. "
+        "Use 'null', 'fake' or 'openai_chat_completions'."
     )
 
 

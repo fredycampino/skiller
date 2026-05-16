@@ -1,5 +1,4 @@
 import json
-import sqlite3
 
 from skiller.domain.run.run_model import Run
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
@@ -15,13 +14,14 @@ class SqliteAgentSteeringStore(SqliteRepository, SteeringPort):
                 """
                 SELECT
                   id,
-                  skill_source,
-                  skill_ref,
-                  skill_snapshot_json,
+                  source,
+                  ref,
+                  snapshot_json,
                   status,
                   current,
                   inputs_json,
                   step_executions_json,
+                  agents_json,
                   steering_queue_json,
                   cancel_reason,
                   created_at,
@@ -73,19 +73,3 @@ class SqliteAgentSteeringStore(SqliteRepository, SteeringPort):
                 """,
                 (json.dumps([item.to_dict() for item in queue]), run_id),
             )
-
-
-def ensure_runs_steering_queue_column(conn: sqlite3.Connection) -> None:
-    rows = conn.execute("PRAGMA table_info(runs)").fetchall()
-    column_names = {str(row["name"]) for row in rows}
-    if "steering_queue_json" in column_names:
-        return
-    conn.execute("ALTER TABLE runs ADD COLUMN steering_queue_json TEXT NOT NULL DEFAULT '[]'")
-    if "steering_messages_json" in column_names:
-        conn.execute(
-            """
-            UPDATE runs
-            SET steering_queue_json = steering_messages_json
-            WHERE steering_queue_json = '[]'
-            """
-        )

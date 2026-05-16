@@ -21,8 +21,8 @@ AgentContextEntry(
     sequence: int,
     entry_type: str,
     payload: AgentContextPayload,
+    usage: LLMUsage | None,
     source_step_id: str,
-    idempotency_key: str,
     created_at: str,
 )
 ```
@@ -35,8 +35,8 @@ Fields:
 - `sequence`: monotonic order within `run_id + context_id`.
 - `entry_type`: one of the supported entry types.
 - `payload`: typed entry content used to rebuild the agent prompt. It is persisted as JSON.
+- `usage`: optional LLM token usage. Currently present on assistant response entries.
 - `source_step_id`: `agent` step that created the entry.
-- `idempotency_key`: stable key used to avoid duplicate appends.
 - `created_at`: entry creation timestamp.
 
 Entry types:
@@ -68,8 +68,8 @@ AgentContextPayload =
 | sequence        | INTEGER | NOT NULL                             |
 | entry_type      | TEXT    | NOT NULL                             |
 | payload_json    | TEXT    | NOT NULL, full payload               |
+| usage_json      | TEXT    | NULL, LLM usage for response entries |
 | source_step_id  | TEXT    | NOT NULL                             |
-| idempotency_key | TEXT    | NOT NULL                             |
 | created_at      | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
 +-----------------+---------+--------------------------------------+
 ```
@@ -78,10 +78,7 @@ Indexes:
 
 ```text
 idx_agent_context_entries_context(run_id, context_id, sequence)
-idx_agent_context_entries_idempotency(run_id, context_id, idempotency_key)
 ```
-
-`idx_agent_context_entries_idempotency` should be unique.
 
 ## Entry Payloads
 
@@ -101,7 +98,8 @@ Assistant final message:
   "type": "assistant_message",
   "turn_id": "turn-2",
   "message_type": "final",
-  "text": "The failing test is test_example.py::test_build."
+  "text": "The failing test is test_example.py::test_build.",
+  "total_tokens": 175
 }
 ```
 
@@ -112,9 +110,14 @@ Assistant message that introduces tool calls:
   "type": "assistant_message",
   "turn_id": "turn-1",
   "message_type": "tool_calls",
-  "text": "I will inspect the failing command output before answering."
+  "text": "I will inspect the failing command output before answering.",
+  "total_tokens": 96
 }
 ```
+
+`total_tokens` is the current accumulated token total for the agent context after
+the assistant response usage has been recorded. It is informational metadata for
+observers and must not be sent back to the LLM as prompt content.
 
 Tool call:
 
@@ -169,7 +172,6 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "text": "Check why the tests are failing."
       },
       "source_step_id": "support_agent",
-      "idempotency_key": "user:support_agent:turn-1",
       "created_at": "2026-04-22T21:40:00Z"
     },
     {
@@ -180,10 +182,15 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "type": "assistant_message",
         "turn_id": "turn-1",
         "message_type": "tool_calls",
-        "text": "I will inspect the test output before answering."
+        "text": "I will inspect the test output before answering.",
+        "total_tokens": 96
+      },
+      "usage": {
+        "prompt_tokens": 80,
+        "completion_tokens": 16,
+        "total_tokens": 96
       },
       "source_step_id": "support_agent",
-      "idempotency_key": "assistant:support_agent:turn-1",
       "created_at": "2026-04-22T21:40:03Z"
     },
     {
@@ -201,7 +208,6 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         }
       },
       "source_step_id": "support_agent",
-      "idempotency_key": "tool_call:support_agent:turn-1:call-1",
       "created_at": "2026-04-22T21:40:05Z"
     },
     {
@@ -224,7 +230,6 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "error": null
       },
       "source_step_id": "support_agent",
-      "idempotency_key": "tool_result:support_agent:turn-1:call-1",
       "created_at": "2026-04-22T21:40:08Z"
     },
     {
@@ -235,10 +240,15 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "type": "assistant_message",
         "turn_id": "turn-2",
         "message_type": "final",
-        "text": "The tests fail because `requests` is missing."
+        "text": "The tests fail because `requests` is missing.",
+        "total_tokens": 175
+      },
+      "usage": {
+        "prompt_tokens": 63,
+        "completion_tokens": 16,
+        "total_tokens": 79
       },
       "source_step_id": "support_agent",
-      "idempotency_key": "assistant:support_agent:turn-2",
       "created_at": "2026-04-22T21:40:15Z"
     }
   ]
@@ -250,6 +260,7 @@ This example has one user task, one tool call inside `turn-1`, and one final ass
 `turn_id` groups entries that belong to the same assistant response.
 `tool_call_id` identifies one concrete tool call inside that turn.
 `message_type` distinguishes assistant content that introduces tool calls from final assistant content.
+`total_tokens` is cumulative for the context at the point the assistant message was persisted.
 `parent_sequence` links `tool_call` and `tool_result` entries back to the assistant message of the same turn.
 
 That allows one assistant turn to persist:
@@ -257,31 +268,6 @@ That allows one assistant turn to persist:
 - one assistant content block
 - multiple `tool_call` entries
 - multiple `tool_result` entries
-
-## Idempotency
-
-Agent context appends must be idempotent.
-
-Suggested keys:
-
-```text
-user:<source_step_id>:<turn_id>
-tool_call:<source_step_id>:<turn_id>:<tool_call_id>
-tool_result:<source_step_id>:<turn_id>:<tool_call_id>
-assistant:<source_step_id>:<turn_id>
-```
-
-The uniqueness boundary is:
-
-```text
-run_id + context_id + idempotency_key
-```
-
-This prevents duplicate entries if a worker appends context and then crashes before the run state is
-advanced.
-
-Keep `id` separate from `idempotency_key`: `id` stays a stable row UUID for references and debug,
-while `idempotency_key` can change format and remains unique only within `run_id + context_id`.
 
 ## Multi-Tool Turns
 
@@ -322,4 +308,6 @@ Then reverse the result in memory before sending it to the LLM.
 - `agent_context_entries` stores the internal append-only memory used by the agent loop.
 - `agent_context_entries.payload_json` is the source of truth for each memory entry and may be
   large.
+- `agent_context_entries.usage_json` stores token usage for assistant response entries and is
+  used to calculate context usage stats.
 - `events` remains an observability stream, not the functional source of truth.

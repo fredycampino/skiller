@@ -5,9 +5,6 @@ from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute.execute_llm_prompt_step import (
-    ExecuteLlmPromptStepUseCase,
-)
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import (
     ExecuteNotifyStepUseCase,
@@ -77,7 +74,6 @@ class RunWorkerService:
         render_mcp_config_use_case: RenderMcpConfigUseCase,
         execute_agent_step_use_case: ExecuteAgentStepUseCase,
         execute_assign_step_use_case: ExecuteAssignStepUseCase,
-        execute_llm_prompt_step_use_case: ExecuteLlmPromptStepUseCase,
         execute_mcp_step_use_case: ExecuteMcpStepUseCase,
         execute_notify_step_use_case: ExecuteNotifyStepUseCase,
         execute_switch_step_use_case: ExecuteSwitchStepUseCase,
@@ -95,7 +91,6 @@ class RunWorkerService:
         self.render_mcp_config_use_case = render_mcp_config_use_case
         self.execute_agent_step_use_case = execute_agent_step_use_case
         self.execute_assign_step_use_case = execute_assign_step_use_case
-        self.execute_llm_prompt_step_use_case = execute_llm_prompt_step_use_case
         self.execute_mcp_step_use_case = execute_mcp_step_use_case
         self.execute_notify_step_use_case = execute_notify_step_use_case
         self.execute_send_step_use_case = execute_send_step_use_case
@@ -196,9 +191,6 @@ class RunWorkerService:
                 raise ValueError("shell step executor is not configured")
             return self.execute_shell_step_use_case.execute(current_step)
 
-        if current_step.step_type == StepType.LLM_PROMPT:
-            return self.execute_llm_prompt_step_use_case.execute(current_step)
-
         if current_step.step_type == StepType.MCP:
             render_result = self.render_mcp_config_use_case.execute(current_step)
             if render_result.status != RenderMcpConfigStatus.RENDERED:
@@ -229,7 +221,7 @@ class RunWorkerService:
 
         raise ValueError(
             f"Unsupported step type '{current_step.step_type.value}' in step "
-            f"'{current_step.step_id}': only 'agent', 'assign', 'llm_prompt', 'mcp', "
+            f"'{current_step.step_id}': only 'agent', 'assign', 'mcp', "
             "'notify', 'send', 'shell', "
             "'switch', 'wait_channel', 'wait_input', 'wait_webhook' and 'when' are enabled "
             "in run loop"

@@ -20,8 +20,8 @@ class FakeRunsAdapter:
         return [
             RunsPortItem(
                 id="run-1",
-                skill_source="internal",
-                skill_ref="chat",
+                source="internal",
+                ref="chat",
                 status="WAITING",
                 current="ask_user",
                 created_at="2026-05-04 00:00:00",
@@ -39,8 +39,8 @@ def test_default_runs_port_delegates_to_command_adapter() -> None:
     assert result == [
         RunsPortItem(
             id="run-1",
-            skill_source="internal",
-            skill_ref="chat",
+            source="internal",
+            ref="chat",
             status="WAITING",
             current="ask_user",
             created_at="2026-05-04 00:00:00",

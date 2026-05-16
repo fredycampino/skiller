@@ -12,7 +12,7 @@ mcp:
     transport: stdio
     command: .venv/bin/python
     args:
-      - tests/integration/runtime/fixtures/mcp/test_file_mcp_server.py
+      - packages/skiller/tests/integration/runtime/fixtures/mcp/test_file_mcp_server.py
     cwd: .
     env:
       FILES_ALLOWED_ROOTS: /tmp

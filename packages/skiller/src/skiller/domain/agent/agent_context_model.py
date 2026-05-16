@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, TypeAlias
 
+from skiller.domain.agent.llm_model import LLMUsage
+
 
 class AgentContextEntryType(str, Enum):
     USER_MESSAGE = "user_message"
@@ -21,6 +23,7 @@ class AgentAssistantMessagePayload:
     turn_id: str
     message_type: str
     text: str
+    total_tokens: int | None = None
     type: Literal["assistant_message"] = "assistant_message"
 
 
@@ -63,8 +66,8 @@ class AgentContextEntry:
     sequence: int
     entry_type: AgentContextEntryType
     payload: AgentContextPayload
+    usage: LLMUsage | None
     source_step_id: str
-    idempotency_key: str
     created_at: str
 
     def __post_init__(self) -> None:
@@ -83,12 +86,15 @@ def agent_context_payload_to_dict(payload: AgentContextPayload) -> dict[str, obj
     if isinstance(payload, AgentUserMessagePayload):
         return {"type": payload.type, "text": payload.text}
     if isinstance(payload, AgentAssistantMessagePayload):
-        return {
+        result: dict[str, object] = {
             "type": payload.type,
             "turn_id": payload.turn_id,
             "message_type": payload.message_type,
             "text": payload.text,
         }
+        if payload.total_tokens is not None:
+            result["total_tokens"] = payload.total_tokens
+        return result
     if isinstance(payload, AgentToolCallPayload):
         return {
             "type": payload.type,
@@ -124,6 +130,7 @@ def agent_context_payload_from_dict(
             turn_id=str(value.get("turn_id", "")),
             message_type=str(value.get("message_type", "")),
             text=str(value.get("text", "")),
+            total_tokens=_optional_int(value.get("total_tokens")),
         )
 
     if entry_type == AgentContextEntryType.TOOL_CALL:

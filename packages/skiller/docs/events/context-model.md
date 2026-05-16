@@ -73,7 +73,7 @@ StepExecution(
   "inputs": {},
   "step_executions": {
     "<step_id>": {
-      "step_type": "llm_prompt",
+      "step_type": "agent",
       "input": {},
       "evaluation": {},
       "output": {
@@ -105,7 +105,6 @@ In memory, the runtime uses typed outputs:
 - `WhenOutput`
 - `WaitInputOutput`
 - `WaitWebhookOutput`
-- `LlmPromptOutput`
 - `McpOutput`
 
 Publicly, every output is normalized to:
@@ -259,22 +258,6 @@ Rules:
     "key": "42",
     "payload": {
       "merged": true
-    }
-  },
-  "body_ref": null
-}
-```
-
-### `llm_prompt`
-
-Normal:
-
-```json
-{
-  "text": "hello back",
-  "value": {
-    "data": {
-      "reply": "hello back"
     }
   },
   "body_ref": null

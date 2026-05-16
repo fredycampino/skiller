@@ -223,7 +223,7 @@ All notable changes to this project should be summarized here before a version i
 - Added `switch` as a runtime step for exact-value routing by `step_id`.
 - Added `when` as a runtime step for ordered conditional branching over a single value.
 - Added manual CLI flows for `switch` and `when`, both included in `tests/e2e/cli_all.sh`.
-- Added demo skills `story_router` and `webhook_signal_oracle` to showcase branching, webhook resume, and LLM-driven routing.
+- Added demo skills to showcase branching and webhook resume.
 
 ### Changed
 - Closed the control-flow spike around `if` by formalizing `switch` and `when` as the branching primitives for `1.0.x`.
@@ -241,13 +241,13 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - `switch` persists minimal routing output as `{"value": ..., "next": ...}` and emits `SWITCH_DECISION`.
 - `when` persists minimal routing output as `{"value": ..., "next": ...}` and emits `WHEN_DECISION` with branch/operator metadata for traceability.
-- `webhook_signal_oracle` requires registering the `signal` webhook channel before sending signed HTTP requests to the webhooks server.
+- Webhook examples require registering the matching webhook channel before sending signed HTTP requests to the webhooks server.
 
 ## 1.0.0-alpha.1 - 2026-03-11
 
 ### Added
-- Added runtime support for `llm_prompt` and `assign` steps.
-- Added manual shell-based E2E CLI flows for `notify`, `assign`, `llm_prompt`, `mcp`, and `wait_webhook`.
+- Added runtime support for `assign` steps.
+- Added manual shell-based E2E CLI flows for `notify`, `assign`, `mcp`, and `wait_webhook`.
 - Added a focused store test to validate removal of the legacy `current_step` column.
 
 ### Changed
@@ -258,7 +258,7 @@ All notable changes to this project should be summarized here before a version i
 
 ### Fixed
 - Restored reliable MCP `stdio` verification for local CLI flows.
-- Made the manual `llm_prompt` CLI skip cleanly when MiniMax credentials are missing.
+- Tightened manual CLI behavior when provider credentials are missing.
 
 ### Removed
 - Removed the legacy `current_step` field from runtime state and SQLite persistence.

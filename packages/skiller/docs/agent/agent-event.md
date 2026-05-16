@@ -63,7 +63,8 @@ Emitted when the assistant returns visible content during an agent turn.
     "type": "assistant_message",
     "turn_id": "turn-1",
     "message_type": "tool_calls",
-    "text": "I will inspect the branch state before continuing."
+    "text": "I will inspect the branch state before continuing.",
+    "total_tokens": 96
   }
 }
 ```
@@ -73,6 +74,8 @@ Rules:
 - one assistant turn can emit one assistant message event.
 - `message_type = "tool_calls"` means the same turn also emitted one or more tool calls.
 - `message_type = "final"` means the turn ended with assistant content and no tool calls.
+- `total_tokens` is the accumulated token total for the agent context after the
+  assistant response usage was recorded.
 - if the provider returns no visible content, this event is omitted.
 
 ## `AGENT_TOOL_CALL`
@@ -217,7 +220,8 @@ finish reason in its output data.
       "type": "assistant_message",
       "turn_id": "turn-7",
       "message_type": "tool_calls",
-      "text": "I will inspect the branch state and recent commits."
+      "text": "I will inspect the branch state and recent commits.",
+      "total_tokens": 240
     }
   },
   {

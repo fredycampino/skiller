@@ -164,7 +164,7 @@ Runtime events describe run and step lifecycle transitions.
   "run_id": "run-123",
   "type": "STEP_STARTED",
   "step_id": "answer",
-  "step_type": "llm_prompt",
+  "step_type": "agent",
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:12Z",
   "payload": {}
@@ -180,7 +180,7 @@ Runtime events describe run and step lifecycle transitions.
   "run_id": "run-123",
   "type": "STEP_SUCCESS",
   "step_id": "answer",
-  "step_type": "llm_prompt",
+  "step_type": "agent",
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:15Z",
   "payload": {
@@ -207,11 +207,11 @@ Runtime events describe run and step lifecycle transitions.
   "run_id": "run-123",
   "type": "STEP_ERROR",
   "step_id": "answer",
-  "step_type": "llm_prompt",
+  "step_type": "agent",
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:16Z",
   "payload": {
-    "error": "LLM step 'answer' returned invalid JSON"
+    "error": "Agent step 'answer' failed"
   }
 }
 ```
@@ -367,14 +367,16 @@ Rules:
     "type": "assistant_message",
     "turn_id": "turn-1",
     "message_type": "tool_calls",
-    "text": "I will inspect the branch state before continuing."
+    "text": "I will inspect the branch state before continuing.",
+    "total_tokens": 96
   }
 }
 ```
 
 `payload.message_type` is `tool_calls` when the assistant message introduces
 one or more tool calls. It is `final` when the assistant message is the final
-agent answer.
+agent answer. `payload.total_tokens` is the accumulated token total for the
+agent context after the assistant response usage was recorded.
 
 ### `AGENT_TOOL_CALL`
 

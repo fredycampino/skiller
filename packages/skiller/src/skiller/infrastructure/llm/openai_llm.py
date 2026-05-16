@@ -38,6 +38,7 @@ class OpenAILLM(LLMPort):
             )
 
         kwargs = to_openai_kwargs(request, default_model=self.model)
+        kwargs["extra_body"] = {"reasoning_split": True}
 
         try:
             response = self.client.chat.completions.create(**kwargs)

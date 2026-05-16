@@ -46,14 +46,14 @@ def _build_run(
     *,
     status: str = RunStatus.CREATED.value,
     current: str | None = "show_message",
-    skill_snapshot: object | None = None,
+    snapshot: object | None = None,
 ) -> Run:
     return Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="demo",
-        skill_snapshot=skill_snapshot
-        if skill_snapshot is not None
+        source="internal",
+        ref="demo",
+        snapshot=snapshot
+        if snapshot is not None
         else {"start": "show_message", "steps": [{"notify": "show_message"}]},
         status=status,
         current=current,
@@ -109,7 +109,7 @@ def test_returns_invalid_skill_when_current_is_missing() -> None:
 
 def test_returns_ready_with_rendered_step() -> None:
     run = _build_run(current="s2")
-    run.skill_snapshot = {
+    run.snapshot = {
         "start": "s2",
         "steps": [{"notify": "show_message"}, {"mcp": "s2", "server": "local-mcp"}],
     }
@@ -129,26 +129,9 @@ def test_returns_ready_with_rendered_step() -> None:
     assert skill_runner.load_calls == []
 
 
-def test_returns_ready_with_llm_prompt_step_type() -> None:
-    run = _build_run(current="analyze")
-    run.skill_snapshot = {
-        "start": "analyze",
-        "steps": [{"llm_prompt": "analyze", "prompt": "hello"}],
-    }
-    use_case = RenderCurrentStepUseCase(
-        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
-    )
-
-    result = use_case.execute("run-1")
-
-    assert result.status == CurrentStepStatus.READY
-    assert result.current_step is not None
-    assert result.current_step.step_type == StepType.LLM_PROMPT
-
-
 def test_resolves_agent_system_file() -> None:
     run = _build_run(current="support_agent")
-    run.skill_snapshot = {
+    run.snapshot = {
         "start": "support_agent",
         "steps": [
             {
@@ -171,7 +154,7 @@ def test_resolves_agent_system_file() -> None:
 
 def test_returns_ready_with_assign_step_type() -> None:
     run = _build_run(current="prepare")
-    run.skill_snapshot = {
+    run.snapshot = {
         "start": "prepare",
         "steps": [{"assign": "prepare", "values": {"action": "retry"}}],
     }
@@ -188,7 +171,7 @@ def test_returns_ready_with_assign_step_type() -> None:
 
 def test_returns_ready_with_switch_step_type() -> None:
     run = _build_run(current="decide")
-    run.skill_snapshot = {
+    run.snapshot = {
         "start": "decide",
         "steps": [
             {
@@ -212,7 +195,7 @@ def test_returns_ready_with_switch_step_type() -> None:
 
 def test_returns_ready_with_when_step_type() -> None:
     run = _build_run(current="decide")
-    run.skill_snapshot = {
+    run.snapshot = {
         "start": "decide",
         "steps": [
             {
@@ -235,7 +218,7 @@ def test_returns_ready_with_when_step_type() -> None:
 
 
 def test_returns_invalid_skill_when_skill_shape_is_wrong() -> None:
-    run = _build_run(skill_snapshot=[])  # type: ignore[arg-type]
+    run = _build_run(snapshot=[])  # type: ignore[arg-type]
     use_case = RenderCurrentStepUseCase(
         store=_FakeStore(run),
         skill_runner=_FakeSkillRunner(["not-a-dict"]),
@@ -249,7 +232,7 @@ def test_returns_invalid_skill_when_skill_shape_is_wrong() -> None:
 
 def test_returns_invalid_skill_when_current_id_does_not_exist() -> None:
     run = _build_run(current="missing")
-    run.skill_snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
+    run.snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
     use_case = RenderCurrentStepUseCase(
         store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
     )

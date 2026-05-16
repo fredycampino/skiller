@@ -1,7 +1,12 @@
 import pytest
+from helpers.agent_config import FakeAgentConfigPort
 from helpers.agent_runner import build_agent_runner
 
-from skiller.application.agent.config.step_config_reader import AGENT_RUNTIME_SYSTEM
+from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
+from skiller.application.agent.config.step_config_reader import (
+    AGENT_RUNTIME_SYSTEM,
+    AgentStepConfigReader,
+)
 from skiller.application.agent.tools.tool_manager import PreparedTool, ToolPrepareResult
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -13,12 +18,18 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
 )
+from skiller.domain.agent.agent_stats_model import (
+    AgentContextEntryStats,
+    AgentContextStats,
+    AgentContextUsageStats,
+)
 from skiller.domain.agent.llm_model import (
     LLMMessage,
     LLMRequest,
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMUsage,
 )
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
@@ -77,7 +88,6 @@ class _FakeAgentContextStore:
         self,
         *,
         scope,
-        turn_id: str,
         text: str,
     ) -> AgentContextEntry:
         return self._append_entry(
@@ -86,7 +96,6 @@ class _FakeAgentContextStore:
             entry_type=AgentContextEntryType.USER_MESSAGE,
             payload={"type": "user_message", "text": text},
             source_step_id=scope.agent_id,
-            idempotency_key=f"user:{scope.agent_id}:{turn_id}",
         )
 
     def append_assistant_message(
@@ -96,6 +105,7 @@ class _FakeAgentContextStore:
         turn_id: str,
         message_type: str,
         text: str,
+        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
@@ -106,20 +116,17 @@ class _FakeAgentContextStore:
                 "turn_id": turn_id,
                 "message_type": message_type,
                 "text": text,
+                "total_tokens": usage.total_tokens if usage is not None else 0,
             },
+            usage=usage,
             source_step_id=scope.agent_id,
-            idempotency_key=f"assistant:{scope.agent_id}:{turn_id}",
         )
 
     def append_tool_call(
         self,
         *,
         scope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        tool: str,
-        args: dict[str, object],
+        tool_call,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
@@ -127,34 +134,31 @@ class _FakeAgentContextStore:
             entry_type=AgentContextEntryType.TOOL_CALL,
             payload={
                 "type": "tool_call",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call_id,
-                "tool": tool,
-                "args": args,
+                "turn_id": tool_call.turn_id,
+                "parent_sequence": tool_call.parent_sequence,
+                "tool_call_id": tool_call.tool_call_id,
+                "tool": tool_call.tool,
+                "args": tool_call.args,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def append_tool_result(
         self,
         *,
         scope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        result: ToolResult,
+        tool_result,
     ) -> AgentContextEntry:
+        result = tool_result.result
         return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             payload={
                 "type": "tool_result",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call_id,
+                "turn_id": tool_result.turn_id,
+                "parent_sequence": tool_result.parent_sequence,
+                "tool_call_id": tool_result.tool_call_id,
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,
@@ -162,7 +166,6 @@ class _FakeAgentContextStore:
                 "error": result.error,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def _append_entry(
@@ -172,8 +175,8 @@ class _FakeAgentContextStore:
         context_id: str,
         entry_type: AgentContextEntryType,
         payload: dict[str, object],
+        usage: LLMUsage | None = None,
         source_step_id: str,
-        idempotency_key: str,
     ) -> AgentContextEntry:
         self.appended.append(
             {
@@ -182,7 +185,6 @@ class _FakeAgentContextStore:
                 "entry_type": entry_type,
                 "payload": payload,
                 "source_step_id": source_step_id,
-                "idempotency_key": idempotency_key,
             }
         )
         entry = AgentContextEntry(
@@ -192,8 +194,8 @@ class _FakeAgentContextStore:
             sequence=len(self.entries) + 1,
             entry_type=entry_type,
             payload=payload,
+            usage=usage,
             source_step_id=source_step_id,
-            idempotency_key=idempotency_key,
             created_at="2026-04-22T00:00:00Z",
         )
         self.entries.append(entry)
@@ -205,6 +207,24 @@ class _FakeAgentContextStore:
             for entry in self.entries
             if entry.run_id == scope.run_id and entry.context_id == scope.context_id
         ]
+
+    def get_stats(self, *, scope) -> AgentContextStats:
+        _ = scope
+        return AgentContextStats(
+            entries=AgentContextEntryStats(
+                total=0,
+                user_messages=0,
+                assistant_messages=0,
+                tool_calls=0,
+                tool_results=0,
+            ),
+            usage=AgentContextUsageStats(
+                entries=0,
+                total_prompt_tokens=0,
+                total_response_tokens=0,
+                total_tokens=0,
+            ),
+        )
 
     def next_turn_id(self, *, scope) -> str:
         entries = self.list_entries(scope=scope)
@@ -376,7 +396,14 @@ def _build_use_case(
         tool_manager=tool_manager,
         append_runtime_event_use_case=append_runtime_event_use_case,
     )
-    return ExecuteAgentStepUseCase(store=store, runner=runner)
+    return ExecuteAgentStepUseCase(
+        store=store,
+        runner=runner,
+        step_mapper=AgentStepMapper(),
+        config_reader=AgentStepConfigReader(
+            agent_config=FakeAgentConfigPort(),
+        ),
+    )
 
 
 def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
@@ -430,6 +457,7 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
         "turn_id": "turn-1",
         "message_type": "final",
         "text": "Hello back.",
+        "total_tokens": 0,
     }
     assert len(llm.calls) == 1
     _assert_system_message_contains(llm.calls[0].messages[0], step_system="Be useful.")

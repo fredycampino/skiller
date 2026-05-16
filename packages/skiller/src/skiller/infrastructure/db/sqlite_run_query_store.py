@@ -18,8 +18,8 @@ class SqliteRunQueryStore(SqliteRepository):
         query = """
             SELECT
               runs.id,
-              runs.skill_source,
-              runs.skill_ref,
+              runs.source,
+              runs.ref,
               runs.status,
               runs.current,
               runs.created_at,
@@ -56,8 +56,8 @@ class SqliteRunQueryStore(SqliteRepository):
             wait_detail = f"{source_name}:{match_key}"
         return RunListItem(
             id=str(row["id"]),
-            skill_source=str(row["skill_source"]),
-            skill_ref=str(row["skill_ref"]),
+            source=str(row["source"]),
+            ref=str(row["ref"]),
             status=str(row["status"]),
             current=(str(row["current"]) if row["current"] is not None else None),
             created_at=str(row["created_at"]),

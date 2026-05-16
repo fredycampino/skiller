@@ -1,0 +1,20 @@
+name: agent_multi_tools_e2e
+description: "Agent executes three shell commands across three tool turns"
+version: "0.1"
+start: shell_three_times
+
+inputs: {}
+
+steps:
+  - agent: shell_three_times
+    system: |
+      You are a deterministic test agent.
+      Follow the task exactly and keep responses minimal.
+    task: |
+      Call the shell tool with command exactly pwd three times total.
+      Make at most one shell call per assistant response.
+      After the third shell result, return final text exactly done.
+    tools:
+      - shell
+    max_turns: 4
+    max_tool_calls: 2

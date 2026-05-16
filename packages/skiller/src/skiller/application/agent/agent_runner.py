@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
-from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.runner_state import (
     AgentRunnerRequest,
     AgentRunnerResult,
@@ -37,7 +37,7 @@ class AgentRunner:
         agent_context_store: AgentContextStorePort,
         llm: LLMPort,
         tool_manager: ToolManager,
-        prompt_builder: AgentPromptBuilder,
+        context_manager: AgentContextManager,
         error_mapper: AgentErrorMapper,
         feedback: AgentRunnerFeedback,
         context_publisher: AgentContextPublisher,
@@ -47,7 +47,7 @@ class AgentRunner:
         self.agent_context_store = agent_context_store
         self.llm = llm
         self.tool_manager = tool_manager
-        self.prompt_builder = prompt_builder
+        self.context_manager = context_manager
         self.error_mapper = error_mapper
         self.feedback = feedback
         self.context_publisher = context_publisher
@@ -56,23 +56,22 @@ class AgentRunner:
 
     def execute(self, request: AgentRunnerRequest) -> AgentRunnerResult:
         state = self._build_runner_state(request)
-        self._append_initial_user_task(state=state)
+        entry = self.context_publisher.publish_user_message(
+            scope=state,
+            text=state.config.task,
+        )
+        self.context_publisher.attach(entry)
 
-        turn_loop = AgentLoop(max_turns=state.config.max_turns)
+        turn_loop = AgentLoop(max_turns=state.config.config.loop.max_turns)
 
         while turn_loop.has_next():
             self._append_last_turn_warning_if_needed(
                 state=state,
                 turn_loop=turn_loop,
             )
-            entries = self.agent_context_store.list_entries(scope=state)
-            turn_id = self.agent_context_store.next_turn_id(scope=state)
-            llm_request = self.prompt_builder.build_request(
-                system=state.config.system,
-                entries=entries,
-                tools=state.enabled_tools,
-            )
-            response = self.llm.generate(llm_request)
+            context_request = self.context_manager.build_llm_request(state=state)
+            turn_id = context_request.turn_id
+            response = self.llm.generate(context_request.llm_request)
             if response.ok is False:
                 state.fail_llm_request(
                     self.error_mapper.llm_request(
@@ -100,6 +99,7 @@ class AgentRunner:
                     scope=state,
                     turn_id=turn_id,
                     text=final_text,
+                    usage=response.usage,
                 )
                 self.event_publisher.emit_assistant_message(entry=entry)
                 state.finish_final(final_text)
@@ -131,6 +131,7 @@ class AgentRunner:
                     scope=state,
                     turn_id=turn_id,
                     text=final_text,
+                    usage=response.usage,
                 )
                 self.event_publisher.emit_assistant_message(entry=entry)
                 state.finish_final(final_text)
@@ -148,7 +149,6 @@ class AgentRunner:
             turn_id = self.agent_context_store.next_turn_id(scope=state)
             self.context_publisher.publish_user_message(
                 scope=state,
-                turn_id=turn_id,
                 text=self.feedback.max_turns_exhausted(),
             )
             state.finish_max_turns_exhausted()
@@ -179,17 +179,6 @@ class AgentRunner:
             ),
         )
 
-    def _append_initial_user_task(
-        self,
-        *,
-        state: AgentRunnerState,
-    ) -> None:
-        self.context_publisher.publish_user_message(
-            scope=state,
-            turn_id=self.agent_context_store.next_turn_id(scope=state),
-            text=state.config.task,
-        )
-
     def _build_tool_execution_request(
         self,
         *,
@@ -204,8 +193,8 @@ class AgentRunner:
             context_id=state.context_id,
             turn_id=turn_id,
             response=response,
-            allowed_tools=state.config.tools,
-            max_tool_calls=state.config.max_tool_calls,
+            allowed_tools=list(state.config.tools),
+            max_tool_calls=state.config.config.loop.max_tool_calls,
             turn_loop=turn_loop,
         )
 
@@ -232,7 +221,6 @@ class AgentRunner:
             return
         self.context_publisher.publish_user_message(
             scope=state,
-            turn_id=self.agent_context_store.next_turn_id(scope=state),
             text=warning,
         )
 
@@ -240,8 +228,8 @@ class AgentRunner:
         self,
         *,
         agent_id: str,
-        tools: list[str],
+        tools: tuple[str, ...],
     ) -> list[ToolConfig]:
         if not tools:
             return []
-        return self.tool_manager.get_tool_configs(tools)
+        return self.tool_manager.get_tool_configs(list(tools))

@@ -10,7 +10,6 @@ Current step types:
 - `send`
 - `notify`
 - `shell`
-- `llm_prompt`
 - `mcp`
 - `switch`
 - `wait_channel`
@@ -144,7 +143,6 @@ skiller run ant
 ### External execution
 
 - `shell`
-- `llm_prompt`
 - `mcp`
 
 ### Persistent waiting
@@ -233,7 +231,6 @@ Core guides:
 
 Step references:
 - [`packages/skiller/docs/steps/assign.md`](packages/skiller/docs/steps/assign.md)
-- [`packages/skiller/docs/steps/llm_prompt.md`](packages/skiller/docs/steps/llm_prompt.md)
 - [`packages/skiller/docs/steps/shell.md`](packages/skiller/docs/steps/shell.md)
 - [`packages/skiller/docs/steps/notify.md`](packages/skiller/docs/steps/notify.md)
 - [`packages/skiller/docs/steps/switch.md`](packages/skiller/docs/steps/switch.md)

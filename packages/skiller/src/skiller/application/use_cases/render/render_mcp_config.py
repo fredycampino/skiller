@@ -41,20 +41,20 @@ class RenderMcpConfigUseCase:
         if run is None:
             return self._invalid(f"Run '{next_step.run_id}' not found")
 
-        skill = run.skill_snapshot
+        skill = run.snapshot
         if not isinstance(skill, dict):
-            return self._invalid(f"Invalid skill format for '{run.skill_ref}'. Expected an object.")
+            return self._invalid(f"Invalid skill format for '{run.ref}'. Expected an object.")
 
         raw_declared = skill.get("mcp", [])
         if not isinstance(raw_declared, list):
             return self._invalid(
-                f"Invalid MCP configuration for skill '{run.skill_ref}'. Expected a list."
+                f"Invalid MCP configuration for skill '{run.ref}'. Expected a list."
             )
 
         raw_config = self._find_server_config(raw_declared, server_name)
         if raw_config is None:
             return self._invalid(
-                f"MCP server '{server_name}' not declared in skill '{run.skill_ref}'"
+                f"MCP server '{server_name}' not declared in skill '{run.ref}'"
             )
 
         rendered = self.skill_runner.render_step(raw_config, next_step.context.to_dict())

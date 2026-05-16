@@ -329,7 +329,7 @@ class ConsoleScreen(App[str]):
         return RunsTableRow(
             mode=_resolve_run_row_mode(run),
             status=_resolve_run_row_status(run),
-            skill=run.skill_ref,
+            skill=run.ref,
             updated_at=_format_run_updated_at(run.updated_at),
             run_id=run.id,
         )

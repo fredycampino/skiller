@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from skiller.application.agent.config.step_config_reader import AgentStepConfig
+from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
 from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.tool.tool_contract import ToolConfig
@@ -12,7 +12,7 @@ class AgentRunnerState:
     run_id: str
     agent_id: str
     context_id: str
-    config: AgentStepConfig
+    config: AgentRunnerConfig
     enabled_tools: list[ToolConfig]
     final_text: str | None = None
     finish: AgentRunnerFinish | None = None
@@ -65,7 +65,7 @@ class AgentRunnerState:
 class AgentRunnerRequest:
     run_id: str
     step_id: str
-    config: AgentStepConfig
+    config: AgentRunnerConfig
 
 
 @dataclass(frozen=True)

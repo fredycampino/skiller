@@ -47,8 +47,8 @@ def _run_json_command(invoker: CliInvoker, *args: str) -> Any:
 def _parse_run_list_item(payload: dict[str, Any]) -> RunsPortItem:
     return RunsPortItem(
         id=str(payload.get("id", "")).strip(),
-        skill_source=str(payload.get("skill_source", "")).strip(),
-        skill_ref=str(payload.get("skill_ref", "")).strip(),
+        source=str(payload.get("source", "")).strip(),
+        ref=str(payload.get("ref", "")).strip(),
         status=str(payload.get("status", "")).strip(),
         current=_optional_text(payload.get("current")),
         created_at=str(payload.get("created_at", "")).strip(),

@@ -198,13 +198,13 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            usage=None,
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="final",
                 text="Done.",
             ),
             source_step_id="support_agent",
-            idempotency_key="assistant:support_agent:turn-4",
             created_at="2026-05-15T00:00:00Z",
         )
     )

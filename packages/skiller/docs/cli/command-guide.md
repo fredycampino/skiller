@@ -2,11 +2,20 @@
 
 This guide documents the current `skiller` CLI commands and how they fit into the runtime flow.
 
+See [`commands/catalogue.md`](commands/catalogue.md) for the command status catalogue.
+
 Terminology used in this guide:
 - transcript = the user-facing execution view rendered by the TUI
 - `/logs` = the raw debug event stream
 
 ## Command Overview
+
+### General
+
+```bash
+skiller --help
+skiller --version
+```
 
 ### Run lifecycle
 
@@ -22,7 +31,6 @@ skiller resume <run_id>
 skiller status <run_id>
 skiller runs [--limit N] [--status WAITING] [--status FAILED]
 skiller logs <run_id>
-skiller watch <run_id>
 skiller delete <run_id>
 ```
 
@@ -54,12 +62,6 @@ skiller worker resume <run_id>
 
 ```bash
 skiller agent interrupt <run_id>
-```
-
-### Setup
-
-```bash
-skiller init-db
 ```
 
 ### Configuration
@@ -137,16 +139,12 @@ skiller runs --status WAITING
 skiller runs --status FAILED --limit 50
 ```
 
+Command contract: [`commands/runs.md`](./commands/runs.md).
+
 Raw event log:
 
 ```bash
 skiller logs <run_id>
-```
-
-Live progress until the run stabilizes:
-
-```bash
-skiller watch <run_id>
 ```
 
 Delete a run and all database rows tied to it:
@@ -158,15 +156,8 @@ skiller delete <run_id>
 This is a destructive cleanup command. It removes the run, runtime events, waits, external
 event records, deduplication receipts for those events, and persisted execution output bodies.
 
-`watch`:
-- polls `status`
-- reads new events from `logs`
-- prints progress to `stderr`
-- returns final JSON to `stdout`
-- stops on `WAITING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`
-
 Rule of thumb:
-- use `watch` to follow a run as it evolves
+- use `status` for current run state
 - use `logs` when you need the raw event payloads
 
 ## Interrupt the current agent turn
@@ -190,6 +181,9 @@ What it does:
 - persists the input event
 - matches it against the waiting run
 - marks the run resumable
+- dispatches worker resume for matched runs
+
+Command contract: [`commands/input.md`](./commands/input.md).
 
 If needed, you can resume explicitly:
 
@@ -197,12 +191,14 @@ If needed, you can resume explicitly:
 skiller resume <run_id>
 ```
 
+Command contract: [`commands/resume.md`](./commands/resume.md).
+
 Typical inspection flow:
 
 ```bash
 skiller status <run_id>
 skiller input receive <run_id> --text "database timeout"
-skiller watch <run_id>
+skiller status <run_id>
 ```
 
 ## Resume a waiting run with a webhook
@@ -230,6 +226,8 @@ Optional deduplication:
 ```bash
 skiller webhook receive github-ci 42 --json '{"ok": true}' --dedup-key ci-42
 ```
+
+Command contract: [`commands/webhook.md`](./commands/webhook.md).
 
 ## Worker commands
 
@@ -289,6 +287,7 @@ Notes:
 - `server start` reports whether the running server is managed by Skiller or just already reachable on the local endpoint
 
 Detailed guide:
+- [`commands/server.md`](./commands/server.md)
 - [`tool-server.md`](tool-server.md)
 
 ### `cloudflared`
@@ -375,24 +374,6 @@ Examples:
 skiller delete <run_id>
 ```
 
-### `watch`
-
-Best used for:
-- following a run live
-- seeing the execution transcript evolve
-- waiting until the run stabilizes
-
-Examples:
-
-```bash
-skiller watch <run_id>
-```
-
-Notes:
-- `watch` returns structured JSON on `stdout`
-- `watch` may print compact progress lines to `stderr` for direct CLI usage
-- the TUI transcript should render from structured `events`, not from `stderr` text
-
 ### `input receive`
 
 Used only for runs blocked on `wait_input`.
@@ -419,9 +400,9 @@ skiller webhook receive github-ci build-42 --json '{"status": "ok"}'
 
 ```bash
 skiller run ant
-skiller watch <run_id>
+skiller status <run_id>
 skiller input receive <run_id> --text "hola"
-skiller watch <run_id>
+skiller status <run_id>
 ```
 
 ### Debug flow
@@ -429,7 +410,6 @@ skiller watch <run_id>
 ```bash
 skiller status <run_id>
 skiller logs <run_id>
-skiller watch <run_id>
 ```
 
 ### Waiting webhook flow
@@ -438,5 +418,5 @@ skiller watch <run_id>
 skiller run --file ./wait_webhook.yaml --arg key=42
 skiller status <run_id>
 skiller webhook receive github-ci 42 --json '{"ok": true}'
-skiller watch <run_id>
+skiller status <run_id>
 ```

@@ -68,6 +68,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
         {
             "model": "gpt-5.2",
             "messages": [{"role": "user", "content": "hello"}],
+            "extra_body": {"reasoning_split": True},
         }
     ]
     assert result.ok is True

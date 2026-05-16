@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -20,22 +20,40 @@ class SkillSource(str, Enum):
 
 
 @dataclass
+class RunAgent:
+    agent_id: str
+    context_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "context_id": self.context_id,
+        }
+
+
+@dataclass
 class Run:
     id: str
-    skill_source: str
-    skill_ref: str
-    skill_snapshot: dict[str, Any]
+    source: str
+    ref: str
+    snapshot: dict[str, Any]
     status: str
     current: str | None
     context: RunContext
     created_at: str
     updated_at: str
+    agents: dict[str, RunAgent] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "skill_source": self.skill_source,
-            "skill_ref": self.skill_ref,
+            "source": self.source,
+            "ref": self.ref,
+            "snapshot": self.snapshot,
+            "agents": {
+                agent_id: agent.to_dict()
+                for agent_id, agent in self.agents.items()
+            },
             "status": self.status,
             "current": self.current,
             "context": self.context.to_dict(),

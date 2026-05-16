@@ -1,8 +1,8 @@
 import pytest
+from helpers.agent_config import agent_runner_config
 from helpers.agent_runner import build_agent_runner
 
 from skiller.application.agent.agent_runner import AgentRunner
-from skiller.application.agent.config.step_config_reader import AgentStepConfig
 from skiller.application.agent.runner_state import AgentRunnerRequest
 from skiller.application.agent.tools.tool_manager import (
     PreparedTool,
@@ -15,12 +15,18 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
 )
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
+from skiller.domain.agent.agent_stats_model import (
+    AgentContextEntryStats,
+    AgentContextStats,
+    AgentContextUsageStats,
+)
 from skiller.domain.agent.llm_model import (
     LLMMessage,
     LLMRequest,
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMUsage,
 )
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
@@ -47,7 +53,6 @@ class _FakeAgentContextStore:
         self,
         *,
         scope,
-        turn_id: str,
         text: str,
     ) -> AgentContextEntry:
         return self._append_entry(
@@ -56,7 +61,6 @@ class _FakeAgentContextStore:
             entry_type=AgentContextEntryType.USER_MESSAGE,
             payload={"type": "user_message", "text": text},
             source_step_id=scope.agent_id,
-            idempotency_key=f"user:{scope.agent_id}:{turn_id}",
         )
 
     def append_assistant_message(
@@ -66,6 +70,7 @@ class _FakeAgentContextStore:
         turn_id: str,
         message_type: str,
         text: str,
+        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
@@ -76,20 +81,17 @@ class _FakeAgentContextStore:
                 "turn_id": turn_id,
                 "message_type": message_type,
                 "text": text,
+                "total_tokens": usage.total_tokens if usage is not None else 0,
             },
+            usage=usage,
             source_step_id=scope.agent_id,
-            idempotency_key=f"assistant:{scope.agent_id}:{turn_id}",
         )
 
     def append_tool_call(
         self,
         *,
         scope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        tool: str,
-        args: dict[str, object],
+        tool_call,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=scope.run_id,
@@ -97,34 +99,31 @@ class _FakeAgentContextStore:
             entry_type=AgentContextEntryType.TOOL_CALL,
             payload={
                 "type": "tool_call",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call_id,
-                "tool": tool,
-                "args": args,
+                "turn_id": tool_call.turn_id,
+                "parent_sequence": tool_call.parent_sequence,
+                "tool_call_id": tool_call.tool_call_id,
+                "tool": tool_call.tool,
+                "args": tool_call.args,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_call:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def append_tool_result(
         self,
         *,
         scope,
-        turn_id: str,
-        parent_sequence: int | None,
-        tool_call_id: str,
-        result: ToolResult,
+        tool_result,
     ) -> AgentContextEntry:
+        result = tool_result.result
         return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             payload={
                 "type": "tool_result",
-                "turn_id": turn_id,
-                "parent_sequence": parent_sequence,
-                "tool_call_id": tool_call_id,
+                "turn_id": tool_result.turn_id,
+                "parent_sequence": tool_result.parent_sequence,
+                "tool_call_id": tool_result.tool_call_id,
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,
@@ -132,7 +131,6 @@ class _FakeAgentContextStore:
                 "error": result.error,
             },
             source_step_id=scope.agent_id,
-            idempotency_key=f"tool_result:{scope.agent_id}:{turn_id}:{tool_call_id}",
         )
 
     def _append_entry(
@@ -142,8 +140,8 @@ class _FakeAgentContextStore:
         context_id: str,
         entry_type: AgentContextEntryType,
         payload: dict[str, object],
+        usage: LLMUsage | None = None,
         source_step_id: str,
-        idempotency_key: str,
     ) -> AgentContextEntry:
         self.appended.append(
             {
@@ -152,7 +150,6 @@ class _FakeAgentContextStore:
                 "entry_type": entry_type,
                 "payload": payload,
                 "source_step_id": source_step_id,
-                "idempotency_key": idempotency_key,
             }
         )
         entry = AgentContextEntry(
@@ -162,8 +159,8 @@ class _FakeAgentContextStore:
             sequence=len(self.entries) + 1,
             entry_type=entry_type,
             payload=payload,
+            usage=usage,
             source_step_id=source_step_id,
-            idempotency_key=idempotency_key,
             created_at="2026-04-22T00:00:00Z",
         )
         self.entries.append(entry)
@@ -175,6 +172,24 @@ class _FakeAgentContextStore:
             for entry in self.entries
             if entry.run_id == scope.run_id and entry.context_id == scope.context_id
         ]
+
+    def get_stats(self, *, scope) -> AgentContextStats:
+        _ = scope
+        return AgentContextStats(
+            entries=AgentContextEntryStats(
+                total=0,
+                user_messages=0,
+                assistant_messages=0,
+                tool_calls=0,
+                tool_results=0,
+            ),
+            usage=AgentContextUsageStats(
+                entries=0,
+                total_prompt_tokens=0,
+                total_response_tokens=0,
+                total_tokens=0,
+            ),
+        )
 
     def next_turn_id(self, *, scope) -> str:
         entries = self.list_entries(scope=scope)
@@ -359,7 +374,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -411,7 +426,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="You are a support agent.",
                 task="Inspect the issue.",
                 context_id="thread-1",
@@ -494,7 +509,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-                config=AgentStepConfig(
+                config=agent_runner_config(
                     system="Be useful.",
                     task="Hi",
                     context_id="thread-1",
@@ -652,7 +667,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -759,7 +774,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -842,7 +857,7 @@ def test_agent_runner_executes_multiple_tool_calls_in_one_turn() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -921,7 +936,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -989,7 +1004,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -1031,7 +1046,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -1078,7 +1093,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",
@@ -1118,7 +1133,7 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
         AgentRunnerRequest(
             run_id="run-1",
             step_id="support_agent",
-            config=AgentStepConfig(
+            config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
                 context_id="thread-1",

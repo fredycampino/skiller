@@ -1,6 +1,10 @@
 from typing import Any
 
 from skiller.application.run_worker_service import RunWorkerService
+from skiller.application.use_cases.agent.get_agent_stats import (
+    GetAgentStatsStatus,
+    GetAgentStatsUseCase,
+)
 from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentStatus,
     InterruptAgentUseCase,
@@ -30,6 +34,7 @@ from skiller.application.use_cases.webhook.remove_webhook import (
     RemoveWebhookStatus,
     RemoveWebhookUseCase,
 )
+from skiller.domain.agent.agent_stats_model import AgentStats
 from skiller.domain.event.event_model import (
     RunCreatedPayload,
     RunFinishedPayload,
@@ -60,6 +65,7 @@ class RuntimeApplicationService:
         run_worker_service: RunWorkerService,
         handle_input_use_case: HandleInputUseCase | None = None,
         handle_channel_use_case: HandleChannelUseCase | None = None,
+        get_agent_stats_use_case: GetAgentStatsUseCase | None = None,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
@@ -76,6 +82,7 @@ class RuntimeApplicationService:
         self.remove_webhook_use_case = remove_webhook_use_case
         self.resume_run_use_case = resume_run_use_case
         self.interrupt_agent_use_case = interrupt_agent_use_case
+        self.get_agent_stats_use_case = get_agent_stats_use_case
         self.get_run_status_use_case = get_run_status_use_case
         self.run_worker_service = run_worker_service
         self.handle_channel_use_case = handle_channel_use_case
@@ -152,7 +159,7 @@ class RuntimeApplicationService:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(skill=skill_ref, skill_source=skill_source),
+            payload=RunCreatedPayload(ref=skill_ref, source=skill_source),
         )
         return {"run_id": run_id, "status": RunStatus.CREATED.value}
 
@@ -312,8 +319,45 @@ class RuntimeApplicationService:
             payload["error"] = result.error
         return payload
 
+    def get_agent_stats(self, run_id: str, agent_id: str) -> dict[str, Any]:
+        if self.get_agent_stats_use_case is None:
+            raise ValueError("Agent stats use case is not configured")
+        result = self.get_agent_stats_use_case.execute(run_id, agent_id)
+        payload: dict[str, Any] = {
+            "run_id": result.run_id,
+            "agent_id": result.agent_id,
+            "status": result.status.value,
+            "ok": result.status == GetAgentStatsStatus.OK,
+        }
+        if result.stats is not None:
+            payload["context_id"] = result.stats.context_id
+            payload["stats"] = _agent_stats_to_dict(result.stats)
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
     def _get_run_or_raise(self, run_id: str) -> Any:
         run = self.get_run_status_use_case.execute(run_id)
         if run is None:
             raise ValueError(f"Run '{run_id}' not found")
         return run
+
+
+def _agent_stats_to_dict(stats: AgentStats) -> dict[str, Any]:
+    return {
+        "context": {
+            "entries": {
+                "total": stats.context.entries.total,
+                "user_messages": stats.context.entries.user_messages,
+                "assistant_messages": stats.context.entries.assistant_messages,
+                "tool_calls": stats.context.entries.tool_calls,
+                "tool_results": stats.context.entries.tool_results,
+            },
+            "usage": {
+                "entries": stats.context.usage.entries,
+                "total_prompt_tokens": stats.context.usage.total_prompt_tokens,
+                "total_response_tokens": stats.context.usage.total_response_tokens,
+                "total_tokens": stats.context.usage.total_tokens,
+            },
+        }
+    }

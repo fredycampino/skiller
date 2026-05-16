@@ -1,0 +1,19 @@
+name: agent_tool_fail_max_turn_e2e
+description: "Agent shell tool call exhausts max_turns before final"
+version: "0.1"
+start: shell_once_no_final
+
+inputs: {}
+
+steps:
+  - agent: shell_once_no_final
+    system: |
+      You are a deterministic test agent.
+      Follow the task exactly and keep responses minimal.
+    task: |
+      First call the shell tool with command exactly pwd.
+      Do not return a final answer in that same turn.
+    tools:
+      - shell
+    max_turns: 1
+    max_tool_calls: 2

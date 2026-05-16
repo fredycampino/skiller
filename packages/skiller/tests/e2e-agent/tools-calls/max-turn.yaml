@@ -1,0 +1,19 @@
+name: agent_tool_max_turn_e2e
+description: "Agent shell tool call completes within max_turns"
+version: "0.1"
+start: shell_once
+
+inputs: {}
+
+steps:
+  - agent: shell_once
+    system: |
+      You are a deterministic test agent.
+      Follow the task exactly and keep responses minimal.
+    task: |
+      First call the shell tool with command exactly pwd.
+      After the shell result, return final text exactly done.
+    tools:
+      - shell
+    max_turns: 2
+    max_tool_calls: 2

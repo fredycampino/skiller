@@ -1,124 +1,111 @@
 import pytest
+from helpers.agent_config import FakeAgentConfigPort, agent_config
 
 from skiller.application.agent.config.step_config_reader import (
     AGENT_RUNTIME_SYSTEM,
     AgentStepConfigReader,
 )
+from skiller.domain.step.run_step_model import AgentStep
 
 pytestmark = pytest.mark.unit
 
 
 def test_agent_step_config_reader_reads_valid_step() -> None:
-    reader = AgentStepConfigReader()
+    reader = AgentStepConfigReader(
+        agent_config=FakeAgentConfigPort(
+            agent_config(
+                max_turns=10,
+                max_tool_calls=5,
+            )
+        )
+    )
 
     config = reader.read(
-        step_id="support_agent",
         run_id="run-1",
-        step={
-            "system": "Be useful.",
-            "task": "Help user",
-            "context_id": "thread-1",
-            "max_turns": 3,
-            "tools": ["notify", "shell"],
-        },
+        step=AgentStep(
+            id="support_agent",
+            system="Be useful.",
+            task="Help user",
+            context_id="thread-1",
+            max_turns=3,
+            max_tool_calls=2,
+            tools=("notify", "shell"),
+        ),
     )
 
     assert config.system == f"{AGENT_RUNTIME_SYSTEM}\n\nBe useful."
     assert config.task == "Help user"
     assert config.context_id == "thread-1"
-    assert config.max_turns == 3
-    assert config.tools == ["notify", "shell"]
+    assert config.config.loop.max_turns == 3
+    assert config.config.loop.max_tool_calls == 2
+    assert config.tools == ("notify", "shell")
 
 
-def test_agent_step_config_reader_uses_defaults() -> None:
-    reader = AgentStepConfigReader()
+def test_agent_step_config_reader_uses_agent_config_loop_defaults() -> None:
+    reader = AgentStepConfigReader(
+        agent_config=FakeAgentConfigPort(
+            agent_config(
+                max_turns=10,
+                max_tool_calls=5,
+            )
+        )
+    )
 
     config = reader.read(
-        step_id="support_agent",
         run_id="run-1",
-        step={
-            "system": "Be useful.",
-            "task": "Help user",
-        },
+        step=AgentStep(
+            id="support_agent",
+            system="Be useful.",
+            task="Help user",
+            tools=(),
+        ),
     )
 
     assert config.context_id == "run-1"
-    assert config.max_turns == 1
-    assert config.max_tool_calls == 1
-    assert config.tools == []
+    assert config.config.loop.max_turns == 10
+    assert config.config.loop.max_tool_calls == 5
+    assert config.tools == ()
     assert config.system == f"{AGENT_RUNTIME_SYSTEM}\n\nBe useful."
 
 
-def test_agent_step_config_reader_uses_runtime_loop_defaults() -> None:
-    reader = AgentStepConfigReader(
-        default_max_turns=10,
-        default_max_tool_calls=5,
+def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_config() -> None:
+    base_config = agent_config(
+        max_turns=10,
+        max_tool_calls=5,
     )
+    reader = AgentStepConfigReader(agent_config=FakeAgentConfigPort(base_config))
 
     config = reader.read(
-        step_id="support_agent",
         run_id="run-1",
-        step={
-            "system": "Be useful.",
-            "task": "Help user",
-        },
+        step=AgentStep(
+            id="support_agent",
+            system="Be useful.",
+            task="Help user",
+            max_turns=2,
+            max_tool_calls=3,
+            tools=(),
+        ),
     )
 
-    assert config.max_turns == 10
-    assert config.max_tool_calls == 5
+    assert config.config.loop.max_turns == 2
+    assert config.config.loop.max_tool_calls == 3
+    assert base_config.loop.max_turns == 10
+    assert base_config.loop.max_tool_calls == 5
+    assert config.config.llm.default_provider == base_config.llm.default_provider
+    assert config.config.context.compaction == base_config.context.compaction
+    assert config.config.event_output.truncate == base_config.event_output.truncate
 
 
-def test_agent_step_config_reader_merges_runtime_system_with_step_system() -> None:
-    reader = AgentStepConfigReader()
+def test_agent_step_config_reader_validates_contract() -> None:
+    reader = AgentStepConfigReader(agent_config=FakeAgentConfigPort())
 
-    config = reader.read(
-        step_id="support_agent",
-        run_id="run-1",
-        step={
-            "system": "Focus on git diagnostics.",
-            "task": "Help user",
-        },
-    )
-
-    assert config.system == (f"{AGENT_RUNTIME_SYSTEM}\n\nFocus on git diagnostics.")
-
-
-@pytest.mark.parametrize(
-    ("step", "expected"),
-    [
-        ({"task": "Help user"}, "requires system"),
-        ({"system": "Be useful."}, "requires task"),
-        (
-            {"system": "Be useful.", "task": "x", "max_turns": "3"},
-            "requires integer max_turns",
-        ),
-        (
-            {"system": "Be useful.", "task": "x", "max_turns": 0},
-            "requires positive max_turns",
-        ),
-        (
-            {"system": "Be useful.", "task": "x", "tools": "notify"},
-            "requires list tools",
-        ),
-        (
-            {"system": "Be useful.", "task": "x", "tools": ["notify", ""]},
-            "requires non-empty tool names",
-        ),
-        (
-            {"system": {"file": "./system.md"}, "task": "x"},
-            "requires string system",
-        ),
-        (
-            {"system": "Be useful.", "task": {"file": "./task.md"}},
-            "requires string task",
-        ),
-    ],
-)
-def test_agent_step_config_reader_validates_contract(
-    step: dict[str, object],
-    expected: str,
-) -> None:
-    reader = AgentStepConfigReader()
-
-    with pytest.raises(ValueError, match=expected):
-        reader.read(step_id="support_agent", run_id="run-1", step=step)
+    with pytest.raises(ValueError, match="requires non-empty context_id"):
+        reader.read(
+            run_id="",
+            step=AgentStep(
+                id="support_agent",
+                system="Be useful.",
+                task="Help user",
+                tools=(),
+            ),
+        )

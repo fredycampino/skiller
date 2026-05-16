@@ -60,7 +60,7 @@ It is a JSON object indexed by `step_id`:
     }
   },
   "answer": {
-    "step_type": "llm_prompt",
+    "step_type": "agent",
     "input": {
       "system": "You are a support assistant.",
       "prompt": "hello"

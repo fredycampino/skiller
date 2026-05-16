@@ -3,7 +3,7 @@
 ## Precedence
 
 ```text
-env -> user file.json -> default feature config.json
+env -> explicit file -> local file -> global file -> default feature config.json
 ```
 
 ## env variables
@@ -18,6 +18,12 @@ Environment variables.
 
 User configuration files:
 
+- `AGENT_AGENT_CONFIG_FILE`
+  - explicit agent config path
+  - highest priority file source for agent-owned config
+- `./agent.json`
+  - local agent config for the current workspace
+  - selected instead of the global agent config when present
 - `~/.skiller/settings/config.json`
   - general
   - must not contain config owned by other `.json` files
@@ -25,6 +31,7 @@ User configuration files:
 - `~/.skiller/settings/agent.json`
   - agent only
   - agent-specific user config
+  - used only when no explicit or local agent config is selected
 - `~/.skiller/settings/local.json`
   - server, tunnel, and local process config
   - machine-local runtime config
@@ -45,10 +52,6 @@ Example:
   - shell config resolver
 - `packages/skiller/src/skiller/infrastructure/tools/shell/config.json`
   - shell default values
-- `packages/skiller/src/skiller/infrastructure/llm/config.py`
-  - llm config resolver
-- `packages/skiller/src/skiller/infrastructure/llm/config.json`
-  - llm default values
 
 ## Features
 

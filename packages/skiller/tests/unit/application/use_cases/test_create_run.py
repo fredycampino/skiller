@@ -14,18 +14,18 @@ class _FakeStore:
 
     def create_run(
         self,
-        skill_source: str,
-        skill_ref: str,
-        skill_snapshot: dict[str, object],
+        source: str,
+        ref: str,
+        snapshot: dict[str, object],
         context: RunContext,
         *,
         run_id: str,
     ) -> str:
         self.create_calls.append(
             {
-                "skill_source": skill_source,
-                "skill_ref": skill_ref,
-                "skill_snapshot": skill_snapshot,
+                "source": source,
+                "ref": ref,
+                "snapshot": snapshot,
                 "context": context,
                 "run_id": run_id,
             }
@@ -34,13 +34,13 @@ class _FakeStore:
 
 
 class _FakeSkillRunner:
-    def __init__(self, skill_snapshot: object) -> None:
-        self.skill_snapshot = skill_snapshot
+    def __init__(self, snapshot: object) -> None:
+        self.snapshot = snapshot
         self.load_calls: list[tuple[str, str]] = []
 
     def load_skill(self, skill_source: str, skill_ref: str) -> object:
         self.load_calls.append((skill_source, skill_ref))
-        return self.skill_snapshot
+        return self.snapshot
 
 
 def test_create_run_generates_uuid_for_store() -> None:
@@ -55,9 +55,9 @@ def test_create_run_generates_uuid_for_store() -> None:
     assert str(uuid.UUID(run_id)) == run_id
     assert store.create_calls == [
         {
-            "skill_source": "internal",
-            "skill_ref": "notify_test",
-            "skill_snapshot": {
+            "source": "internal",
+            "ref": "notify_test",
+            "snapshot": {
                 "start": "show_message",
                 "steps": [{"notify": "show_message", "message": "ok"}],
             },

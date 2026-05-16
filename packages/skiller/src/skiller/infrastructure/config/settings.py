@@ -2,18 +2,13 @@ import json
 import os
 from pathlib import Path
 
-from skiller.infrastructure.agent.config import resolve_agent_settings
 from skiller.infrastructure.config.settings_model import Settings
-from skiller.infrastructure.llm.config import resolve_llm_settings
 from skiller.infrastructure.tools.shell.config import resolve_shell_settings
 
 
 def get_settings() -> Settings:
     config = _load_config()
-    agent_config_path, agent_explicit = _resolve_json_config_path(
-        env_name="AGENT_AGENT_CONFIG_FILE",
-        default_path=Path.home() / ".skiller" / "settings" / "agent.json",
-    )
+    agent_config_path, agent_explicit = _resolve_agent_config_path()
     agent_config = _load_json_config_file(
         config_path=agent_config_path,
         env_name="AGENT_AGENT_CONFIG_FILE",
@@ -23,19 +18,11 @@ def get_settings() -> Settings:
     if agent_runtime_config:
         _merge_agent_config(config, agent_runtime_config)
 
-    agent_settings = resolve_agent_settings(agent_config_path)
-    llm_settings = resolve_llm_settings(agent_config_path)
     shell_settings = resolve_shell_settings(agent_config_path)
 
     return Settings(
         db_path=_path_setting("AGENT_DB_PATH", config, ("runtime", "db_path"), "./runtime.db"),
-        llm_provider=llm_settings.llm_provider,
-        fake_llm_response_json=llm_settings.fake_llm_response_json,
-        fake_llm_model=llm_settings.fake_llm_model,
-        minimax_api_key=llm_settings.minimax_api_key,
-        minimax_base_url=llm_settings.minimax_base_url,
-        minimax_model=llm_settings.minimax_model,
-        minimax_timeout_seconds=llm_settings.minimax_timeout_seconds,
+        agent_config_path=str(agent_config_path),
         log_level=_string_setting("AGENT_LOG_LEVEL", config, ("runtime", "log_level"), "INFO"),
         webhooks_host=_string_setting(
             "AGENT_WEBHOOKS_HOST",
@@ -72,18 +59,6 @@ def get_settings() -> Settings:
             ("agent", "event_output", "truncate", "enabled"),
             True,
         ),
-        agent_event_output_pii_enabled=_bool_setting(
-            "AGENT_EVENT_OUTPUT_PII_ENABLED",
-            config,
-            ("agent", "event_output", "pii", "enabled"),
-            True,
-        ),
-        agent_event_output_secrets_enabled=_bool_setting(
-            "AGENT_EVENT_OUTPUT_SECRETS_ENABLED",
-            config,
-            ("agent", "event_output", "secrets", "enabled"),
-            True,
-        ),
         agent_event_output_max_text_chars=_positive_int_setting_with_fallback(
             "AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS",
             config,
@@ -105,8 +80,6 @@ def get_settings() -> Settings:
             fallback_path=("agent", "event_output", "max_array_items"),
             default=20,
         ),
-        agent_loop_max_turns=agent_settings.loop_max_turns,
-        agent_loop_max_tool_calls=agent_settings.loop_max_tool_calls,
     )
 
 
@@ -126,6 +99,18 @@ def _resolve_json_config_path(*, env_name: str, default_path: Path) -> tuple[Pat
     explicit_path = os.environ.get(env_name, "").strip()
     config_path = Path(explicit_path).expanduser() if explicit_path else default_path
     return config_path, bool(explicit_path)
+
+
+def _resolve_agent_config_path() -> tuple[Path, bool]:
+    explicit_path = os.environ.get("AGENT_AGENT_CONFIG_FILE", "").strip()
+    if explicit_path:
+        return Path(explicit_path).expanduser(), True
+
+    local_path = Path("./agent.json")
+    if local_path.exists():
+        return local_path, False
+
+    return Path.home() / ".skiller" / "settings" / "agent.json", False
 
 
 def _load_json_config_file(

@@ -55,15 +55,15 @@ def patched_to_thread(*modules: ModuleType) -> Iterator[None]:
 def make_runs_port_item(
     *,
     run_id: str = "run-1",
-    skill_ref: str = "chat",
+    ref: str = "chat",
     status: str = "WAITING",
     current: str = "ask_user",
     wait_type: str | None = None,
 ) -> RunsPortItem:
     return RunsPortItem(
         id=run_id,
-        skill_source="internal",
-        skill_ref=skill_ref,
+        source="internal",
+        ref=ref,
         status=status,
         current=current,
         created_at="2026-05-04 00:00:00",

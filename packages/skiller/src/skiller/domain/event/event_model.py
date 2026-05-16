@@ -30,8 +30,8 @@ class RuntimeEventType(StrEnum):
 
 @dataclass(frozen=True)
 class RunCreatedPayload:
-    skill: str
-    skill_source: str
+    ref: str
+    source: str
 
 
 @dataclass(frozen=True)
@@ -185,8 +185,8 @@ def runtime_event_payload_from_dict(
 ) -> RuntimeEventPayload:
     if event_type == RuntimeEventType.RUN_CREATE:
         return RunCreatedPayload(
-            skill=str(value.get("skill", "")),
-            skill_source=str(value.get("skill_source", "")),
+            ref=str(value.get("ref", "")),
+            source=str(value.get("source", "")),
         )
 
     if event_type == RuntimeEventType.RUN_RESUME:

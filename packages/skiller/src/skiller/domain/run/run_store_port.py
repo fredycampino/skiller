@@ -1,15 +1,15 @@
 from typing import Protocol
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import Run, RunStatus
+from skiller.domain.run.run_model import Run, RunAgent, RunStatus
 
 
 class RunStorePort(Protocol):
     def create_run(
         self,
-        skill_source: str,
-        skill_ref: str,
-        skill_snapshot: dict[str, object],
+        source: str,
+        ref: str,
+        snapshot: dict[str, object],
         context: RunContext,
         *,
         run_id: str,
@@ -25,5 +25,20 @@ class RunStorePort(Protocol):
     ) -> None: ...
 
     def get_run(self, run_id: str) -> Run | None: ...
+
+    def get_agent(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+    ) -> RunAgent | None: ...
+
+    def attach_agent(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+        context_id: str,
+    ) -> None: ...
 
     def delete_run(self, run_id: str) -> bool: ...

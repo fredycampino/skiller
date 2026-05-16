@@ -2,13 +2,17 @@
 
 This page documents agent-specific runtime configuration.
 
-Primary file:
+Config files:
 
 ```text
+./agent.json
 ~/.skiller/settings/agent.json
 ```
 
 `agent.json` is the primary user config file for agent-owned runtime features.
+
+The runtime selects one agent config file. It does not merge `./agent.json` with
+`~/.skiller/settings/agent.json`; the first existing source in the resolution order wins.
 
 ## Agent Loop
 
@@ -26,26 +30,26 @@ Primary file:
 ### Fields
 
 - `agent.loop.max_turns`
-  - runtime default for `agent` steps
-  - used when the step YAML does not define `max_turns`
+  - runner default for `agent` steps
+  - a step YAML `max_turns` value overrides this for that step
 - `agent.loop.max_tool_calls`
   - maximum native `tool_calls` accepted from one assistant response
-  - not exposed in step YAML
+  - a step YAML `max_tool_calls` value overrides this for that step
   - if the assistant returns more than this limit, the runtime appends corrective
     feedback to the agent context and asks the LLM again on the next turn
 
 ### Resolution Order
 
-1. environment variables
-2. `~/.skiller/settings/agent.json`
-3. fallback agent config: [`../../packages/skiller/src/skiller/infrastructure/agent/config.json`](../../packages/skiller/src/skiller/infrastructure/agent/config.json)
+1. environment variables handled by the `AgentConfigPort` implementation
+2. `AGENT_AGENT_CONFIG_FILE`
+3. `./agent.json`
+4. `~/.skiller/settings/agent.json`
+5. adapter defaults in [`../../packages/skiller/src/skiller/infrastructure/config/agent_config_adapter.py`](../../packages/skiller/src/skiller/infrastructure/config/agent_config_adapter.py)
 
-Current fallback values in [`../../packages/skiller/src/skiller/infrastructure/agent/config.json`](../../packages/skiller/src/skiller/infrastructure/agent/config.json):
+Current adapter defaults:
 
 - `agent.loop.max_turns = 10`
 - `agent.loop.max_tool_calls = 5`
-
-For `max_turns`, a step YAML value still overrides the runtime default for that specific step.
 
 ## Shell Tool Policy
 
@@ -83,8 +87,10 @@ For `max_turns`, a step YAML value still overrides the runtime default for that 
 ### Resolution Order
 
 1. environment variables
-2. `~/.skiller/settings/agent.json`
-3. fallback shell config: [`../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json`](../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json)
+2. `AGENT_AGENT_CONFIG_FILE`
+3. `./agent.json`
+4. `~/.skiller/settings/agent.json`
+5. fallback shell config: [`../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json`](../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json)
 
 Environment variables:
 
@@ -102,11 +108,13 @@ Environment variables:
     "default_provider": "minimax",
     "providers": {
       "minimax": {
-        "type": "minimax",
+        "provider": "minimax",
+        "client_type": "openai_chat_completions",
         "api_key_file": "~/.skiller/secrets/minimax_api_key",
         "base_url": "https://api.minimax.io/v1",
         "model": "MiniMax-M2.5",
-        "timeout_seconds": 30
+        "timeout_seconds": 30,
+        "context_window_tokens": 1000000
       }
     }
   }
@@ -117,10 +125,10 @@ Environment variables:
 
 - `llm.default_provider`
   - logical provider key selected by default
-- `llm.providers.<name>.type`
+- `llm.providers.<name>.provider`
   - provider runtime type
 - `llm.providers.<name>.client_type`
-  - optional explicit client override
+  - client implementation type used to call the provider API
 - `llm.providers.<name>.api_key`
   - inline secret value
 - `llm.providers.<name>.api_key_env`
@@ -133,20 +141,20 @@ Environment variables:
   - provider model name
 - `llm.providers.<name>.timeout_seconds`
   - request timeout
-- `llm.providers.fake.response_json`
-  - fake provider response payload
+- `llm.providers.<name>.context_window_tokens`
+  - maximum model context window used by context management
 
 ### Resolution Order
 
 1. environment variables
-2. `~/.skiller/settings/agent.json`
-3. fallback llm config: [`../../packages/skiller/src/skiller/infrastructure/llm/config.json`](../../packages/skiller/src/skiller/infrastructure/llm/config.json)
+2. `AGENT_AGENT_CONFIG_FILE`
+3. `./agent.json`
+4. `~/.skiller/settings/agent.json`
 
 Environment variables:
 
 - `AGENT_LLM_PROVIDER`
-- `AGENT_FAKE_LLM_RESPONSE_JSON`
-- `AGENT_FAKE_LLM_MODEL`
+- `AGENT_FAKE_MODEL`
 - `AGENT_MINIMAX_API_KEY`
 - `AGENT_MINIMAX_BASE_URL`
 - `AGENT_MINIMAX_MODEL`
@@ -163,12 +171,6 @@ Environment variables:
         "max_text_chars": 600,
         "max_json_chars": 4000,
         "max_array_items": 20
-      },
-      "pii": {
-        "enabled": true
-      },
-      "secrets": {
-        "enabled": true
       }
     }
   }
@@ -185,16 +187,14 @@ Environment variables:
   - maximum serialized JSON size before truncation
 - `agent.event_output.truncate.max_array_items`
   - maximum array items kept in sanitized output
-- `agent.event_output.pii.enabled`
-  - enables PII redaction
-- `agent.event_output.secrets.enabled`
-  - enables secret redaction
 
 ### Resolution Order
 
 1. environment variables
-2. `~/.skiller/settings/agent.json`
-3. runtime defaults in [`../../packages/skiller/src/skiller/infrastructure/config/settings_model.py`](../../packages/skiller/src/skiller/infrastructure/config/settings_model.py)
+2. `AGENT_AGENT_CONFIG_FILE`
+3. `./agent.json`
+4. `~/.skiller/settings/agent.json`
+5. runtime defaults in [`../../packages/skiller/src/skiller/infrastructure/config/settings_model.py`](../../packages/skiller/src/skiller/infrastructure/config/settings_model.py)
 
 ## Legacy Compatibility
 
@@ -207,8 +207,6 @@ These keys are still accepted and map to `agent.event_output.truncate.*`:
 Environment variables:
 
 - `AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED`
-- `AGENT_EVENT_OUTPUT_PII_ENABLED`
-- `AGENT_EVENT_OUTPUT_SECRETS_ENABLED`
 - `AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS`
 - `AGENT_EVENT_OUTPUT_MAX_JSON_CHARS`
 - `AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS`

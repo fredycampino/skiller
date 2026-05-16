@@ -87,11 +87,6 @@ class WaitChannelOutput(OutputBase):
 
 
 @dataclass(frozen=True)
-class LlmPromptOutput(OutputBase):
-    data: Any = None
-
-
-@dataclass(frozen=True)
 class McpOutput(OutputBase):
     data: dict[str, Any] | None = None
 
@@ -107,7 +102,6 @@ _OUTPUT_TYPES: dict[StepType, Type[OutputBase]] = {
     StepType.WAIT_INPUT: WaitInputOutput,
     StepType.WAIT_WEBHOOK: WaitWebhookOutput,
     StepType.WAIT_CHANNEL: WaitChannelOutput,
-    StepType.LLM_PROMPT: LlmPromptOutput,
     StepType.MCP: McpOutput,
 }
 

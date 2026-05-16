@@ -36,9 +36,9 @@ class _FakeStore:
 def test_fail_run_marks_failed() -> None:
     run = Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="demo",
-        skill_snapshot={"start": "done", "steps": [{"notify": "done"}]},
+        source="internal",
+        ref="demo",
+        snapshot={"start": "done", "steps": [{"notify": "done"}]},
         status=RunStatus.RUNNING.value,
         current="done",
         context=RunContext(inputs={}, step_executions={}),

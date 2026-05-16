@@ -27,12 +27,12 @@ class _FakeStore:
         )
 
 
-def _build_run(skill_snapshot: object) -> Run:
+def _build_run(snapshot: object) -> Run:
     return Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="demo",
-        skill_snapshot=skill_snapshot,  # type: ignore[arg-type]
+        source="internal",
+        ref="demo",
+        snapshot=snapshot,  # type: ignore[arg-type]
         status=RunStatus.CREATED.value,
         current=None,
         context=RunContext(inputs={}, step_executions={}),
@@ -69,7 +69,7 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
 
 
 @pytest.mark.parametrize(
-    "skill_snapshot",
+    "snapshot",
     [
         {"steps": []},
         {"start": "start", "steps": [{"notify": "done"}]},
@@ -79,8 +79,8 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
         [],
     ],
 )
-def test_rejects_invalid_start_config(skill_snapshot: object) -> None:
-    store = _FakeStore(_build_run(skill_snapshot))
+def test_rejects_invalid_start_config(snapshot: object) -> None:
+    store = _FakeStore(_build_run(snapshot))
     use_case = GetStartStepUseCase(store=store)
 
     with pytest.raises(ValueError):

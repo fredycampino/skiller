@@ -27,7 +27,7 @@ def test_cli_runs_adapter_passes_limit_and_status_filters(monkeypatch: pytest.Mo
         subprocess.CompletedProcess(
             args=["python", "-m", "skiller"],
             returncode=0,
-            stdout='[{"id": "run-1", "status": "WAITING"}]',
+            stdout='[{"id": "run-1", "source": "internal", "ref": "chat", "status": "WAITING"}]',
             stderr="",
         )
     )
@@ -37,8 +37,8 @@ def test_cli_runs_adapter_passes_limit_and_status_filters(monkeypatch: pytest.Mo
     assert result == [
         RunsPortItem(
             id="run-1",
-            skill_source="",
-            skill_ref="",
+            source="internal",
+            ref="chat",
             status="WAITING",
             current=None,
             created_at="",

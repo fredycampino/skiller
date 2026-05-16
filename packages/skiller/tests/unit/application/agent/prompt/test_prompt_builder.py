@@ -24,9 +24,9 @@ def _entry(
         context_id="thread-1",
         sequence=sequence,
         entry_type=entry_type,
+        usage=None,
         payload=payload,
         source_step_id="support_agent",
-        idempotency_key=f"entry:{sequence}",
         created_at="2026-04-22T00:00:00Z",
     )
 

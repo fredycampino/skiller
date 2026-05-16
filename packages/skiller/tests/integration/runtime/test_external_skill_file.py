@@ -5,8 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from helpers.agent_config import FakeAgentConfigPort
 from helpers.agent_runner import build_agent_runner
 
+from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
+from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
@@ -14,9 +17,6 @@ from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute.execute_llm_prompt_step import (
-    ExecuteLlmPromptStepUseCase,
-)
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
@@ -59,7 +59,7 @@ from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegis
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
-from skiller.infrastructure.tools.process import DefaultToolProcessRunner
+from skiller.infrastructure.tools.process.default_tool_process import DefaultToolProcessRunner
 
 pytestmark = [
     pytest.mark.integration,
@@ -106,12 +106,12 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
             tool_manager=None,
             append_runtime_event_use_case=append_runtime_event_use_case,
         ),
+        step_mapper=AgentStepMapper(),
+        config_reader=AgentStepConfigReader(
+            agent_config=FakeAgentConfigPort(),
+        ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
-        store=store,
-        llm=NullLLM(),
-    )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
         mcp=mcp,
@@ -143,7 +143,6 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
-        execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,
@@ -214,9 +213,9 @@ def test_run_external_skill_file_succeeds() -> None:
         run = store.get_run(run_result["run_id"])
         assert run_result["status"] == "SUCCEEDED"
         assert run is not None
-        assert run.skill_source == "file"
-        assert run.skill_ref == str(skill_path)
-        assert run.skill_snapshot["name"] == "external_notify"
+        assert run.source == "file"
+        assert run.ref == str(skill_path)
+        assert run.snapshot["name"] == "external_notify"
         events = _event_store(store).list_events(run_result["run_id"])
         notify_event = _step_success_event(events, step_id="show_message")
         assert notify_event.payload.output["value"]["message"] == "external ok"
@@ -298,7 +297,7 @@ def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
         result = render_current_step_use_case.execute(run_id)
 
         assert run is not None
-        assert run.skill_snapshot["steps"][0]["message"] == "original"
+        assert run.snapshot["steps"][0]["message"] == "original"
         assert result.status == CurrentStepStatus.READY
         assert result.current_step is not None
         assert result.current_step.step["message"] == "original"

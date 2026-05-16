@@ -1,4 +1,5 @@
 from skiller.application.agent.agent_runner import AgentRunner
+from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.runner_state import AgentRunnerRequest
 from skiller.application.use_cases.render.render_current_step import CurrentStep
@@ -17,18 +18,20 @@ class ExecuteAgentStepUseCase:
         self,
         store: RunStorePort,
         runner: AgentRunner,
-        config_reader: AgentStepConfigReader | None = None,
+        step_mapper: AgentStepMapper,
+        config_reader: AgentStepConfigReader,
     ) -> None:
         self.store = store
         self.runner = runner
-        self.config_reader = config_reader or AgentStepConfigReader()
+        self.step_mapper = step_mapper
+        self.config_reader = config_reader
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
+        agent_step = self.step_mapper.to_agent(current_step)
         config = self.config_reader.read(
-            step_id=step_id,
             run_id=current_step.run_id,
-            step=current_step.step,
+            step=agent_step,
         )
         runner_result = self.runner.execute(
             AgentRunnerRequest(
@@ -62,8 +65,8 @@ class ExecuteAgentStepUseCase:
                 "system": config.system,
                 "task": config.task,
                 "context_id": config.context_id,
-                "max_turns": config.max_turns,
-                "max_tool_calls": config.max_tool_calls,
+                "max_turns": config.config.loop.max_turns,
+                "max_tool_calls": config.config.loop.max_tool_calls,
                 "tools": list(config.tools),
             },
             evaluation={"model": runner_result.response_model},

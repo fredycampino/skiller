@@ -137,12 +137,20 @@ class LLMRequest:
 
 
 @dataclass(frozen=True)
+class LLMUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     ok: bool
     content: str | None = None
     model: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
     finish_reason: str | None = None
+    usage: LLMUsage | None = None
     error: str | None = None
     error_code: str | None = None
 

@@ -11,8 +11,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from helpers.agent_config import FakeAgentConfigPort
 from helpers.agent_runner import build_agent_runner
 
+from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
+from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
@@ -20,9 +23,6 @@ from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.execute.execute_llm_prompt_step import (
-    ExecuteLlmPromptStepUseCase,
-)
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
@@ -58,7 +58,7 @@ from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
-from skiller.infrastructure.tools.process import DefaultToolProcessRunner
+from skiller.infrastructure.tools.process.default_tool_process import DefaultToolProcessRunner
 
 pytestmark = [
     pytest.mark.integration,
@@ -117,12 +117,12 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
             tool_manager=None,
             append_runtime_event_use_case=append_runtime_event_use_case,
         ),
+        step_mapper=AgentStepMapper(),
+        config_reader=AgentStepConfigReader(
+            agent_config=FakeAgentConfigPort(),
+        ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
-    execute_llm_prompt_step_use_case = ExecuteLlmPromptStepUseCase(
-        store=store,
-        llm=NullLLM(),
-    )
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
         mcp=mcp,
@@ -149,7 +149,6 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
         execute_assign_step_use_case=execute_assign_step_use_case,
-        execute_llm_prompt_step_use_case=execute_llm_prompt_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,

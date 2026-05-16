@@ -3,13 +3,13 @@ import sqlite3
 from typing import Any
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import Run
+from skiller.domain.run.run_model import Run, RunAgent
 
 
 def build_run_from_row(row: sqlite3.Row) -> Run:
-    skill_snapshot = json.loads(row["skill_snapshot_json"])
-    if not isinstance(skill_snapshot, dict):
-        skill_snapshot = {}
+    snapshot = json.loads(row["snapshot_json"])
+    if not isinstance(snapshot, dict):
+        snapshot = {}
     inputs_dict = json.loads(row["inputs_json"])
     if not isinstance(inputs_dict, dict):
         inputs_dict = {}
@@ -19,12 +19,13 @@ def build_run_from_row(row: sqlite3.Row) -> Run:
     steering_queue = json.loads(row["steering_queue_json"])
     if not isinstance(steering_queue, list):
         steering_queue = []
+    agents = _agents_from_json(row["agents_json"])
 
     return Run(
         id=str(row["id"]),
-        skill_source=row["skill_source"],
-        skill_ref=row["skill_ref"],
-        skill_snapshot=skill_snapshot,
+        source=row["source"],
+        ref=row["ref"],
+        snapshot=snapshot,
         status=row["status"],
         current=(str(row["current"]) if row["current"] is not None else None),
         context=build_context(
@@ -35,7 +36,31 @@ def build_run_from_row(row: sqlite3.Row) -> Run:
         ),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        agents=agents,
     )
+
+
+def _agents_from_json(raw_agents: object) -> dict[str, RunAgent]:
+    if not isinstance(raw_agents, str) or not raw_agents.strip():
+        return {}
+    try:
+        parsed = json.loads(raw_agents)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+
+    agents: dict[str, RunAgent] = {}
+    for raw_agent_id, raw_agent in parsed.items():
+        agent_id = str(raw_agent_id).strip()
+        if not agent_id or not isinstance(raw_agent, dict):
+            continue
+        context_id = raw_agent.get("context_id")
+        agents[agent_id] = RunAgent(
+            agent_id=agent_id,
+            context_id=context_id if isinstance(context_id, str) else None,
+        )
+    return agents
 
 
 def build_context(

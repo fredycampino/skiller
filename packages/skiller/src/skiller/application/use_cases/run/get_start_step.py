@@ -1,5 +1,5 @@
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.step.skill_step_model import find_skill_step
+from skiller.domain.step.run_step_model import find_run_step
 
 
 class GetStartStepUseCase:
@@ -11,18 +11,18 @@ class GetStartStepUseCase:
         if run is None:
             raise ValueError(f"Run '{run_id}' not found")
 
-        skill = run.skill_snapshot
-        if not isinstance(skill, dict):
-            raise ValueError(f"Run '{run_id}' has invalid skill snapshot")
+        snapshot = run.snapshot
+        if not isinstance(snapshot, dict):
+            raise ValueError(f"Run '{run_id}' has invalid snapshot")
 
-        raw_steps = skill.get("steps", [])
+        raw_steps = snapshot.get("steps", [])
 
-        start_step_id = str(skill.get("start", "")).strip()
+        start_step_id = str(snapshot.get("start", "")).strip()
         if not start_step_id:
             raise ValueError(f"Run '{run_id}' requires a non-empty root 'start'")
 
         try:
-            find_skill_step(raw_steps, start_step_id)
+            find_run_step(raw_steps, start_step_id)
         except ValueError as exc:
             raise ValueError(
                 f"Run '{run_id}' requires exactly one step with id '{start_step_id}'"

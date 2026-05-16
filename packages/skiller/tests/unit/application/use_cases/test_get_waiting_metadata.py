@@ -12,7 +12,7 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
         id="run-1",
         status="WAITING",
         current="wait_signal",
-        skill_snapshot={
+        snapshot={
             "steps": [
                 {
                     "wait_webhook": "wait_signal",
@@ -46,7 +46,7 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
         id="run-2",
         status="WAITING",
         current="ask_user",
-        skill_snapshot={
+        snapshot={
             "steps": [
                 {
                     "wait_input": "ask_user",
@@ -73,7 +73,7 @@ def test_get_waiting_metadata_returns_channel_data() -> None:
         id="run-3",
         status="WAITING",
         current="listen_whatsapp",
-        skill_snapshot={
+        snapshot={
             "steps": [
                 {
                     "wait_channel": "listen_whatsapp",

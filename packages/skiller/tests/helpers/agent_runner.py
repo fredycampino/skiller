@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -31,6 +32,7 @@ from skiller.domain.event.event_model import (
     RuntimeEventType,
 )
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
+from skiller.domain.run.run_model import RunAgent
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_process_model import (
@@ -50,6 +52,20 @@ class _NullSteering:
     def pop(self, run_id: str, item_type: SteeringItemType) -> list[SteeringItem]:
         _ = run_id, item_type
         return []
+
+
+class _FakeRunStore:
+    def __init__(self) -> None:
+        self.agents: dict[tuple[str, str], RunAgent] = {}
+
+    def get_agent(self, *, run_id: str, agent_id: str) -> RunAgent | None:
+        return self.agents.get((run_id, agent_id))
+
+    def attach_agent(self, *, run_id: str, agent_id: str, context_id: str) -> None:
+        self.agents[(run_id, agent_id)] = RunAgent(
+            agent_id=agent_id,
+            context_id=context_id,
+        )
 
 
 class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
@@ -197,7 +213,11 @@ def build_tool_execution(
     tool_manager: ToolManager | None = None,
     append_runtime_event_use_case: AppendRuntimeEventUseCase | None = None,
 ) -> AgentToolExecutor:
-    context_publisher = AgentContextPublisher(agent_context_store, AgentRunnerFeedback())
+    context_publisher = AgentContextPublisher(
+        agent_context_store,
+        _FakeRunStore(),
+        AgentRunnerFeedback(),
+    )
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
     return AgentToolExecutor(
         context_publisher=context_publisher,
@@ -224,14 +244,22 @@ def build_agent_runner(
     append_runtime_event_use_case: AppendRuntimeEventUseCase | None = None,
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
+    run_store = _FakeRunStore()
     return AgentRunner(
         agent_context_store=agent_context_store,
         llm=llm,
         tool_manager=tool_manager or ToolManager(tools=[]),
-        prompt_builder=AgentPromptBuilder(),
+        context_manager=AgentContextManager(
+            agent_context_store=agent_context_store,
+            prompt_builder=AgentPromptBuilder(),
+        ),
         error_mapper=AgentErrorMapper(),
         feedback=AgentRunnerFeedback(),
-        context_publisher=AgentContextPublisher(agent_context_store, AgentRunnerFeedback()),
+        context_publisher=AgentContextPublisher(
+            agent_context_store,
+            run_store,
+            AgentRunnerFeedback(),
+        ),
         event_publisher=AgentEventPublisher(
             runtime_event_store,
             AgentEventTruncator(

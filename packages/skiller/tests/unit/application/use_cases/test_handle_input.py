@@ -81,7 +81,7 @@ def test_handle_input_rejects_when_current_step_is_not_wait_input() -> None:
     run = SimpleNamespace(
         status="WAITING",
         current="show_message",
-        skill_snapshot={"steps": [{"notify": "show_message"}]},
+        snapshot={"steps": [{"notify": "show_message"}]},
     )
     store = _FakeStore(run=run)
     use_case = HandleInputUseCase(
@@ -100,7 +100,7 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
     run = SimpleNamespace(
         status="WAITING",
         current="ask_user",
-        skill_snapshot={"steps": [{"wait_input": "ask_user"}]},
+        snapshot={"steps": [{"wait_input": "ask_user"}]},
     )
     store = _FakeStore(run=run)
     use_case = HandleInputUseCase(

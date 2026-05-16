@@ -22,6 +22,8 @@ from skiller.domain.run.steering_model import SteeringAgentInterrupt, SteeringAg
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_contract import ProcessTool, ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import (
+    AgentToolCall,
+    AgentToolResult,
     ToolExecutionRequest,
     ToolExecutionResult,
     ToolExecutionResults,
@@ -82,6 +84,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 turn_id=request.turn_id,
                 message_type="tool_calls",
                 text=request.response.content,
+                usage=request.response.usage,
             )
             self.event_publisher.emit_assistant_message(entry=assistant_message_entry)
             state.parent_sequence = assistant_message_entry.sequence
@@ -115,11 +118,16 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 state.add(result)
                 continue
 
+            agent_tool_call = AgentToolCall(
+                turn_id=request.turn_id,
+                tool_call_id=raw_tool_call.id,
+                tool=_tool_name(raw_tool_call),
+                parent_sequence=state.parent_sequence,
+                args=parsed_args,
+            )
             tool_call_entry = self.context_publisher.publish_tool_call(
                 request=request,
-                raw_tool_call=raw_tool_call,
-                parent_sequence=state.parent_sequence,
-                parsed_args=parsed_args,
+                tool_call=agent_tool_call,
             )
             self.event_publisher.emit_tool_call(entry=tool_call_entry)
 
@@ -129,9 +137,9 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                     step_id=request.step_id,
                     context_id=request.context_id,
                     turn_id=request.turn_id,
-                    tool_call_id=raw_tool_call.id,
-                    tool=_tool_name(raw_tool_call),
-                    args=parsed_args,
+                    tool_call_id=agent_tool_call.tool_call_id,
+                    tool=agent_tool_call.tool,
+                    args=agent_tool_call.args,
                     allowed_tools=request.allowed_tools,
                 )
             )
@@ -199,11 +207,15 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 )
                 return state.finish()
 
+            agent_tool_result = AgentToolResult(
+                turn_id=request.turn_id,
+                tool_call_id=agent_tool_call.tool_call_id,
+                parent_sequence=agent_tool_call.parent_sequence,
+                result=tool_result,
+            )
             tool_result_entry = self.context_publisher.publish_tool_result(
                 request=request,
-                tool_call=raw_tool_call,
-                parent_sequence=state.parent_sequence,
-                result=tool_result,
+                tool_result=agent_tool_result,
             )
             self.event_publisher.emit_tool_result(entry=tool_result_entry)
             state.add(

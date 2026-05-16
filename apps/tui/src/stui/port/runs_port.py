@@ -7,8 +7,8 @@ from typing import Protocol
 @dataclass(frozen=True)
 class RunsPortItem:
     id: str
-    skill_source: str
-    skill_ref: str
+    source: str
+    ref: str
     status: str
     current: str | None
     created_at: str

@@ -64,8 +64,8 @@ def test_format_run_updated_at_uses_short_month_day_and_time() -> None:
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:
     return RunsPortItem(
         id="run-1",
-        skill_source="internal",
-        skill_ref="chat",
+        source="internal",
+        ref="chat",
         status=status,
         current="ask_user",
         created_at="2026-05-04 00:00:00",

@@ -12,13 +12,6 @@ _SETTINGS_ENV_NAMES = (
     "AGENT_CONFIG_FILE",
     "AGENT_AGENT_CONFIG_FILE",
     "AGENT_DB_PATH",
-    "AGENT_LLM_PROVIDER",
-    "AGENT_FAKE_LLM_RESPONSE_JSON",
-    "AGENT_FAKE_LLM_MODEL",
-    "AGENT_MINIMAX_API_KEY",
-    "AGENT_MINIMAX_BASE_URL",
-    "AGENT_MINIMAX_MODEL",
-    "AGENT_MINIMAX_TIMEOUT_SECONDS",
     "AGENT_LOG_LEVEL",
     "AGENT_WEBHOOKS_HOST",
     "AGENT_WEBHOOKS_PORT",
@@ -31,13 +24,9 @@ _SETTINGS_ENV_NAMES = (
     "AGENT_SHELL_ALLOWLIST_ALLOWED_COMMANDS",
     "AGENT_SHELL_SANDBOX_ENABLED",
     "AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED",
-    "AGENT_EVENT_OUTPUT_PII_ENABLED",
-    "AGENT_EVENT_OUTPUT_SECRETS_ENABLED",
     "AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS",
     "AGENT_EVENT_OUTPUT_MAX_JSON_CHARS",
     "AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS",
-    "AGENT_LOOP_MAX_TURNS",
-    "AGENT_LOOP_MAX_TOOL_CALLS",
 )
 
 
@@ -52,7 +41,6 @@ def test_get_settings_uses_defaults_when_config_is_missing(
     settings = settings_module.get_settings()
 
     assert settings.db_path == "./runtime.db"
-    assert settings.llm_provider == "null"
     assert settings.whatsapp_bridge_send_timeout_seconds == 10.0
     assert settings.agent_shell_allowlist_enabled is False
     assert settings.agent_shell_allowlist_workspace == ""
@@ -60,13 +48,9 @@ def test_get_settings_uses_defaults_when_config_is_missing(
     assert settings.agent_shell_allowlist_allowed_commands == ()
     assert settings.agent_shell_sandbox_enabled is False
     assert settings.agent_event_output_truncate_enabled is True
-    assert settings.agent_event_output_pii_enabled is True
-    assert settings.agent_event_output_secrets_enabled is True
     assert settings.agent_event_output_max_text_chars == 600
     assert settings.agent_event_output_max_json_chars == 4000
     assert settings.agent_event_output_max_array_items == 20
-    assert settings.agent_loop_max_turns == 10
-    assert settings.agent_loop_max_tool_calls == 5
 
 
 def test_get_settings_loads_explicit_structured_config(
@@ -74,8 +58,6 @@ def test_get_settings_loads_explicit_structured_config(
     tmp_path,
 ) -> None:
     _clear_settings_env(monkeypatch)
-    secret_path = tmp_path / "minimax-key"
-    secret_path.write_text("test-key\n", encoding="utf-8")
     config_path = tmp_path / "config.json"
     agent_config_path = tmp_path / "agent.json"
     config_path.write_text(
@@ -101,31 +83,7 @@ def test_get_settings_loads_explicit_structured_config(
         ),
         encoding="utf-8",
     )
-    agent_config_path.write_text(
-        json.dumps(
-            {
-                "agent": {
-                    "loop": {
-                        "max_turns": 12,
-                        "max_tool_calls": 6,
-                    }
-                },
-                "llm": {
-                    "default_provider": "minimax-fast",
-                    "providers": {
-                        "minimax-fast": {
-                            "type": "minimax",
-                            "api_key_file": str(secret_path),
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 13.5,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    agent_config_path.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AGENT_CONFIG_FILE", str(config_path))
     monkeypatch.setenv("AGENT_AGENT_CONFIG_FILE", str(agent_config_path))
@@ -134,12 +92,6 @@ def test_get_settings_loads_explicit_structured_config(
 
     assert settings.db_path == "/tmp/skiller.db"
     assert settings.log_level == "DEBUG"
-    assert settings.llm_provider == "minimax"
-    assert settings.minimax_api_key == "test-key"
-    assert settings.minimax_model == "MiniMax-M2.5"
-    assert settings.minimax_timeout_seconds == 13.5
-    assert settings.agent_loop_max_turns == 12
-    assert settings.agent_loop_max_tool_calls == 6
     assert settings.webhooks_host == "0.0.0.0"
     assert settings.webhooks_port == 9002
     assert settings.whatsapp_bridge_host == "0.0.0.0"
@@ -147,26 +99,33 @@ def test_get_settings_loads_explicit_structured_config(
     assert settings.whatsapp_bridge_send_timeout_seconds == 14.5
 
 
-def test_get_settings_loads_global_structured_config(
+def test_get_settings_uses_local_agent_json_before_global(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     _clear_settings_env(monkeypatch)
     home = tmp_path / "home"
-    config_dir = home / ".skiller" / "settings"
-    config_dir.mkdir(parents=True)
-    (config_dir / "agent.json").write_text(
+    global_dir = home / ".skiller" / "settings"
+    global_dir.mkdir(parents=True)
+    (global_dir / "agent.json").write_text(
         json.dumps(
             {
-                "llm": {
-                    "default_provider": "fake-chat",
-                    "providers": {
-                        "fake-chat": {
-                            "type": "fake",
-                            "model": "global-model",
-                            "response_json": {"reply": "hola"},
-                        }
-                    },
+                "event_output": {
+                    "truncate": {
+                        "max_text_chars": 100,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "agent.json").write_text(
+        json.dumps(
+            {
+                "event_output": {
+                    "truncate": {
+                        "max_text_chars": 900,
+                    }
                 }
             }
         ),
@@ -177,43 +136,49 @@ def test_get_settings_loads_global_structured_config(
 
     settings = settings_module.get_settings()
 
-    assert settings.llm_provider == "fake"
-    assert settings.fake_llm_model == "global-model"
-    assert settings.fake_llm_response_json == '{"reply": "hola"}'
+    assert settings.agent_config_path == "agent.json"
+    assert settings.agent_event_output_max_text_chars == 900
 
 
-def test_get_settings_prefers_client_type_over_type(
+def test_get_settings_uses_explicit_agent_config_before_local(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     _clear_settings_env(monkeypatch)
-    agent_config_path = tmp_path / "agent.json"
-    agent_config_path.write_text(
+    local_path = tmp_path / "agent.json"
+    explicit_path = tmp_path / "explicit-agent.json"
+    local_path.write_text(
         json.dumps(
             {
-                "llm": {
-                    "default_provider": "fake-main",
-                    "providers": {
-                        "fake-main": {
-                            "client_type": "fake",
-                            "type": "minimax",
-                            "model": "fake-model-v2",
-                            "response_json": {"status": "ok"},
-                        }
-                    },
+                "event_output": {
+                    "truncate": {
+                        "max_text_chars": 100,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    explicit_path.write_text(
+        json.dumps(
+            {
+                "event_output": {
+                    "truncate": {
+                        "max_text_chars": 700,
+                    }
                 }
             }
         ),
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_AGENT_CONFIG_FILE", str(agent_config_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("AGENT_AGENT_CONFIG_FILE", str(explicit_path))
 
     settings = settings_module.get_settings()
 
-    assert settings.llm_provider == "fake"
-    assert settings.fake_llm_model == "fake-model-v2"
-    assert settings.fake_llm_response_json == '{"status": "ok"}'
+    assert settings.agent_config_path == str(explicit_path)
+    assert settings.agent_event_output_max_text_chars == 700
 
 
 def test_get_settings_loads_agent_config_file_and_merges_with_main(
@@ -237,8 +202,7 @@ def test_get_settings_loads_agent_config_file_and_merges_with_main(
                             "enabled": True,
                             "max_text_chars": 700,
                             "max_json_chars": 5000,
-                        },
-                        "pii": {"enabled": False},
+                        }
                     },
                 },
             }
@@ -248,22 +212,11 @@ def test_get_settings_loads_agent_config_file_and_merges_with_main(
     (config_dir / "agent.json").write_text(
         json.dumps(
             {
-                "llm": {
-                    "default_provider": "fake-chat",
-                    "providers": {
-                        "fake-chat": {
-                            "type": "fake",
-                            "model": "global-model",
-                            "response_json": {"reply": "hola"},
-                        }
-                    },
-                },
                 "event_output": {
                     "truncate": {
                         "max_json_chars": 9000,
                         "max_array_items": 33,
-                    },
-                    "secrets": {"enabled": False},
+                    }
                 },
                 "shell": {
                     "policy": {
@@ -286,16 +239,11 @@ def test_get_settings_loads_agent_config_file_and_merges_with_main(
     settings = settings_module.get_settings()
 
     assert settings.db_path == "/tmp/skiller.db"
-    assert settings.llm_provider == "fake"
-    assert settings.fake_llm_model == "global-model"
-    assert settings.fake_llm_response_json == '{"reply": "hola"}'
     assert settings.agent_shell_allowlist_enabled is True
     assert settings.agent_shell_allowlist_workspace == "/tmp/skiller-workspace"
     assert settings.agent_shell_allowlist_allow_env_prefix is False
     assert settings.agent_shell_allowlist_allowed_commands == ("git", "rg")
     assert settings.agent_event_output_truncate_enabled is True
-    assert settings.agent_event_output_pii_enabled is False
-    assert settings.agent_event_output_secrets_enabled is False
     assert settings.agent_event_output_max_text_chars == 700
     assert settings.agent_event_output_max_json_chars == 9000
     assert settings.agent_event_output_max_array_items == 33
@@ -307,7 +255,6 @@ def test_get_settings_environment_overrides_structured_config(
 ) -> None:
     _clear_settings_env(monkeypatch)
     config_path = tmp_path / "config.json"
-    agent_config_path = tmp_path / "agent.json"
     config_path.write_text(
         json.dumps(
             {
@@ -316,22 +263,8 @@ def test_get_settings_environment_overrides_structured_config(
         ),
         encoding="utf-8",
     )
-    agent_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "fake-chat",
-                    "providers": {"fake-chat": {"type": "fake", "model": "fake-model"}},
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AGENT_CONFIG_FILE", str(config_path))
-    monkeypatch.setenv("AGENT_AGENT_CONFIG_FILE", str(agent_config_path))
-    monkeypatch.setenv("AGENT_LLM_PROVIDER", "minimax")
-    monkeypatch.setenv("AGENT_MINIMAX_API_KEY", "env-key")
     monkeypatch.setenv("AGENT_WEBHOOKS_PORT", "9010")
     monkeypatch.setenv("AGENT_SHELL_ALLOWLIST_ENABLED", "true")
     monkeypatch.setenv("AGENT_SHELL_ALLOWLIST_WORKSPACE", "~/sandbox/ws")
@@ -339,14 +272,10 @@ def test_get_settings_environment_overrides_structured_config(
     monkeypatch.setenv("AGENT_SHELL_ALLOWLIST_ALLOWED_COMMANDS", "git, rg,pytest")
     monkeypatch.setenv("AGENT_SHELL_SANDBOX_ENABLED", "false")
     monkeypatch.setenv("AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED", "false")
-    monkeypatch.setenv("AGENT_EVENT_OUTPUT_PII_ENABLED", "0")
-    monkeypatch.setenv("AGENT_EVENT_OUTPUT_SECRETS_ENABLED", "off")
     monkeypatch.setenv("AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS", "1234")
 
     settings = settings_module.get_settings()
 
-    assert settings.llm_provider == "minimax"
-    assert settings.minimax_api_key == "env-key"
     assert settings.webhooks_port == 9010
     assert settings.agent_shell_allowlist_enabled is True
     assert settings.agent_shell_allowlist_workspace.endswith("/sandbox/ws")
@@ -354,68 +283,7 @@ def test_get_settings_environment_overrides_structured_config(
     assert settings.agent_shell_allowlist_allowed_commands == ("git", "rg", "pytest")
     assert settings.agent_shell_sandbox_enabled is False
     assert settings.agent_event_output_truncate_enabled is False
-    assert settings.agent_event_output_pii_enabled is False
-    assert settings.agent_event_output_secrets_enabled is False
     assert settings.agent_event_output_max_text_chars == 1234
-
-
-def test_get_settings_loads_secret_from_provider_env_reference(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    _clear_settings_env(monkeypatch)
-    agent_config_path = tmp_path / "agent.json"
-    agent_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax",
-                    "providers": {
-                        "minimax": {
-                            "type": "minimax",
-                            "api_key_env": "TEST_MINIMAX_KEY",
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_AGENT_CONFIG_FILE", str(agent_config_path))
-    monkeypatch.setenv("TEST_MINIMAX_KEY", "env-ref-key")
-
-    settings = settings_module.get_settings()
-
-    assert settings.minimax_api_key == "env-ref-key"
-
-
-def test_get_settings_ignores_llm_config_from_main_config_file(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    _clear_settings_env(monkeypatch)
-    home = tmp_path / "home"
-    home.mkdir()
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "fake-chat",
-                    "providers": {"fake-chat": {"type": "fake", "model": "from-config"}},
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("AGENT_CONFIG_FILE", str(config_path))
-
-    settings = settings_module.get_settings()
-
-    assert settings.llm_provider == "null"
 
 
 def test_get_settings_ignores_shell_config_from_main_config_file(
@@ -462,7 +330,6 @@ def test_get_settings_merges_root_and_agent_event_output_blocks_in_agent_json(
         json.dumps(
             {
                 "event_output": {
-                    "secrets": {"enabled": False},
                     "truncate": {"max_json_chars": 7000},
                 },
                 "agent": {
@@ -486,7 +353,6 @@ def test_get_settings_merges_root_and_agent_event_output_blocks_in_agent_json(
 
     settings = settings_module.get_settings()
 
-    assert settings.agent_event_output_secrets_enabled is False
     assert settings.agent_event_output_max_json_chars == 9100
     assert settings.agent_shell_allowlist_enabled is True
     assert settings.agent_shell_allowlist_allowed_commands == ("git",)

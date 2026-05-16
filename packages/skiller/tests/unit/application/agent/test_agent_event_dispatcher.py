@@ -38,13 +38,13 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            usage=None,
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="final",
                 text="Done.",
             ),
             source_step_id="support_agent",
-            idempotency_key="assistant:support_agent:turn-4",
             created_at="2026-05-15T00:00:00Z",
         )
     )
@@ -104,6 +104,7 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
             context_id="ctx-1",
             sequence=8,
             entry_type=AgentContextEntryType.TOOL_CALL,
+            usage=None,
             payload=AgentToolCallPayload(
                 turn_id="turn-4",
                 parent_sequence=7,
@@ -112,7 +113,6 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
                 args={"command": "x" * 1000},
             ),
             source_step_id="support_agent",
-            idempotency_key="tool_call:support_agent:turn-4:call-1",
             created_at="2026-05-15T00:00:00Z",
         )
     )

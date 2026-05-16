@@ -1,0 +1,17 @@
+name: agent_minimal_e2e
+description: "Minimal CLI e2e for agent final output"
+version: "0.1"
+start: answer_date
+
+inputs:
+  expected_date: string
+
+steps:
+  - agent: answer_date
+    system: |
+      You are a deterministic formatting agent.
+      Return only the requested value.
+      Do not add prose, markdown, quotes, punctuation, or extra whitespace.
+    task: "Return this date exactly in YYYY-MM-DD format: {{inputs.expected_date}}"
+    tools: []
+    max_turns: 1

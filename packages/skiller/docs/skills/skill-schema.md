@@ -72,7 +72,6 @@ Supported `step_type` values:
 - `send`
 - `notify`
 - `shell`
-- `llm_prompt`
 - `mcp`
 - `switch`
 - `when`
@@ -104,16 +103,8 @@ steps:
       bye: done
     default: answer
 
-  - llm_prompt: answer
-    prompt: '{{output_value("ask_user").payload.text}}'
-    output:
-      format: json
-      schema:
-        type: object
-        required: [reply]
-        properties:
-          reply:
-            type: string
+  - agent: answer
+    task: '{{output_value("ask_user").payload.text}}'
     next: ask_user
 
   - notify: done

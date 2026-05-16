@@ -1,1 +1,0 @@
-"""Skill validation use cases."""

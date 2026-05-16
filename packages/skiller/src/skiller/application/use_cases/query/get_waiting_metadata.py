@@ -2,8 +2,8 @@ from typing import Any
 
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.run_step_model import find_run_step
 from skiller.domain.step.skill_runner_port import SkillRunnerPort
-from skiller.domain.step.skill_step_model import find_skill_step
 from skiller.domain.step.step_type import StepType
 
 
@@ -24,14 +24,14 @@ class GetWaitingMetadataUseCase:
         if run.current is None:
             return None
 
-        skill = run.skill_snapshot
-        if not isinstance(skill, dict):
+        snapshot = run.snapshot
+        if not isinstance(snapshot, dict):
             return None
 
-        raw_steps = skill.get("steps", [])
+        raw_steps = snapshot.get("steps", [])
 
         try:
-            _, parsed_step = find_skill_step(raw_steps, run.current)
+            _, parsed_step = find_run_step(raw_steps, run.current)
         except ValueError:
             return None
 

@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.tool.tool_contract import ToolResult
 
 
 class ToolExecutionStatus(str, Enum):
@@ -34,6 +36,23 @@ class ToolExecutionRequest:
     @property
     def agent_id(self) -> str:
         return self.step_id
+
+
+@dataclass(frozen=True)
+class AgentToolCall:
+    turn_id: str
+    tool_call_id: str
+    tool: str
+    parent_sequence: int | None
+    args: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class AgentToolResult:
+    turn_id: str
+    tool_call_id: str
+    parent_sequence: int | None
+    result: ToolResult
 
 
 @dataclass(frozen=True)

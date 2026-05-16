@@ -524,7 +524,6 @@ Rules:
 | `wait_input` | `none` | `status_view` | prompt shown in global status, not transcript |
 | `wait_webhook` | `none` | `status_view` | prompt shown in global status, not transcript |
 | `wait_channel` | `none` | `status_view` | prompt shown in global status, not transcript |
-| `llm_prompt` | `simple` | `text` | multiline allowed |
 | `switch` | `inline` | `value.next_step_id` | render as `[switch] step_id → next_step_id` |
 | `when` | `inline` | `value.next_step_id` | render as `[when] step_id → next_step_id` |
 | `send` | `simple` | `text` | compact result |

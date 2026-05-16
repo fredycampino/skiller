@@ -57,13 +57,12 @@ class _FakeSkillRunner:
         return value
 
 
-def _build_run(skill_snapshot: dict[str, object] | None = None) -> Run:
+def _build_run(snapshot: dict[str, object] | None = None) -> Run:
     return Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="local_mcp",
-        skill_snapshot=skill_snapshot
-        or {
+        source="internal",
+        ref="local_mcp",
+        snapshot=snapshot or {
             "mcp": [
                 {
                     "name": "local-mcp",
@@ -81,14 +80,13 @@ def _build_run(skill_snapshot: dict[str, object] | None = None) -> Run:
 
 
 def _build_run_with_inputs(
-    *, skill_snapshot: dict[str, object] | None = None, **inputs: str
+    *, snapshot: dict[str, object] | None = None, **inputs: str
 ) -> Run:
     return Run(
         id="run-1",
-        skill_source="internal",
-        skill_ref="local_mcp",
-        skill_snapshot=skill_snapshot
-        or {
+        source="internal",
+        ref="local_mcp",
+        snapshot=snapshot or {
             "mcp": [
                 {
                     "name": "local-mcp",
@@ -106,7 +104,7 @@ def _build_run_with_inputs(
 
 
 def test_render_mcp_config_returns_rendered_stdio_config() -> None:
-    skill_snapshot = {
+    snapshot = {
         "mcp": [
             {
                 "name": "local-mcp",
@@ -133,7 +131,7 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
         }
     )
     use_case = RenderMcpConfigUseCase(
-        store=_FakeStore(_build_run(skill_snapshot)), skill_runner=skill_runner
+        store=_FakeStore(_build_run(snapshot)), skill_runner=skill_runner
     )
 
     result = use_case.execute(
@@ -332,7 +330,7 @@ def test_render_mcp_config_resolves_http_config_from_secret_files(tmp_path: Path
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+        skill_runner=_FakeSkillRunner(run.snapshot),
     )
 
     result = use_case.execute(
@@ -377,7 +375,7 @@ def test_render_mcp_config_resolves_header_from_env(monkeypatch: pytest.MonkeyPa
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+        skill_runner=_FakeSkillRunner(run.snapshot),
     )
 
     result = use_case.execute(
@@ -405,7 +403,7 @@ def test_render_mcp_config_renders_http_url_template() -> None:
     run = _build_run_with_inputs(
         host="127.0.0.1",
         port="8765",
-        skill_snapshot={
+        snapshot={
             "mcp": [
                 {
                     "name": "test-mcp",
@@ -640,7 +638,7 @@ def test_render_mcp_config_rejects_missing_header_env() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.skill_snapshot),
+        skill_runner=_FakeSkillRunner(run.snapshot),
     )
 
     result = use_case.execute(

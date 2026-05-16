@@ -35,8 +35,8 @@ class OutputPayload:
 
 @dataclass(frozen=True)
 class RunCreatePayload:
-    skill: str
-    skill_source: str
+    ref: str
+    source: str
 
 
 @dataclass(frozen=True)

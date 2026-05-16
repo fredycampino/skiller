@@ -26,8 +26,8 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
         [
             RunListItem(
                 id="f25d21cc-95ea-4dc1-9305-c18f4ddceaca",
-                skill_source="internal",
-                skill_ref="chat",
+                source="internal",
+                ref="chat",
                 status="WAITING",
                 current="ask_user",
                 created_at="2026-03-30 10:00:00",
@@ -36,8 +36,8 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
             ),
             RunListItem(
                 id="eeee1234-1111-2222-3333-444444444444",
-                skill_source="internal",
-                skill_ref="repo_checks",
+                source="internal",
+                ref="repo_checks",
                 status="SUCCEEDED",
                 current="summarize",
                 created_at="2026-03-30 09:00:00",
@@ -56,8 +56,8 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
     ]
     assert result[0].to_dict() == {
         "id": "f25d21cc-95ea-4dc1-9305-c18f4ddceaca",
-        "skill_source": "internal",
-        "skill_ref": "chat",
+        "source": "internal",
+        "ref": "chat",
         "status": "WAITING",
         "current": "ask_user",
         "created_at": "2026-03-30 10:00:00",
@@ -66,8 +66,8 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
     }
     assert result[1].to_dict() == {
         "id": "eeee1234-1111-2222-3333-444444444444",
-        "skill_source": "internal",
-        "skill_ref": "repo_checks",
+        "source": "internal",
+        "ref": "repo_checks",
         "status": "SUCCEEDED",
         "current": "summarize",
         "created_at": "2026-03-30 09:00:00",

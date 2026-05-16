@@ -5,8 +5,8 @@ from typing import Any
 @dataclass(frozen=True)
 class RunListItem:
     id: str
-    skill_source: str
-    skill_ref: str
+    source: str
+    ref: str
     status: str
     current: str | None
     created_at: str
@@ -17,8 +17,8 @@ class RunListItem:
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "id": self.id,
-            "skill_source": self.skill_source,
-            "skill_ref": self.skill_ref,
+            "source": self.source,
+            "ref": self.ref,
             "status": self.status,
             "current": self.current,
             "created_at": self.created_at,

@@ -19,6 +19,15 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-beta.4 - 2026-05-17
+
+### Fixed
+- Keep observer polling events visible (PR #32).
+- Interrupt running agent on observer error (PR #33).
+
+### Notes
+- Release version bump consolidating recent bug fixes.
+
 ## 1.0.0-beta.3 - 2026-05-17
 
 ### Added

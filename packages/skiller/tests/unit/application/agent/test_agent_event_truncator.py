@@ -31,6 +31,25 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
     assert payload.text == "abcdefghij..."
 
 
+def test_agent_event_truncator_preserves_assistant_message_total_tokens() -> None:
+    truncator = AgentEventTruncator(
+        AgentEventOutputPolicy(max_text_chars=10),
+        OutputTruncator(),
+    )
+
+    payload = truncator.truncate_assistant_message(
+        AgentAssistantMessagePayload(
+            turn_id="turn-1",
+            message_type="final",
+            text="abcdefghijklmnopqrstuvwxyz",
+            total_tokens=123,
+        )
+    )
+
+    assert payload.text == "abcdefghij..."
+    assert payload.total_tokens == 123
+
+
 def test_agent_event_truncator_truncates_tool_call_args() -> None:
     truncator = AgentEventTruncator(
         AgentEventOutputPolicy(max_text_chars=8, max_json_chars=70, max_array_items=2),

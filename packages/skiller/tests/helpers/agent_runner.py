@@ -17,6 +17,7 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
+from skiller.domain.agent.agent_config_model import AgentConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -27,6 +28,9 @@ from skiller.domain.agent.agent_context_model import (
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.event.event_model import (
+    AgentAssistantMessageContext,
+    AgentBodyFinalMessage,
+    AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
     RuntimeEventType,
@@ -133,7 +137,44 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
                 step_id=entry.source_step_id,
                 turn_id=entry.payload.turn_id,
                 agent_sequence=entry.sequence,
-                body=entry.payload,
+                body=AgentBodyToolMessage(
+                    total_tokens=entry.payload.total_tokens or 0,
+                    text=entry.payload.text,
+                ),
+            ),
+        )
+
+    def emit_final_assistant_message(
+        self,
+        *,
+        entry: AgentContextEntry,
+        config: AgentConfig,
+    ) -> None:
+        if self.append_runtime_event_use_case is None:
+            return
+        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
+            raise ValueError("Final assistant event requires assistant_message entry")
+        if not isinstance(entry.payload, AgentAssistantMessagePayload):
+            raise ValueError("Final assistant event requires AgentAssistantMessagePayload")
+
+        provider = config.llm.default()
+        self.append_runtime_event_use_case.execute(
+            entry.run_id,
+            event_type=RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+            payload=AgentEventPayload(
+                step_id=entry.source_step_id,
+                turn_id=entry.payload.turn_id,
+                agent_sequence=entry.sequence,
+                body=AgentBodyFinalMessage(
+                    text=entry.payload.text,
+                    context=AgentAssistantMessageContext(
+                        compaction_enabled=config.context.compaction.enabled,
+                        max_window_ratio=config.context.compaction.max_total_tokens_ratio,
+                        max_window_tokens=provider.context_window_tokens,
+                        total_tokens=entry.payload.total_tokens or 0,
+                        model=provider.model,
+                    ),
+                ),
             ),
         )
 

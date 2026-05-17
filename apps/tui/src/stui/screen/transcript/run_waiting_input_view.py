@@ -17,5 +17,5 @@ class RunWaitingInputView(TranscriptView):
     def render(self, *, theme: TuiTheme) -> RenderableType:
         return Text(
             "   ...",
-            style=theme.rich_style(theme.color_text_muted),
+            style=theme.color_text_muted,
         )

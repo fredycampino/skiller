@@ -250,6 +250,7 @@ class ConsoleScreenViewModel(LogEventsListener):
             command=self.state.runs_table.command,
             rows=self.state.runs_table.rows,
         )
+        state.set_agent_usage(self.state.agent_usage)
         state.set_autocompletion(self.state.autocompletion)
         return state
 

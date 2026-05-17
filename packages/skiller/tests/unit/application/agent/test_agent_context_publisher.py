@@ -284,10 +284,12 @@ class _FakeAgentContextStore(AgentContextStorePort):
             created_at="2026-05-15T00:00:00Z",
         )
 
-    def list_entries(self, *, scope: AgentRunScope) -> list[AgentContextEntry]:
+    def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
+        _ = context_id
         raise NotImplementedError
 
-    def next_turn_id(self, *, scope: AgentRunScope) -> str:
+    def next_turn_id(self, *, context_id: str) -> str:
+        _ = context_id
         raise NotImplementedError
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from stui.port.event_models import (
+    AgentAssistantMessageContextPayload,
+    AgentFinalAssistantMessagePayload,
     ErrorPayload,
     InputReceivedPayload,
     LogEvent,
@@ -119,6 +121,37 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     assert state.prompt.cursor_position == 5
     assert state.prompt.waiting_prompt == ""
     assert context.status == RunStatus.FAILED
+
+
+def test_event_state_updates_agent_usage_from_final_assistant_message() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    use_case = EventStateUseCase(context=context)
+
+    use_case.execute(
+        state=state,
+        events=[
+            _event(
+                LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+                sequence=2,
+                payload=AgentFinalAssistantMessagePayload(
+                    text="Done",
+                    context=AgentAssistantMessageContextPayload(
+                        compaction_enabled=False,
+                        max_window_ratio=0.8,
+                        max_window_tokens=1000000,
+                        total_tokens=3155,
+                        model="MiniMax-M2.5",
+                    ),
+                ),
+            )
+        ],
+    )
+
+    assert state.agent_usage is not None
+    assert state.agent_usage.model == "MiniMax-M2.5"
+    assert state.agent_usage.total_tokens == 3155
+    assert state.agent_usage.max_window_tokens == 1000000
 
 
 @pytest.mark.parametrize(

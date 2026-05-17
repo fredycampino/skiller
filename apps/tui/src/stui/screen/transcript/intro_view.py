@@ -19,5 +19,5 @@ class IntroView(TranscriptView):
             f"{self.strings.intro_title}\n"
             f"{self.strings.intro_body}\n"
             f"{self.strings.intro_hint}",
-            style=theme.rich_style(theme.color_text_muted),
+            style=theme.color_text_muted,
         )

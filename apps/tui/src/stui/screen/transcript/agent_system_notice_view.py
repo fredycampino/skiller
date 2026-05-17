@@ -15,7 +15,7 @@ class AgentSystemNoticeView(TranscriptView):
     item: AgentSystemNoticeItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
-        warning_style = theme.rich_style(theme.color_text_warning)
+        warning_style = theme.color_text_warning
         return prefixed_view(
             prefix=transcript_text(
                 theme.system_warning_icon,

@@ -4,7 +4,6 @@ import json
 from dataclasses import dataclass
 
 from rich.console import RenderableType
-from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.pretty import Pretty
 from rich.segment import Segment, Segments
@@ -12,14 +11,13 @@ from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
 
+from stui.screen.markdown import MarkdownView
 from stui.screen.theme import TuiTheme
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     OutputFormat,
     TranscriptMode,
 )
-
-_MARKDOWN_CODE_THEME = "monokai"
 
 
 def transcript_text(value: str, *, style: str = "") -> Text:
@@ -46,16 +44,16 @@ def prefixed_view(
 
 def agent_step_tag_style(*, theme: TuiTheme, mode: TranscriptMode) -> str:
     if mode == TranscriptMode.CHAT:
-        base_style = theme.rich_style(theme.color_text_muted)
+        base_style = theme.color_text_muted
         return f"{base_style} dim".strip()
-    return theme.rich_style(theme.color_text_accent)
+    return theme.color_text_accent
 
 
 def agent_step_id_style(*, theme: TuiTheme, mode: TranscriptMode) -> str:
     if mode == TranscriptMode.CHAT:
-        base_style = theme.rich_style(theme.color_text_muted)
+        base_style = theme.color_text_muted
         return f"{base_style} dim".strip()
-    return theme.rich_style(theme.color_text_secondary)
+    return theme.color_text_secondary
 
 
 def render_run_output(
@@ -84,10 +82,20 @@ def render_run_output(
     if format == OutputFormat.MARKDOWN:
         if step_type.strip().lower() == "agent":
             return wrap_agent_renderable(
-                render_agent_content(output=normalized, format=format, parsed=parsed),
+                render_agent_content(
+                    output=normalized,
+                    format=format,
+                    theme=theme,
+                    parsed=parsed,
+                ),
                 theme=theme,
             )
-        return render_markdown_output(normalized, parsed, indent=indent)
+        return render_markdown_output(
+            normalized,
+            parsed,
+            theme=theme,
+            indent=indent,
+        )
 
     if format == OutputFormat.STRUCTURED:
         return render_structured_output(parsed, normalized, indent=indent)
@@ -105,12 +113,13 @@ def render_agent_assistant_content(
     renderable = render_agent_content(
         output=item.text,
         format=item.format,
+        theme=theme,
     )
     if item.message_type.strip().lower() == "final":
         return renderable
     return Styled(
         renderable,
-        style=theme.rich_style(theme.color_text_secondary),
+        style=theme.color_text_secondary,
     )
 
 
@@ -122,7 +131,7 @@ def wrap_agent_renderable(
     return prefixed_view(
         prefix=transcript_text(
             theme.agent_message_icon,
-            style=theme.rich_style(theme.color_text_primary),
+            style=theme.color_text_primary,
         ),
         content=TrimLeadingBlankLines(renderable),
         prefix_width=1,
@@ -171,13 +180,14 @@ def render_markdown_output(
     normalized: str,
     parsed: object | None,
     *,
+    theme: TuiTheme,
     indent: int,
 ) -> RenderableType:
     markdown_text = extract_markdown_text(normalized, parsed)
     if not markdown_text.strip():
         return Text("")
     return Padding(
-        Markdown(markdown_text, code_theme=_MARKDOWN_CODE_THEME),
+        MarkdownView(markdown_text, theme=theme).render(),
         (0, 0, 0, indent),
     )
 
@@ -186,6 +196,7 @@ def render_agent_content(
     *,
     output: str,
     format: OutputFormat,
+    theme: TuiTheme,
     parsed: object | None = None,
 ) -> RenderableType:
     normalized = output.strip()
@@ -198,7 +209,7 @@ def render_agent_content(
 
     if format == OutputFormat.MARKDOWN:
         markdown_text = extract_markdown_text(normalized, resolved_parsed)
-        return Markdown(markdown_text, code_theme=_MARKDOWN_CODE_THEME)
+        return MarkdownView(markdown_text, theme=theme).render()
 
     if format == OutputFormat.STRUCTURED:
         return render_structured_output(resolved_parsed, normalized, indent=0)

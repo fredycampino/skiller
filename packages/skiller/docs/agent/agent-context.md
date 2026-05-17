@@ -32,7 +32,7 @@ Fields:
 - `id`: unique entry id.
 - `run_id`: run that owns this context entry.
 - `context_id`: logical agent memory id inside the run.
-- `sequence`: monotonic order within `run_id + context_id`.
+- `sequence`: monotonic order within `context_id`.
 - `entry_type`: one of the supported entry types.
 - `payload`: typed entry content used to rebuild the agent prompt. It is persisted as JSON.
 - `usage`: optional LLM token usage. Currently present on assistant response entries.
@@ -67,6 +67,8 @@ AgentContextPayload =
 | context_id      | TEXT    | NOT NULL                             |
 | sequence        | INTEGER | NOT NULL                             |
 | entry_type      | TEXT    | NOT NULL                             |
+| message_type    | TEXT    | NULL, assistant message subtype      |
+| total_tokens    | INTEGER | NULL, assistant request tokens       |
 | payload_json    | TEXT    | NOT NULL, full payload               |
 | usage_json      | TEXT    | NULL, LLM usage for response entries |
 | source_step_id  | TEXT    | NOT NULL                             |
@@ -77,8 +79,12 @@ AgentContextPayload =
 Indexes:
 
 ```text
-idx_agent_context_entries_context(run_id, context_id, sequence)
+idx_agent_context_entries_context(context_id, sequence)
+idx_agent_context_entries_final_marker(context_id, entry_type, message_type, total_tokens, sequence)
 ```
+
+`message_type` and `total_tokens` duplicate assistant payload fields on purpose. They make
+context-window queries cheap without parsing `payload_json`.
 
 ## Entry Payloads
 
@@ -115,9 +121,10 @@ Assistant message that introduces tool calls:
 }
 ```
 
-`total_tokens` is the current accumulated token total for the agent context after
-the assistant response usage has been recorded. It is informational metadata for
-observers and must not be sent back to the LLM as prompt content.
+`total_tokens` is the `usage.total_tokens` reported by the LLM for that assistant
+response. It represents prompt tokens plus completion tokens for that request.
+It is metadata for context-window reads and observers, and must not be sent back
+to the LLM as prompt content.
 
 Tool call:
 
@@ -241,7 +248,7 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "turn_id": "turn-2",
         "message_type": "final",
         "text": "The tests fail because `requests` is missing.",
-        "total_tokens": 175
+        "total_tokens": 79
       },
       "usage": {
         "prompt_tokens": 63,
@@ -260,7 +267,7 @@ This example has one user task, one tool call inside `turn-1`, and one final ass
 `turn_id` groups entries that belong to the same assistant response.
 `tool_call_id` identifies one concrete tool call inside that turn.
 `message_type` distinguishes assistant content that introduces tool calls from final assistant content.
-`total_tokens` is cumulative for the context at the point the assistant message was persisted.
+`total_tokens` is the `usage.total_tokens` reported by the LLM for that assistant response.
 `parent_sequence` links `tool_call` and `tool_result` entries back to the assistant message of the same turn.
 
 That allows one assistant turn to persist:
@@ -288,19 +295,74 @@ This keeps the next LLM request aligned with the original provider response orde
 
 ## Read Model
 
-Load context entries by `run_id + context_id`, ordered by `sequence`.
+Load context entries by `context_id`, ordered by `sequence`.
 
-For prompt construction, the `agent` step can load the most recent entries:
+For full prompt construction:
 
 ```sql
 SELECT *
 FROM agent_context_entries
-WHERE run_id = ? AND context_id = ?
-ORDER BY sequence DESC
-LIMIT ?
+WHERE context_id = ?
+ORDER BY sequence ASC
 ```
 
-Then reverse the result in memory before sending it to the LLM.
+For normal agent execution, the runner uses a sliding context window instead of loading the
+full context.
+
+## Context Window
+
+The window is a read limit, not summarization or compaction.
+
+Inputs:
+
+- `llm.providers.<name>.context_window_tokens`: provider context capacity.
+- `agent.context.compaction.max_total_tokens_ratio`: fraction of the provider capacity used
+  for context reads.
+
+Resolved request metadata:
+
+```python
+AgentContextLLMRequest(
+    context_id: str,
+    turn_id: str,
+    llm_request: LLMRequest,
+    context_window_tokens: int,
+    max_ratio: float,
+    estimated_tokens: int,
+)
+```
+
+Fields:
+
+- `context_id`: context being read.
+- `turn_id`: next agent turn id.
+- `llm_request`: provider-ready request built from system prompt, window entries, and tools.
+- `context_window_tokens`: resolved token limit used for the context-window query.
+- `max_ratio`: configured ratio used to calculate `context_window_tokens`.
+- `estimated_tokens`: estimated token size of the selected window. It is `0` when the selected
+  entries do not expose usable assistant final totals.
+
+Window selection:
+
+```text
+current_total = last assistant_message where message_type = "final" and total_tokens is not null
+cutoff = current_total - context_window_tokens
+start_marker = first assistant_message where message_type = "final" and total_tokens > cutoff
+window = entries where sequence >= start_marker.sequence
+```
+
+If there is no final marker, or the current total is still inside the window, the store returns
+the full context for that `context_id`.
+
+Window token estimate:
+
+```text
+estimated_tokens = last_selected_entry.total_tokens - first_selected_entry.total_tokens
+```
+
+The estimate only reads the first and last selected entries. If the first selected entry is not a
+final assistant message, the estimate falls back to the last selected entry total. If the last
+selected entry is not a final assistant message, the estimate is `0`.
 
 ## Relationship To Existing Tables
 
@@ -308,6 +370,8 @@ Then reverse the result in memory before sending it to the LLM.
 - `agent_context_entries` stores the internal append-only memory used by the agent loop.
 - `agent_context_entries.payload_json` is the source of truth for each memory entry and may be
   large.
-- `agent_context_entries.usage_json` stores token usage for assistant response entries and is
-  used to calculate context usage stats.
+- `agent_context_entries.usage_json` stores token usage for assistant response entries.
+  Context usage stats expose the latest final assistant usage.
+- `agent_context_entries.message_type` and `agent_context_entries.total_tokens` are indexed
+  assistant metadata for context-window reads.
 - `events` remains an observability stream, not the functional source of truth.

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TuiTheme:
-    color_terminal_default: str = "ansi_default"
-    color_text_primary: str = "ansi_default"
+    color_ansi_default: str = "ansi_default"
+    color_text_primary: str = "white"
     color_text_secondary: str = "#8a8a8a"
     color_text_muted: str = "#555555"
     color_text_warning: str = "#d29922"
@@ -14,6 +14,8 @@ class TuiTheme:
     color_text_error: str = "#ff7b72"
     color_text_accent: str = "#79c0ff"
     color_text_selected: str = "white"
+    color_text_inline_code: str = "#9b9d9d"
+
     color_prompt_border: str = "#444444"
     cursor: str = ">"
     user_icon: str = "›"
@@ -39,11 +41,6 @@ class TuiTheme:
     prompt_editor_max_height: int = 3
     footer_margin_top: int = 1
 
-    def rich_style(self, color: str) -> str:
-        if color == self.color_terminal_default:
-            return ""
-        return color
-
 
 DEFAULT_TUI_THEME = TuiTheme()
 
@@ -53,20 +50,20 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
     autocomplete_box_height = theme.autocomplete_visible_lines + 2
     return f"""
         App {{
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_primary};
         }}
 
         Screen {{
             layout: vertical;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_primary};
         }}
 
         #root {{
             layout: vertical;
             height: 100%;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #transcript-log {{
@@ -75,7 +72,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             overflow: scroll;
             scrollbar-size: 0 0;
             scrollbar-visibility: hidden;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             border: none;
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
             padding: 0 1;
@@ -92,7 +89,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             padding: 0 1;
             color: {theme.color_text_primary};
             text-style: dim;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #runs-table-area {{
@@ -113,7 +110,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
             padding: 0 1;
             border: round {theme.color_prompt_border};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #prompt-prefix {{
@@ -121,7 +118,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             padding: 0;
             content-align: left top;
             color: {theme.color_text_primary};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #prompt {{
@@ -132,7 +129,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             padding: 0;
             margin: 0;
             overflow-y: auto;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_primary};
         }}
 
@@ -146,12 +143,12 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
         }}
 
         #prompt .text-area--selection {{
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             text-style: reverse;
         }}
 
         #prompt .text-area--cursor-line {{
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #autocomplete {{
@@ -161,7 +158,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
             padding: 0 1;
             border: round {theme.color_prompt_border};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_secondary};
             overflow: hidden;
         }}
@@ -171,7 +168,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             width: 100%;
             padding: 0 0 0 0;
             border: round {theme.color_prompt_border};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_secondary};
             overflow: hidden;
             scrollbar-size: 0 0;
@@ -180,24 +177,24 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #runs-table > .datatable--header {{
             color: {theme.color_text_primary};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             padding-bottom: 1;
             text-style: bold;
         }}
 
         #runs-table > .datatable--cursor {{
             color: {theme.color_text_accent};
-            background: {theme.color_terminal_default} 0%;
+            background: {theme.color_ansi_default} 0%;
             text-style: bold;
         }}
 
         #footer {{
             height: 2;
             margin: {theme.footer_margin_top} {footer_margin_x} 0 {footer_margin_x};
-            padding: 0 0 1 0;
+            padding: 0;
             color: {theme.color_text_secondary};
             text-style: dim;
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
         }}
 
         #footer-left {{
@@ -213,7 +210,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             height: {autocomplete_box_height};
             max-height: {autocomplete_box_height};
             padding: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
-            background: {theme.color_terminal_default};
+            background: {theme.color_ansi_default};
             color: {theme.color_text_primary};
         }}
         """

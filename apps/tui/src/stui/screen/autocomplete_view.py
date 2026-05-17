@@ -45,9 +45,9 @@ class AutoCompleteView(Static):
             return Text("")
 
         label_width = max(len(item.label) for item in self._state.items) + 2
-        muted_style = self._theme.rich_style(self._theme.color_text_secondary)
-        selected_style = self._theme.rich_style(self._theme.color_text_accent)
-        description_style = self._theme.rich_style(self._theme.color_text_secondary)
+        muted_style = self._theme.color_text_secondary
+        selected_style = self._theme.color_text_accent
+        description_style = self._theme.color_text_secondary
 
         renderable = Text()
         for index, item in enumerate(self._state.items):

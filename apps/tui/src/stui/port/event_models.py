@@ -18,6 +18,7 @@ class LogEventType(StrEnum):
     RUN_FINISHED = "RUN_FINISHED"
     INPUT_RECEIVED = "INPUT_RECEIVED"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
+    AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
     AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
@@ -76,17 +77,25 @@ class InputReceivedPayload:
     payload: dict[str, JsonValue]
 
 
-class AgentAssistantMessageType(StrEnum):
-    TOOL_CALLS = "tool_calls"
-    FINAL = "final"
+@dataclass(frozen=True)
+class AgentAssistantMessagePayload:
+    text: str
+    total_tokens: int
 
 
 @dataclass(frozen=True)
-class AgentAssistantMessagePayload:
-    type: str
-    turn_id: str
-    message_type: AgentAssistantMessageType
+class AgentAssistantMessageContextPayload:
+    compaction_enabled: bool
+    max_window_ratio: float
+    max_window_tokens: int
+    total_tokens: int
+    model: str
+
+
+@dataclass(frozen=True)
+class AgentFinalAssistantMessagePayload:
     text: str
+    context: AgentAssistantMessageContextPayload
 
 
 @dataclass(frozen=True)
@@ -143,6 +152,7 @@ LogEventPayload: TypeAlias = (
     | RunFinishedPayload
     | InputReceivedPayload
     | AgentAssistantMessagePayload
+    | AgentFinalAssistantMessagePayload
     | AgentToolCallPayload
     | AgentToolResultPayload
     | AgentLifecyclePayload

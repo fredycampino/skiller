@@ -94,4 +94,4 @@ def test_autocomplete_view_uses_theme_icon_and_accent_for_selection() -> None:
 
     assert isinstance(renderable, Text)
     assert "⇢ run" in renderable.plain
-    assert any(span.style == theme.rich_style(theme.color_text_accent) for span in renderable.spans)
+    assert any(span.style == theme.color_text_accent for span in renderable.spans)

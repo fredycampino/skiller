@@ -51,6 +51,7 @@ from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUs
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -159,8 +160,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
-            store=store,
-            webhook_registry=webhook_registry,
+            store=SqliteRuntimeBootstrap(store.db_path),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
@@ -239,7 +239,7 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
@@ -266,7 +266,7 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
 
         runtime = _build_runtime(store)
         run_result = runtime.run(

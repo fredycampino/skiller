@@ -69,7 +69,7 @@ class AgentRunner:
                 state=state,
                 turn_loop=turn_loop,
             )
-            context_request = self.context_manager.build_llm_request(state=state)
+            context_request = self.context_manager.build_window_context(state=state)
             turn_id = context_request.turn_id
             response = self.llm.generate(context_request.llm_request)
             if response.ok is False:
@@ -101,7 +101,10 @@ class AgentRunner:
                     text=final_text,
                     usage=response.usage,
                 )
-                self.event_publisher.emit_assistant_message(entry=entry)
+                self.event_publisher.emit_final_assistant_message(
+                    entry=entry,
+                    config=state.config.config,
+                )
                 state.finish_final(final_text)
                 turn_loop.advance()
                 break
@@ -133,7 +136,10 @@ class AgentRunner:
                     text=final_text,
                     usage=response.usage,
                 )
-                self.event_publisher.emit_assistant_message(entry=entry)
+                self.event_publisher.emit_final_assistant_message(
+                    entry=entry,
+                    config=state.config.config,
+                )
                 state.finish_final(final_text)
                 break
             if state.finish == AgentRunnerFinish.INTERRUPTED:
@@ -146,7 +152,7 @@ class AgentRunner:
             break
 
         if state.finish is None:
-            turn_id = self.agent_context_store.next_turn_id(scope=state)
+            turn_id = self.agent_context_store.next_turn_id(context_id=state.context_id)
             self.context_publisher.publish_user_message(
                 scope=state,
                 text=self.feedback.max_turns_exhausted(),
@@ -209,7 +215,7 @@ class AgentRunner:
         remaining_turns = turn_loop.max_turns - turn_loop.turn_count
         if remaining_turns != 1:
             return
-        entries = self.agent_context_store.list_entries(scope=state)
+        entries = self.agent_context_store.list_entries(context_id=state.context_id)
         warning = self.feedback.last_turn_warning()
         if any(
             entry.entry_type == AgentContextEntryType.USER_MESSAGE

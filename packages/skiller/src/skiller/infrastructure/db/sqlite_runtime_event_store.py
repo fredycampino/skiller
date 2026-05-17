@@ -1,7 +1,6 @@
 import json
 import sqlite3
 import uuid
-from pathlib import Path
 from typing import Any
 
 from skiller.domain.agent.agent_context_model import (
@@ -12,14 +11,15 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
 )
 from skiller.domain.event.event_model import (
+    AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
     RuntimeEvent,
     RuntimeEventDraft,
     RuntimeEventType,
     runtime_event_agent_sequence,
-    runtime_event_body_to_dict,
     runtime_event_payload_from_dict,
+    runtime_event_payload_to_dict,
     runtime_event_step_id,
     runtime_event_step_type,
 )
@@ -28,34 +28,6 @@ from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
-    def init_db(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS log_events (
-                  id TEXT PRIMARY KEY,
-                  run_id TEXT NOT NULL,
-                  sequence INTEGER NOT NULL,
-                  event_type TEXT NOT NULL,
-                  step_id TEXT,
-                  step_type TEXT,
-                  agent_sequence INTEGER,
-                  body_json TEXT NOT NULL,
-                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  UNIQUE(run_id, sequence),
-                  FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_log_events_run_sequence
-                  ON log_events(run_id, sequence);
-                CREATE INDEX IF NOT EXISTS idx_log_events_run_type
-                  ON log_events(run_id, event_type);
-                CREATE INDEX IF NOT EXISTS idx_log_events_agent_sequence
-                  ON log_events(run_id, agent_sequence);
-                """
-            )
-
     def emit_assistant_message(
         self,
         *,
@@ -74,7 +46,10 @@ class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
                     step_id=entry.source_step_id,
                     turn_id=entry.payload.turn_id,
                     agent_sequence=entry.sequence,
-                    body=entry.payload,
+                    body=AgentBodyToolMessage(
+                        total_tokens=entry.payload.total_tokens or 0,
+                        text=entry.payload.text,
+                    ),
                 ),
             )
         )
@@ -204,7 +179,7 @@ class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
                     event.agent_sequence
                     if event.agent_sequence is not None
                     else runtime_event_agent_sequence(event.payload),
-                    json.dumps(runtime_event_body_to_dict(event.payload)),
+                    json.dumps(runtime_event_payload_to_dict(event.payload)),
                 ),
             )
         return event_id

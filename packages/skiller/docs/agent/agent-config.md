@@ -51,6 +51,35 @@ Current adapter defaults:
 - `agent.loop.max_turns = 10`
 - `agent.loop.max_tool_calls = 5`
 
+## Agent Context Window
+
+```json
+{
+  "agent": {
+    "context": {
+      "compaction": {
+        "enabled": false,
+        "max_total_tokens_ratio": 0.8
+      }
+    }
+  }
+}
+```
+
+### Fields
+
+- `agent.context.compaction.enabled`
+  - reserved for future summarization or compaction behavior
+  - the current runner still uses a context window regardless of this flag
+- `agent.context.compaction.max_total_tokens_ratio`
+  - ratio applied to `llm.providers.<name>.context_window_tokens`
+  - defines the maximum token window used when reading agent context for the next LLM request
+
+Current adapter defaults:
+
+- `agent.context.compaction.enabled = false`
+- `agent.context.compaction.max_total_tokens_ratio = 0.8`
+
 ## Shell Tool Policy
 
 ```json

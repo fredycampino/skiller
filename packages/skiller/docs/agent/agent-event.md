@@ -40,6 +40,7 @@ Rules:
 Current agent event types:
 
 - `AGENT_ASSISTANT_MESSAGE`
+- `AGENT_FINAL_ASSISTANT_MESSAGE`
 - `AGENT_TOOL_CALL`
 - `AGENT_TOOL_RESULT`
 - `AGENT_INTERRUPTED`
@@ -47,35 +48,68 @@ Current agent event types:
 
 ## `AGENT_ASSISTANT_MESSAGE`
 
-Emitted when the assistant returns visible content during an agent turn.
+Emitted when the assistant returns visible content that introduces one or more
+tool calls.
 
 ```json
 {
-  "sequence": 101,
+  "sequence": 102,
   "id": "event-uuid",
   "run_id": "run-123",
   "type": "AGENT_ASSISTANT_MESSAGE",
   "step_id": "support_agent",
   "step_type": "agent",
-  "agent_sequence": 32,
-  "created_at": "2026-05-12T10:30:15Z",
+  "agent_sequence": 33,
+  "created_at": "2026-05-12T10:30:16Z",
   "payload": {
-    "type": "assistant_message",
-    "turn_id": "turn-1",
-    "message_type": "tool_calls",
-    "text": "I will inspect the branch state before continuing.",
-    "total_tokens": 96
+    "total_tokens": 1000,
+    "text": "I will inspect the branch state before continuing."
   }
 }
 ```
 
 Rules:
 
-- one assistant turn can emit one assistant message event.
-- `message_type = "tool_calls"` means the same turn also emitted one or more tool calls.
-- `message_type = "final"` means the turn ended with assistant content and no tool calls.
-- `total_tokens` is the accumulated token total for the agent context after the
-  assistant response usage was recorded.
+- only tool-call assistant messages use this event type.
+- `total_tokens` is the `usage.total_tokens` reported by the LLM for that request.
+- truncation: `text` is truncated by the agent event output policy.
+- not truncated: `total_tokens`.
+
+## `AGENT_FINAL_ASSISTANT_MESSAGE`
+
+Emitted when the agent finishes with a final assistant message.
+
+```json
+{
+  "sequence": 103,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "AGENT_FINAL_ASSISTANT_MESSAGE",
+  "step_id": "support_agent",
+  "step_type": "agent",
+  "agent_sequence": 34,
+  "created_at": "2026-05-12T10:30:18Z",
+  "payload": {
+    "text": "Done",
+    "context": {
+      "compaction_enabled": false,
+      "max_window_ratio": 0.8,
+      "max_window_tokens": 1000000,
+      "total_tokens": 2144,
+      "model": "MiniMax-M2.5"
+    }
+  }
+}
+```
+
+Rules:
+
+- truncation: `text` is truncated by the agent event output policy.
+- `context.total_tokens` is the `usage.total_tokens`
+  reported by the LLM for that request.
+- `context` includes the model and context-window limits used by the
+  runner when the request was built.
+- not truncated: all `context` fields.
 - if the provider returns no visible content, this event is omitted.
 
 ## `AGENT_TOOL_CALL`
@@ -109,7 +143,9 @@ Rules:
 
 - one event is emitted per tool call.
 - `tool_call_id` correlates the call with its result.
-- `args` is observable payload and must be sanitized before persistence.
+- truncation: string fields inside `args` can be truncated; arrays can be capped;
+  JSON payload size can be capped by the agent event output policy.
+- not truncated: `turn_id`, `parent_sequence`, `tool_call_id`, `tool`.
 - `parent_sequence` is omitted for tool-only turns.
 
 ## `AGENT_TOOL_RESULT`
@@ -153,6 +189,10 @@ Rules:
   persisted as tool results.
 - programmer/runtime exceptions should fail the step/run instead of being
   converted into agent feedback.
+- truncation: `text`, `error`, and string fields inside `data` can be truncated;
+  arrays can be capped; JSON payload size can be capped by the agent event
+  output policy.
+- not truncated: `turn_id`, `parent_sequence`, `tool_call_id`, `tool`, `status`.
 
 ## `AGENT_INTERRUPTED`
 
@@ -217,11 +257,8 @@ finish reason in its output data.
     "agent_sequence": 70,
     "created_at": "2026-05-12T10:31:00Z",
     "payload": {
-      "type": "assistant_message",
-      "turn_id": "turn-7",
-      "message_type": "tool_calls",
-      "text": "I will inspect the branch state and recent commits.",
-      "total_tokens": 240
+      "total_tokens": 240,
+      "text": "I will inspect the branch state and recent commits."
     }
   },
   {

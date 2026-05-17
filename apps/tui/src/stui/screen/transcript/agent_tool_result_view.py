@@ -19,7 +19,7 @@ class AgentToolResultView(TranscriptView):
         return Padding(
             transcript_text(
                 self.item.preview,
-                style=theme.rich_style(theme.color_text_muted),
+                style=theme.color_text_muted,
             ),
             (0, 0, 0, 4),
         )

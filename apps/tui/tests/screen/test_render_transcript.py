@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import pytest
+from rich.console import Console
 
+from stui.screen.markdown import MarkdownView
+from stui.screen.theme import DEFAULT_TUI_THEME
+from stui.screen.transcript.agent_final_assistant_message_view import (
+    AgentFinalAssistantMessageView,
+)
 from stui.screen.transcript.agent_tool_call_view import AgentToolCallView
 from stui.screen.transcript.agent_tool_result_view import AgentToolResultView
 from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.viewmodel.console_screen_state import (
+    AgentFinalAssistantMessageItem,
     AgentToolCallItem,
     AgentToolResultItem,
     InfoItem,
@@ -71,3 +78,31 @@ def test_active_tool_stops_after_non_tool_view() -> None:
     assert views[0] is call
     assert call.active is False
     assert views[1] is info
+
+
+def test_final_assistant_message_view_renders_blank_line() -> None:
+    view = AgentFinalAssistantMessageView(
+        item=AgentFinalAssistantMessageItem(
+            run_id="run-1",
+            step_id="agent",
+            text="truncated",
+            total_tokens=3155,
+            max_window_tokens=1000000,
+            model="MiniMax-M2.5",
+        )
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    assert console.export_text() == "\n"
+
+
+def test_render_markdown_inline_code_has_no_background() -> None:
+    console = Console(width=80, record=True)
+
+    console.print(MarkdownView("Run `pwd` now.", theme=DEFAULT_TUI_THEME).render())
+
+    rendered = console.export_text(styles=True)
+    assert "pwd" in rendered
+    assert "40m" not in rendered

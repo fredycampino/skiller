@@ -3,8 +3,9 @@ from __future__ import annotations
 import pytest
 
 from stui.port.event_models import (
+    AgentAssistantMessageContextPayload,
     AgentAssistantMessagePayload,
-    AgentAssistantMessageType,
+    AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentStopReason,
     AgentToolCallPayload,
@@ -23,6 +24,8 @@ from stui.port.event_models import (
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
+    AgentFinalAssistantMessageItem,
+    AgentStepFinalOutputItem,
     AgentSystemNoticeItem,
     AgentToolCallItem,
     AgentToolResultItem,
@@ -45,10 +48,8 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
                 step_id="support_agent",
                 step_type="agent",
                 payload=AgentAssistantMessagePayload(
-                    type="assistant_message",
-                    turn_id="turn-1",
-                    message_type=AgentAssistantMessageType.TOOL_CALLS,
                     text="I will inspect the repository state.",
+                    total_tokens=1000,
                 ),
             ),
             _event(
@@ -92,20 +93,43 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
     assert items[2].preview == "Command completed successfully."
 
 
-def test_event_transcript_mapper_uses_step_success_as_agent_final_output() -> None:
+def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_output() -> None:
     mapper = EventTranscriptMapper()
 
     items = mapper.to_transcript(
         [
             _event(
-                LogEventType.AGENT_ASSISTANT_MESSAGE,
-                payload=AgentAssistantMessagePayload(
-                    type="assistant_message",
-                    turn_id="turn-1",
-                    message_type=AgentAssistantMessageType.FINAL,
-                    text="Hecho truncado...",
+                LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+                sequence=2,
+                step_id="support_agent",
+                step_type="agent",
+                payload=AgentFinalAssistantMessagePayload(
+                    text="Hecho completo.",
+                    context=AgentAssistantMessageContextPayload(
+                        compaction_enabled=False,
+                        max_window_ratio=0.8,
+                        max_window_tokens=1000000,
+                        total_tokens=2144,
+                        model="MiniMax-M2.5",
+                    ),
                 ),
             ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], AgentFinalAssistantMessageItem)
+    assert items[0].text == "Hecho completo."
+    assert items[0].total_tokens == 2144
+    assert items[0].max_window_tokens == 1000000
+    assert items[0].model == "MiniMax-M2.5"
+
+
+def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
             _event(
                 LogEventType.STEP_SUCCESS,
                 sequence=2,
@@ -123,8 +147,7 @@ def test_event_transcript_mapper_uses_step_success_as_agent_final_output() -> No
     )
 
     assert len(items) == 1
-    assert isinstance(items[0], AgentAssistantMessageItem)
-    assert items[0].message_type == "final"
+    assert isinstance(items[0], AgentStepFinalOutputItem)
     assert items[0].text == "Hecho completo."
 
 

@@ -7,14 +7,13 @@ from rich.text import Text
 
 from stui.screen.theme import TuiTheme
 from stui.screen.transcript.base import TranscriptView
+from stui.viewmodel.console_screen_state import AgentFinalAssistantMessageItem
 
 
 @dataclass(frozen=True)
-class PlaceholderView(TranscriptView):
-    text: str
+class AgentFinalAssistantMessageView(TranscriptView):
+    item: AgentFinalAssistantMessageItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
-        return Text(
-            self.text,
-            style=theme.color_text_muted,
-        )
+        _ = theme
+        return Text("")

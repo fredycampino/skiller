@@ -84,6 +84,7 @@ from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentCont
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
@@ -111,6 +112,7 @@ def build_runtime_container(
     skills_dir: str | None = None,
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
+    runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
     store = SqliteStateStore(cfg.db_path)
     wait_store = SqliteWaitStore(cfg.db_path)
     external_event_store = SqliteExternalEventStore(cfg.db_path)
@@ -135,8 +137,7 @@ def build_runtime_container(
     tool_manager = _build_agent_tool_manager(cfg)
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
-        store=store,
-        webhook_registry=webhook_registry,
+        store=runtime_bootstrap,
     )
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)

@@ -89,6 +89,11 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
 def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
     response = SimpleNamespace(
         model="gpt-5.2",
+        usage=SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=25,
+            total_tokens=125,
+        ),
         choices=[
             SimpleNamespace(
                 finish_reason="tool_calls",
@@ -114,6 +119,10 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
     assert result.model == "gpt-5.2"
     assert result.finish_reason == "tool_calls"
     assert result.content is None
+    assert result.usage is not None
+    assert result.usage.prompt_tokens == 100
+    assert result.usage.completion_tokens == 25
+    assert result.usage.total_tokens == 125
     assert result.tool_calls == (
         LLMToolCall(
             id="call_1",
@@ -123,3 +132,33 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
             ),
         ),
     )
+
+
+def test_to_port_llm_response_maps_dict_usage_to_port_response() -> None:
+    result = to_port_llm_response(
+        {
+            "model": "MiniMax-M2.7",
+            "usage": {
+                "prompt_tokens": 42,
+                "completion_tokens": 38,
+                "total_tokens": 80,
+            },
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "content": "Hello",
+                    },
+                }
+            ],
+        },
+        fallback_model="default-model",
+    )
+
+    assert result.ok is True
+    assert result.model == "MiniMax-M2.7"
+    assert result.content == "Hello"
+    assert result.usage is not None
+    assert result.usage.prompt_tokens == 42
+    assert result.usage.completion_tokens == 38
+    assert result.usage.total_tokens == 80

@@ -22,13 +22,6 @@ class GetAgentStatsResult:
     error: str | None = None
 
 
-@dataclass(frozen=True)
-class _AgentStatsScope:
-    run_id: str
-    agent_id: str
-    context_id: str
-
-
 class GetAgentStatsUseCase:
     def __init__(
         self,
@@ -68,12 +61,7 @@ class GetAgentStatsUseCase:
                 error=f"Agent '{agent_id}' has no attached context in run '{run_id}'",
             )
 
-        scope = _AgentStatsScope(
-            run_id=run_id,
-            agent_id=agent_id,
-            context_id=agent.context_id,
-        )
-        context_stats = self.context_stats.get_stats(scope=scope)
+        context_stats = self.context_stats.get_stats(context_id=agent.context_id)
         return GetAgentStatsResult(
             status=GetAgentStatsStatus.OK,
             run_id=run_id,

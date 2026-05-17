@@ -44,6 +44,7 @@ from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -137,8 +138,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
-            store=store,
-            webhook_registry=webhook_registry,
+            store=SqliteRuntimeBootstrap(store.db_path),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
@@ -174,7 +174,7 @@ def test_basic_skill_examples_succeed(
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
 
         runtime = _build_runtime(store)
         run_result = runtime.run(skill_ref, inputs)
@@ -226,7 +226,7 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
@@ -300,7 +300,7 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")
@@ -362,7 +362,7 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")

@@ -51,8 +51,8 @@ Inner agent flow:
 
 1. Read rendered step config.
 2. Append the incoming `task` as `user_message`.
-3. Load persisted agent context for `run_id + context_id`.
-4. Build provider-ready messages from `system + entries`.
+3. Load the persisted agent context window for `context_id`.
+4. Build provider-ready messages from `system + window entries`.
 5. Ask the LLM for one decision.
 6. If the response has no tool calls, append the final `assistant_message`, build `StepExecution`, and return.
 7. If the response has tool calls, append the optional assistant `tool_calls` message, append each `tool_call`, execute each tool, append each `tool_result`, and continue.

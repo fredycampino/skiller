@@ -65,7 +65,7 @@ class ScreenStatusView(Static):
             frame = self._theme.status_spinner_frames[self._frame_index]
             return f"{frame} Running"
         if self._state.kind == ViewStatusKind.WAITING:
-            waiting_style = f"{self._theme.rich_style(self._theme.color_text_secondary)} dim"
+            waiting_style = f"{self._theme.color_text_secondary} dim"
             if not self._waiting_prompt:
                 return Text("...", style=waiting_style)
             text = Text("...", style=waiting_style)

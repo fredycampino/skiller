@@ -6,6 +6,7 @@ from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
@@ -15,7 +16,7 @@ def test_external_event_store_creates_pending_event_and_hides_consumed_event(tmp
     db_path = tmp_path / "external-events.db"
     run_store = SqliteStateStore(str(db_path))
     external_event_store = SqliteExternalEventStore(str(db_path))
-    run_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = run_store.create_run(
         "internal",
@@ -77,9 +78,8 @@ def test_external_event_store_creates_pending_event_and_hides_consumed_event(tmp
 
 def test_external_event_store_returns_oldest_pending_match_first(tmp_path) -> None:
     db_path = tmp_path / "external-events-order.db"
-    run_store = SqliteStateStore(str(db_path))
     external_event_store = SqliteExternalEventStore(str(db_path))
-    run_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     first_event_id = external_event_store.create_external_event(
         source_type=SourceType.CHANNEL,

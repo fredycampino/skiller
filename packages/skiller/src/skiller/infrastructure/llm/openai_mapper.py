@@ -13,6 +13,7 @@ from skiller.domain.agent.llm_model import (
     LLMToolCallFunction,
     LLMToolChoice,
     LLMToolChoiceMode,
+    LLMUsage,
 )
 from skiller.domain.tool.tool_contract import ToolConfig
 
@@ -77,12 +78,17 @@ def to_port_llm_response(response: object, *, fallback_model: str) -> LLMRespons
     if finish_reason is None and isinstance(first_choice, Mapping):
         finish_reason = first_choice.get("finish_reason")
 
+    usage = _to_port_usage(getattr(response, "usage", None))
+    if usage is None and isinstance(response, Mapping):
+        usage = _to_port_usage(response.get("usage"))
+
     return LLMResponse(
         ok=True,
         content=content,
         model=_response_model(response_model, fallback_model=fallback_model),
         tool_calls=tool_calls,
         finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+        usage=usage,
     )
 
 
@@ -170,6 +176,29 @@ def _to_port_content(raw_content: object) -> str | None:
     if isinstance(raw_content, (dict, list, int, float, bool)):
         return json.dumps(raw_content, ensure_ascii=False)
     return str(raw_content)
+
+
+def _to_port_usage(raw_usage: object) -> LLMUsage | None:
+    if raw_usage is None:
+        return None
+    return LLMUsage(
+        prompt_tokens=_optional_int(_value(raw_usage, "prompt_tokens")),
+        completion_tokens=_optional_int(_value(raw_usage, "completion_tokens")),
+        total_tokens=_optional_int(_value(raw_usage, "total_tokens")),
+    )
+
+
+def _value(source: object, key: str) -> object:
+    value = getattr(source, key, None)
+    if value is None and isinstance(source, Mapping):
+        return source.get(key)
+    return value
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 def _tool_call_to_payload(tool_call: LLMToolCall) -> dict[str, object]:

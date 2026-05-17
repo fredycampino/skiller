@@ -201,15 +201,24 @@ class _FakeAgentContextStore:
         self.entries.append(entry)
         return entry
 
-    def list_entries(self, *, scope) -> list[AgentContextEntry]:
+    def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         return [
             entry
             for entry in self.entries
-            if entry.run_id == scope.run_id and entry.context_id == scope.context_id
+            if entry.context_id == context_id
         ]
 
-    def get_stats(self, *, scope) -> AgentContextStats:
-        _ = scope
+    def list_context_window(
+        self,
+        *,
+        context_id: str,
+        window_tokens: int,
+    ) -> list[AgentContextEntry]:
+        _ = window_tokens
+        return self.list_entries(context_id=context_id)
+
+    def get_stats(self, *, context_id: str) -> AgentContextStats:
+        _ = context_id
         return AgentContextStats(
             entries=AgentContextEntryStats(
                 total=0,
@@ -226,8 +235,8 @@ class _FakeAgentContextStore:
             ),
         )
 
-    def next_turn_id(self, *, scope) -> str:
-        entries = self.list_entries(scope=scope)
+    def next_turn_id(self, *, context_id: str) -> str:
+        entries = self.list_entries(context_id=context_id)
         turn_entries = sum(
             1
             for entry in entries

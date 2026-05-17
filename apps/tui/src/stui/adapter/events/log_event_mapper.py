@@ -6,8 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.port.event_models import (
+    AgentAssistantMessageContextPayload,
     AgentAssistantMessagePayload,
-    AgentAssistantMessageType,
+    AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentStopReason,
     AgentToolCallPayload,
@@ -92,10 +93,25 @@ class InputReceivedModel(BaseModel):
 class AgentAssistantMessageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["assistant_message"]
-    turn_id: str
-    message_type: AgentAssistantMessageType
     text: str
+    total_tokens: int
+
+
+class AgentAssistantMessageContextModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    compaction_enabled: bool
+    max_window_ratio: float
+    max_window_tokens: int
+    total_tokens: int
+    model: str
+
+
+class AgentFinalAssistantMessageModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    context: AgentAssistantMessageContextModel
 
 
 class AgentToolCallModel(BaseModel):
@@ -186,10 +202,21 @@ class LogEventMapper:
         if event_type == LogEventType.AGENT_ASSISTANT_MESSAGE:
             model = _validate_model(AgentAssistantMessageModel, payload, "payload")
             return AgentAssistantMessagePayload(
-                type=model.type,
-                turn_id=model.turn_id,
-                message_type=model.message_type,
                 text=model.text,
+                total_tokens=model.total_tokens,
+            )
+
+        if event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
+            model = _validate_model(AgentFinalAssistantMessageModel, payload, "payload")
+            return AgentFinalAssistantMessagePayload(
+                text=model.text,
+                context=AgentAssistantMessageContextPayload(
+                    compaction_enabled=model.context.compaction_enabled,
+                    max_window_ratio=model.context.max_window_ratio,
+                    max_window_tokens=model.context.max_window_tokens,
+                    total_tokens=model.context.total_tokens,
+                    model=model.context.model,
+                ),
             )
 
         if event_type == LogEventType.AGENT_TOOL_CALL:

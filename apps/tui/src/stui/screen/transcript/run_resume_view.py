@@ -17,5 +17,5 @@ class RunResumeView(TranscriptView):
     def render(self, *, theme: TuiTheme) -> RenderableType:
         return Text(
             f"\u21b3 resume({self.item.skill})",
-            style=theme.rich_style(theme.color_text_muted),
+            style=theme.color_text_muted,
         )

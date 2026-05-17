@@ -17,9 +17,9 @@ class AgentToolCallView(TranscriptView):
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
         tool_style = (
-            theme.rich_style(theme.color_text_primary)
+            theme.color_text_primary
             if self.active
-            else theme.rich_style(theme.color_text_muted)
+            else theme.color_text_muted
         )
         return prefixed_view(
             prefix=transcript_text(

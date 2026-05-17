@@ -97,6 +97,25 @@ class AgentAssistantMessageItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class AgentFinalAssistantMessageItem(TranscriptItem):
+    run_id: str
+    step_id: str
+    text: str
+    total_tokens: int
+    max_window_tokens: int
+    model: str
+    format: OutputFormat = OutputFormat.MARKDOWN
+
+
+@dataclass(frozen=True)
+class AgentStepFinalOutputItem(TranscriptItem):
+    run_id: str
+    step_id: str
+    text: str
+    format: OutputFormat = OutputFormat.MARKDOWN
+
+
+@dataclass(frozen=True)
 class AgentSystemNoticeItem(TranscriptItem):
     run_id: str
     step_id: str
@@ -174,6 +193,13 @@ class RunsTableState:
 
 
 @dataclass
+class AgentUsageState:
+    model: str
+    total_tokens: int = 0
+    max_window_tokens: int = 0
+
+
+@dataclass
 class ViewStatusState:
     kind: ViewStatusKind = ViewStatusKind.HIDDEN
     message: str = ""
@@ -185,6 +211,7 @@ class ConsoleScreenState:
     transcript: TranscriptState = field(default_factory=TranscriptState)
     prompt: PromptState = field(default_factory=PromptState)
     runs_table: RunsTableState = field(default_factory=RunsTableState)
+    agent_usage: AgentUsageState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
 
@@ -237,6 +264,11 @@ class ConsoleScreenState:
         self.runs_table.visible = visible
         self.runs_table.command = command
         self.runs_table.rows = tuple(rows)
+
+    def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
+        if agent_usage is None:
+            return
+        self.agent_usage = agent_usage
 
     def load_session(
         self,

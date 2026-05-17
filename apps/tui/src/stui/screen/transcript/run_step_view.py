@@ -27,7 +27,7 @@ class RunStepView(TranscriptView):
         if normalized_step_type in _WAIT_STEP_TYPES:
             return Text(
                 "   ...",
-                style=theme.rich_style(theme.color_text_muted),
+                style=theme.color_text_muted,
             )
         if normalized_step_type == "agent":
             return self._render_agent_step(theme=theme)

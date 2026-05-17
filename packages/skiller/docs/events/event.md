@@ -82,6 +82,7 @@ class RuntimeEventType(StrEnum):
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
+    AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
     AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
@@ -353,6 +354,8 @@ Rules:
 
 ### `AGENT_ASSISTANT_MESSAGE`
 
+Assistant message that introduces tool calls:
+
 ```json
 {
   "sequence": 101,
@@ -364,19 +367,49 @@ Rules:
   "agent_sequence": 32,
   "created_at": "2026-05-12T10:30:15Z",
   "payload": {
-    "type": "assistant_message",
-    "turn_id": "turn-1",
-    "message_type": "tool_calls",
-    "text": "I will inspect the branch state before continuing.",
-    "total_tokens": 96
+    "total_tokens": 1000,
+    "text": "I will inspect the branch state before continuing."
   }
 }
 ```
 
-`payload.message_type` is `tool_calls` when the assistant message introduces
-one or more tool calls. It is `final` when the assistant message is the final
-agent answer. `payload.total_tokens` is the accumulated token total for the
-agent context after the assistant response usage was recorded.
+Truncation:
+
+- `text` is truncated by the agent event output policy.
+- `total_tokens` is not truncated.
+
+### `AGENT_FINAL_ASSISTANT_MESSAGE`
+
+```json
+{
+  "sequence": 102,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "AGENT_FINAL_ASSISTANT_MESSAGE",
+  "step_id": "support_agent",
+  "step_type": "agent",
+  "agent_sequence": 33,
+  "created_at": "2026-05-12T10:30:16Z",
+  "payload": {
+    "text": "Done",
+    "context": {
+      "compaction_enabled": false,
+      "max_window_ratio": 0.8,
+      "max_window_tokens": 1000000,
+      "total_tokens": 2144,
+      "model": "MiniMax-M2.5"
+    }
+  }
+}
+```
+
+Final messages include `payload.context.total_tokens`, the model, and the
+context-window limits used for that request.
+
+Truncation:
+
+- `text` is truncated by the agent event output policy.
+- `context` fields are not truncated.
 
 ### `AGENT_TOOL_CALL`
 
@@ -404,6 +437,12 @@ agent context after the assistant response usage was recorded.
 ```
 
 `agent_sequence` is the persisted agent context entry sequence.
+
+Truncation:
+
+- string fields inside `args` can be truncated; arrays can be capped; JSON
+  payload size can be capped by the agent event output policy.
+- `turn_id`, `parent_sequence`, `tool_call_id`, and `tool` are not truncated.
 
 ### `AGENT_TOOL_RESULT`
 
@@ -437,6 +476,13 @@ agent context after the assistant response usage was recorded.
 ```
 
 `payload` uses the same shape as the matching agent context tool result.
+
+Truncation:
+
+- `text`, `error`, and string fields inside `data` can be truncated; arrays can
+  be capped; JSON payload size can be capped by the agent event output policy.
+- `turn_id`, `parent_sequence`, `tool_call_id`, `tool`, and `status` are not
+  truncated.
 
 ### `AGENT_INTERRUPTED`
 

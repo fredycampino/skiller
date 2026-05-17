@@ -20,5 +20,5 @@ class CollapsedRouteView(TranscriptView):
         _ = self.output
         return Text(
             f"   [{self.step.step_type}] {self.step.step_id} \u2192 {self.target}",
-            style=theme.rich_style(theme.color_text_muted),
+            style=theme.color_text_muted,
         )

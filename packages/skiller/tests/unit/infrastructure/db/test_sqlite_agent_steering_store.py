@@ -6,6 +6,7 @@ from skiller.domain.run.steering_model import (
     SteeringAgentMessage,
 )
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
@@ -15,7 +16,7 @@ def test_steering_queue_is_updated_only_through_agent_steering_store(tmp_path) -
     db_path = tmp_path / "steering-queue.db"
     state_store = SqliteStateStore(str(db_path))
     steering_store = SqliteAgentSteeringStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = state_store.create_run(
         "internal",
         "demo",
@@ -38,9 +39,8 @@ def test_steering_queue_is_updated_only_through_agent_steering_store(tmp_path) -
 
 def test_agent_steering_store_raises_when_run_is_missing(tmp_path) -> None:
     db_path = tmp_path / "missing-run.db"
-    state_store = SqliteStateStore(str(db_path))
     steering_store = SqliteAgentSteeringStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     with pytest.raises(ValueError, match="Run 'missing-run' not found"):
         steering_store.append("missing-run", SteeringAgentInterrupt())
 
@@ -52,7 +52,7 @@ def test_agent_steering_store_does_not_duplicate_pending_abort_turn(tmp_path) ->
     db_path = tmp_path / "dedupe-abort-turn.db"
     state_store = SqliteStateStore(str(db_path))
     steering_store = SqliteAgentSteeringStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = state_store.create_run(
         "internal",
         "demo",

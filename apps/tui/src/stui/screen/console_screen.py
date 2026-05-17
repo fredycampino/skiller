@@ -4,7 +4,6 @@ import json
 from datetime import datetime
 
 from rich.console import Group
-from rich.markdown import Markdown
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
@@ -16,6 +15,7 @@ from textual.widgets import DataTable, Static, TextArea
 from stui.di.container import build_tui_container
 from stui.port.runs_port import RunsPortItem
 from stui.screen.autocomplete_view import AutoCompleteView
+from stui.screen.markdown import MarkdownView
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
     RunRowMode,
@@ -72,7 +72,7 @@ class ConsoleScreen(App[str]):
             PromptView(theme=self.ui_theme),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             Horizontal(
-                Static(self._build_footer_left_text(), id="footer-left"),
+                Static(_build_footer_left_text(state=self.state), id="footer-left"),
                 Static(self._build_footer_right_text(), id="footer-right"),
                 id="footer",
             ),
@@ -211,11 +211,8 @@ class ConsoleScreen(App[str]):
             footer_right = self.query_one("#footer-right", Static)
         except NoMatches:
             return
-        footer_left.update(self._build_footer_left_text())
+        footer_left.update(_build_footer_left_text(state=new_state))
         footer_right.update(self._build_footer_right_text(state=new_state))
-
-    def _build_footer_left_text(self) -> str:
-        return "/ for commands"
 
     def _build_footer_right_text(self, *, state: ConsoleScreenState | None = None) -> str:
         screen_state = state or self.state
@@ -244,17 +241,23 @@ class ConsoleScreen(App[str]):
         transcript.write(
             Text(
                 f"{self.ui_theme.user_icon} /dev",
-                style=self.ui_theme.rich_style(self.ui_theme.color_text_accent),
+                style=self.ui_theme.color_text_accent,
             )
         )
         transcript.write(
             Group(
                 Text(""),
                 Text("[inspect] RunContext"),
-                Markdown(_render_json_markdown_block(_build_run_context_payload(event))),
+                MarkdownView(
+                    _render_json_markdown_block(_build_run_context_payload(event)),
+                    theme=self.ui_theme,
+                ).render(),
                 Text(""),
                 Text("[inspect] ScreenStatus"),
-                Markdown(_render_json_markdown_block(_build_screen_state_payload(self.state))),
+                MarkdownView(
+                    _render_json_markdown_block(_build_screen_state_payload(self.state)),
+                    theme=self.ui_theme,
+                ).render(),
             ),
             scroll_end=True,
         )
@@ -397,6 +400,26 @@ def _format_run_updated_at(value: str) -> str:
         except ValueError:
             continue
     return "-"
+
+
+def _format_agent_tokens(value: int) -> str:
+    if value < 1000:
+        return str(value)
+    return f"{value / 1000:.1f}k"
+
+
+def _format_agent_window_tokens(value: int) -> str:
+    return f"{round(value / 1000)}K"
+
+
+def _build_footer_left_text(*, state: ConsoleScreenState) -> str:
+    if state.agent_usage is None:
+        return "/ for commands"
+    return (
+        f"{state.agent_usage.model}\n"
+        f"{_format_agent_tokens(state.agent_usage.total_tokens)}/"
+        f"{_format_agent_window_tokens(state.agent_usage.max_window_tokens)}"
+    )
 
 
 def _is_local_dev_status_command(text: str) -> bool:

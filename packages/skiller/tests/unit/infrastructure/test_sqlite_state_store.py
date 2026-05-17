@@ -25,6 +25,7 @@ from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -73,7 +74,7 @@ def _wait_input_execution(
 def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
     db_path = tmp_path / "persisted-results.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
         "internal",
@@ -104,7 +105,7 @@ def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
 def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-when.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
         "internal",
@@ -137,7 +138,7 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
 ) -> None:
     db_path = tmp_path / "persisted-context.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     initial_item = SteeringAgentInterrupt()
 
     run_id = store.create_run(
@@ -172,7 +173,7 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
 def test_create_run_uses_explicit_run_id(tmp_path) -> None:
     db_path = tmp_path / "explicit-id.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     explicit_run_id = "550e8400-e29b-41d4-a716-446655440003"
 
     run_id = store.create_run(
@@ -193,7 +194,7 @@ def test_create_run_uses_explicit_run_id(tmp_path) -> None:
 def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
     db_path = tmp_path / "duplicate-id.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
     context = RunContext(inputs={}, step_executions={})
     run_id = "550e8400-e29b-41d4-a716-446655440004"
@@ -207,7 +208,7 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
 def test_attach_agent_creates_and_reads_run_agent_context(tmp_path) -> None:
     db_path = tmp_path / "run-agents.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440006"
     store.create_run(
         "internal",
@@ -238,7 +239,7 @@ def test_attach_agent_creates_and_reads_run_agent_context(tmp_path) -> None:
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-input.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
         "internal",
@@ -268,11 +269,12 @@ def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     )
 
 
-def test_init_db_creates_normalized_waits_and_external_events_schema(tmp_path) -> None:
+def test_runtime_bootstrap_creates_normalized_waits_and_external_events_schema(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "normalized-schema.db"
-    store = SqliteStateStore(str(db_path))
 
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     with sqlite3.connect(db_path) as conn:
         waits_columns = [row[1] for row in conn.execute("PRAGMA table_info(waits)").fetchall()]
@@ -327,7 +329,7 @@ def test_init_db_creates_normalized_waits_and_external_events_schema(tmp_path) -
 def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
     db_path = tmp_path / "terminal-status-expires-waits.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
         "internal",
@@ -376,8 +378,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     store = SqliteStateStore(str(db_path))
     external_event_store = SqliteExternalEventStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
-    store.init_db()
-    runtime_event_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = "550e8400-e29b-41d4-a716-446655440021"
     other_run_id = "550e8400-e29b-41d4-a716-446655440022"
@@ -506,7 +507,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
 def test_delete_run_returns_false_for_missing_run(tmp_path) -> None:
     db_path = tmp_path / "delete-missing-run.db"
     store = SqliteStateStore(str(db_path))
-    store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     deleted = store.delete_run("missing-run")
 
@@ -522,7 +523,7 @@ def _count(conn: sqlite3.Connection, table: str, where: str, *params: object) ->
 def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:
     db_path = tmp_path / "webhooks.db"
     registry = SqliteWebhookRegistry(str(db_path))
-    registry.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     registry.register_webhook("github-ci", "secret-1")
     registry.register_webhook("market-signal", "secret-2")

@@ -7,8 +7,6 @@ from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolRes
 
 
 class AgentContextStorePort(Protocol):
-    def init_db(self) -> None: ...
-
     def append_user_message(
         self,
         *,
@@ -40,6 +38,13 @@ class AgentContextStorePort(Protocol):
         tool_result: AgentToolResult,
     ) -> AgentContextEntry: ...
 
-    def list_entries(self, *, scope: AgentRunScope) -> list[AgentContextEntry]: ...
+    def list_entries(self, *, context_id: str) -> list[AgentContextEntry]: ...
 
-    def next_turn_id(self, *, scope: AgentRunScope) -> str: ...
+    def list_context_window(
+        self,
+        *,
+        context_id: str,
+        window_tokens: int,
+    ) -> list[AgentContextEntry]: ...
+
+    def next_turn_id(self, *, context_id: str) -> str: ...

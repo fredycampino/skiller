@@ -1,8 +1,6 @@
 import json
 import sqlite3
 import uuid
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from skiller.domain.agent.agent_context_model import (
@@ -29,27 +27,11 @@ from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolRes
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
-@dataclass(frozen=True)
-class _AgentUsage:
-    run_id: str
-    context_id: str
-    usage: LLMUsage
-
-
 class SqliteAgentContextStore(
     SqliteRepository,
     AgentContextStorePort,
     AgentContextStatsPort,
 ):
-    def __init__(self, db_path: str) -> None:
-        super().__init__(db_path)
-        self._usage: _AgentUsage | None = None
-
-    def init_db(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
-            ensure_agent_context_schema(conn)
-
     def append_user_message(
         self,
         *,
@@ -73,9 +55,7 @@ class SqliteAgentContextStore(
         text: str,
         usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
-        current_usage = self.get_usage(scope=scope)
-        next_usage = _add_usage(current_usage, usage) if usage is not None else current_usage
-        entry = self._append_entry(
+        return self._append_entry(
             run_id=scope.run_id,
             context_id=scope.context_id,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
@@ -83,17 +63,11 @@ class SqliteAgentContextStore(
                 turn_id=turn_id,
                 message_type=message_type,
                 text=text,
-                total_tokens=next_usage.total_tokens,
+                total_tokens=usage.total_tokens if usage is not None else 0,
             ),
             usage=usage,
             source_step_id=scope.agent_id,
         )
-        self._usage = _AgentUsage(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
-            usage=next_usage,
-        )
-        return entry
 
     def append_tool_call(
         self,
@@ -151,7 +125,7 @@ class SqliteAgentContextStore(
     ) -> AgentContextEntry:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
-            sequence = self._next_sequence(conn, run_id=run_id, context_id=context_id)
+            sequence = self._next_sequence(conn, context_id=context_id)
             entry_id = str(uuid.uuid4())
             conn.execute(
                 """
@@ -161,11 +135,13 @@ class SqliteAgentContextStore(
                   context_id,
                   sequence,
                   entry_type,
+                  message_type,
+                  total_tokens,
                   payload_json,
                   usage_json,
                   source_step_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry_id,
@@ -173,6 +149,8 @@ class SqliteAgentContextStore(
                     context_id,
                     sequence,
                     entry_type.value,
+                    _message_type(payload),
+                    _total_tokens(payload),
                     json.dumps(agent_context_payload_to_dict(payload)),
                     json.dumps(_usage_to_dict(usage)) if usage is not None else None,
                     source_step_id,
@@ -190,62 +168,62 @@ class SqliteAgentContextStore(
             raise ValueError("Agent context entry was not persisted")
         return _build_entry(row)
 
-    def list_entries(self, *, scope: AgentRunScope) -> list[AgentContextEntry]:
+    def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
-            rows = conn.execute(
-                """
-                SELECT *
-                FROM agent_context_entries
-                WHERE run_id = ? AND context_id = ?
-                ORDER BY sequence ASC
-                """,
-                (scope.run_id, scope.context_id),
-            ).fetchall()
-        return [_build_entry(row) for row in rows]
+            return _list_entries(conn, context_id=context_id)
 
-    def get_stats(self, *, scope: AgentRunScope) -> AgentContextStats:
-        entries = self.list_entries(scope=scope)
+    def list_context_window(
+        self,
+        *,
+        context_id: str,
+        window_tokens: int,
+    ) -> list[AgentContextEntry]:
+        with self._connect() as conn:
+            ensure_agent_context_schema(conn)
+            current_total = _current_total_tokens(conn, context_id=context_id)
+            if current_total is None or current_total <= window_tokens:
+                return _list_entries(conn, context_id=context_id)
+
+            marker_sequence = _window_marker_sequence(
+                conn,
+                context_id=context_id,
+                cutoff=current_total - window_tokens,
+            )
+            if marker_sequence is None:
+                return _list_entries(conn, context_id=context_id)
+
+            return _list_entries_from_sequence(
+                conn,
+                context_id=context_id,
+                sequence=marker_sequence,
+            )
+
+    def get_stats(self, *, context_id: str) -> AgentContextStats:
+        entries = self.list_entries(context_id=context_id)
         return AgentContextStats(
             entries=_calculate_entry_stats(entries),
             usage=_calculate_usage_stats(entries),
         )
 
-    def get_usage(self, *, scope: AgentRunScope) -> LLMUsage:
-        if (
-            self._usage is not None
-            and self._usage.run_id == scope.run_id
-            and self._usage.context_id == scope.context_id
-        ):
-            return self._usage.usage
+    def get_usage(self, *, context_id: str) -> LLMUsage:
+        with self._connect() as conn:
+            ensure_agent_context_schema(conn)
+            usage = _last_final_usage(conn, context_id=context_id)
+        return usage or _empty_usage()
 
-        stats = self.get_stats(scope=scope)
-        usage = LLMUsage(
-            prompt_tokens=stats.usage.total_prompt_tokens,
-            completion_tokens=stats.usage.total_response_tokens,
-            total_tokens=stats.usage.total_tokens,
-        )
-        self._usage = _AgentUsage(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
-            usage=usage,
-        )
-        return usage
-
-    def next_turn_id(self, *, scope: AgentRunScope) -> str:
+    def next_turn_id(self, *, context_id: str) -> str:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS turn_entries
                 FROM agent_context_entries
-                WHERE run_id = ?
-                  AND context_id = ?
+                WHERE context_id = ?
                   AND entry_type IN (?, ?)
                 """,
                 (
-                    scope.run_id,
-                    scope.context_id,
+                    context_id,
                     AgentContextEntryType.ASSISTANT_MESSAGE.value,
                     AgentContextEntryType.TOOL_CALL.value,
                 ),
@@ -258,16 +236,15 @@ class SqliteAgentContextStore(
         self,
         conn: sqlite3.Connection,
         *,
-        run_id: str,
         context_id: str,
     ) -> int:
         row = conn.execute(
             """
             SELECT MAX(sequence) AS max_sequence
             FROM agent_context_entries
-            WHERE run_id = ? AND context_id = ?
+            WHERE context_id = ?
             """,
-            (run_id, context_id),
+            (context_id,),
         ).fetchone()
         if row is None or row["max_sequence"] is None:
             return 1
@@ -282,6 +259,8 @@ def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
           context_id TEXT NOT NULL,
           sequence INTEGER NOT NULL,
           entry_type TEXT NOT NULL,
+          message_type TEXT NULL,
+          total_tokens INTEGER NULL,
           payload_json TEXT NOT NULL,
           usage_json TEXT NULL,
           source_step_id TEXT NOT NULL,
@@ -290,7 +269,10 @@ def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_agent_context_entries_context
-          ON agent_context_entries(run_id, context_id, sequence);
+          ON agent_context_entries(context_id, sequence);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_context_entries_final_marker
+          ON agent_context_entries(context_id, entry_type, message_type, total_tokens, sequence);
 
         """
     )
@@ -318,12 +300,151 @@ def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
     )
 
 
+def _list_entries(
+    conn: sqlite3.Connection,
+    *,
+    context_id: str,
+) -> list[AgentContextEntry]:
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM agent_context_entries
+        WHERE context_id = ?
+        ORDER BY sequence ASC
+        """,
+        (context_id,),
+    ).fetchall()
+    return [_build_entry(row) for row in rows]
+
+
+def _list_entries_from_sequence(
+    conn: sqlite3.Connection,
+    *,
+    context_id: str,
+    sequence: int,
+) -> list[AgentContextEntry]:
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM agent_context_entries
+        WHERE context_id = ?
+          AND sequence >= ?
+        ORDER BY sequence ASC
+        """,
+        (context_id, sequence),
+    ).fetchall()
+    return [_build_entry(row) for row in rows]
+
+
+def _current_total_tokens(
+    conn: sqlite3.Connection,
+    *,
+    context_id: str,
+) -> int | None:
+    row = conn.execute(
+        """
+        SELECT total_tokens
+        FROM agent_context_entries
+        WHERE context_id = ?
+          AND entry_type = ?
+          AND message_type = ?
+          AND total_tokens IS NOT NULL
+        ORDER BY sequence DESC
+        LIMIT 1
+        """,
+        (
+            context_id,
+            AgentContextEntryType.ASSISTANT_MESSAGE.value,
+            "final",
+        ),
+    ).fetchone()
+    if row is None:
+        return None
+    return int(row["total_tokens"])
+
+
+def _window_marker_sequence(
+    conn: sqlite3.Connection,
+    *,
+    context_id: str,
+    cutoff: int,
+) -> int | None:
+    row = conn.execute(
+        """
+        SELECT sequence
+        FROM agent_context_entries
+        WHERE context_id = ?
+          AND entry_type = ?
+          AND message_type = ?
+          AND total_tokens > ?
+        ORDER BY sequence ASC
+        LIMIT 1
+        """,
+        (
+            context_id,
+            AgentContextEntryType.ASSISTANT_MESSAGE.value,
+            "final",
+            cutoff,
+        ),
+    ).fetchone()
+    if row is None:
+        return None
+    return int(row["sequence"])
+
+
+def _last_final_usage(
+    conn: sqlite3.Connection,
+    *,
+    context_id: str,
+) -> LLMUsage | None:
+    row = conn.execute(
+        """
+        SELECT usage_json
+        FROM agent_context_entries
+        WHERE context_id = ?
+          AND entry_type = ?
+          AND message_type = ?
+          AND usage_json IS NOT NULL
+        ORDER BY sequence DESC
+        LIMIT 1
+        """,
+        (
+            context_id,
+            AgentContextEntryType.ASSISTANT_MESSAGE.value,
+            "final",
+        ),
+    ).fetchone()
+    if row is None:
+        return None
+    return _usage_from_json(row["usage_json"])
+
+
+def _empty_usage() -> LLMUsage:
+    return LLMUsage(
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+    )
+
+
 def _usage_to_dict(usage: LLMUsage) -> dict[str, int | None]:
     return {
         "prompt_tokens": usage.prompt_tokens,
         "completion_tokens": usage.completion_tokens,
         "total_tokens": usage.total_tokens,
     }
+
+
+def _message_type(payload: AgentContextPayload) -> str | None:
+    if isinstance(payload, AgentAssistantMessagePayload):
+        return payload.message_type
+    return None
+
+
+def _total_tokens(payload: AgentContextPayload) -> int | None:
+    if isinstance(payload, AgentAssistantMessagePayload):
+        return payload.total_tokens
+    return None
 
 
 def _usage_from_json(raw_usage: object) -> LLMUsage | None:
@@ -371,35 +492,33 @@ def _calculate_entry_stats(entries: list[AgentContextEntry]) -> AgentContextEntr
 
 
 def _calculate_usage_stats(entries: list[AgentContextEntry]) -> AgentContextUsageStats:
-    usage_entries = 0
-    total_prompt_tokens = 0
-    total_response_tokens = 0
-    total_tokens = 0
-
-    for entry in entries:
-        usage = entry.usage
-        if usage is None:
-            continue
-        usage_entries += 1
-        total_prompt_tokens += usage.prompt_tokens or 0
-        total_response_tokens += usage.completion_tokens or 0
-        total_tokens += usage.total_tokens or 0
+    usage = _last_final_usage_from_entries(entries)
+    if usage is None:
+        return AgentContextUsageStats(
+            entries=0,
+            total_prompt_tokens=0,
+            total_response_tokens=0,
+            total_tokens=0,
+        )
 
     return AgentContextUsageStats(
-        entries=usage_entries,
-        total_prompt_tokens=total_prompt_tokens,
-        total_response_tokens=total_response_tokens,
-        total_tokens=total_tokens,
+        entries=1,
+        total_prompt_tokens=usage.prompt_tokens or 0,
+        total_response_tokens=usage.completion_tokens or 0,
+        total_tokens=usage.total_tokens or 0,
     )
 
 
-def _add_usage(current: LLMUsage, entry_usage: LLMUsage) -> LLMUsage:
-    return LLMUsage(
-        prompt_tokens=(current.prompt_tokens or 0) + (entry_usage.prompt_tokens or 0),
-        completion_tokens=(current.completion_tokens or 0)
-        + (entry_usage.completion_tokens or 0),
-        total_tokens=(current.total_tokens or 0) + (entry_usage.total_tokens or 0),
-    )
+def _last_final_usage_from_entries(entries: list[AgentContextEntry]) -> LLMUsage | None:
+    for entry in reversed(entries):
+        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
+            continue
+        if not isinstance(entry.payload, AgentAssistantMessagePayload):
+            continue
+        if entry.payload.message_type != "final":
+            continue
+        return entry.usage
+    return None
 
 
 def _optional_int(value: object) -> int | None:

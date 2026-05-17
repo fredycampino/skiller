@@ -7,6 +7,9 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
 )
 from skiller.domain.event.event_model import (
+    AgentAssistantMessageContext,
+    AgentBodyFinalMessage,
+    AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
     RuntimeEventDraft,
@@ -15,6 +18,7 @@ from skiller.domain.event.event_model import (
     StepStartedPayload,
 )
 from skiller.domain.run.run_context_model import RunContext
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
@@ -25,8 +29,7 @@ def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> N
     db_path = tmp_path / "runtime-events-sequence.db"
     run_store = SqliteStateStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
-    run_store.init_db()
-    runtime_event_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440030"
     run_store.create_run(
         "internal",
@@ -81,8 +84,7 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
     db_path = tmp_path / "runtime-agent-events.db"
     run_store = SqliteStateStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
-    run_store.init_db()
-    runtime_event_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440031"
     run_store.create_run(
         "internal",
@@ -144,8 +146,7 @@ def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path
     db_path = tmp_path / "runtime-agent-lifecycle-events.db"
     run_store = SqliteStateStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
-    run_store.init_db()
-    runtime_event_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440032"
     run_store.create_run(
         "internal",
@@ -180,8 +181,7 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
     db_path = tmp_path / "runtime-assistant-message.db"
     run_store = SqliteStateStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
-    run_store.init_db()
-    runtime_event_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440033"
     run_store.create_run(
         "internal",
@@ -201,8 +201,9 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
             usage=None,
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
-                message_type="final",
-                text="Done.",
+                message_type="tool_calls",
+                text="I will inspect.",
+                total_tokens=1000,
             ),
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
@@ -219,9 +220,79 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
         step_id="support_agent",
         turn_id="turn-4",
         agent_sequence=7,
-        body=AgentAssistantMessagePayload(
-            turn_id="turn-4",
-            message_type="final",
-            text="Done.",
+        body=AgentBodyToolMessage(
+            total_tokens=1000,
+            text="I will inspect.",
         ),
     )
+    assert event.model_dump(mode="json")["payload"] == {
+        "total_tokens": 1000,
+        "text": "I will inspect.",
+    }
+
+
+def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path) -> None:
+    db_path = tmp_path / "runtime-final-assistant-message-context.db"
+    run_store = SqliteStateStore(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440034"
+    run_store.create_run(
+        "internal",
+        "skill",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+            payload=AgentEventPayload(
+                step_id="support_agent",
+                turn_id="turn-4",
+                agent_sequence=7,
+                body=AgentBodyFinalMessage(
+                    text="Done.",
+                    context=AgentAssistantMessageContext(
+                        compaction_enabled=False,
+                        max_window_ratio=0.8,
+                        max_window_tokens=100_000,
+                        total_tokens=2144,
+                        model="MiniMax-M2.5",
+                    ),
+                ),
+            ),
+        )
+    )
+
+    event = runtime_event_store.get_last_event(run_id)
+
+    assert event is not None
+    assert event.type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE
+    assert event.payload == AgentEventPayload(
+        step_id="support_agent",
+        turn_id="turn-4",
+        agent_sequence=7,
+        body=AgentBodyFinalMessage(
+            text="Done.",
+            context=AgentAssistantMessageContext(
+                compaction_enabled=False,
+                max_window_ratio=0.8,
+                max_window_tokens=100_000,
+                total_tokens=2144,
+                model="MiniMax-M2.5",
+            ),
+        ),
+    )
+    assert event.model_dump(mode="json")["payload"] == {
+        "text": "Done.",
+        "context": {
+            "compaction_enabled": False,
+            "max_window_ratio": 0.8,
+            "max_window_tokens": 100_000,
+            "total_tokens": 2144,
+            "model": "MiniMax-M2.5",
+        },
+    }

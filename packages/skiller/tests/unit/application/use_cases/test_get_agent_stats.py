@@ -4,7 +4,6 @@ from skiller.application.use_cases.agent.get_agent_stats import (
     GetAgentStatsStatus,
     GetAgentStatsUseCase,
 )
-from skiller.domain.agent.agent_run_scope import AgentRunScope
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
     AgentContextStats,
@@ -30,13 +29,7 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
     assert result.stats.run_id == "run-1"
     assert result.stats.agent_id == "support_agent"
     assert result.stats.context_id == "support-thread"
-    assert context_stats.scopes == [
-        {
-            "run_id": "run-1",
-            "agent_id": "support_agent",
-            "context_id": "support-thread",
-        }
-    ]
+    assert context_stats.context_ids == ["support-thread"]
 
 def test_get_agent_stats_returns_not_found_statuses() -> None:
     missing_run = GetAgentStatsUseCase(
@@ -93,16 +86,10 @@ class _FakeStore:
 
 class _FakeContextStats:
     def __init__(self) -> None:
-        self.scopes: list[dict[str, str]] = []
+        self.context_ids: list[str] = []
 
-    def get_stats(self, *, scope: AgentRunScope) -> AgentContextStats:
-        self.scopes.append(
-            {
-                "run_id": scope.run_id,
-                "agent_id": scope.agent_id,
-                "context_id": scope.context_id,
-            }
-        )
+    def get_stats(self, *, context_id: str) -> AgentContextStats:
+        self.context_ids.append(context_id)
         return AgentContextStats(
             entries=AgentContextEntryStats(
                 total=3,

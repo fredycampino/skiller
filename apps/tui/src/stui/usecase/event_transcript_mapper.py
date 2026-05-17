@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from stui.port.event_models import (
     AgentAssistantMessagePayload,
+    AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentStopReason,
     AgentToolCallPayload,
@@ -21,6 +22,8 @@ from stui.port.event_models import (
 )
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
+    AgentFinalAssistantMessageItem,
+    AgentStepFinalOutputItem,
     AgentSystemNoticeItem,
     AgentToolCallItem,
     AgentToolResultItem,
@@ -62,16 +65,28 @@ class EventTranscriptMapper:
 
         if event.event_type == LogEventType.AGENT_ASSISTANT_MESSAGE:
             payload = _payload(event, AgentAssistantMessagePayload)
-            if payload.message_type.value == "final":
-                return None
             if not payload.text.strip():
                 return None
             return AgentAssistantMessageItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 step_id=event.step_id or "",
-                message_type=payload.message_type.value,
+                message_type="assistant",
                 text=payload.text,
+            )
+
+        if event.event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
+            payload = _payload(event, AgentFinalAssistantMessagePayload)
+            if not payload.text.strip():
+                return None
+            return AgentFinalAssistantMessageItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_id=event.step_id or "",
+                text=payload.text,
+                total_tokens=payload.context.total_tokens,
+                max_window_tokens=payload.context.max_window_tokens,
+                model=payload.context.model,
             )
 
         if event.event_type == LogEventType.AGENT_TOOL_CALL:
@@ -125,11 +140,10 @@ class EventTranscriptMapper:
             if _should_skip_step_success(step_type=step_type, output=payload.output):
                 return None
             if step_type.strip().lower() == "agent":
-                return AgentAssistantMessageItem(
+                return AgentStepFinalOutputItem(
                     sequence=event.sequence,
                     run_id=event.run_id,
                     step_id=event.step_id or "",
-                    message_type="final",
                     text=_agent_final_text(payload.output),
                     format=OutputFormat.MARKDOWN,
                 )

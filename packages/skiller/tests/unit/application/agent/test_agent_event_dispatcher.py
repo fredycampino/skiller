@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pytest
+from helpers.agent_config import agent_config
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
@@ -15,6 +16,8 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
 )
 from skiller.domain.event.event_model import (
+    AgentBodyFinalMessage,
+    AgentBodyToolMessage,
     AgentEventPayload,
     RuntimeEventDraft,
     RuntimeEventType,
@@ -28,7 +31,10 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
-        AgentEventTruncator(AgentEventOutputPolicy(), OutputTruncator()),
+        AgentEventTruncator(
+            AgentEventOutputPolicy(max_text_chars=10),
+            OutputTruncator(),
+        ),
     )
 
     publisher.emit_assistant_message(
@@ -41,8 +47,9 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             usage=None,
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
-                message_type="final",
-                text="Done.",
+                message_type="tool_calls",
+                text="I will call a tool.",
+                total_tokens=2144,
             ),
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
@@ -57,6 +64,51 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     assert event.payload.step_id == "support_agent"
     assert event.payload.turn_id == "turn-4"
     assert event.payload.agent_sequence == 7
+    assert isinstance(event.payload.body, AgentBodyToolMessage)
+    assert event.payload.body.total_tokens == 2144
+    assert event.payload.body.text == "I will cal..."
+
+
+def test_agent_event_publisher_enriches_final_assistant_message_context() -> None:
+    store = _FakeRuntimeEventStore()
+    publisher = AgentEventPublisher(
+        store,
+        AgentEventTruncator(
+            AgentEventOutputPolicy(max_text_chars=10),
+            OutputTruncator(),
+        ),
+    )
+
+    publisher.emit_final_assistant_message(
+        entry=AgentContextEntry(
+            id="entry-1",
+            run_id="run-1",
+            context_id="ctx-1",
+            sequence=7,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            usage=None,
+            payload=AgentAssistantMessagePayload(
+                turn_id="turn-4",
+                message_type="final",
+                text="Final answer is intentionally longer than the event text limit.",
+                total_tokens=2144,
+            ),
+            source_step_id="support_agent",
+            created_at="2026-05-15T00:00:00Z",
+        ),
+        config=agent_config(),
+    )
+
+    event = store.events[0]
+    assert event.type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE
+    assert isinstance(event.payload, AgentEventPayload)
+    assert isinstance(event.payload.body, AgentBodyFinalMessage)
+    assert event.payload.body.context.compaction_enabled is False
+    assert event.payload.body.context.max_window_ratio == 0.8
+    assert event.payload.body.context.max_window_tokens == 100_000
+    assert event.payload.body.context.total_tokens == 2144
+    assert event.payload.body.context.model == "test-model"
+    assert event.payload.body.text == "Final answ..."
 
 
 def test_agent_event_publisher_emits_agent_lifecycle_events() -> None:

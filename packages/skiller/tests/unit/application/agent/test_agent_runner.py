@@ -48,6 +48,7 @@ class _FakeAgentContextStore:
     def __init__(self, entries: list[AgentContextEntry] | None = None) -> None:
         self.entries = list(entries or [])
         self.appended: list[dict[str, object]] = []
+        self.window_calls: list[dict[str, object]] = []
 
     def append_user_message(
         self,
@@ -166,15 +167,29 @@ class _FakeAgentContextStore:
         self.entries.append(entry)
         return entry
 
-    def list_entries(self, *, scope) -> list[AgentContextEntry]:
+    def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         return [
             entry
             for entry in self.entries
-            if entry.run_id == scope.run_id and entry.context_id == scope.context_id
+            if entry.context_id == context_id
         ]
 
-    def get_stats(self, *, scope) -> AgentContextStats:
-        _ = scope
+    def list_context_window(
+        self,
+        *,
+        context_id: str,
+        window_tokens: int,
+    ) -> list[AgentContextEntry]:
+        self.window_calls.append(
+            {
+                "context_id": context_id,
+                "window_tokens": window_tokens,
+            }
+        )
+        return self.list_entries(context_id=context_id)
+
+    def get_stats(self, *, context_id: str) -> AgentContextStats:
+        _ = context_id
         return AgentContextStats(
             entries=AgentContextEntryStats(
                 total=0,
@@ -191,8 +206,8 @@ class _FakeAgentContextStore:
             ),
         )
 
-    def next_turn_id(self, *, scope) -> str:
-        entries = self.list_entries(scope=scope)
+    def next_turn_id(self, *, context_id: str) -> str:
+        entries = self.list_entries(context_id=context_id)
         turn_entries = sum(
             1
             for entry in entries
@@ -389,6 +404,9 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
     assert result.tool_call_count == 0
     assert result.finish == AgentRunnerFinish.FINAL
     assert result.response_model == "fake-model"
+    assert context_store.window_calls == [
+        {"context_id": "thread-1", "window_tokens": 80_000}
+    ]
 
 
 def test_agent_runner_interrupts_inside_tool_execution() -> None:
@@ -485,6 +503,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
                 ok=True,
                 content="Done.",
                 model="fake",
+                usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
             ),
         ]
     )
@@ -602,18 +621,22 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         },
         {
             "run_id": "run-1",
-            "event_type": RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+            "event_type": RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
             "payload": {
                 "step_id": "support_agent",
                 "turn_id": "turn-2",
                 "agent_sequence": 4,
-                "body": {
-                    "type": "assistant_message",
-                    "turn_id": "turn-2",
-                    "message_type": "final",
-                    "text": "Done.",
+                    "body": {
+                        "text": "Done.",
+                        "context": {
+                            "compaction_enabled": False,
+                            "max_window_ratio": 0.8,
+                            "max_window_tokens": 100_000,
+                            "total_tokens": 125,
+                            "model": "test-model",
+                        },
+                    },
                 },
-            },
             "step_id": None,
             "step_type": None,
             "agent_sequence": None,
@@ -642,8 +665,14 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
                     ),
                 ),
                 finish_reason="tool_calls",
+                usage=LLMUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60),
             ),
-            LLMResponse(ok=True, content="Done.", model="fake"),
+            LLMResponse(
+                ok=True,
+                content="Done.",
+                model="fake",
+                usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
+            ),
         ]
     )
     tool_manager = _FakeToolManager(
@@ -710,32 +739,34 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
         RuntimeEventType.AGENT_TOOL_CALL,
         RuntimeEventType.AGENT_TOOL_RESULT,
-        RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
     ]
     assert append_event.calls[0]["payload"] == {
         "step_id": "support_agent",
         "turn_id": "turn-1",
-        "agent_sequence": 2,
-        "body": {
-            "type": "assistant_message",
-            "turn_id": "turn-1",
-            "message_type": "tool_calls",
-            "text": "I should send a notification.",
-        },
-    }
+            "agent_sequence": 2,
+            "body": {
+                "total_tokens": 60,
+                "text": "I should send a notification.",
+            },
+        }
     assert append_event.calls[1]["payload"]["body"]["parent_sequence"] == 2
     assert append_event.calls[2]["payload"]["body"]["parent_sequence"] == 2
     assert append_event.calls[3]["payload"] == {
         "step_id": "support_agent",
         "turn_id": "turn-3",
         "agent_sequence": 5,
-        "body": {
-            "type": "assistant_message",
-            "turn_id": "turn-3",
-            "message_type": "final",
-            "text": "Done.",
-        },
-    }
+            "body": {
+                "text": "Done.",
+                "context": {
+                    "compaction_enabled": False,
+                    "max_window_ratio": 0.8,
+                    "max_window_tokens": 100_000,
+                    "total_tokens": 125,
+                    "model": "test-model",
+                },
+            },
+        }
 
 
 def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() -> None:

@@ -20,15 +20,15 @@ class UserInputView(TranscriptView):
             prefixed_view(
                 prefix=transcript_text(
                     theme.user_icon,
-                    style=theme.rich_style(theme.color_text_accent),
+                    style=theme.color_text_accent,
                 ),
                 content=transcript_text(
                     self.item.text,
-                    style=theme.rich_style(theme.color_text_accent),
+                    style=theme.color_text_accent,
                 ),
                 prefix_width=1,
             ),
-            border_style=theme.rich_style(theme.color_prompt_border),
+            border_style=theme.color_prompt_border,
             expand=True,
             padding=(0, 0),
         )

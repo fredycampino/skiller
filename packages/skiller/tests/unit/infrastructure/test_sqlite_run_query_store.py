@@ -6,6 +6,7 @@ from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
@@ -14,7 +15,7 @@ pytestmark = pytest.mark.unit
 def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
     db_path = tmp_path / "runs.db"
     state_store = SqliteStateStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     query_store = SqliteRunQueryStore(str(db_path))
 
     first_run_id = "550e8400-e29b-41d4-a716-446655440010"
@@ -48,7 +49,7 @@ def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
 def test_list_runs_can_filter_by_status(tmp_path) -> None:
     db_path = tmp_path / "runs-filter.db"
     state_store = SqliteStateStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     query_store = SqliteRunQueryStore(str(db_path))
 
     waiting_run_id = "550e8400-e29b-41d4-a716-446655440012"
@@ -80,7 +81,7 @@ def test_list_runs_can_filter_by_status(tmp_path) -> None:
 def test_list_runs_includes_wait_type_and_webhook_detail(tmp_path) -> None:
     db_path = tmp_path / "runs-waits.db"
     state_store = SqliteStateStore(str(db_path))
-    state_store.init_db()
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
     query_store = SqliteRunQueryStore(str(db_path))
 
     webhook_run_id = "550e8400-e29b-41d4-a716-446655440014"

@@ -393,8 +393,8 @@ class _FakeAgentContextStore:
         self.entries.append(entry)
         return entry
 
-    def get_stats(self, *, scope) -> AgentContextStats:
-        _ = scope
+    def get_stats(self, *, context_id: str) -> AgentContextStats:
+        _ = context_id
         return AgentContextStats(
             entries=AgentContextEntryStats(
                 total=0,
@@ -554,6 +554,7 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
     def append_event(self, event):  # noqa: ANN001
         event_type_map = {
             RuntimeEventType.AGENT_ASSISTANT_MESSAGE: "assistant_message",
+            RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE: "final_assistant_message",
             RuntimeEventType.AGENT_TOOL_CALL: "tool_call",
             RuntimeEventType.AGENT_TOOL_RESULT: "tool_result",
             RuntimeEventType.AGENT_INTERRUPTED: "interrupted",

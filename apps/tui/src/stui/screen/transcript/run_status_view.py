@@ -21,7 +21,7 @@ class RunStatusView(TranscriptView):
         return Text(f"  {self.item.status}")
 
     def _render_error(self, *, theme: TuiTheme) -> RenderableType:
-        error_style = theme.rich_style(theme.color_text_error)
+        error_style = theme.color_text_error
         if self.item.message:
             return Group(
                 Text("  error:", style=error_style),

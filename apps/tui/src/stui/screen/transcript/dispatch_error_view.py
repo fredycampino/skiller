@@ -17,7 +17,7 @@ class DispatchErrorView(TranscriptView):
     item: DispatchErrorItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
-        error_style = theme.rich_style(theme.color_text_error)
+        error_style = theme.color_text_error
         return Group(
             Text("error:", style=error_style),
             Padding(

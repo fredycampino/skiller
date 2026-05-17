@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from stui.port.event_models import (
+    AgentFinalAssistantMessagePayload,
     LogEvent,
     LogEventType,
     OutputPayload,
@@ -13,6 +14,7 @@ from stui.port.event_models import (
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentUsageState,
     ConsoleScreenState,
     PromptMode,
     ViewStatusKind,
@@ -35,11 +37,29 @@ class EventStateUseCase:
         state: ConsoleScreenState,
         events: list[LogEvent],
     ) -> EventStateResult:
-        state.transcript.items = self.transcript_mapper.to_transcript(events)
         if not events:
             return EventStateResult(state=state)
+
+        state.transcript.items = self.transcript_mapper.to_transcript(events)
+        state.set_agent_usage(self._agent_usage_state(events=events))
         self._project_event(state=state, event=_most_recent_event(events))
         return EventStateResult(state=state)
+
+    def _agent_usage_state(
+        self,
+        *,
+        events: list[LogEvent],
+    ) -> AgentUsageState | None:
+        for event in reversed(events):
+            if event.event_type != LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
+                continue
+            payload: AgentFinalAssistantMessagePayload = event.payload
+            return AgentUsageState(
+                model=payload.context.model,
+                total_tokens=payload.context.total_tokens,
+                max_window_tokens=payload.context.max_window_tokens,
+            )
+        return None
 
     def _project_event(
         self,
@@ -55,6 +75,7 @@ class EventStateUseCase:
 
         if event.event_type in {
             LogEventType.AGENT_ASSISTANT_MESSAGE,
+            LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
             LogEventType.AGENT_TOOL_CALL,
             LogEventType.AGENT_TOOL_RESULT,
             LogEventType.AGENT_INTERRUPTED,
@@ -69,7 +90,7 @@ class EventStateUseCase:
             return
 
         if event.event_type == LogEventType.STEP_ERROR:
-            payload = _payload(event, StepErrorPayload)
+            payload: StepErrorPayload = event.payload
             state.set_prompt(
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
@@ -84,7 +105,7 @@ class EventStateUseCase:
             return
 
         if event.event_type == LogEventType.RUN_WAITING:
-            payload = _payload(event, RunWaitingPayload)
+            payload: RunWaitingPayload = event.payload
             waiting_status = _resolve_waiting_status(event)
             self.context.status = waiting_status
             state.set_status(kind=ViewStatusKind.WAITING)
@@ -100,7 +121,7 @@ class EventStateUseCase:
             return
 
         if event.event_type == LogEventType.RUN_FINISHED:
-            payload = _payload(event, RunFinishedPayload)
+            payload: RunFinishedPayload = event.payload
             normalized_status = payload.status.strip().lower()
             state.set_prompt(
                 text=state.prompt.text,
@@ -113,13 +134,6 @@ class EventStateUseCase:
                 return
             state.set_status(kind=ViewStatusKind.ERROR, message=normalized_status or "failed")
             self.context.status = RunStatus.FAILED
-
-
-def _payload(event: LogEvent, expected: type) -> object:
-    if not isinstance(event.payload, expected):
-        raise RuntimeError(f"unexpected payload for {event.event_type}")
-    return event.payload
-
 
 def _waiting_prompt(output: OutputPayload) -> str:
     if output.value:

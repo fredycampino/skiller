@@ -53,6 +53,7 @@ from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPaylo
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
@@ -154,8 +155,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
 
     runtime = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
-            store=store,
-            webhook_registry=webhook_registry,
+            store=SqliteRuntimeBootstrap(store.db_path),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
@@ -205,7 +205,7 @@ def test_run_external_skill_file_succeeds() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")
@@ -241,7 +241,7 @@ def test_external_notify_can_read_shell_output_value() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")
@@ -270,7 +270,7 @@ def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         skill_runner = FilesystemSkillRunner(skills_dir="skills")
         create_run_use_case = CreateRunUseCase(store, skill_runner)
         get_start_step_use_case = GetStartStepUseCase(store=store)
@@ -325,7 +325,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
@@ -381,7 +381,7 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
@@ -443,7 +443,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")
@@ -521,7 +521,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
         )
 
         store = SqliteStateStore(db_path)
-        store.init_db()
+        SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
         run_result = runtime.run(str(skill_path), {}, skill_source="file")

@@ -16,8 +16,9 @@ from apps.tui.tests.support import (
     patched_to_thread,
 )
 from stui.port.event_models import (
+    AgentAssistantMessageContextPayload,
     AgentAssistantMessagePayload,
-    AgentAssistantMessageType,
+    AgentFinalAssistantMessagePayload,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentToolResultStatus,
@@ -52,6 +53,8 @@ from stui.usecase import (
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
+    AgentFinalAssistantMessageItem,
+    AgentStepFinalOutputItem,
     AgentToolCallItem,
     AgentToolResultItem,
     CompletionItem,
@@ -965,6 +968,8 @@ def test_console_screen_viewmodel_reconstructs_input_received_and_ignores_run_re
         run_port=run_port,
         waiting_port=FakeWaitingPort(),
     )
+    emitted_states: list[ConsoleScreenState] = []
+    viewmodel.bind_on_state(emitted_states.append)
 
     viewmodel.notify(
         [
@@ -1038,6 +1043,8 @@ def test_console_screen_viewmodel_skips_input_received_wait_output_block() -> No
         run_port=run_port,
         waiting_port=FakeWaitingPort(),
     )
+    emitted_states: list[ConsoleScreenState] = []
+    viewmodel.bind_on_state(emitted_states.append)
 
     viewmodel.notify(
         [
@@ -1138,10 +1145,19 @@ def test_console_screen_viewmodel_maps_output_format_by_step_type() -> None:
     viewmodel.notify(
         [
             _event(
-                LogEventType.STEP_SUCCESS,
+                LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
                 step_id="support_agent",
                 step_type="agent",
-                payload=StepSuccessPayload(output=_output_from_json('{"text":"hola"}')),
+                payload=AgentFinalAssistantMessagePayload(
+                    text="hola",
+                    context=AgentAssistantMessageContextPayload(
+                        compaction_enabled=False,
+                        max_window_ratio=0.8,
+                        max_window_tokens=1000000,
+                        total_tokens=10,
+                        model="MiniMax-M2.5",
+                    ),
+                ),
                 event_id="evt-agent-out",
             ),
             _event(
@@ -1161,13 +1177,37 @@ def test_console_screen_viewmodel_maps_output_format_by_step_type() -> None:
     agent_messages = [
         item
         for item in viewmodel.state.transcript.items
-        if isinstance(item, AgentAssistantMessageItem)
+        if isinstance(item, AgentFinalAssistantMessageItem)
     ]
     assert len(agent_messages) == 1
-    assert agent_messages[0].message_type == "final"
     assert agent_messages[0].text == "hola"
     assert len(outputs) == 1
     assert outputs[0].format == OutputFormat.STRUCTURED
+
+
+def test_console_screen_viewmodel_appends_agent_step_final_output_item() -> None:
+    run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=run_port,
+        waiting_port=FakeWaitingPort(),
+    )
+
+    viewmodel.notify(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                step_id="support_agent",
+                step_type="agent",
+                payload=StepSuccessPayload(output=_output_from_json('{"text":"hola"}')),
+                event_id="evt-agent-out",
+            ),
+        ]
+    )
+
+    assert len(viewmodel.state.transcript.items) == 1
+    assert isinstance(viewmodel.state.transcript.items[0], AgentStepFinalOutputItem)
+    assert viewmodel.state.transcript.items[0].text == "hola"
 
 
 def test_console_screen_viewmodel_appends_agent_tool_call_and_result_items() -> None:
@@ -1236,10 +1276,8 @@ def test_console_screen_viewmodel_appends_agent_assistant_message_item() -> None
                 step_id="support_agent",
                 step_type="agent",
                 payload=AgentAssistantMessagePayload(
-                    type="assistant_message",
-                    turn_id="turn-1",
-                    message_type=AgentAssistantMessageType.TOOL_CALLS,
                     text="I will inspect the repository state.",
+                    total_tokens=1000,
                 ),
                 event_id="evt-agent-assistant",
             ),
@@ -1247,29 +1285,35 @@ def test_console_screen_viewmodel_appends_agent_assistant_message_item() -> None
     )
 
     assert isinstance(viewmodel.state.transcript.items[0], AgentAssistantMessageItem)
-    assert viewmodel.state.transcript.items[0].message_type == "tool_calls"
+    assert viewmodel.state.transcript.items[0].message_type == "assistant"
     assert viewmodel.state.transcript.items[0].text == "I will inspect the repository state."
 
 
-def test_console_screen_viewmodel_uses_step_success_as_only_agent_final_output() -> None:
+def test_console_screen_viewmodel_appends_agent_final_assistant_message_item() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     viewmodel = build_viewmodel(
         session_key="main",
         run_port=run_port,
         waiting_port=FakeWaitingPort(),
     )
+    emitted_states: list[ConsoleScreenState] = []
+    viewmodel.bind_on_state(emitted_states.append)
 
     viewmodel.notify(
         [
             _event(
-                LogEventType.AGENT_ASSISTANT_MESSAGE,
+                LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
                 step_id="support_agent",
                 step_type="agent",
-                payload=AgentAssistantMessagePayload(
-                    type="assistant_message",
-                    turn_id="turn-1",
-                    message_type=AgentAssistantMessageType.FINAL,
-                    text="Hecho truncado...",
+                payload=AgentFinalAssistantMessagePayload(
+                    text="Hecho completo.",
+                    context=AgentAssistantMessageContextPayload(
+                        compaction_enabled=False,
+                        max_window_ratio=0.8,
+                        max_window_tokens=1000000,
+                        total_tokens=2144,
+                        model="MiniMax-M2.5",
+                    ),
                 ),
                 event_id="evt-agent-final",
             ),
@@ -1286,10 +1330,18 @@ def test_console_screen_viewmodel_uses_step_success_as_only_agent_final_output()
         ]
     )
 
-    assert len(viewmodel.state.transcript.items) == 1
-    assert isinstance(viewmodel.state.transcript.items[0], AgentAssistantMessageItem)
-    assert viewmodel.state.transcript.items[0].message_type == "final"
+    assert len(viewmodel.state.transcript.items) == 2
+    assert isinstance(viewmodel.state.transcript.items[0], AgentFinalAssistantMessageItem)
     assert viewmodel.state.transcript.items[0].text == "Hecho completo."
+    assert viewmodel.state.transcript.items[0].total_tokens == 2144
+    assert viewmodel.state.transcript.items[0].max_window_tokens == 1000000
+    emitted_state = emitted_states[-1]
+    assert emitted_state.agent_usage is not None
+    assert emitted_state.agent_usage.model == "MiniMax-M2.5"
+    assert emitted_state.agent_usage.total_tokens == 2144
+    assert emitted_state.agent_usage.max_window_tokens == 1000000
+    assert isinstance(viewmodel.state.transcript.items[1], AgentStepFinalOutputItem)
+    assert viewmodel.state.transcript.items[1].text == "Hecho completo."
 
 
 def test_console_screen_viewmodel_moves_wait_prompt_to_status_instead_of_transcript_output(

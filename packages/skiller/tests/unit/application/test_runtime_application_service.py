@@ -328,7 +328,6 @@ def _build_service(
     service = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SimpleNamespace(init_db=lambda: None),
-            webhook_registry=SimpleNamespace(init_db=lambda: None),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
@@ -633,7 +632,6 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
     service = RuntimeApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SimpleNamespace(init_db=lambda: None),
-            webhook_registry=SimpleNamespace(init_db=lambda: None),
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=_FakeCreateRunUseCase(),

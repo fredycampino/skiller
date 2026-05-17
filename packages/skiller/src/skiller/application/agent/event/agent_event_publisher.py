@@ -1,4 +1,5 @@
 from skiller.application.agent.event.agent_event_truncator import AgentEventTruncator
+from skiller.domain.agent.agent_config_model import AgentConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -7,6 +8,9 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
 )
 from skiller.domain.event.event_model import (
+    AgentAssistantMessageContext,
+    AgentBodyFinalMessage,
+    AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
     RuntimeEventDraft,
@@ -33,16 +37,61 @@ class AgentEventPublisher:
             raise ValueError("Assistant event requires assistant_message entry")
         if not isinstance(entry.payload, AgentAssistantMessagePayload):
             raise ValueError("Assistant event requires AgentAssistantMessagePayload")
+        if entry.payload.message_type != "tool_calls":
+            raise ValueError("Assistant event requires tool_calls message")
 
+        payload = self.truncator.truncate_assistant_message(entry.payload)
         self.runtime_event_store.append_event(
             RuntimeEventDraft(
                 run_id=entry.run_id,
                 type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
                 payload=AgentEventPayload(
                     step_id=entry.source_step_id,
-                    turn_id=entry.payload.turn_id,
+                    turn_id=payload.turn_id,
                     agent_sequence=entry.sequence,
-                    body=self.truncator.truncate_assistant_message(entry.payload),
+                    body=AgentBodyToolMessage(
+                        total_tokens=payload.total_tokens or 0,
+                        text=payload.text,
+                    ),
+                ),
+            )
+        )
+
+    def emit_final_assistant_message(
+        self,
+        *,
+        entry: AgentContextEntry,
+        config: AgentConfig,
+    ) -> None:
+        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
+            raise ValueError("Final assistant event requires assistant_message entry")
+        if not isinstance(entry.payload, AgentAssistantMessagePayload):
+            raise ValueError("Final assistant event requires AgentAssistantMessagePayload")
+        if entry.payload.message_type != "final":
+            raise ValueError("Final assistant event requires final message")
+
+        payload = self.truncator.truncate_assistant_message(entry.payload)
+        provider = config.llm.default()
+        self.runtime_event_store.append_event(
+            RuntimeEventDraft(
+                run_id=entry.run_id,
+                type=RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+                payload=AgentEventPayload(
+                    step_id=entry.source_step_id,
+                    turn_id=payload.turn_id,
+                    agent_sequence=entry.sequence,
+                    body=AgentBodyFinalMessage(
+                        text=payload.text,
+                        context=AgentAssistantMessageContext(
+                            compaction_enabled=config.context.compaction.enabled,
+                            max_window_ratio=(
+                                config.context.compaction.max_total_tokens_ratio
+                            ),
+                            max_window_tokens=provider.context_window_tokens,
+                            total_tokens=payload.total_tokens or 0,
+                            model=provider.model,
+                        ),
+                    ),
                 ),
             )
         )

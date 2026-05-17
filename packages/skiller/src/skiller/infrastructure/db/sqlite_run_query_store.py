@@ -1,10 +1,11 @@
 from typing import Any
 
 from skiller.domain.run.run_list_item_model import RunListItem
+from skiller.domain.run.run_query_port import RunQueryPort
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
-class SqliteRunQueryStore(SqliteRepository):
+class SqliteRunQueryStore(SqliteRepository, RunQueryPort):
     def list_runs(
         self,
         *,

@@ -6,7 +6,8 @@ from typing import Any, TypeAlias
 
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
-    AgentContextPayload,
+    AgentToolCallPayload,
+    AgentToolResultPayload,
     agent_context_payload_from_dict,
     agent_context_payload_to_dict,
 )
@@ -21,6 +22,7 @@ class RuntimeEventType(StrEnum):
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
+    AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
     AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
@@ -67,11 +69,40 @@ class StepErrorPayload:
 
 
 @dataclass(frozen=True)
+class AgentAssistantMessageContext:
+    compaction_enabled: bool
+    max_window_ratio: float
+    max_window_tokens: int
+    total_tokens: int
+    model: str
+
+
+@dataclass(frozen=True)
+class AgentBodyToolMessage:
+    total_tokens: int
+    text: str
+
+
+@dataclass(frozen=True)
+class AgentBodyFinalMessage:
+    text: str
+    context: AgentAssistantMessageContext
+
+
+AgentEventBody: TypeAlias = (
+    AgentBodyToolMessage
+    | AgentBodyFinalMessage
+    | AgentToolCallPayload
+    | AgentToolResultPayload
+)
+
+
+@dataclass(frozen=True)
 class AgentEventPayload:
     step_id: str
     turn_id: str
     agent_sequence: int
-    body: AgentContextPayload
+    body: AgentEventBody
 
 
 @dataclass(frozen=True)
@@ -144,7 +175,7 @@ def runtime_event_payload_to_dict(payload: object) -> dict[str, Any]:
             "step_id": payload.step_id,
             "turn_id": payload.turn_id,
             "agent_sequence": payload.agent_sequence,
-            "body": agent_context_payload_to_dict(payload.body),
+            "body": agent_event_body_to_dict(payload.body),
         }
 
     if is_dataclass(payload):
@@ -155,9 +186,25 @@ def runtime_event_payload_to_dict(payload: object) -> dict[str, Any]:
 
 def runtime_event_body_to_dict(payload: RuntimeEventPayload) -> dict[str, Any]:
     if isinstance(payload, AgentEventPayload):
-        return agent_context_payload_to_dict(payload.body)
+        return agent_event_body_to_dict(payload.body)
 
     return runtime_event_payload_to_dict(payload)
+
+
+def agent_event_body_to_dict(
+    payload: AgentEventBody,
+) -> dict[str, Any]:
+    if isinstance(payload, AgentBodyToolMessage):
+        return {
+            "total_tokens": payload.total_tokens,
+            "text": payload.text,
+        }
+    if isinstance(payload, AgentBodyFinalMessage):
+        return {
+            "text": payload.text,
+            "context": _without_none(asdict(payload.context)),
+        }
+    return agent_context_payload_to_dict(payload)
 
 
 def runtime_event_step_id(payload: RuntimeEventPayload) -> str | None:
@@ -241,25 +288,53 @@ def _agent_event_payload_from_dict(
     event_type: RuntimeEventType,
     value: dict[str, Any],
 ) -> AgentEventPayload:
-    body = dict(value)
-    body.pop("step_id", None)
-    body.pop("step_type", None)
-    body.pop("agent_sequence", None)
+    raw_body = value.get("body")
+    if isinstance(raw_body, dict):
+        body = raw_body
+    else:
+        body = dict(value)
+        body.pop("step_id", None)
+        body.pop("step_type", None)
+        body.pop("agent_sequence", None)
 
     return AgentEventPayload(
         step_id=str(value.get("step_id", "")),
         turn_id=str(value.get("turn_id", "")),
         agent_sequence=_int_value(value.get("agent_sequence")),
-        body=agent_context_payload_from_dict(
-            entry_type=_agent_context_entry_type(event_type),
-            value=body,
-        ),
+        body=_agent_event_body_from_dict(event_type=event_type, value=body),
+    )
+
+
+def _agent_event_body_from_dict(
+    *,
+    event_type: RuntimeEventType,
+    value: dict[str, Any],
+) -> AgentEventBody:
+    if event_type == RuntimeEventType.AGENT_ASSISTANT_MESSAGE:
+        return AgentBodyToolMessage(
+            total_tokens=_int_value(value.get("total_tokens")),
+            text=str(value.get("text", "")),
+        )
+    if event_type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
+        context = value.get("context")
+        context_dict = context if isinstance(context, dict) else {}
+        return AgentBodyFinalMessage(
+            text=str(value.get("text", "")),
+            context=AgentAssistantMessageContext(
+                compaction_enabled=bool(context_dict.get("compaction_enabled")),
+                max_window_ratio=_float_value(context_dict.get("max_window_ratio")),
+                max_window_tokens=_int_value(context_dict.get("max_window_tokens")),
+                total_tokens=_int_value(context_dict.get("total_tokens")),
+                model=str(context_dict.get("model", "")),
+            )
+        )
+    return agent_context_payload_from_dict(
+        entry_type=_agent_context_entry_type(event_type),
+        value=value,
     )
 
 
 def _agent_context_entry_type(event_type: RuntimeEventType) -> AgentContextEntryType:
-    if event_type == RuntimeEventType.AGENT_ASSISTANT_MESSAGE:
-        return AgentContextEntryType.ASSISTANT_MESSAGE
     if event_type == RuntimeEventType.AGENT_TOOL_CALL:
         return AgentContextEntryType.TOOL_CALL
     return AgentContextEntryType.TOOL_RESULT
@@ -271,6 +346,14 @@ def _dict_value(value: object) -> dict[str, Any]:
 
 def _int_value(value: object) -> int:
     return value if isinstance(value, int) else 0
+
+
+def _float_value(value: object) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (float, int)):
+        return float(value)
+    return 0.0
 
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:

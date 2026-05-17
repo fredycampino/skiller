@@ -9,6 +9,8 @@ import pytest
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.log_event_mapper import LogEventMapper
 from stui.port.event_models import (
+    AgentAssistantMessagePayload,
+    AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentStopReason,
     AgentToolResultPayload,
@@ -143,6 +145,65 @@ def test_cli_log_event_adapter_parses_agent_tool_result_payload() -> None:
     assert event.payload.status == AgentToolResultStatus.COMPLETED
     assert event.payload.data == {"ok": True, "exit_code": 0}
     assert event.payload.text == "ok"
+
+
+def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 88,
+                "id": "event-88",
+                "run_id": "run-1",
+                "type": "AGENT_ASSISTANT_MESSAGE",
+                "step_id": "support_agent",
+                "step_type": "agent",
+                "agent_sequence": 16,
+                "created_at": "2026-05-12T10:30:18Z",
+                "payload": {
+                    "text": "summary",
+                    "total_tokens": 2144,
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.AGENT_ASSISTANT_MESSAGE
+    assert isinstance(event.payload, AgentAssistantMessagePayload)
+    assert event.payload.text == "summary"
+    assert event.payload.total_tokens == 2144
+
+
+def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 89,
+                "id": "event-89",
+                "run_id": "run-1",
+                "type": "AGENT_FINAL_ASSISTANT_MESSAGE",
+                "step_id": "support_agent",
+                "step_type": "agent",
+                "agent_sequence": 17,
+                "created_at": "2026-05-12T10:30:20Z",
+                "payload": {
+                    "text": "Done",
+                    "context": {
+                        "compaction_enabled": False,
+                        "max_window_ratio": 0.8,
+                        "max_window_tokens": 1000000,
+                        "total_tokens": 2144,
+                        "model": "MiniMax-M2.5",
+                    },
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE
+    assert isinstance(event.payload, AgentFinalAssistantMessagePayload)
+    assert event.payload.text == "Done"
+    assert event.payload.context.total_tokens == 2144
+    assert event.payload.context.model == "MiniMax-M2.5"
 
 
 def test_cli_log_event_adapter_parses_agent_lifecycle_payload() -> None:

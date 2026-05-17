@@ -4,11 +4,12 @@ from typing import Any
 
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
+from skiller.domain.wait.wait_store_port import WaitStorePort
 from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
-class SqliteWaitStore(SqliteRepository):
+class SqliteWaitStore(SqliteRepository, WaitStorePort):
     def create_wait(
         self,
         run_id: str,

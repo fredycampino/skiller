@@ -15,6 +15,7 @@ from stui.port.event_models import (
     RunWaitingPayload,
     StepErrorPayload,
 )
+from stui.port.run_port import CommandAck, CommandAckStatus
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -26,10 +27,19 @@ from stui.viewmodel.console_screen_state import (
 pytestmark = pytest.mark.unit
 
 
+class FakeAgentPort:
+    def __init__(self) -> None:
+        self.interrupt_calls: list[str] = []
+
+    def interrupt(self, run_id: str) -> CommandAck:
+        self.interrupt_calls.append(run_id)
+        return CommandAck(status=CommandAckStatus.ACCEPTED, run_id=run_id)
+
+
 def test_event_state_maps_transcript_and_projects_most_recent_event() -> None:
     state = ConsoleScreenState()
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(
         state=state,
@@ -60,7 +70,7 @@ def test_event_state_maps_transcript_and_projects_most_recent_event() -> None:
 def test_event_state_waiting_input_sets_prompt_and_context() -> None:
     state = ConsoleScreenState()
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(
         state=state,
@@ -81,7 +91,7 @@ def test_event_state_waiting_input_sets_prompt_and_context() -> None:
 def test_event_state_waiting_without_step_type_defaults_to_webhook() -> None:
     state = ConsoleScreenState()
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(
         state=state,
@@ -103,7 +113,7 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     state = ConsoleScreenState()
     state.set_prompt(text="draft", cursor_position=5, waiting_prompt="old")
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(
         state=state,
@@ -126,7 +136,7 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
 def test_event_state_updates_agent_usage_from_final_assistant_message() -> None:
     state = ConsoleScreenState()
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(
         state=state,
@@ -195,13 +205,54 @@ def test_event_state_projects_terminal_and_observer_status(
 ) -> None:
     state = ConsoleScreenState()
     context = _context()
-    use_case = EventStateUseCase(context=context)
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
 
     use_case.execute(state=state, events=[_event(event_type, payload=payload)])
 
     assert state.view_status.kind == expected_view_status
     assert state.view_status.message == expected_message
     assert context.status == expected_context_status
+
+
+def test_event_state_interrupts_running_run_on_observer_error() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    context.run_id = "run-1"
+    agent_port = FakeAgentPort()
+    use_case = EventStateUseCase(context=context, agent_port=agent_port)
+
+    use_case.execute(
+        state=state,
+        events=[
+            _event(
+                LogEventType.OBSERVER_LOOP_ERROR,
+                payload=ErrorPayload(error="RuntimeError: boom"),
+            )
+        ],
+    )
+
+    assert agent_port.interrupt_calls == ["run-1"]
+
+
+def test_event_state_does_not_interrupt_waiting_run_on_observer_error() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    context.run_id = "run-1"
+    context.status = RunStatus.WAITING_INPUT
+    agent_port = FakeAgentPort()
+    use_case = EventStateUseCase(context=context, agent_port=agent_port)
+
+    use_case.execute(
+        state=state,
+        events=[
+            _event(
+                LogEventType.OBSERVER_LOOP_ERROR,
+                payload=ErrorPayload(error="RuntimeError: boom"),
+            )
+        ],
+    )
+
+    assert agent_port.interrupt_calls == []
 
 
 def _context() -> RunEventContext:

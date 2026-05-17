@@ -61,6 +61,17 @@ if is_ready and current_step.step_type == StepType.MCP:
 - Put detail in the error message, not in a large taxonomy of statuses.
 - Prepare data in one step and execute it in the next step.
 - Keep YAML-driven behavior explicit and deterministic.
+- Do not make constructor dependencies optional to keep old call sites working. Update the call
+  sites and tests so the required dependency is visible.
+- Use `| None` only when absence is part of the contract. Do not use it as a fallback for missing
+  wiring, delayed validation, or convenience.
+- Do not scatter `.strip()` across internal logic. Normalize text once at the boundary, parser, or
+  dedicated mapper; after that, trust the normalized contract.
+- Do not extract private helpers by default. Keep the flow inline when it is short and readable.
+- Extract a private helper only when it names a real sub-operation, removes meaningful duplication,
+  or keeps a long branch understandable.
+- Do not create private helpers for one-line checks, defensive guards, or code that is clearer at
+  the call site.
 
 ## Parameter Grouping
 

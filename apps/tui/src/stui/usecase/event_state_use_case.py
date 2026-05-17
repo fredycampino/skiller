@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from stui.port.agent_port import AgentPort
 from stui.port.event_models import (
     AgentFinalAssistantMessagePayload,
     LogEvent,
@@ -29,6 +30,7 @@ class EventStateResult:
 @dataclass(frozen=True)
 class EventStateUseCase:
     context: RunEventContext
+    agent_port: AgentPort
     transcript_mapper: EventTranscriptMapper = field(default_factory=EventTranscriptMapper)
 
     def execute(
@@ -101,6 +103,8 @@ class EventStateUseCase:
             return
 
         if event.event_type == LogEventType.OBSERVER_LOOP_ERROR:
+            if self.context.status == RunStatus.RUNNING:
+                self.agent_port.interrupt(self.context.run_id)
             state.set_status(kind=ViewStatusKind.ERROR, message="Observer error")
             return
 

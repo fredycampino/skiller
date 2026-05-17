@@ -22,6 +22,8 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - Prefer predictive flow over defensive flow. If a case is expected in normal execution,
   model it in the contract or result type instead of rediscovering it through scattered
   `None` checks or generic exceptions.
+- Do not make dependencies or fields optional by default. Use `| None` only when absence is
+  a real domain state or a boundary genuinely may not provide the value.
 - Avoid adding `__init__.py` files by default. Use namespace packages unless a package needs
   real initialization logic, explicit re-exports, or tooling compatibility that requires it.
 - Trust the contract of a use case. Do not add defensive checks for states that should be impossible.

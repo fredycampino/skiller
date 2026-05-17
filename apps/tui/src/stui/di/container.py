@@ -107,6 +107,9 @@ def build_tui_container(
     resolved_run_port = run_port or DefaultRunPort(
         command_adapter=CliRunAdapter(invoker=resolved_cli_invoker),
     )
+    resolved_agent_port = agent_port or DefaultAgentPort(
+        command_adapter=CliAgentAdapter(invoker=resolved_cli_invoker),
+    )
     resolved_events_port = events_port or DefaultEventsPort(
         event_observer=LogsEventObserver(
             logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
@@ -118,9 +121,6 @@ def build_tui_container(
     )
     resolved_waiting_port = waiting_port or DefaultWaitingPort(
         command_adapter=CliWaitingAdapter(invoker=resolved_cli_invoker),
-    )
-    resolved_agent_port = agent_port or DefaultAgentPort(
-        command_adapter=CliAgentAdapter(invoker=resolved_cli_invoker),
     )
     run_event_context = RunEventContext(
         run_id="",
@@ -136,7 +136,10 @@ def build_tui_container(
         move_completion_use_case=MoveCompletionUseCase(),
         list_runs_use_case=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command_use_case=NormalizeCommandUseCase(),
-        event_state_use_case=EventStateUseCase(context=run_event_context),
+        event_state_use_case=EventStateUseCase(
+            context=run_event_context,
+            agent_port=resolved_agent_port,
+        ),
         project_transcript_use_case=ProjectTranscriptUseCase(),
         prompt_enter_use_case=PromptEnterUseCase(),
         run_command_use_case=RunCommandUseCase(

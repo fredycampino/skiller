@@ -42,14 +42,8 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
         subscription = self._subscription
         if subscription is None:
             return
-        seen_sequences = {event.sequence for event in subscription.events}
 
-        for event in events:
-            if event.sequence in seen_sequences:
-                continue
-            subscription.events.append(event)
-            seen_sequences.add(event.sequence)
-
+        subscription.events.extend(events)
         self._trim_window(subscription, max_events=subscription.listener.get_max_page())
         subscription.listener.notify(list(subscription.events))
 

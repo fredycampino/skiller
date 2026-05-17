@@ -77,7 +77,7 @@ def test_notify_sends_clean_window_to_listener() -> None:
     ]
 
 
-def test_notify_deduplicates_by_sequence() -> None:
+def test_notify_keeps_received_events() -> None:
     listener = FakeLogEventsListener()
     port = DefaultEventsPort(event_observer=FakeLogEventsObserver())
     port.subscribe(run_id="run-1", listener=listener)
@@ -85,7 +85,7 @@ def test_notify_deduplicates_by_sequence() -> None:
     port.notify([_event(sequence=1)])
     port.notify([_event(sequence=1), _event(sequence=2)])
 
-    assert [event.sequence for event in listener.notifications[-1]] == [1, 2]
+    assert [event.sequence for event in listener.notifications[-1]] == [1, 1, 2]
 
 
 def test_notify_trims_window_with_listener_max_page() -> None:

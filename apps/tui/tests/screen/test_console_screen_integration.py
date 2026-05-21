@@ -23,11 +23,12 @@ from stui.usecase import (
 )
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentStepFinalOutputItem,
     InfoItem,
     OutputFormat,
     PromptMode,
-    RunOutputItem,
     RunStepItem,
+    StepNotifyOutputItem,
     TranscriptMode,
     UserInputItem,
     ViewStatusKind,
@@ -81,6 +82,108 @@ def test_console_screen_exits_on_quit_command() -> None:
             await pilot.pause()
 
         assert exited == ["session-123"]
+
+    asyncio.run(run())
+
+
+def test_console_screen_ctrl_c_copies_prompt_selection_without_exiting() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="session-123",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        exited: list[str | None] = []
+        copied: list[str] = []
+
+        def fake_exit(result: str | None = None) -> None:
+            exited.append(result)
+
+        def fake_copy_to_clipboard(text: str) -> None:
+            copied.append(text)
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+        app.copy_to_clipboard = fake_copy_to_clipboard  # type: ignore[method-assign]
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            prompt = app.query_one("#prompt", TextArea)
+            prompt.text = "copy me"
+            prompt.select_all()
+            prompt.focus()
+
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+
+        assert copied == ["copy me"]
+        assert exited == []
+
+    asyncio.run(run())
+
+
+def test_console_screen_ctrl_c_does_not_show_quit_notification() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="session-123",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        exited: list[str | None] = []
+        notifications: list[tuple[str, str]] = []
+
+        def fake_exit(result: str | None = None) -> None:
+            exited.append(result)
+
+        def fake_notify(
+            message: str,
+            *,
+            title: str = "",
+            severity: str = "information",
+            timeout: float | None = None,
+            markup: bool = True,
+        ) -> None:
+            _ = severity, timeout, markup
+            notifications.append((title, message))
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+        app.notify = fake_notify  # type: ignore[method-assign]
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.set_focus(None)
+
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+
+        assert exited == []
+        assert notifications == []
+
+    asyncio.run(run())
+
+
+def test_console_screen_ctrl_q_exits_app() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="session-123",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        exited: list[str | None] = []
+
+        def fake_exit(result: str | None = None) -> None:
+            exited.append(result)
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("ctrl+q")
+            await pilot.pause()
+
+        assert exited == [None]
 
     asyncio.run(run())
 
@@ -324,10 +427,10 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
                     step_type="agent",
                     step_id="support_agent",
                 ),
-                RunOutputItem(
+                AgentStepFinalOutputItem(
                     run_id="run-1",
-                    step_type="agent",
-                    output='{"text":"Hola **mundo**\\n\\n- **uno**\\n- dos"}',
+                    step_id="support_agent",
+                    text='{"text":"Hola **mundo**\\n\\n- **uno**\\n- dos"}',
                     format=OutputFormat.MARKDOWN,
                 ),
             ]
@@ -363,10 +466,10 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
                     step_type="agent",
                     step_id="support_agent",
                 ),
-                RunOutputItem(
+                AgentStepFinalOutputItem(
                     run_id="run-1",
-                    step_type="agent",
-                    output=(
+                    step_id="support_agent",
+                    text=(
                         '{"text":"```diff\\n@@ -1 +1 @@\\n-old\\n+new\\n```\\n\\n'
                         'Cambios:\\n\\n1. Uno"}'
                     ),
@@ -390,6 +493,42 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
     asyncio.run(run())
 
 
+def test_console_screen_renders_notify_output_like_agent_message() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.transcript.items.extend(
+            [
+                RunStepItem(
+                    run_id="run-1",
+                    step_type="notify",
+                    step_id="show_message",
+                ),
+                StepNotifyOutputItem(
+                    run_id="run-1",
+                    step_type="notify",
+                    message="Hola mundo",
+                    format=OutputFormat.SIMPLE,
+                ),
+            ]
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            transcript = app.query_one("#transcript-log", TranscriptLog)
+            rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+            notify_index = rendered_lines.index("[notify] show_message")
+
+            assert rendered_lines[notify_index + 1] == "• Hola mundo"
+
+    asyncio.run(run())
+
+
 def test_console_screen_renders_local_dev_status_without_mutating_state() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
@@ -405,7 +544,6 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
             skill_name="ant",
-            mode=RunMode.CHAT,
             status=RunStatus.WAITING_INPUT,
         )
 

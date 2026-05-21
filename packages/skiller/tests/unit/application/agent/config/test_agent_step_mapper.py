@@ -18,7 +18,6 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
             step={
                 "system": "Be useful.",
                 "task": "Help user",
-                "context_id": "thread-1",
                 "max_turns": 3,
                 "max_tool_calls": 2,
                 "tools": ["notify", "shell"],
@@ -31,7 +30,6 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
     assert step.id == "support_agent"
     assert step.system == "Be useful."
     assert step.task == "Help user"
-    assert step.context_id == "thread-1"
     assert step.max_turns == 3
     assert step.max_tool_calls == 2
     assert step.tools == ("notify", "shell")
@@ -66,6 +64,10 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
         (
             {"system": "Be useful.", "task": {"file": "./task.md"}},
             "requires string task",
+        ),
+        (
+            {"system": "Be useful.", "task": "x", "context_id": "thread-1"},
+            "does not support context_id",
         ),
     ],
 )

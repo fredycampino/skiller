@@ -66,7 +66,7 @@ The agent loop has three non-error terminal shapes:
 
 | finish | runtime event | assistant message | step output |
 | --- | --- | --- | --- |
-| `final` | `AGENT_ASSISTANT_MESSAGE` with `message_type = "final"` | yes | `data.stop_reason = "final"` and `data.final.text` contains the final text |
+| `final` | `AGENT_FINAL_ASSISTANT_MESSAGE` | yes | `data.stop_reason = "final"` and `data.final.text` contains the final text |
 | `interrupted` | `AGENT_INTERRUPTED` | no | `data.stop_reason = "interrupted"` and `data.final = null` |
 | `max_turns_exhausted` | `AGENT_MAX_TURNS_EXHAUSTED` | no | `data.stop_reason = "max_turns_exhausted"` and `data.final = null` |
 

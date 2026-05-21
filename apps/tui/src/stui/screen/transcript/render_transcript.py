@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from rich.console import RenderableType
 
+from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.screen.transcript.agent_assistant_message_view import AgentAssistantMessageView
 from stui.screen.transcript.agent_final_assistant_message_view import (
@@ -23,6 +24,9 @@ from stui.screen.transcript.run_resume_view import RunResumeView
 from stui.screen.transcript.run_status_view import RunStatusView
 from stui.screen.transcript.run_step_view import RunStepView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
+from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
+from stui.screen.transcript.step_output_view import StepOutputView
+from stui.screen.transcript.step_shell_output_view import StepShellOutputView
 from stui.screen.transcript.user_input_view import UserInputView
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
@@ -39,6 +43,9 @@ from stui.viewmodel.console_screen_state import (
     RunStatusItem,
     RunStepItem,
     RunWaitingInputItem,
+    StepNotifyOutputItem,
+    StepOutputItem,
+    StepShellOutputItem,
     TranscriptItem,
     TranscriptMode,
     UserInputItem,
@@ -47,11 +54,13 @@ from stui.viewmodel.console_screen_state import (
 
 @dataclass(frozen=True)
 class RenderTranscript:
+    strings: TuiStrings = DEFAULT_TUI_STRINGS
+
     def render(
         self,
         *,
         items: list[TranscriptItem],
-        mode: TranscriptMode = TranscriptMode.FLOW,
+        mode: TranscriptMode = TranscriptMode.CHAT,
         theme: TuiTheme = DEFAULT_TUI_THEME,
         prompt_placeholder: str | None = None,
     ) -> list[RenderableType]:
@@ -71,11 +80,82 @@ class RenderTranscript:
     ) -> list[RenderableType]:
         _ = prompt_placeholder
         views = self._map_chat_views(items=items)
+        views = self._active_step_output(views=views)
+        views = self._active_notify(views=views)
         views = self._active_tool(views=views)
         renderables: list[RenderableType] = []
         for view in views:
             renderables.append(view.render(theme=theme))
         return renderables
+
+    def _active_step_output(
+        self,
+        *,
+        views: list[TranscriptView],
+    ) -> list[TranscriptView]:
+        if not views:
+            return views
+
+        latest_index = self._active_output_index(views=views)
+        if latest_index is None:
+            return views
+        latest_is_step_output = isinstance(
+            views[latest_index],
+            (StepOutputView, StepShellOutputView),
+        )
+        active_views: list[TranscriptView] = []
+        for index, view in enumerate(views):
+            if isinstance(view, StepOutputView):
+                muted = not (latest_is_step_output and index == latest_index)
+                active_views.append(
+                    StepOutputView(item=replace(view.item, muted=muted))
+                )
+                continue
+            if isinstance(view, StepShellOutputView):
+                muted = not (latest_is_step_output and index == latest_index)
+                active_views.append(
+                    StepShellOutputView(item=replace(view.item, muted=muted))
+                )
+                continue
+            active_views.append(view)
+        return active_views
+
+    def _active_notify(
+        self,
+        *,
+        views: list[TranscriptView],
+    ) -> list[TranscriptView]:
+        if not views:
+            return views
+
+        latest_index = self._active_output_index(views=views)
+        if latest_index is None:
+            return views
+        latest_is_notify = isinstance(views[latest_index], StepNotifyOutputView)
+        active_views: list[TranscriptView] = []
+        for index, view in enumerate(views):
+            if isinstance(view, StepNotifyOutputView):
+                muted = not (latest_is_notify and index == latest_index)
+                active_views.append(
+                    StepNotifyOutputView(item=replace(view.item, muted=muted))
+                )
+                continue
+            active_views.append(view)
+        return active_views
+
+    def _active_output_index(
+        self,
+        *,
+        views: list[TranscriptView],
+    ) -> int | None:
+        if not views:
+            return None
+        latest_index = len(views) - 1
+        if isinstance(views[latest_index], RunWaitingInputView):
+            latest_index -= 1
+        if latest_index < 0:
+            return None
+        return latest_index
 
     def _active_tool(
         self,
@@ -120,7 +200,7 @@ class RenderTranscript:
         *,
         items: list[TranscriptItem],
     ) -> list[TranscriptView]:
-        views: list[TranscriptView] = [IntroView()]
+        views: list[TranscriptView] = [IntroView(strings=self.strings)]
         for item in items:
             views.append(self._to_chat_view(item=item))
         return views
@@ -154,6 +234,12 @@ class RenderTranscript:
             return AgentStepFinalOutputView(item=item)
         if isinstance(item, AgentSystemNoticeItem):
             return AgentSystemNoticeView(item=item)
+        if isinstance(item, StepNotifyOutputItem):
+            return StepNotifyOutputView(item=item)
+        if isinstance(item, StepOutputItem):
+            return StepOutputView(item=item)
+        if isinstance(item, StepShellOutputItem):
+            return StepShellOutputView(item=item)
         if isinstance(item, RunOutputItem):
             return RunOutputView(item=item)
         if isinstance(item, RunStatusItem):

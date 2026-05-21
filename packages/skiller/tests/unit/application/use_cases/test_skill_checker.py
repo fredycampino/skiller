@@ -158,6 +158,31 @@ def test_skill_checker_rejects_unknown_next_target() -> None:
     assert [item.code for item in result.errors] == ["SKILL_STEP_NEXT_NOT_FOUND"]
 
 
+def test_skill_checker_rejects_unsupported_notify_format() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "show_message",
+                "steps": [
+                    {
+                        "notify": "show_message",
+                        "message": "ok",
+                        "format": "html",
+                    }
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.INVALID
+    assert [item.code for item in result.errors] == [
+        "SKILL_NOTIFY_FORMAT_UNSUPPORTED"
+    ]
+
+
 def test_skill_checker_rejects_unsupported_helper() -> None:
     use_case = SkillCheckerUseCase(
         skill_runner=_FakeSkillRunner(

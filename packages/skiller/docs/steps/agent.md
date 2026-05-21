@@ -18,7 +18,6 @@ Agent runtime internals are documented in:
   task: '{{output_value("ask_user").payload.text}}'
   tools:
     - shell
-  context_id: '{{inputs.thread_id}}'
   max_turns: 8
   next: finish
 ```
@@ -52,9 +51,8 @@ System prompt from a file:
   - `{file: "./system.md"}`: load the prompt from a UTF-8 file next to the skill file
 - `task` (required): user request for this run; templates are allowed.
 - `tools` (optional): allowlist of tool names for this step.
-- `context_id` (optional): logical memory key inside the run; default is run id.
 - `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `agent.loop.max_turns` from `agent.json`.
-- `next` (optional): next step after successful final response.
+- `next` (optional): next step after the agent step completes normally.
 
 `system.file` must be a relative path inside the skill directory. Absolute paths
 and paths escaping the skill directory are rejected.
@@ -100,6 +98,10 @@ The `agent` step stores a normal `StepExecution` output in runtime context.
 It does not create `WAITING` by itself. If the agent should wait for user input,
 the next explicit wait step is responsible for that.
 
+Only non-fatal agent finishes create this output. Fatal agent failures do not
+create a normal `StepExecution`; they raise from the step execution path and the
+runtime records the step/run failure.
+
 The output follows the standard output envelope:
 
 ```json
@@ -109,13 +111,20 @@ The output follows the standard output envelope:
     "text_ref": "data.final.text",
     "value": {
       "data": {
-        "context_id": "thread-1",
+        "context_id": "ctx-123",
         "final": {
           "text": "Done."
         },
         "turn_count": 3,
         "tool_call_count": 2,
-        "stop_reason": "final"
+        "stop_reason": "final",
+        "usage": {
+          "prompt_tokens": 123,
+          "completion_tokens": 45,
+          "total_tokens": 168,
+          "provider": "minimax",
+          "model": "MiniMax-M2.5"
+        }
       }
     },
     "body_ref": null
@@ -128,13 +137,20 @@ The output follows the standard output envelope:
 ```json
 {
   "data": {
-    "context_id": "thread-1",
+    "context_id": "ctx-123",
     "final": {
       "text": "Done."
     },
     "turn_count": 3,
     "tool_call_count": 2,
-    "stop_reason": "final"
+    "stop_reason": "final",
+    "usage": {
+      "prompt_tokens": 123,
+      "completion_tokens": 45,
+      "total_tokens": 168,
+      "provider": "minimax",
+      "model": "MiniMax-M2.5"
+    }
   }
 }
 ```
@@ -142,7 +158,7 @@ The output follows the standard output envelope:
 ### Output Fields
 
 - `data.context_id`
-  - logical agent context id used for this step
+  - generated agent context id attached to the current `run_id + agent_id`
 - `data.final`
   - final assistant answer; `null` when the agent loop finishes without a final answer
 - `data.turn_count`
@@ -151,6 +167,11 @@ The output follows the standard output envelope:
   - number of tool calls executed by this step execution
 - `data.stop_reason`
   - terminal reason for this step execution
+- `data.usage`
+  - optional latest LLM usage for the agent step
+  - present when the LLM provider returned usage for the last response
+  - includes `prompt_tokens`, `completion_tokens`, `total_tokens`, `provider`, and `model`
+  - this is copied into the `STEP_SUCCESS` output; detailed per-entry usage still lives in agent context
 
 ### `stop_reason`
 
@@ -165,6 +186,9 @@ Current values:
   - the step consumed its turn budget without a final answer, then finalized and
     the flow continued through `next`
 
+These `stop_reason` values are non-fatal. The step completes normally and the
+runtime follows `next` when it is present.
+
 Successful final response:
 
 ```json
@@ -174,13 +198,20 @@ Successful final response:
     "text_ref": "data.final.text",
     "value": {
       "data": {
-        "context_id": "thread-1",
+        "context_id": "ctx-123",
         "final": {
           "text": "Done."
         },
         "turn_count": 3,
         "tool_call_count": 2,
-        "stop_reason": "final"
+        "stop_reason": "final",
+        "usage": {
+          "prompt_tokens": 123,
+          "completion_tokens": 45,
+          "total_tokens": 168,
+          "provider": "minimax",
+          "model": "MiniMax-M2.5"
+        }
       }
     },
     "body_ref": null
@@ -193,13 +224,20 @@ Successful final response:
 ```json
 {
   "data": {
-    "context_id": "thread-1",
+    "context_id": "ctx-123",
     "final": {
       "text": "Done."
     },
     "turn_count": 3,
     "tool_call_count": 2,
-    "stop_reason": "final"
+    "stop_reason": "final",
+    "usage": {
+      "prompt_tokens": 123,
+      "completion_tokens": 45,
+      "total_tokens": 168,
+      "provider": "minimax",
+      "model": "MiniMax-M2.5"
+    }
   }
 }
 ```
@@ -210,6 +248,8 @@ Template examples:
 {{output_value("support_agent").data.final.text}}
 {{output_value("support_agent").data.stop_reason}}
 {{output_value("support_agent").data.turn_count}}
+{{output_value("support_agent").data.usage.total_tokens}}
+{{output_value("support_agent").data.usage.model}}
 ```
 
 Interrupted tool turn:
@@ -220,7 +260,7 @@ Interrupted tool turn:
     "text": "",
     "value": {
       "data": {
-        "context_id": "thread-1",
+        "context_id": "ctx-123",
         "final": null,
         "turn_count": 1,
         "tool_call_count": 0,
@@ -240,7 +280,7 @@ Reached turn limit:
     "text": "",
     "value": {
       "data": {
-        "context_id": "thread-1",
+        "context_id": "ctx-123",
         "final": null,
         "turn_count": 8,
         "tool_call_count": 2,
@@ -261,3 +301,31 @@ Exceeded per-turn tool limit:
 - if one assistant response contains more than `agent.loop.max_tool_calls` tool calls,
   the runtime does not execute any of them
 - instead, it appends corrective feedback to the agent context and asks the LLM again
+
+## Fatal Exits
+
+Fatal exits do not produce the normal `agent` step output shown above. They raise
+from the agent step use case, so the runtime records the step/run failure instead
+of advancing through `next`.
+
+Current fatal cases:
+
+- `agent_config_invalid`
+  - `agent.json` is missing, invalid, or defines an unsupported provider/model/client
+  - this is checked before the agent runner starts
+  - no agent context entry is created
+  - no LLM request is sent
+- `llm_request_failed`
+  - the configured LLM client returns `ok = false`
+  - no final assistant message is persisted
+- `tool_execution_failed`
+  - tool preparation/execution hits an unexpected request or policy exception
+  - already-persisted context before the failure remains in the agent context
+  - no final assistant message is persisted
+- `invalid_final_message`
+  - the LLM finishes without usable final text when a final answer is required
+  - no final assistant message is persisted
+
+Schema errors in the YAML step itself are also fatal, for example missing
+`system`, missing `task`, invalid `tools`, unsupported `context_id`, or an empty
+`next` value.

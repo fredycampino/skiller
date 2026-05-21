@@ -168,6 +168,7 @@ Environment variables:
   - provider base URL
 - `llm.providers.<name>.model`
   - provider model name
+  - validated against the supported model list for `provider`
 - `llm.providers.<name>.timeout_seconds`
   - request timeout
 - `llm.providers.<name>.context_window_tokens`
@@ -188,6 +189,21 @@ Environment variables:
 - `AGENT_MINIMAX_BASE_URL`
 - `AGENT_MINIMAX_MODEL`
 - `AGENT_MINIMAX_TIMEOUT_SECONDS`
+
+Model overrides from environment variables are validated after resolution. An unsupported
+override fails config loading.
+
+### Supported Provider Models
+
+| Provider | Client type | Models |
+| --- | --- | --- |
+| `null` | `null` | `null` |
+| `fake` | `fake` | `fake`, `fake-llm` |
+| `minimax` | `openai_chat_completions` | `MiniMax-M2.5`, `MiniMax-M2.7` |
+| `openai` | `openai_chat_completions` | `gpt-5.2`, `gpt-5.2-mini` |
+
+`provider` identifies the product/provider. `client_type` identifies the protocol adapter used
+to call it. A provider can use an OpenAI-compatible client without becoming an OpenAI provider.
 
 ## Agent Event Output Policy
 

@@ -13,6 +13,7 @@ from textual.css.query import NoMatches
 from textual.widgets import DataTable, Static, TextArea
 
 from stui.di.container import build_tui_container
+from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.runs_port import RunsPortItem
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.markdown import MarkdownView
@@ -38,6 +39,7 @@ class ConsoleScreen(App[str]):
     BINDINGS = [
         Binding("enter", "submit", show=False, priority=True),
         Binding("ctrl+j", "submit", show=False, priority=True),
+        Binding("ctrl+q", "quit", show=False),
         Binding("escape", "handle_escape", show=False, priority=True),
         Binding("up", "transcript_scroll_up", show=False, priority=True),
         Binding("down", "transcript_scroll_down", show=False, priority=True),
@@ -45,7 +47,6 @@ class ConsoleScreen(App[str]):
         Binding("pagedown", "transcript_page_down", show=False, priority=True),
         Binding("home", "transcript_home", show=False, priority=True),
         Binding("end", "transcript_end", show=False, priority=True),
-        Binding("ctrl+c", "quit", show=False),
     ]
 
     def __init__(
@@ -53,12 +54,14 @@ class ConsoleScreen(App[str]):
         *,
         viewmodel: ConsoleScreenViewModel,
         theme: TuiTheme = DEFAULT_TUI_THEME,
+        strings: TuiStrings = DEFAULT_TUI_STRINGS,
     ) -> None:
         super().__init__(ansi_color=True)
         self.ui_theme = theme
+        self.ui_strings = strings
         self.viewmodel = viewmodel
         self.state = ConsoleScreenState()
-        self._render_transcript = RenderTranscript()
+        self._render_transcript = RenderTranscript(strings=strings)
         self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
@@ -79,9 +82,10 @@ class ConsoleScreen(App[str]):
             id="root",
         )
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self.viewmodel.bind_on_state(self._on_state_changed)
         self.viewmodel.bind_on_event(self._on_viewmodel_event)
+        await self.viewmodel.on_start()
         self._prompt_view().focus_prompt()
 
     def on_key(self, event: events.Key) -> None:
@@ -149,6 +153,9 @@ class ConsoleScreen(App[str]):
 
         await self.viewmodel.interrupt_running_agent_turn()
         self._prompt_view().focus_prompt()
+
+    def action_help_quit(self) -> None:
+        pass
 
     def action_transcript_page_up(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_selection(-3):
@@ -349,14 +356,19 @@ def run_console_screen(
     *,
     session_key: str,
     theme: TuiTheme = DEFAULT_TUI_THEME,
+    strings: TuiStrings = DEFAULT_TUI_STRINGS,
 ) -> str:
-    container = build_tui_container(theme=theme)
+    container = build_tui_container(theme=theme, strings=strings)
     viewmodel = container.build_viewmodel(session_key=session_key)
 
     class ThemedConsoleScreen(ConsoleScreen):
         CSS = build_textual_css(theme)
 
-    app = ThemedConsoleScreen(viewmodel=viewmodel, theme=theme)
+    app = ThemedConsoleScreen(
+        viewmodel=viewmodel,
+        theme=theme,
+        strings=container.strings,
+    )
     result = app.run(mouse=False)
     return result or session_key
 
@@ -408,17 +420,12 @@ def _format_agent_tokens(value: int) -> str:
     return f"{value / 1000:.1f}k"
 
 
-def _format_agent_window_tokens(value: int) -> str:
-    return f"{round(value / 1000)}K"
-
-
 def _build_footer_left_text(*, state: ConsoleScreenState) -> str:
     if state.agent_usage is None:
         return "/ for commands"
     return (
         f"{state.agent_usage.model}\n"
-        f"{_format_agent_tokens(state.agent_usage.total_tokens)}/"
-        f"{_format_agent_window_tokens(state.agent_usage.max_window_tokens)}"
+        f"{_format_agent_tokens(state.agent_usage.total_tokens)}"
     )
 
 

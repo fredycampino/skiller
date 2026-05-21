@@ -72,7 +72,7 @@ def test_list_runs_use_case_maps_runtime_errors_to_state() -> None:
         asyncio.run(run())
 
 
-def test_list_runs_use_case_filters_waiting_input_runs_for_chats_command() -> None:
+def test_list_runs_use_case_does_not_filter_waiting_types() -> None:
     async def run() -> None:
         port = FakeRunsPort(
             runs=[
@@ -89,13 +89,13 @@ def test_list_runs_use_case_filters_waiting_input_runs_for_chats_command() -> No
 
         result = await use_case.execute(
             state=state,
-            command=NormalizeCommandUseCase().execute(text="/chats"),
+            command=NormalizeCommandUseCase().execute(text="/runs --status WAITING"),
         )
 
         assert result.state is state
         assert port.called_with == [(20, ["WAITING"])]
-        assert [item.id for item in state.runs_table.rows] == ["run-input"]
-        assert state.runs_table.command == "/chats"
+        assert [item.id for item in state.runs_table.rows] == ["run-input", "run-webhook"]
+        assert state.runs_table.command == "/runs --status WAITING"
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())

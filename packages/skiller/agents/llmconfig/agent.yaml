@@ -1,0 +1,104 @@
+name: llmconfig
+description: "First-run LLM provider configuration"
+version: "0.1"
+start: welcome
+
+inputs: {}
+
+steps:
+  - notify: welcome
+    format: markdown
+    message: |
+      # Welcome
+
+      To work with agents, you need to configure an LLM provider first.
+
+      Choose an option:
+
+      1. MiniMax
+      2. Config Later
+      3. Exit App
+    next: select_action
+
+  - wait_input: select_action
+    prompt: "Choose 1, 2, or 3"
+    next: route_action
+
+  - switch: route_action
+    value: '{{output_value("select_action").payload.text}}'
+    cases:
+      "1": minimax_config
+      minimax: minimax_config
+      MiniMax: minimax_config
+      MINIMAX: minimax_config
+      "2": later_run
+      later: later_run
+      Config Later: later_run
+      config later: later_run
+      "3": exit_run
+      exit: exit_run
+      Exit App: exit_run
+      exit app: exit_run
+      quit: exit_run
+    default: invalid_action
+
+  - notify: invalid_action
+    format: markdown
+    message: |
+      Invalid option.
+
+      Choose an option:
+
+      1. MiniMax
+      2. Config Later
+      3. Exit App
+    next: select_action
+
+  - notify: minimax_config
+    format: markdown
+    message: |
+      # MiniMax LLM config
+
+      Create these two files:
+
+      ```text
+      ~/.skiller/settings/agent.json
+      ~/.skiller/secrets/minimax_api_key
+      ```
+
+      The `minimax_api_key` file must contain only your MiniMax API key.
+
+      Use this content for `~/.skiller/settings/agent.json`:
+
+      ```json
+      {
+        "llm": {
+          "default_provider": "minimax",
+          "providers": {
+            "minimax": {
+              "provider": "minimax",
+              "client_type": "openai_chat_completions",
+              "model": "MiniMax-M2.7",
+              "base_url": "https://api.minimax.io/v1",
+              "timeout_seconds": 60,
+              "context_window_tokens": 80000,
+              "api_key_file": "~/.skiller/secrets/minimax_api_key"
+            }
+          }
+        }
+      }
+      ```
+
+      Do not paste your API key into the transcript. After creating the files, run the agent you wanted to use again.
+
+  - notify: later_run
+    format: markdown
+    message: |
+      LLM config postponed.
+
+      Run `llmconfig` when you are ready.
+
+  - notify: exit_run
+    format: markdown
+    message: |
+      LLM config closed.

@@ -29,11 +29,9 @@ class RunStepView(TranscriptView):
                 "   ...",
                 style=theme.color_text_muted,
             )
-        if normalized_step_type == "agent":
-            return self._render_agent_step(theme=theme)
-        return Text(f"   [{self.item.step_type}] {self.item.step_id}")
+        return self._render_labeled_step(theme=theme)
 
-    def _render_agent_step(self, *, theme: TuiTheme) -> Text:
+    def _render_labeled_step(self, *, theme: TuiTheme) -> Text:
         tag_style = agent_step_tag_style(theme=theme, mode=self.mode)
         id_style = agent_step_id_style(theme=theme, mode=self.mode)
         renderable = Text("[")

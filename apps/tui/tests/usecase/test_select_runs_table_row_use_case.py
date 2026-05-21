@@ -16,6 +16,8 @@ from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.usecase.select_runs_table_row_use_case import SelectRunsTableRowUseCase
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
+    RunStepItem,
+    StepNotifyOutputItem,
     TranscriptMode,
     ViewStatusKind,
 )
@@ -99,7 +101,7 @@ def test_empty_run_id_only_closes_table() -> None:
     result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
-        prompt_text="/chats",
+        prompt_text="/runs",
         run_id="",
         skill_name="ant",
     )
@@ -121,7 +123,7 @@ def test_missing_runtime_status_only_closes_table() -> None:
     result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
-        prompt_text="/chats",
+        prompt_text="/runs",
         run_id="run-1234",
         skill_name="ant",
     )
@@ -146,7 +148,7 @@ def test_non_waiting_runtime_status_only_closes_table() -> None:
     result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
-        prompt_text="/chats",
+        prompt_text="/runs",
         run_id="run-1234",
         skill_name="ant",
     )
@@ -169,7 +171,7 @@ def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> N
     _use_case(run_port=run_port, events_port=events_port, context=context).execute(
         observer,
         state=state,
-        prompt_text="/chats",
+        prompt_text="/runs",
         run_id="run-1234",
         skill_name="ant",
     )
@@ -179,33 +181,7 @@ def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> N
     assert events_port.subscribe_calls == ["run-1234"]
 
 
-def test_chats_selection_loads_waiting_run_in_chat_mode() -> None:
-    state = _state_with_open_table()
-    context = _context()
-    observer = FakeLogEventsListener()
-    run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.INPUT))
-    events_port = FakeEventsPort()
-
-    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
-        observer,
-        state=state,
-        prompt_text="/chats",
-        run_id="run-1234",
-        skill_name="ant",
-    )
-
-    assert result.state.session_key == "run-1234"
-    assert result.state.transcript.mode == TranscriptMode.CHAT
-    assert result.state.view_status.kind == ViewStatusKind.WAITING
-    assert result.state.prompt.waiting_prompt == "Write a message"
-    assert context.run_id == "run-1234"
-    assert context.skill_name == "ant"
-    assert context.mode == RunMode.CHAT
-    assert context.status == RunStatus.WAITING_INPUT
-    assert events_port.subscribe_calls == ["run-1234"]
-
-
-def test_runs_selection_loads_waiting_run_in_flow_mode() -> None:
+def test_runs_selection_loads_waiting_run_in_chat_mode() -> None:
     state = _state_with_open_table()
     context = _context()
     observer = FakeLogEventsListener()
@@ -221,9 +197,41 @@ def test_runs_selection_loads_waiting_run_in_flow_mode() -> None:
     )
 
     assert result.state.session_key == "run-1234"
-    assert result.state.transcript.mode == TranscriptMode.FLOW
-    assert context.mode == RunMode.FLOW
+    assert result.state.transcript.mode == TranscriptMode.CHAT
+    assert result.state.view_status.kind == ViewStatusKind.WAITING
+    assert result.state.prompt.waiting_prompt == "Write a message"
+    assert context.run_id == "run-1234"
+    assert context.skill_name == "ant"
+    assert context.mode == RunMode.CHAT
     assert context.status == RunStatus.WAITING_INPUT
+    assert events_port.subscribe_calls == ["run-1234"]
+
+
+def test_same_run_selection_preserves_transcript_items() -> None:
+    state = _state_with_open_table()
+    state.load_session(run_id="run-1234")
+    transcript_items = [
+        RunStepItem(run_id="run-1234", step_type="notify", step_id="intro"),
+        StepNotifyOutputItem(run_id="run-1234", step_type="notify", message="Skiller.run"),
+    ]
+    state.set_transcript(mode=TranscriptMode.CHAT, items=transcript_items)
+    context = _context()
+    observer = FakeLogEventsListener()
+    run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.INPUT))
+    events_port = FakeEventsPort()
+
+    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
+        observer,
+        state=state,
+        prompt_text="/runs",
+        run_id="run-1234",
+        skill_name="steps",
+    )
+
+    assert result.state.session_key == "run-1234"
+    assert result.state.transcript.mode == TranscriptMode.CHAT
+    assert result.state.transcript.items == transcript_items
+    assert context.mode == RunMode.CHAT
     assert events_port.subscribe_calls == ["run-1234"]
 
 
@@ -283,7 +291,7 @@ def _use_case(
 def _state_with_open_table() -> ConsoleScreenState:
     state = ConsoleScreenState()
     state.runs_table.visible = True
-    state.runs_table.command = "/chats"
+    state.runs_table.command = "/runs"
     return state
 
 
@@ -291,7 +299,7 @@ def _context() -> RunEventContext:
     return RunEventContext(
         run_id="old-run",
         skill_name="old-skill",
-        mode=RunMode.FLOW,
+        mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )
 

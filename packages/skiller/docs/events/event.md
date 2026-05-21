@@ -391,25 +391,16 @@ Truncation:
   "agent_sequence": 33,
   "created_at": "2026-05-12T10:30:16Z",
   "payload": {
-    "text": "Done",
-    "context": {
-      "compaction_enabled": false,
-      "max_window_ratio": 0.8,
-      "max_window_tokens": 1000000,
-      "total_tokens": 2144,
-      "model": "MiniMax-M2.5"
-    }
+    "total_tokens": 2144,
+    "text": "Done"
   }
 }
 ```
 
-Final messages include `payload.context.total_tokens`, the model, and the
-context-window limits used for that request.
-
 Truncation:
 
 - `text` is truncated by the agent event output policy.
-- `context` fields are not truncated.
+- `total_tokens` is not truncated.
 
 ### `AGENT_TOOL_CALL`
 

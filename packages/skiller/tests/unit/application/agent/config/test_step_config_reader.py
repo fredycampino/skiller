@@ -5,28 +5,43 @@ from skiller.application.agent.config.step_config_reader import (
     AGENT_RUNTIME_SYSTEM,
     AgentStepConfigReader,
 )
+from skiller.application.agent.tools.tool_manager import ToolManager
+from skiller.domain.agent.agent_config_validation_model import (
+    AgentConfigValidation,
+    AgentConfigValidationErrorCode,
+)
 from skiller.domain.step.run_step_model import AgentStep
+from skiller.domain.tool.tool_contract import ToolConfig
 
 pytestmark = pytest.mark.unit
 
 
 def test_agent_step_config_reader_reads_valid_step() -> None:
+    notify_tool = ToolConfig(
+        name="notify",
+        description="Fake notify tool",
+        parameters_schema={},
+    )
+    shell_tool = ToolConfig(
+        name="shell",
+        description="Fake shell tool",
+        parameters_schema={},
+    )
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
             agent_config(
                 max_turns=10,
                 max_tool_calls=5,
             )
-        )
+        ),
+        tool_manager=_FakeToolManager(tools=(notify_tool, shell_tool)),
     )
 
     config = reader.read(
-        run_id="run-1",
         step=AgentStep(
             id="support_agent",
             system="Be useful.",
             task="Help user",
-            context_id="thread-1",
             max_turns=3,
             max_tool_calls=2,
             tools=("notify", "shell"),
@@ -35,24 +50,23 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
 
     assert config.system == f"{AGENT_RUNTIME_SYSTEM}\n\nBe useful."
     assert config.task == "Help user"
-    assert config.context_id == "thread-1"
     assert config.config.loop.max_turns == 3
     assert config.config.loop.max_tool_calls == 2
-    assert config.tools == ("notify", "shell")
+    assert config.tools == (notify_tool, shell_tool)
 
 
-def test_agent_step_config_reader_uses_agent_config_loop_defaults() -> None:
+def test_agent_step_config_reader_reads_defaults_without_tools() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
             agent_config(
                 max_turns=10,
                 max_tool_calls=5,
             )
-        )
+        ),
+        tool_manager=ToolManager(tools=[]),
     )
 
     config = reader.read(
-        run_id="run-1",
         step=AgentStep(
             id="support_agent",
             system="Be useful.",
@@ -61,7 +75,6 @@ def test_agent_step_config_reader_uses_agent_config_loop_defaults() -> None:
         ),
     )
 
-    assert config.context_id == "run-1"
     assert config.config.loop.max_turns == 10
     assert config.config.loop.max_tool_calls == 5
     assert config.tools == ()
@@ -73,10 +86,12 @@ def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_c
         max_turns=10,
         max_tool_calls=5,
     )
-    reader = AgentStepConfigReader(agent_config=FakeAgentConfigPort(base_config))
+    reader = AgentStepConfigReader(
+        agent_config=FakeAgentConfigPort(base_config),
+        tool_manager=ToolManager(tools=[]),
+    )
 
     config = reader.read(
-        run_id="run-1",
         step=AgentStep(
             id="support_agent",
             system="Be useful.",
@@ -96,16 +111,43 @@ def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_c
     assert config.config.event_output.truncate == base_config.event_output.truncate
 
 
-def test_agent_step_config_reader_validates_contract() -> None:
-    reader = AgentStepConfigReader(agent_config=FakeAgentConfigPort())
+def test_agent_step_config_reader_validates_agent_config_through_port() -> None:
+    validation = AgentConfigValidation.invalid(
+        error=AgentConfigValidationErrorCode.PROVIDER_MODEL_UNSUPPORTED,
+        message="bad model",
+    )
+    agent_config = _FakeAgentConfigPort(validation=validation)
+    reader = AgentStepConfigReader(
+        agent_config=agent_config,
+        tool_manager=ToolManager(tools=[]),
+    )
 
-    with pytest.raises(ValueError, match="requires non-empty context_id"):
-        reader.read(
-            run_id="",
-            step=AgentStep(
-                id="support_agent",
-                system="Be useful.",
-                task="Help user",
-                tools=(),
-            ),
-        )
+    result = reader.validate_agent_config()
+
+    assert result == validation
+    assert agent_config.validate_calls == 1
+
+
+class _FakeToolManager:
+    def __init__(self, *, tools: tuple[ToolConfig, ...]) -> None:
+        self.tools = tools
+
+    def get_tool_configs(self, allowed_tools: list[str]) -> list[ToolConfig]:
+        return [
+            tool
+            for tool in self.tools
+            if tool.name in allowed_tools
+        ]
+
+
+class _FakeAgentConfigPort:
+    def __init__(self, *, validation: AgentConfigValidation) -> None:
+        self.validation = validation
+        self.validate_calls = 0
+
+    def get_config(self):  # noqa: ANN201
+        raise AssertionError("get_config should not be called")
+
+    def validate_config(self) -> AgentConfigValidation:
+        self.validate_calls += 1
+        return self.validation

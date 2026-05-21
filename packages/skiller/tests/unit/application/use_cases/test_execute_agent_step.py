@@ -14,10 +14,15 @@ from skiller.application.use_cases.execute.execute_agent_step import (
 )
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
+from skiller.domain.agent.agent_config_validation_model import (
+    AgentConfigValidation,
+    AgentConfigValidationErrorCode,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
 )
+from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
     AgentContextStats,
@@ -47,6 +52,7 @@ from skiller.domain.run.steering_model import (
 from skiller.domain.step.step_execution_model import AgentOutput
 from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_contract import ToolConfig, ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 pytestmark = pytest.mark.unit
 
@@ -87,29 +93,29 @@ class _FakeAgentContextStore:
     def append_user_message(
         self,
         *,
-        scope,
+        context: AgentContext,
         text: str,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.USER_MESSAGE,
             payload={"type": "user_message", "text": text},
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_assistant_message(
         self,
         *,
-        scope,
+        context: AgentContext,
         turn_id: str,
         message_type: str,
         text: str,
         usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             payload={
                 "type": "assistant_message",
@@ -119,18 +125,18 @@ class _FakeAgentContextStore:
                 "total_tokens": usage.total_tokens if usage is not None else 0,
             },
             usage=usage,
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_call(
         self,
         *,
-        scope,
-        tool_call,
+        context: AgentContext,
+        tool_call: AgentToolCall,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_CALL,
             payload={
                 "type": "tool_call",
@@ -140,19 +146,19 @@ class _FakeAgentContextStore:
                 "tool": tool_call.tool,
                 "args": tool_call.args,
             },
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_result(
         self,
         *,
-        scope,
-        tool_result,
+        context: AgentContext,
+        tool_result: AgentToolResult,
     ) -> AgentContextEntry:
         result = tool_result.result
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             payload={
                 "type": "tool_result",
@@ -165,7 +171,7 @@ class _FakeAgentContextStore:
                 "text": result.text,
                 "error": result.error,
             },
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def _append_entry(
@@ -396,13 +402,16 @@ def _build_use_case(
     llm: _FakeLLM,
     steering: _FakeSteering | None = None,
     tool_manager: _FakeToolManager | None = None,
+    agent_config: FakeAgentConfigPort | None = None,
     append_runtime_event_use_case: _FakeAppendRuntimeEventUseCase | None = None,
 ) -> ExecuteAgentStepUseCase:
+    resolved_tool_manager = tool_manager or _FakeToolManager()
+    resolved_agent_config = agent_config or FakeAgentConfigPort()
     runner = build_agent_runner(
         agent_context_store=context_store,
         steering=steering,
         llm=llm,
-        tool_manager=tool_manager,
+        tool_manager=resolved_tool_manager,
         append_runtime_event_use_case=append_runtime_event_use_case,
     )
     return ExecuteAgentStepUseCase(
@@ -410,9 +419,52 @@ def _build_use_case(
         runner=runner,
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
-            agent_config=FakeAgentConfigPort(),
+            agent_config=resolved_agent_config,
+            tool_manager=resolved_tool_manager,
         ),
     )
+
+
+def test_execute_agent_step_fails_when_agent_config_is_invalid() -> None:
+    store = _FakeStore()
+    context_store = _FakeAgentContextStore()
+    llm = _FakeLLM()
+    context = RunContext(inputs={}, step_executions={})
+    validation = AgentConfigValidation.invalid(
+        error=AgentConfigValidationErrorCode.PROVIDER_MODEL_UNSUPPORTED,
+        message="Provider 'minimax' does not support model='bad-model'.",
+    )
+    agent_config = FakeAgentConfigPort(validation=validation)
+    use_case = _build_use_case(
+        store=store,
+        context_store=context_store,
+        llm=llm,
+        agent_config=agent_config,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Provider 'minimax' does not support model='bad-model'.",
+    ):
+        use_case.execute(
+            CurrentStep(
+                run_id="run-1",
+                step_index=0,
+                step_id="support_agent",
+                step_type=StepType.AGENT,
+                step={
+                    "system": "Be useful.",
+                    "task": "Hi",
+                    "tools": ["notify"],
+                },
+                context=context,
+            )
+        )
+
+    assert context.step_executions == {}
+    assert llm.calls == []
+    assert context_store.appended == []
+    assert store.updated == []
 
 
 def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
@@ -435,7 +487,6 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
             step={
                 "system": "Be useful.",
                 "task": "Hi",
-                "context_id": "thread-1",
                 "max_turns": 1,
                 "next": "send_reply",
             },
@@ -446,11 +497,14 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
+    context_id = result.execution.output.data["context_id"]
+    assert isinstance(context_id, str)
+    assert context_id
     assert result.execution.output == AgentOutput(
         text="Hello back.",
         text_ref="data.final.text",
         data={
-            "context_id": "thread-1",
+            "context_id": context_id,
             "final": {"text": "Hello back."},
             "turn_count": 1,
             "tool_call_count": 0,
@@ -499,7 +553,16 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 ),
                 finish_reason="tool_calls",
             ),
-            LLMResponse(ok=True, content="Done.", model="fake"),
+            LLMResponse(
+                ok=True,
+                content="Done.",
+                model="fake",
+                usage=LLMUsage(
+                    prompt_tokens=100,
+                    completion_tokens=25,
+                    total_tokens=125,
+                ),
+            ),
         ]
     )
     tool_manager = _FakeToolManager(
@@ -536,15 +599,25 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.execution is not None
+    context_id = result.execution.output.data["context_id"]
+    assert isinstance(context_id, str)
+    assert context_id
     assert result.execution.output == AgentOutput(
         text="Done.",
         text_ref="data.final.text",
         data={
-            "context_id": "run-1",
+            "context_id": context_id,
             "final": {"text": "Done."},
             "turn_count": 2,
             "tool_call_count": 1,
             "stop_reason": "final",
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 25,
+                "total_tokens": 125,
+                "provider": "openai",
+                "model": "fake",
+            },
         },
     )
     assert tool_manager.get_tool_configs_calls == [["notify"]]
@@ -555,7 +628,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
         AgentToolRequest(
             run_id="run-1",
             step_id="support_agent",
-            context_id="run-1",
+            context_id=context_id,
             turn_id="turn-1",
             tool_call_id="openai-call-1",
             tool="notify",
@@ -623,7 +696,6 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
             step={
                 "system": "Be useful.",
                 "task": "Hi",
-                "context_id": "thread-1",
                 "max_turns": 2,
                 "tools": ["notify"],
                 "next": "send_reply",
@@ -635,11 +707,14 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
+    context_id = result.execution.output.data["context_id"]
+    assert isinstance(context_id, str)
+    assert context_id
     assert result.execution.output == AgentOutput(
         text="",
         text_ref=None,
         data={
-            "context_id": "thread-1",
+            "context_id": context_id,
             "final": None,
             "turn_count": 1,
             "tool_call_count": 0,
@@ -694,7 +769,6 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
             step={
                 "system": "Be useful.",
                 "task": "Hi",
-                "context_id": "thread-1",
                 "max_turns": 1,
                 "tools": ["notify"],
                 "next": "send_reply",
@@ -706,11 +780,14 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
+    context_id = result.execution.output.data["context_id"]
+    assert isinstance(context_id, str)
+    assert context_id
     assert result.execution.output == AgentOutput(
         text="",
         text_ref=None,
         data={
-            "context_id": "thread-1",
+            "context_id": context_id,
             "final": None,
             "turn_count": 1,
             "tool_call_count": 1,
@@ -757,7 +834,6 @@ def test_execute_agent_step_fails_when_agent_returns_invalid_final_message() -> 
                 step={
                     "system": "Be useful.",
                     "task": "Hi",
-                    "context_id": "thread-1",
                     "max_turns": 2,
                     "tools": [],
                     "next": "send_reply",

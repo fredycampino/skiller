@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any, Type
 
 from skiller.domain.step.step_type import StepType
@@ -43,9 +44,16 @@ class SendOutput(OutputBase):
     message_id: str | None = None
 
 
+class NotifyOutputFormat(StrEnum):
+    SIMPLE = "simple"
+    STRUCTURED = "structured"
+    MARKDOWN = "markdown"
+
+
 @dataclass(frozen=True)
 class NotifyOutput(OutputBase):
     message: str = ""
+    format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,8 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
     body_ref = raw.get("body_ref")
     value = raw.get("value")
     output_fields = value if isinstance(value, dict) else {}
+    if step_type == StepType.NOTIFY and "format" in output_fields:
+        output_fields["format"] = NotifyOutputFormat(str(output_fields["format"]))
     return output_type(
         text=str(text),
         text_ref=(

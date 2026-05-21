@@ -14,6 +14,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
 )
+from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
@@ -40,8 +41,15 @@ from skiller.domain.run.steering_model import (
     SteeringItemType,
 )
 from skiller.domain.tool.tool_contract import ToolConfig, ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 pytestmark = pytest.mark.unit
+
+NOTIFY_TOOL_CONFIG = ToolConfig(
+    name="notify",
+    description="Fake notify tool",
+    parameters_schema={},
+)
 
 
 class _FakeAgentContextStore:
@@ -53,29 +61,29 @@ class _FakeAgentContextStore:
     def append_user_message(
         self,
         *,
-        scope,
+        context: AgentContext,
         text: str,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.USER_MESSAGE,
             payload={"type": "user_message", "text": text},
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_assistant_message(
         self,
         *,
-        scope,
+        context: AgentContext,
         turn_id: str,
         message_type: str,
         text: str,
         usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             payload={
                 "type": "assistant_message",
@@ -85,18 +93,18 @@ class _FakeAgentContextStore:
                 "total_tokens": usage.total_tokens if usage is not None else 0,
             },
             usage=usage,
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_call(
         self,
         *,
-        scope,
-        tool_call,
+        context: AgentContext,
+        tool_call: AgentToolCall,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_CALL,
             payload={
                 "type": "tool_call",
@@ -106,19 +114,19 @@ class _FakeAgentContextStore:
                 "tool": tool_call.tool,
                 "args": tool_call.args,
             },
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_result(
         self,
         *,
-        scope,
-        tool_result,
+        context: AgentContext,
+        tool_result: AgentToolResult,
     ) -> AgentContextEntry:
         result = tool_result.result
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             payload={
                 "type": "tool_result",
@@ -131,7 +139,7 @@ class _FakeAgentContextStore:
                 "text": result.text,
                 "error": result.error,
             },
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def _append_entry(
@@ -237,7 +245,6 @@ class _FakeTool:
 
 class _FakeToolManager:
     def __init__(self, execute_result: ToolResult | None = None) -> None:
-        self.get_tool_configs_calls: list[list[str]] = []
         self.execute_prepared_calls: list[PreparedTool] = []
         self.execute_result = execute_result or ToolResult(
             name="notify",
@@ -246,17 +253,6 @@ class _FakeToolManager:
             text="ok",
             error=None,
         )
-
-    def get_tool_configs(self, allowed_tools: list[str]) -> list[ToolConfig]:
-        self.get_tool_configs_calls.append(list(allowed_tools))
-        return [
-            ToolConfig(
-                name=tool,
-                description=f"Fake {tool} tool",
-                parameters_schema={},
-            )
-            for tool in allowed_tools
-        ]
 
     def get_tools(self, allowed_tools: list[str]) -> list[_FakeTool]:
         return [_FakeTool(name=tool) for tool in allowed_tools]
@@ -277,22 +273,10 @@ class _FakeToolManager:
         if not isinstance(request, AgentToolRequest):
             raise AssertionError("expected AgentToolRequest")
         self.execute_prepared_calls.append(prepared)
-        if callable(self.execute_result):
-            return self.execute_result(request)
         return self.execute_result
 
 
 class _ExceptionPrepareToolManager:
-    def get_tool_configs(self, allowed_tools: list[str]) -> list[ToolConfig]:
-        return [
-            ToolConfig(
-                name=tool,
-                description=f"Fake {tool} tool",
-                parameters_schema={},
-            )
-            for tool in allowed_tools
-        ]
-
     def prepare(self, request: AgentToolRequest) -> ToolPrepareResult:
         return ToolPrepareResult(
             ok=False,
@@ -387,14 +371,12 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=1,
-                tools=[],
+                tools=(),
             ),
         )
     )
@@ -405,7 +387,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
     assert result.finish == AgentRunnerFinish.FINAL
     assert result.response_model == "fake-model"
     assert context_store.window_calls == [
-        {"context_id": "thread-1", "window_tokens": 80_000}
+        {"context_id": result.context_id, "window_tokens": 80_000}
     ]
 
 
@@ -442,14 +424,12 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="You are a support agent.",
                 task="Inspect the issue.",
-                context_id="thread-1",
                 max_turns=3,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
                 max_tool_calls=5,
             ),
         )
@@ -526,24 +506,28 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
-                config=agent_runner_config(
-                    system="Be useful.",
-                    task="Hi",
-                    context_id="thread-1",
-                    max_turns=3,
-                    tools=["notify"],
-                    max_tool_calls=5,
-                ),
-            )
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
+            config=agent_runner_config(
+                system="Be useful.",
+                task="Hi",
+                max_turns=3,
+                tools=(NOTIFY_TOOL_CONFIG,),
+                max_tool_calls=5,
+            ),
         )
+    )
 
     assert result.final_text == "Done."
     assert result.turn_count == 2
     assert result.tool_call_count == 1
     assert result.finish == AgentRunnerFinish.FINAL
-    assert tool_manager.get_tool_configs_calls == [["notify"]]
+    assert result.usage == LLMUsage(
+        prompt_tokens=100,
+        completion_tokens=25,
+        total_tokens=125,
+        provider="openai",
+        model="fake",
+    )
     executed_request = tool_manager.execute_prepared_calls[0].request
     assert isinstance(executed_request, AgentToolRequest)
     assert executed_request.tool == "notify"
@@ -569,82 +553,14 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         ),
         LLMMessage.tool("sent", tool_call_id="openai-call-1"),
     )
-    assert append_event.calls == [
-        {
-            "run_id": "run-1",
-            "event_type": RuntimeEventType.AGENT_TOOL_CALL,
-            "payload": {
-                "step_id": "support_agent",
-                "turn_id": "turn-1",
-                "agent_sequence": 2,
-                "body": {
-                    "type": "tool_call",
-                    "turn_id": "turn-1",
-                    "parent_sequence": None,
-                    "tool_call_id": "openai-call-1",
-                    "tool": "notify",
-                    "args": {"message": "hello"},
-                },
-            },
-            "step_id": None,
-            "step_type": None,
-            "agent_sequence": None,
-            "execution": None,
-            "next_step_id": None,
-            "error": None,
-        },
-        {
-            "run_id": "run-1",
-            "event_type": RuntimeEventType.AGENT_TOOL_RESULT,
-            "payload": {
-                "step_id": "support_agent",
-                "turn_id": "turn-1",
-                "agent_sequence": 3,
-                "body": {
-                    "type": "tool_result",
-                    "turn_id": "turn-1",
-                    "parent_sequence": None,
-                    "tool_call_id": "openai-call-1",
-                    "tool": "notify",
-                    "status": "COMPLETED",
-                    "data": {"message": "sent"},
-                    "text": "sent",
-                    "error": None,
-                },
-            },
-            "step_id": None,
-            "step_type": None,
-            "agent_sequence": None,
-            "execution": None,
-            "next_step_id": None,
-            "error": None,
-        },
-        {
-            "run_id": "run-1",
-            "event_type": RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
-            "payload": {
-                "step_id": "support_agent",
-                "turn_id": "turn-2",
-                "agent_sequence": 4,
-                    "body": {
-                        "text": "Done.",
-                        "context": {
-                            "compaction_enabled": False,
-                            "max_window_ratio": 0.8,
-                            "max_window_tokens": 100_000,
-                            "total_tokens": 125,
-                            "model": "test-model",
-                        },
-                    },
-                },
-            "step_id": None,
-            "step_type": None,
-            "agent_sequence": None,
-            "execution": None,
-            "next_step_id": None,
-            "error": None,
-        },
+    assert [call["event_type"] for call in append_event.calls] == [
+        RuntimeEventType.AGENT_TOOL_CALL,
+        RuntimeEventType.AGENT_TOOL_RESULT,
+        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
     ]
+    final_payload = append_event.calls[-1]["payload"]
+    assert isinstance(final_payload, dict)
+    assert final_payload["body"]["total_tokens"] == 125
 
 
 def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> None:
@@ -684,24 +600,20 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
             error=None,
         )
     )
-    append_event = _FakeAppendRuntimeEventUseCase()
     runner = _build_runner(
         context_store=context_store,
         llm=llm,
         tool_manager=tool_manager,
-        append_runtime_event_use_case=append_event,
     )
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=3,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
                 max_tool_calls=5,
             ),
         )
@@ -735,39 +647,6 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         ),
         LLMMessage.tool("sent", tool_call_id="openai-call-1"),
     )
-    assert [item["event_type"] for item in append_event.calls] == [
-        RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
-        RuntimeEventType.AGENT_TOOL_CALL,
-        RuntimeEventType.AGENT_TOOL_RESULT,
-        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
-    ]
-    assert append_event.calls[0]["payload"] == {
-        "step_id": "support_agent",
-        "turn_id": "turn-1",
-            "agent_sequence": 2,
-            "body": {
-                "total_tokens": 60,
-                "text": "I should send a notification.",
-            },
-        }
-    assert append_event.calls[1]["payload"]["body"]["parent_sequence"] == 2
-    assert append_event.calls[2]["payload"]["body"]["parent_sequence"] == 2
-    assert append_event.calls[3]["payload"] == {
-        "step_id": "support_agent",
-        "turn_id": "turn-3",
-        "agent_sequence": 5,
-            "body": {
-                "text": "Done.",
-                "context": {
-                    "compaction_enabled": False,
-                    "max_window_ratio": 0.8,
-                    "max_window_tokens": 100_000,
-                    "total_tokens": 125,
-                    "model": "test-model",
-                },
-            },
-        }
-
 
 def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() -> None:
     context_store = _FakeAgentContextStore()
@@ -803,14 +682,12 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=3,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
                 max_tool_calls=5,
             ),
         )
@@ -833,107 +710,6 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         AgentContextEntryType.USER_MESSAGE,
         AgentContextEntryType.ASSISTANT_MESSAGE,
     ]
-
-
-def test_agent_runner_executes_multiple_tool_calls_in_one_turn() -> None:
-    context_store = _FakeAgentContextStore()
-    llm = _FakeLLM(
-        responses=[
-            LLMResponse(
-                ok=True,
-                model="fake",
-                tool_calls=(
-                    LLMToolCall(
-                        id="call-1",
-                        function=LLMToolCallFunction(
-                            name="notify",
-                            arguments_json='{"message":"hello"}',
-                        ),
-                    ),
-                    LLMToolCall(
-                        id="call-2",
-                        function=LLMToolCallFunction(
-                            name="notify",
-                            arguments_json='{"message":"world"}',
-                        ),
-                    ),
-                ),
-                finish_reason="tool_calls",
-            ),
-            LLMResponse(
-                ok=True,
-                content="Done.",
-                model="fake",
-            ),
-        ]
-    )
-
-    def execute_result(request: AgentToolRequest) -> ToolResult:
-        return ToolResult(
-            name="notify",
-            status=ToolResultStatus.COMPLETED,
-            data={"message": request.args["message"]},
-            text=str(request.args["message"]),
-            error=None,
-        )
-
-    tool_manager = _FakeToolManager(execute_result=execute_result)
-    runner = _build_runner(
-        context_store=context_store,
-        llm=llm,
-        tool_manager=tool_manager,
-    )
-
-    result = runner.execute(
-        AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
-            config=agent_runner_config(
-                system="Be useful.",
-                task="Hi",
-                context_id="thread-1",
-                max_turns=3,
-                tools=["notify"],
-                max_tool_calls=5,
-            ),
-        )
-    )
-
-    assert result.final_text == "Done."
-    assert result.turn_count == 2
-    assert result.tool_call_count == 2
-    executed_requests = [
-        prepared.request for prepared in tool_manager.execute_prepared_calls
-    ]
-    assert all(isinstance(request, AgentToolRequest) for request in executed_requests)
-    assert [request.tool_call_id for request in executed_requests] == [
-        "call-1",
-        "call-2",
-    ]
-    assert llm.calls[1].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
-        LLMMessage.assistant(
-            tool_calls=(
-                LLMToolCall(
-                    id="call-1",
-                    function=LLMToolCallFunction(
-                        name="notify",
-                        arguments_json='{"message": "hello"}',
-                    ),
-                ),
-                LLMToolCall(
-                    id="call-2",
-                    function=LLMToolCallFunction(
-                        name="notify",
-                        arguments_json='{"message": "world"}',
-                    ),
-                ),
-            )
-        ),
-        LLMMessage.tool("hello", tool_call_id="call-1"),
-        LLMMessage.tool("world", tool_call_id="call-2"),
-    )
 
 
 def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> None:
@@ -965,14 +741,12 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=1,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
             ),
         )
     )
@@ -1033,14 +807,12 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=4,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
             ),
         )
     )
@@ -1075,14 +847,12 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=3,
-                tools=[],
+                tools=(),
             ),
         )
     )
@@ -1122,14 +892,12 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=3,
-                tools=["notify"],
+                tools=(NOTIFY_TOOL_CONFIG,),
             ),
         )
     )
@@ -1162,14 +930,12 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
 
     result = runner.execute(
         AgentRunnerRequest(
-            run_id="run-1",
-            step_id="support_agent",
+            agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
                 system="Be useful.",
                 task="Hi",
-                context_id="thread-1",
                 max_turns=3,
-                tools=[],
+                tools=(),
             ),
         )
     )

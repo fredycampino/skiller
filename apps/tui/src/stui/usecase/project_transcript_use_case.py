@@ -7,6 +7,9 @@ from stui.viewmodel.console_screen_state import (
     RunOutputItem,
     RunResumeItem,
     RunStepItem,
+    StepNotifyOutputItem,
+    StepOutputItem,
+    StepShellOutputItem,
     TranscriptItem,
     TranscriptMode,
 )
@@ -33,6 +36,15 @@ class ProjectTranscriptUseCase:
 def _should_hide_in_chat_mode(item: TranscriptItem) -> bool:
     if isinstance(item, RunResumeItem):
         return True
-    if isinstance(item, (RunStepItem, RunOutputItem)):
-        return item.step_type.strip().lower() != "agent"
+    if isinstance(
+        item,
+        (
+            RunStepItem,
+            RunOutputItem,
+            StepNotifyOutputItem,
+            StepOutputItem,
+            StepShellOutputItem,
+        ),
+    ):
+        return item.step_type.strip().lower() in {"switch", "when"}
     return False

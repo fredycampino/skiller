@@ -42,13 +42,12 @@ def test_autocomplete_use_case_hides_queries_with_whitespace() -> None:
     assert use_case.execute(text="/run chat", cursor_position=9) is None
 
 
-def test_autocomplete_use_case_suggests_chats_command() -> None:
+def test_autocomplete_use_case_does_not_suggest_legacy_chat_commands() -> None:
     use_case = AutocompleteUseCase()
 
     state = use_case.execute(text="/ch", cursor_position=3)
 
-    assert state is not None
-    assert [item.label for item in state.items] == ["chat", "chats"]
+    assert state is None
 
 
 def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
@@ -59,9 +58,7 @@ def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
     assert state is not None
     assert [item.label for item in state.items] == [
         "run",
-        "chat",
         "runs",
-        "chats",
         "quit",
         "dev",
     ]

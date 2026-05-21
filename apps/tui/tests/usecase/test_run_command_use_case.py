@@ -91,7 +91,7 @@ def test_run_command_use_case_missing_agent_records_error(
         assert result.raw_args == "chat"
         assert context.run_id == ""
         assert context.skill_name == ""
-        assert context.mode == RunMode.FLOW
+        assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.FAILED
         assert state.session_key == "main"
         assert state.view_status.kind == ViewStatusKind.ERROR
@@ -130,7 +130,7 @@ def test_run_command_use_case_dispatch_success_loads_run(
         assert result.raw_args == "chat"
         assert context.run_id == "run-1234"
         assert context.skill_name == "chat"
-        assert context.mode == RunMode.FLOW
+        assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.session_key == "run-1234"
         assert state.view_status.kind == ViewStatusKind.RUNNING
@@ -209,7 +209,7 @@ def test_run_command_use_case_unsubscribes_existing_observer(
     asyncio.run(run())
 
 
-def test_run_command_use_case_sets_chat_mode_for_chat_command(
+def test_run_command_use_case_keeps_current_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_to_thread(monkeypatch)
@@ -225,7 +225,7 @@ def test_run_command_use_case_sets_chat_mode_for_chat_command(
         await use_case.execute(
             FakeObserver(),
             state=ConsoleScreenState(session_key="main"),
-            command=NormalizeCommandUseCase().execute(text="/chat ant"),
+            command=NormalizeCommandUseCase().execute(text="/run ant"),
         )
 
         assert context.mode == RunMode.CHAT
@@ -246,7 +246,7 @@ def _run_context() -> RunEventContext:
     return RunEventContext(
         run_id="",
         skill_name="",
-        mode=RunMode.FLOW,
+        mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )
 

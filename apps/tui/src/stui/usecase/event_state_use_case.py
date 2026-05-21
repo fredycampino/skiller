@@ -1,23 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 from stui.port.agent_port import AgentPort
 from stui.port.event_models import (
-    AgentFinalAssistantMessagePayload,
     LogEvent,
     LogEventType,
     OutputPayload,
     RunFinishedPayload,
     RunWaitingPayload,
     StepErrorPayload,
+    WaitInputOutputValue,
 )
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentStepFinalOutputItem,
     AgentUsageState,
     ConsoleScreenState,
     PromptMode,
+    TranscriptItem,
     ViewStatusKind,
 )
 
@@ -42,24 +45,29 @@ class EventStateUseCase:
         if not events:
             return EventStateResult(state=state)
 
-        state.transcript.items = self.transcript_mapper.to_transcript(events)
-        state.set_agent_usage(self._agent_usage_state(events=events))
+        transcript_items = self.transcript_mapper.to_transcript(events)
+        state.transcript.items = transcript_items
+        state.set_agent_usage(self._agent_usage_state(items=transcript_items))
         self._project_event(state=state, event=_most_recent_event(events))
         return EventStateResult(state=state)
 
     def _agent_usage_state(
         self,
         *,
-        events: list[LogEvent],
+        items: list[TranscriptItem],
     ) -> AgentUsageState | None:
-        for event in reversed(events):
-            if event.event_type != LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
+        for item in reversed(items):
+            if not isinstance(item, AgentStepFinalOutputItem):
                 continue
-            payload: AgentFinalAssistantMessagePayload = event.payload
+            if item.usage is None:
+                continue
+            if item.usage.model is None:
+                continue
+            if item.usage.total_tokens is None:
+                continue
             return AgentUsageState(
-                model=payload.context.model,
-                total_tokens=payload.context.total_tokens,
-                max_window_tokens=payload.context.max_window_tokens,
+                model=item.usage.model,
+                total_tokens=item.usage.total_tokens,
             )
         return None
 
@@ -139,12 +147,10 @@ class EventStateUseCase:
             state.set_status(kind=ViewStatusKind.ERROR, message=normalized_status or "failed")
             self.context.status = RunStatus.FAILED
 
+
 def _waiting_prompt(output: OutputPayload) -> str:
-    if output.value:
-        prompt = output.value.get("prompt")
-        if isinstance(prompt, str) and prompt.strip():
-            return prompt.strip()
-    return output.text.strip()
+    value = cast(WaitInputOutputValue, output.value)
+    return value.prompt.strip()
 
 
 def _resolve_waiting_status(event: LogEvent) -> RunStatus:

@@ -5,21 +5,7 @@ from stui.port.run_port import (
     RunRuntimeStatusKind,
     RunRuntimeWaitType,
 )
-from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
-
-
-def run_runtime_status_to_event_context(
-    runtime_status: RunRuntimeStatus,
-    *,
-    skill_name: str,
-    mode: RunMode,
-) -> RunEventContext:
-    return RunEventContext(
-        run_id=runtime_status.run_id,
-        skill_name=skill_name,
-        mode=mode,
-        status=to_run_status(runtime_status),
-    )
+from stui.usecase.run_event_context import RunStatus
 
 
 def to_run_status(runtime_status: RunRuntimeStatus) -> RunStatus:

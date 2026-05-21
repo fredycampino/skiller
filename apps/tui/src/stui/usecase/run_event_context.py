@@ -31,10 +31,8 @@ class RunEventContext:
         run_id: str,
         *,
         skill_name: str,
-        mode: RunMode,
         status: RunStatus,
     ) -> None:
         self.run_id = run_id
         self.skill_name = skill_name
-        self.mode = mode
         self.status = status

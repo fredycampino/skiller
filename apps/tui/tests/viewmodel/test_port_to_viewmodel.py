@@ -7,54 +7,43 @@ from stui.port.run_port import (
     RunRuntimeStatusKind,
     RunRuntimeWaitType,
 )
-from stui.usecase.run_event_context import RunMode, RunStatus
-from stui.viewmodel.port_to_viewmodel import run_runtime_status_to_event_context
+from stui.usecase.run_event_context import RunStatus
+from stui.viewmodel.port_to_viewmodel import to_run_status
 
 pytestmark = pytest.mark.unit
 
 
-def test_run_runtime_status_to_event_context_maps_waiting_input() -> None:
-    context = run_runtime_status_to_event_context(
+def test_to_run_status_maps_waiting_input() -> None:
+    status = to_run_status(
         RunRuntimeStatus(
             run_id="run-1234",
             status=RunRuntimeStatusKind.WAITING,
             wait_type=RunRuntimeWaitType.INPUT,
-        ),
-        skill_name="ant",
-        mode=RunMode.CHAT,
+        )
     )
 
-    assert context.run_id == "run-1234"
-    assert context.skill_name == "ant"
-    assert context.mode == RunMode.CHAT
-    assert context.status == RunStatus.WAITING_INPUT
+    assert status == RunStatus.WAITING_INPUT
 
 
-def test_run_runtime_status_to_event_context_maps_waiting_channel() -> None:
-    context = run_runtime_status_to_event_context(
+def test_to_run_status_maps_waiting_channel() -> None:
+    status = to_run_status(
         RunRuntimeStatus(
             run_id="run-1234",
             status=RunRuntimeStatusKind.WAITING,
             wait_type=RunRuntimeWaitType.CHANNEL,
-        ),
-        skill_name="ant",
-        mode=RunMode.FLOW,
+        )
     )
 
-    assert context.status == RunStatus.WAITING_CHANNEL
+    assert status == RunStatus.WAITING_CHANNEL
 
 
-def test_run_runtime_status_to_event_context_maps_terminal_statuses() -> None:
-    succeeded = run_runtime_status_to_event_context(
-        RunRuntimeStatus(run_id="run-1", status=RunRuntimeStatusKind.SUCCEEDED),
-        skill_name="ant",
-        mode=RunMode.FLOW,
+def test_to_run_status_maps_terminal_statuses() -> None:
+    succeeded = to_run_status(
+        RunRuntimeStatus(run_id="run-1", status=RunRuntimeStatusKind.SUCCEEDED)
     )
-    failed = run_runtime_status_to_event_context(
-        RunRuntimeStatus(run_id="run-2", status=RunRuntimeStatusKind.CANCELLED),
-        skill_name="ant",
-        mode=RunMode.FLOW,
+    failed = to_run_status(
+        RunRuntimeStatus(run_id="run-2", status=RunRuntimeStatusKind.CANCELLED)
     )
 
-    assert succeeded.status == RunStatus.SUCCESS
-    assert failed.status == RunStatus.FAILED
+    assert succeeded == RunStatus.SUCCESS
+    assert failed == RunStatus.FAILED

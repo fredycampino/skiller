@@ -6,7 +6,6 @@ from stui.port.runs_port import RunsPortItem
 from stui.screen.console_screen import (
     _build_footer_left_text,
     _format_agent_tokens,
-    _format_agent_window_tokens,
     _format_run_updated_at,
     _resolve_run_row_mode,
     _resolve_run_row_status,
@@ -68,7 +67,6 @@ def test_format_run_updated_at_uses_short_month_day_and_time() -> None:
 def test_format_agent_tokens_uses_compact_k_units() -> None:
     assert _format_agent_tokens(999) == "999"
     assert _format_agent_tokens(3155) == "3.2k"
-    assert _format_agent_window_tokens(1000000) == "1000K"
 
 
 def test_build_footer_left_text_shows_usage_when_available() -> None:
@@ -76,11 +74,10 @@ def test_build_footer_left_text_shows_usage_when_available() -> None:
         agent_usage=AgentUsageState(
             model="MiniMax-M2.5",
             total_tokens=3155,
-            max_window_tokens=1000000,
         )
     )
 
-    assert _build_footer_left_text(state=state) == "MiniMax-M2.5\n3.2k/1000K"
+    assert _build_footer_left_text(state=state) == "MiniMax-M2.5\n3.2k"
 
 
 def test_build_footer_left_text_falls_back_to_commands_hint() -> None:

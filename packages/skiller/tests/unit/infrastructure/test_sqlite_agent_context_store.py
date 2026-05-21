@@ -1,6 +1,5 @@
 import json
 import sqlite3
-from dataclasses import dataclass
 
 import pytest
 
@@ -10,6 +9,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
+from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
@@ -21,11 +21,14 @@ from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 pytestmark = pytest.mark.unit
 
 
-@dataclass(frozen=True)
-class _AgentScope:
-    run_id: str = "run-1"
-    agent_id: str = "support_agent"
-    context_id: str = "thread-1"
+RUN_ID = "run-1"
+SOURCE_STEP_ID = "support_agent"
+CONTEXT_ID = "thread-1"
+AGENT_CONTEXT = AgentContext(
+    run_id=RUN_ID,
+    agent_id=SOURCE_STEP_ID,
+    context_id=CONTEXT_ID,
+)
 
 
 def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
@@ -37,24 +40,29 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
     first = store.append_user_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         text="Hi",
     )
     second = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="final",
         text="Hello",
-        usage=LLMUsage(prompt_tokens=123, completion_tokens=45, total_tokens=168),
+        usage=LLMUsage(
+            prompt_tokens=123,
+            completion_tokens=45,
+            total_tokens=168,
+            provider="minimax",
+            model="MiniMax-M2.5",
+        ),
     )
 
-    entries = store.list_entries(context_id=scope.context_id)
+    entries = store.list_entries(context_id=CONTEXT_ID)
     with sqlite3.connect(db_path) as conn:
         raw_row = conn.execute(
             """
@@ -80,6 +88,8 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         prompt_tokens=123,
         completion_tokens=45,
         total_tokens=168,
+        provider="minimax",
+        model="MiniMax-M2.5",
     )
     assert raw_row[0] == "final"
     assert raw_row[1] == 168
@@ -87,11 +97,15 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         "prompt_tokens": 123,
         "completion_tokens": 45,
         "total_tokens": 168,
+        "provider": "minimax",
+        "model": "MiniMax-M2.5",
     }
-    assert store.get_usage(context_id=scope.context_id) == LLMUsage(
+    assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
         prompt_tokens=123,
         completion_tokens=45,
         total_tokens=168,
+        provider="minimax",
+        model="MiniMax-M2.5",
     )
 
 
@@ -104,13 +118,12 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
     first = store.append_tool_call(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_call=AgentToolCall(
             turn_id="turn-1",
             parent_sequence=None,
@@ -120,7 +133,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         ),
     )
     second = store.append_tool_call(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_call=AgentToolCall(
             turn_id="turn-1",
             parent_sequence=None,
@@ -130,7 +143,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         ),
     )
     first_result = store.append_tool_result(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_result=AgentToolResult(
             turn_id="turn-1",
             parent_sequence=None,
@@ -145,7 +158,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         ),
     )
     second_result = store.append_tool_result(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_result=AgentToolResult(
             turn_id="turn-1",
             parent_sequence=None,
@@ -160,7 +173,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         ),
     )
 
-    entries = store.list_entries(context_id=scope.context_id)
+    entries = store.list_entries(context_id=CONTEXT_ID)
 
     assert [entry.id for entry in entries] == [
         first.id,
@@ -194,29 +207,28 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
-    assert store.next_turn_id(context_id=scope.context_id) == "turn-1"
+    assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-1"
 
     store.append_user_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         text="Hi",
     )
-    assert store.next_turn_id(context_id=scope.context_id) == "turn-1"
+    assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-1"
 
     store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="tool_calls",
         text="I will inspect this.",
     )
-    assert store.next_turn_id(context_id=scope.context_id) == "turn-2"
+    assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-2"
 
     store.append_tool_call(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_call=AgentToolCall(
             turn_id="turn-1",
             parent_sequence=2,
@@ -225,7 +237,7 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
             args={"message": "hello"},
         ),
     )
-    assert store.next_turn_id(context_id=scope.context_id) == "turn-3"
+    assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-3"
 
 
 def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
@@ -237,28 +249,30 @@ def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
-    store.append_user_message(scope=scope, text="Hi")
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Hi",
+    )
     store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="tool_calls",
         text="I will call a tool.",
         usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
     )
     store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-2",
         message_type="final",
         text="Done",
         usage=LLMUsage(prompt_tokens=None, completion_tokens=12, total_tokens=None),
     )
     store.append_tool_call(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_call=AgentToolCall(
             turn_id="turn-1",
             parent_sequence=2,
@@ -268,7 +282,7 @@ def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
         ),
     )
     store.append_tool_result(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_result=AgentToolResult(
             turn_id="turn-1",
             parent_sequence=2,
@@ -283,7 +297,7 @@ def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
         ),
     )
 
-    stats = store.get_stats(context_id=scope.context_id)
+    stats = store.get_stats(context_id=CONTEXT_ID)
 
     assert stats.entries.total == 5
     assert stats.entries.user_messages == 1
@@ -305,39 +319,38 @@ def test_sqlite_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
     store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="final",
         text="First final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
     )
     store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-2",
         message_type="tool_calls",
         text="Not final",
         usage=LLMUsage(prompt_tokens=20, completion_tokens=8, total_tokens=28),
     )
     latest = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-3",
         message_type="final",
         text="Latest final",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=9, total_tokens=39),
     )
 
-    entries = store.list_entries(context_id=scope.context_id)
-    stats = store.get_stats(context_id=scope.context_id)
+    entries = store.list_entries(context_id=CONTEXT_ID)
+    stats = store.get_stats(context_id=CONTEXT_ID)
 
     assert isinstance(latest.payload, AgentAssistantMessagePayload)
     assert latest.payload.total_tokens == 39
-    assert store.get_usage(context_id=scope.context_id) == LLMUsage(
+    assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
         prompt_tokens=30,
         completion_tokens=9,
         total_tokens=39,
@@ -362,28 +375,30 @@ def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_p
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
-    store.append_user_message(scope=scope, text="Task")
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Task",
+    )
     old = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="final",
         text="Old",
         usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
     )
     tool_calls = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-2",
         message_type="tool_calls",
         text="",
         usage=LLMUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5),
     )
     store.append_tool_call(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_call=AgentToolCall(
             turn_id="turn-2",
             parent_sequence=tool_calls.sequence,
@@ -393,7 +408,7 @@ def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_p
         ),
     )
     store.append_tool_result(
-        scope=scope,
+        context=AGENT_CONTEXT,
         tool_result=AgentToolResult(
             turn_id="turn-2",
             parent_sequence=tool_calls.sequence,
@@ -408,21 +423,21 @@ def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_p
         ),
     )
     marker = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-3",
         message_type="final",
         text="Marker",
         usage=LLMUsage(prompt_tokens=13, completion_tokens=2, total_tokens=15),
     )
     latest = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-4",
         message_type="final",
         text="Latest",
         usage=LLMUsage(prompt_tokens=14, completion_tokens=6, total_tokens=20),
     )
 
-    entries = store.list_context_window(context_id=scope.context_id, window_tokens=10)
+    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
     assert isinstance(old.payload, AgentAssistantMessagePayload)
     assert old.payload.total_tokens == 10
@@ -440,21 +455,23 @@ def test_sqlite_agent_context_store_returns_full_context_when_window_is_not_exce
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
-    first = store.append_user_message(scope=scope, text="Task")
+    first = store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Task",
+    )
     final = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="final",
         text="Done",
         usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
     )
 
-    entries = store.list_context_window(context_id=scope.context_id, window_tokens=10)
+    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
     assert [entry.id for entry in entries] == [first.id, final.id]
 
@@ -468,20 +485,22 @@ def test_sqlite_agent_context_store_returns_full_context_without_final_marker(tm
         "demo",
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
-        run_id="run-1",
+        run_id=RUN_ID,
     )
     store = SqliteAgentContextStore(str(db_path))
-    scope = _AgentScope()
 
-    first = store.append_user_message(scope=scope, text="Task")
+    first = store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Task",
+    )
     tool_calls = store.append_assistant_message(
-        scope=scope,
+        context=AGENT_CONTEXT,
         turn_id="turn-1",
         message_type="tool_calls",
         text="",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=10, total_tokens=20),
     )
 
-    entries = store.list_context_window(context_id=scope.context_id, window_tokens=10)
+    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
     assert [entry.id for entry in entries] == [first.id, tool_calls.id]

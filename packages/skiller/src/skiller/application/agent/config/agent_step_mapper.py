@@ -9,12 +9,13 @@ class AgentStepMapper:
     def to_agent(self, current_step: CurrentStep) -> AgentStep:
         if current_step.step_type != StepType.AGENT:
             raise ValueError(f"Step '{current_step.step_id}' must be an agent step")
+        if "context_id" in current_step.step:
+            raise ValueError(f"Step '{current_step.step_id}' does not support context_id")
 
         return AgentStep(
             id=current_step.step_id,
             system=self._required_string(current_step, "system"),
             task=self._required_string(current_step, "task"),
-            context_id=self._optional_string(current_step, "context_id"),
             max_turns=self._optional_positive_int(current_step, "max_turns"),
             max_tool_calls=self._optional_positive_int(current_step, "max_tool_calls"),
             tools=self._tools(current_step, current_step.step.get("tools")),

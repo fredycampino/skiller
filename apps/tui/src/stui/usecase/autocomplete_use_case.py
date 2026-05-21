@@ -15,21 +15,9 @@ _COMPLETION_CATALOG: tuple[CompletionItem, ...] = (
         kind="command",
     ),
     CompletionItem(
-        label="chat",
-        description="Run a skill in chat mode",
-        insert_text="/chat",
-        kind="command",
-    ),
-    CompletionItem(
         label="runs",
         description="Show runs",
         insert_text="/runs",
-        kind="command",
-    ),
-    CompletionItem(
-        label="chats",
-        description="Show waiting input chats",
-        insert_text="/chats",
         kind="command",
     ),
     CompletionItem(

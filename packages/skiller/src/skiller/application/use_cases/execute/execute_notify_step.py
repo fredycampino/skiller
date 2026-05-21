@@ -6,7 +6,11 @@ from skiller.application.use_cases.shared.step_execution_result import (
 )
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.step.step_execution_model import NotifyOutput, StepExecution
+from skiller.domain.step.step_execution_model import (
+    NotifyOutput,
+    NotifyOutputFormat,
+    StepExecution,
+)
 from skiller.domain.tool.tool_contract import ToolInput
 
 
@@ -37,11 +41,22 @@ class ExecuteNotifyStepUseCase:
         notify_request = notify_request_result.request
         notify_result = self.notify_tool.run(notify_request)
         message = str(notify_result.data.get("message", ""))
+        raw_format = step.get("format", NotifyOutputFormat.SIMPLE.value)
+        try:
+            output_format = NotifyOutputFormat(str(raw_format))
+        except ValueError as exc:
+            raise ValueError(
+                f"Notify step '{step_id}' has unsupported format '{raw_format}'"
+            ) from exc
         execution = StepExecution(
             step_type=next_step.step_type,
             input={"message": notify_request.message},
             evaluation={},
-            output=NotifyOutput(text=notify_result.text or message, message=message),
+            output=NotifyOutput(
+                text=notify_result.text or message,
+                message=message,
+                format=output_format,
+            ),
         )
         context.step_executions[step_id] = execution
 

@@ -69,29 +69,13 @@ class StepErrorPayload:
 
 
 @dataclass(frozen=True)
-class AgentAssistantMessageContext:
-    compaction_enabled: bool
-    max_window_ratio: float
-    max_window_tokens: int
-    total_tokens: int
-    model: str
-
-
-@dataclass(frozen=True)
 class AgentBodyToolMessage:
     total_tokens: int
     text: str
 
 
-@dataclass(frozen=True)
-class AgentBodyFinalMessage:
-    text: str
-    context: AgentAssistantMessageContext
-
-
 AgentEventBody: TypeAlias = (
     AgentBodyToolMessage
-    | AgentBodyFinalMessage
     | AgentToolCallPayload
     | AgentToolResultPayload
 )
@@ -199,11 +183,6 @@ def agent_event_body_to_dict(
             "total_tokens": payload.total_tokens,
             "text": payload.text,
         }
-    if isinstance(payload, AgentBodyFinalMessage):
-        return {
-            "text": payload.text,
-            "context": _without_none(asdict(payload.context)),
-        }
     return agent_context_payload_to_dict(payload)
 
 
@@ -310,23 +289,13 @@ def _agent_event_body_from_dict(
     event_type: RuntimeEventType,
     value: dict[str, Any],
 ) -> AgentEventBody:
-    if event_type == RuntimeEventType.AGENT_ASSISTANT_MESSAGE:
+    if event_type in {
+        RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+    }:
         return AgentBodyToolMessage(
             total_tokens=_int_value(value.get("total_tokens")),
             text=str(value.get("text", "")),
-        )
-    if event_type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
-        context = value.get("context")
-        context_dict = context if isinstance(context, dict) else {}
-        return AgentBodyFinalMessage(
-            text=str(value.get("text", "")),
-            context=AgentAssistantMessageContext(
-                compaction_enabled=bool(context_dict.get("compaction_enabled")),
-                max_window_ratio=_float_value(context_dict.get("max_window_ratio")),
-                max_window_tokens=_int_value(context_dict.get("max_window_tokens")),
-                total_tokens=_int_value(context_dict.get("total_tokens")),
-                model=str(context_dict.get("model", "")),
-            )
         )
     return agent_context_payload_from_dict(
         entry_type=_agent_context_entry_type(event_type),
@@ -346,14 +315,6 @@ def _dict_value(value: object) -> dict[str, Any]:
 
 def _int_value(value: object) -> int:
     return value if isinstance(value, int) else 0
-
-
-def _float_value(value: object) -> float:
-    if isinstance(value, bool):
-        return 0.0
-    if isinstance(value, (float, int)):
-        return float(value)
-    return 0.0
 
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:

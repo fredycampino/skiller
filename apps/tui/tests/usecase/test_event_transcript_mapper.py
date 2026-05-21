@@ -3,23 +3,30 @@ from __future__ import annotations
 import pytest
 
 from stui.port.event_models import (
-    AgentAssistantMessageContextPayload,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
+    AgentOutputValue,
     AgentStopReason,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentToolResultStatus,
+    AssignOutputValue,
     ErrorPayload,
     InputReceivedPayload,
     LogEvent,
     LogEventPayload,
     LogEventType,
+    NotifyOutputFormat,
+    NotifyOutputValue,
     OutputPayload,
+    RouteOutputValue,
+    RunResumePayload,
     RunWaitingPayload,
+    ShellOutputValue,
     StepStartedPayload,
     StepSuccessPayload,
+    WaitInputOutputValue,
 )
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
@@ -30,8 +37,11 @@ from stui.viewmodel.console_screen_state import (
     AgentToolCallItem,
     AgentToolResultItem,
     DispatchErrorItem,
-    RunStepItem,
+    OutputFormat,
     RunWaitingInputItem,
+    StepNotifyOutputItem,
+    StepOutputItem,
+    StepShellOutputItem,
     UserInputItem,
 )
 
@@ -105,13 +115,7 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
                 step_type="agent",
                 payload=AgentFinalAssistantMessagePayload(
                     text="Hecho completo.",
-                    context=AgentAssistantMessageContextPayload(
-                        compaction_enabled=False,
-                        max_window_ratio=0.8,
-                        max_window_tokens=1000000,
-                        total_tokens=2144,
-                        model="MiniMax-M2.5",
-                    ),
+                    total_tokens=2144,
                 ),
             ),
         ],
@@ -121,8 +125,6 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
     assert isinstance(items[0], AgentFinalAssistantMessageItem)
     assert items[0].text == "Hecho completo."
     assert items[0].total_tokens == 2144
-    assert items[0].max_window_tokens == 1000000
-    assert items[0].model == "MiniMax-M2.5"
 
 
 def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> None:
@@ -138,7 +140,18 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
                 payload=StepSuccessPayload(
                     output=OutputPayload(
                         text="Hecho completo.",
-                        value={"data": {"final": {"text": "Hecho completo."}}},
+                        value=AgentOutputValue(
+                            data={
+                                "final": {"text": "Hecho completo."},
+                                "usage": {
+                                    "prompt_tokens": 100,
+                                    "completion_tokens": 25,
+                                    "total_tokens": 125,
+                                    "provider": "openai",
+                                    "model": "fake",
+                                },
+                            }
+                        ),
                         body_ref=None,
                     )
                 ),
@@ -149,6 +162,160 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
     assert len(items) == 1
     assert isinstance(items[0], AgentStepFinalOutputItem)
     assert items[0].text == "Hecho completo."
+    assert items[0].usage is not None
+    assert items[0].usage.prompt_tokens == 100
+    assert items[0].usage.completion_tokens == 25
+    assert items[0].usage.total_tokens == 125
+    assert items[0].usage.provider == "openai"
+    assert items[0].usage.model == "fake"
+
+
+def test_event_transcript_mapper_uses_notify_step_success_as_step_notify_output() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="intro",
+                step_type="notify",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Skiller.run",
+                        value=NotifyOutputValue(message="Skiller.run"),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepNotifyOutputItem)
+    assert items[0].step_type == "notify"
+    assert items[0].message == "Skiller.run"
+    assert items[0].format == OutputFormat.SIMPLE
+    assert items[0].icon == "•"
+    assert items[0].muted is False
+
+
+def test_event_transcript_mapper_uses_notify_output_format() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="intro",
+                step_type="notify",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="**Skiller.run**",
+                        value=NotifyOutputValue(
+                            message="**Skiller.run**",
+                            format=NotifyOutputFormat.MARKDOWN,
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepNotifyOutputItem)
+    assert items[0].format == OutputFormat.MARKDOWN
+
+
+def test_event_transcript_mapper_uses_generic_step_success_as_step_output() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="assign_sample",
+                step_type="assign",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Values assigned.",
+                        value=AssignOutputValue(assigned={"action": "retry"}),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepOutputItem)
+    assert items[0].step_type == "assign"
+    assert items[0].format == OutputFormat.SIMPLE
+    assert items[0].icon == "⇢"
+
+
+def test_event_transcript_mapper_uses_shell_step_success_as_step_shell_output() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="intro_pause",
+                step_type="shell",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Shell command completed.",
+                        value=ShellOutputValue(
+                            ok=True,
+                            exit_code=0,
+                            stdout="ready",
+                            stderr="",
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepShellOutputItem)
+    assert items[0].step_type == "shell"
+    assert items[0].output == "ready"
+    assert items[0].format == OutputFormat.SIMPLE
+    assert items[0].icon == "▫"
+
+
+def test_event_transcript_mapper_renders_route_step_output_with_arrow_icon() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="switch_sample",
+                step_type="switch",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Route selected: when_sample.",
+                        value=RouteOutputValue(next_step_id="when_sample"),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepOutputItem)
+    assert items[0].output == "when_sample."
+    assert items[0].icon == "↳"
 
 
 def test_event_transcript_mapper_renders_input_received() -> None:
@@ -166,6 +333,44 @@ def test_event_transcript_mapper_renders_input_received() -> None:
     assert len(items) == 1
     assert isinstance(items[0], UserInputItem)
     assert items[0].text == "hola mundo"
+
+
+def test_event_transcript_mapper_ignores_run_resume() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_RESUME,
+                payload=RunResumePayload(source="manual"),
+            )
+        ],
+    )
+
+    assert items == []
+
+
+def test_event_transcript_mapper_ignores_wait_input_step_success() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                step_id="ask_user",
+                step_type="wait_input",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Input received.",
+                        value=WaitInputOutputValue(payload={"text": "hola mundo"}),
+                        body_ref=None,
+                    )
+                ),
+            )
+        ],
+    )
+
+    assert items == []
 
 
 def test_event_transcript_mapper_orders_events_by_created_at_and_sequence() -> None:
@@ -201,7 +406,7 @@ def test_event_transcript_mapper_orders_events_by_created_at_and_sequence() -> N
     ]
 
 
-def test_event_transcript_mapper_renders_agent_interrupted_notice_and_skips_step_success() -> None:
+def test_event_transcript_mapper_renders_agent_interrupted_notice_and_final_output() -> None:
     mapper = EventTranscriptMapper()
 
     items = mapper.to_transcript(
@@ -223,7 +428,7 @@ def test_event_transcript_mapper_renders_agent_interrupted_notice_and_skips_step
                 payload=StepSuccessPayload(
                     output=OutputPayload(
                         text="",
-                        value={"data": {"stop_reason": "interrupted"}},
+                        value=AgentOutputValue(data={"stop_reason": "interrupted"}),
                         body_ref=None,
                     )
                 ),
@@ -231,9 +436,11 @@ def test_event_transcript_mapper_renders_agent_interrupted_notice_and_skips_step
         ],
     )
 
-    assert len(items) == 1
+    assert len(items) == 2
     assert isinstance(items[0], AgentSystemNoticeItem)
     assert items[0].text == "Interrupted by user"
+    assert isinstance(items[1], AgentStepFinalOutputItem)
+    assert items[1].text == "Interrupted by user"
 
 
 def test_event_transcript_mapper_renders_waiting_output() -> None:
@@ -255,7 +462,7 @@ def test_event_transcript_mapper_renders_waiting_output() -> None:
                 payload=RunWaitingPayload(
                     output=OutputPayload(
                         text="Write a message.",
-                        value={"prompt": "Write a message.", "payload": None},
+                        value=WaitInputOutputValue(prompt="Write a message."),
                         body_ref=None,
                     )
                 ),
@@ -263,12 +470,11 @@ def test_event_transcript_mapper_renders_waiting_output() -> None:
         ],
     )
 
-    assert len(items) == 2
-    assert isinstance(items[0], RunStepItem)
-    assert isinstance(items[1], RunWaitingInputItem)
-    assert items[1].step_type == "wait_input"
-    assert items[1].step_id == "ask_user"
-    assert items[1].prompt == "Write a message."
+    assert len(items) == 1
+    assert isinstance(items[0], RunWaitingInputItem)
+    assert items[0].step_type == "wait_input"
+    assert items[0].step_id == "ask_user"
+    assert items[0].prompt == "Write a message."
 
 
 def test_event_transcript_mapper_surfaces_observer_loop_error() -> None:

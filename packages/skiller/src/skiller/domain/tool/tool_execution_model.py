@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any
 
 from skiller.domain.agent.agent_loop_model import AgentLoop
+from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.tool.tool_contract import ToolResult
 
@@ -24,9 +25,7 @@ class ToolExecutionStatus(str, Enum):
 
 @dataclass(frozen=True)
 class ToolExecutionRequest:
-    run_id: str
-    step_id: str
-    context_id: str
+    context: AgentContext
     turn_id: str
     response: LLMResponse
     allowed_tools: list[str]
@@ -35,7 +34,7 @@ class ToolExecutionRequest:
 
     @property
     def agent_id(self) -> str:
-        return self.step_id
+        return self.context.agent_id
 
 
 @dataclass(frozen=True)

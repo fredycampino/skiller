@@ -38,7 +38,11 @@ class _FakeController:
                 "payload": {
                     "step": "done",
                     "step_type": "notify",
-                    "output": {"text": "done", "value": {"message": "done"}, "body_ref": None},
+                    "output": {
+                        "text": "done",
+                        "value": {"message": "done", "format": "simple"},
+                        "body_ref": None,
+                    },
                 },
             }
         ]

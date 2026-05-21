@@ -145,7 +145,8 @@ Rules:
 {
   "text": "message body",
   "value": {
-    "message": "message body"
+    "message": "message body",
+    "format": "simple"
   },
   "body_ref": null
 }

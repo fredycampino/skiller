@@ -528,7 +528,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "payload": {
                 "output": {
                     "text": "first",
-                    "value": {"message": "first"},
+                    "value": {"message": "first", "format": "simple"},
                     "body_ref": None,
                 },
                 "next": "done",
@@ -551,7 +551,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
             "payload": {
                 "output": {
                     "text": "done",
-                    "value": {"message": "done"},
+                    "value": {"message": "done", "format": "simple"},
                     "body_ref": None,
                 },
             },

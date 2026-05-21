@@ -36,12 +36,11 @@ def test_normalize_command_use_case_normalizes_runs_command() -> None:
     assert command.params == ("waiting",)
 
 
-def test_normalize_command_use_case_normalizes_chats_command() -> None:
-    command = NormalizeCommandUseCase().execute(text="/chats")
+def test_normalize_command_use_case_classifies_legacy_chat_commands_as_unknown() -> None:
+    use_case = NormalizeCommandUseCase()
 
-    assert command.kind == CommandKind.CHATS
-    assert command.name == "/chats"
-    assert command.params == ()
+    assert use_case.execute(text="/chat ant").kind == CommandKind.UNKNOWN
+    assert use_case.execute(text="/chats").kind == CommandKind.UNKNOWN
 
 
 def test_normalize_command_use_case_normalizes_quit_variants() -> None:

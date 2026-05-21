@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 import pytest
-from helpers.agent_config import agent_config
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
@@ -16,7 +15,6 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
 )
 from skiller.domain.event.event_model import (
-    AgentBodyFinalMessage,
     AgentBodyToolMessage,
     AgentEventPayload,
     RuntimeEventDraft,
@@ -69,7 +67,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     assert event.payload.body.text == "I will cal..."
 
 
-def test_agent_event_publisher_enriches_final_assistant_message_context() -> None:
+def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload() -> None:
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
@@ -96,18 +94,13 @@ def test_agent_event_publisher_enriches_final_assistant_message_context() -> Non
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
         ),
-        config=agent_config(),
     )
 
     event = store.events[0]
     assert event.type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE
     assert isinstance(event.payload, AgentEventPayload)
-    assert isinstance(event.payload.body, AgentBodyFinalMessage)
-    assert event.payload.body.context.compaction_enabled is False
-    assert event.payload.body.context.max_window_ratio == 0.8
-    assert event.payload.body.context.max_window_tokens == 100_000
-    assert event.payload.body.context.total_tokens == 2144
-    assert event.payload.body.context.model == "test-model"
+    assert isinstance(event.payload.body, AgentBodyToolMessage)
+    assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "Final answ..."
 
 

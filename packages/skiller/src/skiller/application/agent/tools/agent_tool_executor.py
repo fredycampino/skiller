@@ -76,11 +76,11 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                         status=ToolExecutionStatus.INVALID,
                     )
                 ]
-            )
+        )
 
         if request.response.has_text_content:
             assistant_message_entry = self.context_publisher.publish_assistant_message(
-                scope=request,
+                context=request.context,
                 turn_id=request.turn_id,
                 message_type="tool_calls",
                 text=request.response.content,
@@ -91,7 +91,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
 
         for raw_tool_call in request.response.tool_calls:
             # User interrupt stops the current tool loop immediately.
-            if self.is_interrupted(request.run_id):
+            if self.is_interrupted(request.context.run_id):
                 self.context_publisher.publish_interrupt_feedback(request=request)
                 state.add(
                     ToolExecutionResult(
@@ -133,9 +133,9 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
 
             prepare_result = self.tool_manager.prepare(
                 AgentToolRequest(
-                    run_id=request.run_id,
-                    step_id=request.step_id,
-                    context_id=request.context_id,
+                    run_id=request.context.run_id,
+                    step_id=request.context.agent_id,
+                    context_id=request.context.context_id,
                     turn_id=request.turn_id,
                     tool_call_id=agent_tool_call.tool_call_id,
                     tool=agent_tool_call.tool,
@@ -146,7 +146,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             # Process tools run through the managed process runner.
             if prepare_result.ok and isinstance(prepare_result.prepared.tool, ProcessTool):
                 tool_result = self._execute_process_tool(
-                    run_id=request.run_id,
+                    run_id=request.context.run_id,
                     prepared=prepare_result.prepared,
                 )
             # Direct tools run in-process through the tool manager.

@@ -72,6 +72,45 @@ if is_ready and current_step.step_type == StepType.MCP:
   or keeps a long branch understandable.
 - Do not create private helpers for one-line checks, defensive guards, or code that is clearer at
   the call site.
+- Do not hide non-trivial expressions inside dataclass constructors, request objects, function
+  calls, or return parameters. Prepare values in named local variables first, then pass the names.
+- Do not create a helper just to avoid an inline expression. Prefer explicit local variables for
+  one or two simple preparation steps.
+- Small obvious conversions are allowed inline when they do not reduce readability. Examples:
+  `tool_names = list(step.tools)` or `tools=tuple(tools)`. The point of the rule is readable code,
+  not banning every expression.
+- Avoid chained transformations in one expression when a reader has to parse several operations at
+  once. Split them into named steps.
+
+Preferred:
+
+```python
+system = f"{AGENT_RUNTIME_SYSTEM}\n\n{step.system.strip()}"
+tool_names = list(step.tools)
+tool_configs = self.tool_manager.get_tool_configs(tool_names)
+tools = tuple(tool_configs)
+config = self._apply_step_overrides(config=config, step=step)
+
+return AgentRunnerConfig(
+    system=system,
+    task=step.task,
+    context_id=step.context_id,
+    tools=tools,
+    config=config,
+)
+```
+
+Avoid:
+
+```python
+return AgentRunnerConfig(
+    system=f"{AGENT_RUNTIME_SYSTEM}\n\n{step.system.strip()}",
+    task=step.task,
+    context_id=step.context_id,
+    tools=tuple(self.tool_manager.get_tool_configs(list(step.tools))),
+    config=self._apply_step_overrides(config=config, step=step),
+)
+```
 
 ## Parameter Grouping
 

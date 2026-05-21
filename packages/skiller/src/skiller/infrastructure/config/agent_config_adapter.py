@@ -24,6 +24,18 @@ DEFAULT_AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED = True
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS = 600
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS = 4000
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS = 20
+SUPPORTED_LLM_PROVIDER_MODELS = {
+    AgentLLMProviderType.NULL: ("null",),
+    AgentLLMProviderType.FAKE: ("fake", "fake-llm"),
+    AgentLLMProviderType.MINIMAX: ("MiniMax-M2.5", "MiniMax-M2.7"),
+    AgentLLMProviderType.OPENAI: ("gpt-5.2", "gpt-5.2-mini"),
+}
+SUPPORTED_LLM_PROVIDER_CLIENT_TYPES = {
+    AgentLLMProviderType.NULL: (AgentLLMClientType.NULL,),
+    AgentLLMProviderType.FAKE: (AgentLLMClientType.FAKE,),
+    AgentLLMProviderType.MINIMAX: (AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,),
+    AgentLLMProviderType.OPENAI: (AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,),
+}
 
 
 class _AgentConfigModel(BaseModel):
@@ -115,7 +127,7 @@ def agent_config_from_json(
     try:
         config = _AgentConfigModel.model_validate(raw_config)
     except ValidationError as exc:
-        raise RuntimeError(f"Invalid agent config: {exc}") from exc
+        raise ValueError(f"Invalid agent config: {exc}") from exc
 
     default_provider = env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
     return AgentConfig(
@@ -147,14 +159,50 @@ def _build_provider_config(
     selected: bool,
     env: Mapping[str, str],
 ) -> AgentLLMProviderConfig:
+    model = _provider_env(provider.provider, selected, "MODEL", env) or provider.model
+    _validate_provider_client_type(provider=provider)
+    _validate_provider_model(provider=provider.provider, model=model)
+
     return AgentLLMProviderConfig(
         provider=provider.provider,
         client_type=provider.client_type,
-        model=_provider_env(provider.provider, selected, "MODEL", env) or provider.model,
+        model=model,
         api_key=_resolve_api_key(provider=provider, selected=selected, env=env),
         base_url=_provider_env(provider.provider, selected, "BASE_URL", env) or provider.base_url,
         timeout_seconds=_provider_timeout_seconds(provider=provider, selected=selected, env=env),
         context_window_tokens=provider.context_window_tokens,
+    )
+
+
+def _validate_provider_client_type(
+    *,
+    provider: _LLMProviderConfigModel,
+) -> None:
+    supported_client_types = SUPPORTED_LLM_PROVIDER_CLIENT_TYPES.get(provider.provider, ())
+    if provider.client_type in supported_client_types:
+        return
+
+    supported_values = ", ".join(client_type.value for client_type in supported_client_types)
+    raise ValueError(
+        f"Unsupported client_type='{provider.client_type.value}' "
+        f"for provider='{provider.provider.value}'. "
+        f"Supported client types: {supported_values or 'none'}."
+    )
+
+
+def _validate_provider_model(
+    *,
+    provider: AgentLLMProviderType,
+    model: str,
+) -> None:
+    supported_models = SUPPORTED_LLM_PROVIDER_MODELS.get(provider, ())
+    if model in supported_models:
+        return
+
+    supported_values = ", ".join(supported_models)
+    raise ValueError(
+        f"Unsupported model='{model}' for provider='{provider.value}'. "
+        f"Supported models: {supported_values or 'none'}."
     )
 
 
@@ -217,17 +265,17 @@ def _resolve_api_key(
     if provider.api_key_env is not None:
         value = env.get(provider.api_key_env)
         if value is None:
-            raise RuntimeError(
+            raise ValueError(
                 f"Missing environment variable for api_key_env: {provider.api_key_env}"
             )
         return value
 
     if provider.api_key_file is None:
-        raise RuntimeError("LLM provider requires api_key")
+        raise ValueError("LLM provider requires api_key")
 
     secret_path = Path(provider.api_key_file).expanduser()
     if not secret_path.exists():
-        raise RuntimeError(f"Missing api_key_file: {_display_path(secret_path)}")
+        raise ValueError(f"Missing api_key_file: {_display_path(secret_path)}")
     return secret_path.read_text(encoding="utf-8").strip()
 
 
@@ -267,7 +315,7 @@ def _env_bool(env_name: str, default: bool, env: Mapping[str, str]) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
-    raise RuntimeError(f"{env_name} must be a boolean")
+    raise ValueError(f"{env_name} must be a boolean")
 
 
 def _env_positive_int(env_name: str, default: int, env: Mapping[str, str]) -> int:
@@ -277,9 +325,9 @@ def _env_positive_int(env_name: str, default: int, env: Mapping[str, str]) -> in
     try:
         parsed = int(value)
     except ValueError as exc:
-        raise RuntimeError(f"{env_name} must be a positive integer") from exc
+        raise ValueError(f"{env_name} must be a positive integer") from exc
     if parsed <= 0:
-        raise RuntimeError(f"{env_name} must be a positive integer")
+        raise ValueError(f"{env_name} must be a positive integer")
     return parsed
 
 
@@ -287,9 +335,9 @@ def _positive_float_from_env(value: str, label: str) -> float:
     try:
         parsed = float(value)
     except ValueError as exc:
-        raise RuntimeError(f"{label} must be a positive number") from exc
+        raise ValueError(f"{label} must be a positive number") from exc
     if parsed <= 0:
-        raise RuntimeError(f"{label} must be a positive number")
+        raise ValueError(f"{label} must be a positive number")
     return parsed
 
 

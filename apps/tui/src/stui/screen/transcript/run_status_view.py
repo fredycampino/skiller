@@ -18,7 +18,7 @@ class RunStatusView(TranscriptView):
     def render(self, *, theme: TuiTheme) -> RenderableType:
         if self.item.status == "error":
             return self._render_error(theme=theme)
-        return Text(f"  {self.item.status}")
+        return Text("  Run finished", style=theme.color_text_muted)
 
     def _render_error(self, *, theme: TuiTheme) -> RenderableType:
         error_style = theme.color_text_error

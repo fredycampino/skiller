@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+from typing import cast
 
 from stui.port.event_models import (
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
+    AgentOutputValue,
     AgentStopReason,
     AgentToolCallPayload,
     AgentToolResultPayload,
@@ -14,25 +15,32 @@ from stui.port.event_models import (
     InputReceivedPayload,
     LogEvent,
     LogEventType,
+    NotifyOutputValue,
     OutputPayload,
+    RouteOutputValue,
     RunFinishedPayload,
     RunWaitingPayload,
+    ShellOutputValue,
     StepErrorPayload,
     StepSuccessPayload,
+    WaitInputOutputValue,
 )
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
+    AgentStepUsage,
     AgentSystemNoticeItem,
     AgentToolCallItem,
     AgentToolResultItem,
     DispatchErrorItem,
     OutputFormat,
-    RunOutputItem,
     RunStatusItem,
     RunStepItem,
     RunWaitingInputItem,
+    StepNotifyOutputItem,
+    StepOutputItem,
+    StepShellOutputItem,
     TranscriptItem,
     UserInputItem,
 )
@@ -84,9 +92,7 @@ class EventTranscriptMapper:
                 run_id=event.run_id,
                 step_id=event.step_id or "",
                 text=payload.text,
-                total_tokens=payload.context.total_tokens,
-                max_window_tokens=payload.context.max_window_tokens,
-                model=payload.context.model,
+                total_tokens=payload.total_tokens,
             )
 
         if event.event_type == LogEventType.AGENT_TOOL_CALL:
@@ -126,6 +132,12 @@ class EventTranscriptMapper:
                 text=_agent_notice_text(payload.stop_reason),
             )
 
+        if (
+            event.event_type == LogEventType.STEP_STARTED
+            and event.step_type == "wait_input"
+        ):
+            return None
+
         if event.event_type == LogEventType.STEP_STARTED:
             return RunStepItem(
                 sequence=event.sequence,
@@ -134,25 +146,67 @@ class EventTranscriptMapper:
                 step_type=event.step_type or "",
             )
 
+        if (
+            event.event_type == LogEventType.STEP_SUCCESS
+            and event.step_type == "agent"
+        ):
+            payload = _payload(event, StepSuccessPayload)
+            return AgentStepFinalOutputItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_id=event.step_id or "",
+                text=_agent_final_text(payload.output),
+                usage=_agent_step_usage(payload.output),
+                format=OutputFormat.MARKDOWN,
+            )
+
+        if (
+            event.event_type == LogEventType.STEP_SUCCESS
+            and event.step_type == "wait_input"
+        ):
+            return None
+
+        if (
+            event.event_type == LogEventType.STEP_SUCCESS
+            and event.step_type == "notify"
+        ):
+            payload = _payload(event, StepSuccessPayload)
+            output_value = cast(NotifyOutputValue, payload.output.value)
+            return StepNotifyOutputItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_type=event.step_type,
+                message=output_value.message,
+                format=OutputFormat(output_value.format.value),
+                icon="•",
+                muted=False,
+            )
+
+        if (
+            event.event_type == LogEventType.STEP_SUCCESS
+            and event.step_type == "shell"
+        ):
+            payload = _payload(event, StepSuccessPayload)
+            return StepShellOutputItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_type=event.step_type,
+                output=_shell_output_text(payload.output),
+                format=OutputFormat.SIMPLE,
+                icon="▫",
+                muted=False,
+            )
+
         if event.event_type == LogEventType.STEP_SUCCESS:
             payload = _payload(event, StepSuccessPayload)
-            step_type = event.step_type or ""
-            if _should_skip_step_success(step_type=step_type, output=payload.output):
-                return None
-            if step_type.strip().lower() == "agent":
-                return AgentStepFinalOutputItem(
-                    sequence=event.sequence,
-                    run_id=event.run_id,
-                    step_id=event.step_id or "",
-                    text=_agent_final_text(payload.output),
-                    format=OutputFormat.MARKDOWN,
-                )
-            return RunOutputItem(
+            step_type = event.step_type
+            return StepOutputItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 step_type=step_type,
-                output=_output_text(payload.output),
+                output=_step_output_text(step_type=step_type, output=payload.output),
                 format=_resolve_output_format(step_type),
+                icon=_resolve_step_output_icon(step_type),
             )
 
         if event.event_type == LogEventType.STEP_ERROR:
@@ -168,17 +222,21 @@ class EventTranscriptMapper:
             payload = _payload(event, ErrorPayload)
             return DispatchErrorItem(sequence=event.sequence, message=payload.error)
 
-        if event.event_type == LogEventType.RUN_WAITING:
+        if (
+            event.event_type == LogEventType.RUN_WAITING
+            and event.step_type == "wait_input"
+        ):
             payload = _payload(event, RunWaitingPayload)
-            if (event.step_type or "").strip().lower() != "wait_input":
-                return None
             return RunWaitingInputItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                step_type=event.step_type or "",
-                step_id=event.step_id or "",
+                step_type="wait_input",
+                step_id=event.step_id,
                 prompt=_waiting_prompt(payload.output),
             )
+
+        if event.event_type == LogEventType.RUN_WAITING:
+            return None
 
         if event.event_type == LogEventType.RUN_FINISHED:
             payload = _payload(event, RunFinishedPayload)
@@ -210,69 +268,107 @@ def _json_string(value: object) -> str:
 
 
 def _output_text(output: OutputPayload) -> str:
-    if output.value is None:
-        return output.text
-    return json.dumps(
-        {
-            "text": output.text,
-            "value": output.value,
-            "body_ref": output.body_ref,
-        },
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
+    return output.text
 
 
-def _should_skip_step_success(*, step_type: str, output: OutputPayload) -> bool:
-    normalized = step_type.strip().lower()
-    if normalized == "agent":
-        stop_reason = _agent_stop_reason(output)
-        return stop_reason in {"interrupted", "max_turns_exhausted"}
-    if normalized == "wait_input":
-        return output.text.strip().lower() == "input received."
-    return False
+def _step_output_text(*, step_type: str, output: OutputPayload) -> str:
+    if step_type in {"switch", "when"}:
+        return _route_output_text(output)
+    return _output_text(output)
 
 
-def _agent_stop_reason(output: OutputPayload) -> str:
-    if not output.value:
-        return ""
-    data = output.value.get("data")
-    if not isinstance(data, dict):
-        return ""
-    stop_reason = data.get("stop_reason")
-    if not isinstance(stop_reason, str):
-        return ""
-    return stop_reason.strip().lower()
+def _shell_output_text(output: OutputPayload) -> str:
+    value = cast(ShellOutputValue, output.value)
+    stdout = value.stdout
+    stderr = value.stderr
+    parts = [
+        value
+        for value in (stdout, stderr)
+        if value
+    ]
+    if parts:
+        return "\n".join(parts)
+    return output.text
+
+
+def _route_output_text(output: OutputPayload) -> str:
+    value = cast(RouteOutputValue, output.value)
+    return f"{value.next_step_id}."
 
 
 def _waiting_prompt(output: OutputPayload) -> str:
-    if output.value:
-        prompt = output.value.get("prompt")
-        if isinstance(prompt, str) and prompt.strip():
-            return prompt.strip()
-    return output.text.strip()
+    value = cast(WaitInputOutputValue, output.value)
+    return value.prompt.strip()
 
 
 def _agent_final_text(output: OutputPayload) -> str:
     normalized = output.text.strip()
-    if output.value:
-        data = output.value.get("data")
-        if isinstance(data, dict):
-            final = data.get("final")
-            if isinstance(final, dict):
-                text = final.get("text")
-                if isinstance(text, str) and text.strip():
-                    return text.strip()
+    value = cast(AgentOutputValue, output.value)
+    data = value.data
+    if isinstance(data, dict):
+        final = data.get("final")
+        if isinstance(final, dict):
+            text = final.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+        stop_reason = data.get("stop_reason")
+        if stop_reason == AgentStopReason.INTERRUPTED.value:
+            return _agent_notice_text(AgentStopReason.INTERRUPTED)
+        if stop_reason == AgentStopReason.MAX_TURNS_EXHAUSTED.value:
+            return _agent_notice_text(AgentStopReason.MAX_TURNS_EXHAUSTED)
     return normalized
+
+
+def _agent_step_usage(output: OutputPayload) -> AgentStepUsage | None:
+    value = cast(AgentOutputValue, output.value)
+    data = value.data
+    if not isinstance(data, dict):
+        return None
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return AgentStepUsage(
+        prompt_tokens=_optional_int(usage.get("prompt_tokens")),
+        completion_tokens=_optional_int(usage.get("completion_tokens")),
+        total_tokens=_optional_int(usage.get("total_tokens")),
+        provider=_optional_string(usage.get("provider")),
+        model=_optional_string(usage.get("model")),
+    )
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _optional_string(value: object) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
 def _resolve_output_format(step_type: str) -> OutputFormat:
     normalized = step_type.strip().lower()
     if normalized == "agent":
         return OutputFormat.MARKDOWN
-    if normalized == "shell":
-        return OutputFormat.STRUCTURED
     return OutputFormat.SIMPLE
+
+
+def _resolve_step_output_icon(step_type: str) -> str:
+    normalized = step_type.strip().lower()
+    icons = {
+        "assign": "⇢",
+        "mcp": "@",
+        "send": ">",
+        "switch": "↳",
+        "wait_channel": "#",
+        "wait_webhook": "~",
+        "when": "↳",
+    }
+    return icons.get(normalized, "•")
 
 
 def _agent_notice_text(stop_reason: AgentStopReason) -> str:

@@ -7,9 +7,10 @@ from stui.usecase.project_transcript_use_case import (
 )
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
-    RunOutputItem,
     RunResumeItem,
     RunStepItem,
+    StepNotifyOutputItem,
+    StepOutputItem,
     TranscriptMode,
     UserInputItem,
 )
@@ -19,6 +20,7 @@ pytestmark = pytest.mark.unit
 
 def test_project_transcript_use_case_keeps_all_items_in_flow_mode() -> None:
     state = ConsoleScreenState(session_key="main")
+    state.transcript.mode = TranscriptMode.FLOW
     state.transcript.items.extend(
         [
             UserInputItem(text="hola"),
@@ -32,7 +34,7 @@ def test_project_transcript_use_case_keeps_all_items_in_flow_mode() -> None:
     assert visible_items == state.transcript.items
 
 
-def test_project_transcript_use_case_hides_resume_and_non_agent_flow_items_in_chat_mode(
+def test_project_transcript_use_case_hides_resume_and_conditionals_in_chat_mode(
 ) -> None:
     state = ConsoleScreenState(session_key="main")
     state.transcript.mode = TranscriptMode.CHAT
@@ -40,8 +42,20 @@ def test_project_transcript_use_case_hides_resume_and_non_agent_flow_items_in_ch
         [
             UserInputItem(text="hola"),
             RunResumeItem(run_id="run-1", skill="agent_tools"),
+            RunStepItem(run_id="run-1", step_type="notify", step_id="intro"),
+            StepNotifyOutputItem(
+                run_id="run-1",
+                step_type="notify",
+                message="Hello",
+            ),
+            RunStepItem(run_id="run-1", step_type="assign", step_id="prepare"),
+            StepOutputItem(
+                run_id="run-1",
+                step_type="assign",
+                output="Values assigned.",
+            ),
             RunStepItem(run_id="run-1", step_type="switch", step_id="decide_exit"),
-            RunOutputItem(
+            StepOutputItem(
                 run_id="run-1",
                 step_type="switch",
                 output='{"text":"Route selected: support_agent."}',
@@ -54,5 +68,17 @@ def test_project_transcript_use_case_hides_resume_and_non_agent_flow_items_in_ch
 
     assert visible_items == [
         UserInputItem(text="hola"),
+        RunStepItem(run_id="run-1", step_type="notify", step_id="intro"),
+        StepNotifyOutputItem(
+            run_id="run-1",
+            step_type="notify",
+            message="Hello",
+        ),
+        RunStepItem(run_id="run-1", step_type="assign", step_id="prepare"),
+        StepOutputItem(
+            run_id="run-1",
+            step_type="assign",
+            output="Values assigned.",
+        ),
         RunStepItem(run_id="run-1", step_type="agent", step_id="support_agent"),
     ]

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 
 from skiller.application.agent.context.agent_context_publisher import (
@@ -14,7 +16,7 @@ from skiller.domain.agent.agent_context_model import (
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_loop_model import AgentLoop
-from skiller.domain.agent.agent_run_scope import AgentRunScope
+from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
 from skiller.domain.agent.llm_model import (
     LLMResponse,
     LLMToolCall,
@@ -111,7 +113,7 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
     usage = LLMUsage(prompt_tokens=10, completion_tokens=3, total_tokens=13)
 
     entry = publisher.publish_final_assistant_message(
-        scope=request,
+        context=request.context,
         turn_id="turn-1",
         text="Done.",
         usage=usage,
@@ -131,13 +133,15 @@ def test_agent_context_publisher_attaches_agent_context_once() -> None:
     store = _FakeAgentContextStore()
     run_store = _FakeRunStore()
     publisher = AgentContextPublisher(store, run_store, AgentRunnerFeedback())
-    entry = store.append_user_message(
-        scope=_tool_request(),
-        text="Hello",
-    )
+    agent = AgentRun(run_id="run-1", agent_id="agent-1")
 
-    publisher.attach(entry)
-    publisher.attach(entry)
+    context = publisher.attach_context(agent=agent)
+    repeated_context = publisher.attach_context(agent=agent)
+
+    UUID(context.context_id)
+    assert context.run_id == "run-1"
+    assert context.agent_id == "agent-1"
+    assert repeated_context == context
 
     assert run_store.get_calls == [
         {
@@ -149,16 +153,18 @@ def test_agent_context_publisher_attaches_agent_context_once() -> None:
         {
             "run_id": "run-1",
             "agent_id": "agent-1",
-            "context_id": "ctx-1",
+            "context_id": context.context_id,
         }
     ]
 
 
 def _tool_request() -> ToolExecutionRequest:
     return ToolExecutionRequest(
-        run_id="run-1",
-        step_id="agent-1",
-        context_id="ctx-1",
+        context=AgentContext(
+            run_id="run-1",
+            agent_id="agent-1",
+            context_id="ctx-1",
+        ),
         turn_id="turn-1",
         response=LLMResponse(ok=True),
         allowed_tools=["notify"],
@@ -177,26 +183,26 @@ class _FakeAgentContextStore(AgentContextStorePort):
     def append_user_message(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         text: str,
     ) -> AgentContextEntry:
         self.calls.append({"kind": "user", "text": text})
         return AgentContextEntry(
             id=f"entry-{len(self.calls)}",
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             sequence=1,
             entry_type=AgentContextEntryType.USER_MESSAGE,
             usage=None,
             payload=AgentUserMessagePayload(text=text),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
             created_at="2026-05-15T00:00:00Z",
         )
 
     def append_assistant_message(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         turn_id: str,
         message_type: str,
         text: str,
@@ -213,8 +219,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
         )
         return AgentContextEntry(
             id=f"entry-{len(self.calls)}",
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             sequence=2,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
@@ -224,14 +230,14 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 text=text,
                 total_tokens=usage.total_tokens if usage is not None else None,
             ),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
             created_at="2026-05-15T00:00:00Z",
         )
 
     def append_tool_call(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         tool_call: AgentToolCall,
     ) -> AgentContextEntry:
         self.calls.append(
@@ -239,8 +245,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
         )
         return AgentContextEntry(
             id=f"entry-{len(self.calls)}",
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             sequence=3,
             entry_type=AgentContextEntryType.TOOL_CALL,
             usage=None,
@@ -251,22 +257,22 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 tool=tool_call.tool,
                 args=tool_call.args,
             ),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
             created_at="2026-05-15T00:00:00Z",
         )
 
     def append_tool_result(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         tool_result: AgentToolResult,
     ) -> AgentContextEntry:
         result = tool_result.result
         self.calls.append({"kind": "tool_result", "tool": result.name})
         return AgentContextEntry(
             id=f"entry-{len(self.calls)}",
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             sequence=4,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             usage=None,
@@ -280,7 +286,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 text=result.text,
                 error=result.error,
             ),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
             created_at="2026-05-15T00:00:00Z",
         )
 

@@ -1,5 +1,4 @@
 from skiller.application.agent.event.agent_event_truncator import AgentEventTruncator
-from skiller.domain.agent.agent_config_model import AgentConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -8,8 +7,6 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
 )
 from skiller.domain.event.event_model import (
-    AgentAssistantMessageContext,
-    AgentBodyFinalMessage,
     AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -61,7 +58,6 @@ class AgentEventPublisher:
         self,
         *,
         entry: AgentContextEntry,
-        config: AgentConfig,
     ) -> None:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Final assistant event requires assistant_message entry")
@@ -71,7 +67,6 @@ class AgentEventPublisher:
             raise ValueError("Final assistant event requires final message")
 
         payload = self.truncator.truncate_assistant_message(entry.payload)
-        provider = config.llm.default()
         self.runtime_event_store.append_event(
             RuntimeEventDraft(
                 run_id=entry.run_id,
@@ -80,17 +75,9 @@ class AgentEventPublisher:
                     step_id=entry.source_step_id,
                     turn_id=payload.turn_id,
                     agent_sequence=entry.sequence,
-                    body=AgentBodyFinalMessage(
+                    body=AgentBodyToolMessage(
+                        total_tokens=payload.total_tokens or 0,
                         text=payload.text,
-                        context=AgentAssistantMessageContext(
-                            compaction_enabled=config.context.compaction.enabled,
-                            max_window_ratio=(
-                                config.context.compaction.max_total_tokens_ratio
-                            ),
-                            max_window_tokens=provider.context_window_tokens,
-                            total_tokens=payload.total_tokens or 0,
-                            model=provider.model,
-                        ),
                     ),
                 ),
             )

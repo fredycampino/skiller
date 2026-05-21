@@ -6,26 +6,37 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.port.event_models import (
-    AgentAssistantMessageContextPayload,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
+    AgentOutputValue,
     AgentStopReason,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentToolResultStatus,
+    AssignOutputValue,
     InputReceivedPayload,
     LogEvent,
     LogEventPayload,
     LogEventType,
+    McpOutputValue,
+    NotifyOutputFormat,
+    NotifyOutputValue,
     OutputPayload,
+    OutputValue,
+    RouteOutputValue,
     RunCreatePayload,
     RunFinishedPayload,
     RunResumePayload,
     RunWaitingPayload,
+    SendOutputValue,
+    ShellOutputValue,
     StepErrorPayload,
     StepStartedPayload,
     StepSuccessPayload,
+    WaitChannelOutputValue,
+    WaitInputOutputValue,
+    WaitWebhookOutputValue,
 )
 
 JsonObject: TypeAlias = dict[str, JsonValue]
@@ -39,6 +50,13 @@ class OutputModel(BaseModel):
     value: JsonObject | None = None
     body_ref: str | None = None
     text_ref: str | None = None
+
+
+class NotifyOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = ""
+    format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
 
 
 class RunCreateModel(BaseModel):
@@ -65,16 +83,81 @@ class StepSuccessModel(BaseModel):
     next_step_id: str | None = Field(default=None, alias="next")
 
 
+class RunWaitingModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output: OutputModel
+
+
 class StepErrorModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     error: str
 
 
-class RunWaitingModel(BaseModel):
+class AgentOutputValueModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    output: OutputModel
+    data: JsonObject | None = None
+
+
+class AssignOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assigned: JsonValue = None
+
+
+class SendOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    channel: str = ""
+    key: str = ""
+    message: str = ""
+    message_id: str | None = None
+
+
+class ShellOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool = False
+    exit_code: int = 0
+    stdout: str = ""
+    stderr: str = ""
+
+
+class RouteOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    next_step_id: str = ""
+
+
+class WaitInputOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = ""
+    payload: JsonObject | None = None
+
+
+class WaitWebhookOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    webhook: str = ""
+    key: str = ""
+    payload: JsonObject | None = None
+
+
+class WaitChannelOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    channel: str = ""
+    key: str = ""
+    payload: JsonObject | None = None
+
+
+class McpOutputValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: JsonObject | None = None
 
 
 class RunFinishedModel(BaseModel):
@@ -97,21 +180,11 @@ class AgentAssistantMessageModel(BaseModel):
     total_tokens: int
 
 
-class AgentAssistantMessageContextModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    compaction_enabled: bool
-    max_window_ratio: float
-    max_window_tokens: int
-    total_tokens: int
-    model: str
-
-
 class AgentFinalAssistantMessageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str
-    context: AgentAssistantMessageContextModel
+    total_tokens: int
 
 
 class AgentToolCallModel(BaseModel):
@@ -179,7 +252,7 @@ class LogEventMapper:
         if event_type == LogEventType.STEP_SUCCESS:
             model = _validate_model(StepSuccessModel, payload, "payload")
             return StepSuccessPayload(
-                output=_to_output_payload(model.output),
+                output=_to_output_payload(event.step_type, model.output),
                 next_step_id=model.next_step_id,
             )
 
@@ -189,7 +262,9 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_WAITING:
             model = _validate_model(RunWaitingModel, payload, "payload")
-            return RunWaitingPayload(output=_to_output_payload(model.output))
+            return RunWaitingPayload(
+                output=_to_output_payload(event.step_type, model.output)
+            )
 
         if event_type == LogEventType.RUN_FINISHED:
             model = _validate_model(RunFinishedModel, payload, "payload")
@@ -210,13 +285,7 @@ class LogEventMapper:
             model = _validate_model(AgentFinalAssistantMessageModel, payload, "payload")
             return AgentFinalAssistantMessagePayload(
                 text=model.text,
-                context=AgentAssistantMessageContextPayload(
-                    compaction_enabled=model.context.compaction_enabled,
-                    max_window_ratio=model.context.max_window_ratio,
-                    max_window_tokens=model.context.max_window_tokens,
-                    total_tokens=model.context.total_tokens,
-                    model=model.context.model,
-                ),
+                total_tokens=model.total_tokens,
             )
 
         if event_type == LogEventType.AGENT_TOOL_CALL:
@@ -257,13 +326,89 @@ class LogEventMapper:
         raise RuntimeError(f"unsupported log event type: {event_type}")
 
 
-def _to_output_payload(model: OutputModel) -> OutputPayload:
+def _to_output_payload(step_type: str | None, model: OutputModel) -> OutputPayload:
     return OutputPayload(
         text=model.text,
-        value=model.value,
+        value=_to_output_value(step_type, model.value),
         body_ref=model.body_ref,
         text_ref=model.text_ref,
     )
+
+
+def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputValue:
+    output_value = value or {}
+    normalized_step_type = (step_type or "").strip().lower()
+
+    if normalized_step_type == "agent":
+        model = _validate_model(AgentOutputValueModel, output_value, "output.value")
+        return AgentOutputValue(data=model.data)
+
+    if normalized_step_type == "assign":
+        model = _validate_model(AssignOutputValueModel, output_value, "output.value")
+        return AssignOutputValue(assigned=model.assigned)
+
+    if normalized_step_type == "send":
+        model = _validate_model(SendOutputValueModel, output_value, "output.value")
+        return SendOutputValue(
+            channel=model.channel,
+            key=model.key,
+            message=model.message,
+            message_id=model.message_id,
+        )
+
+    if normalized_step_type == "notify":
+        model = _validate_model(NotifyOutputValueModel, output_value, "output.value")
+        return NotifyOutputValue(
+            message=model.message,
+            format=model.format,
+        )
+
+    if normalized_step_type == "shell":
+        model = _validate_model(ShellOutputValueModel, output_value, "output.value")
+        return ShellOutputValue(
+            ok=model.ok,
+            exit_code=model.exit_code,
+            stdout=model.stdout,
+            stderr=model.stderr,
+        )
+
+    if normalized_step_type in {"switch", "when"}:
+        model = _validate_model(RouteOutputValueModel, output_value, "output.value")
+        return RouteOutputValue(next_step_id=model.next_step_id)
+
+    if normalized_step_type == "wait_input":
+        model = _validate_model(WaitInputOutputValueModel, output_value, "output.value")
+        return WaitInputOutputValue(prompt=model.prompt, payload=model.payload)
+
+    if normalized_step_type == "wait_webhook":
+        model = _validate_model(
+            WaitWebhookOutputValueModel,
+            output_value,
+            "output.value",
+        )
+        return WaitWebhookOutputValue(
+            webhook=model.webhook,
+            key=model.key,
+            payload=model.payload,
+        )
+
+    if normalized_step_type == "wait_channel":
+        model = _validate_model(
+            WaitChannelOutputValueModel,
+            output_value,
+            "output.value",
+        )
+        return WaitChannelOutputValue(
+            channel=model.channel,
+            key=model.key,
+            payload=model.payload,
+        )
+
+    if normalized_step_type == "mcp":
+        model = _validate_model(McpOutputValueModel, output_value, "output.value")
+        return McpOutputValue(data=model.data)
+
+    raise RuntimeError(f"unsupported output step type: {step_type}")
 
 
 def _validate_model(

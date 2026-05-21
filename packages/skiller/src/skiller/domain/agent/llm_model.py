@@ -141,6 +141,8 @@ class LLMUsage:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)

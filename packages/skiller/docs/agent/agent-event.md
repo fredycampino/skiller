@@ -90,26 +90,17 @@ Emitted when the agent finishes with a final assistant message.
   "agent_sequence": 34,
   "created_at": "2026-05-12T10:30:18Z",
   "payload": {
-    "text": "Done",
-    "context": {
-      "compaction_enabled": false,
-      "max_window_ratio": 0.8,
-      "max_window_tokens": 1000000,
-      "total_tokens": 2144,
-      "model": "MiniMax-M2.5"
-    }
+    "total_tokens": 2144,
+    "text": "Done"
   }
 }
 ```
 
 Rules:
 
+- `total_tokens` is the `usage.total_tokens` reported by the LLM for that request.
 - truncation: `text` is truncated by the agent event output policy.
-- `context.total_tokens` is the `usage.total_tokens`
-  reported by the LLM for that request.
-- `context` includes the model and context-window limits used by the
-  runner when the request was built.
-- not truncated: all `context` fields.
+- not truncated: `total_tokens`.
 - if the provider returns no visible content, this event is omitted.
 
 ## `AGENT_TOOL_CALL`

@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.di.container import _build_llm
+from skiller.di.container import _build_llm_model_manager, build_runtime_container
 from skiller.domain.agent.agent_config_model import (
     AgentConfig,
     AgentLLMClientType,
@@ -8,6 +8,8 @@ from skiller.domain.agent.agent_config_model import (
     AgentLLMProviderConfig,
     AgentLLMProviderType,
 )
+from skiller.domain.agent.llm_model import LLMMessage, LLMRequest
+from skiller.infrastructure.config.settings_model import Settings
 from skiller.infrastructure.llm import openai_llm
 from skiller.infrastructure.llm.fake_llm import FakeLLM
 from skiller.infrastructure.llm.null_llm import NullLLM
@@ -38,53 +40,50 @@ class _FakeOpenAIClient:
         ),
     ],
 )
-def test_build_llm_returns_expected_provider(
+def test_build_llm_model_manager_creates_expected_client_on_demand(
     monkeypatch: pytest.MonkeyPatch,
     provider: AgentLLMProviderType,
     client_type: AgentLLMClientType,
     expected_type: type[object],
 ) -> None:
     monkeypatch.setattr(openai_llm, "_load_openai_client_class", lambda: _FakeOpenAIClient)
+    manager = _build_llm_model_manager()
+    config = _config(provider=provider, client_type=client_type)
+    request = LLMRequest(messages=(LLMMessage.user("hello"),))
 
-    llm = _build_llm(_FakeAgentConfigPort(provider=provider, client_type=client_type))
+    manager.generate(config=config, request=request)
 
-    assert isinstance(llm, expected_type)
+    assert isinstance(manager.current_client, expected_type)
 
 
-def test_build_llm_rejects_unsupported_client_type() -> None:
-    with pytest.raises(ValueError, match="Unsupported LLM client type='anthropic_messages'"):
-        _build_llm(
-            _FakeAgentConfigPort(
-                provider=AgentLLMProviderType.ANTHROPIC,
-                client_type=AgentLLMClientType.ANTHROPIC_MESSAGES,
-            )
+def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) -> None:
+    missing_agent_config = tmp_path / "missing-agent.json"
+    settings = Settings(
+        db_path=str(tmp_path / "runtime.db"),
+        agent_config_path=str(missing_agent_config),
+    )
+
+    build_runtime_container(settings=settings, skills_dir=str(tmp_path))
+
+
+def _config(
+    *,
+    provider: AgentLLMProviderType,
+    client_type: AgentLLMClientType,
+) -> AgentConfig:
+    return AgentConfig(
+        llm=AgentLLMConfig(
+            default_provider="test-provider",
+            providers={
+                "test-provider": AgentLLMProviderConfig(
+                    provider=provider,
+                    client_type=client_type,
+                    api_key="secret-key",
+                    base_url="https://api.example.com/v1",
+                    model="test-model",
+                    timeout_seconds=30,
+                    context_window_tokens=100_000,
+                )
+            },
         )
-
-
-class _FakeAgentConfigPort:
-    def __init__(
-        self,
-        *,
-        provider: AgentLLMProviderType,
-        client_type: AgentLLMClientType,
-    ) -> None:
-        self.provider = provider
-        self.client_type = client_type
-
-    def get_config(self) -> AgentConfig:
-        return AgentConfig(
-            llm=AgentLLMConfig(
-                default_provider="test-provider",
-                providers={
-                    "test-provider": AgentLLMProviderConfig(
-                        provider=self.provider,
-                        client_type=self.client_type,
-                        api_key="secret-key",
-                        base_url="https://api.example.com/v1",
-                        model="test-model",
-                        timeout_seconds=30,
-                        context_window_tokens=100_000,
-                    )
-                },
-            )
-        )
+    )

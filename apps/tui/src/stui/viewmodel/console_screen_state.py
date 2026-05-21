@@ -102,9 +102,16 @@ class AgentFinalAssistantMessageItem(TranscriptItem):
     step_id: str
     text: str
     total_tokens: int
-    max_window_tokens: int
-    model: str
     format: OutputFormat = OutputFormat.MARKDOWN
+
+
+@dataclass(frozen=True)
+class AgentStepUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,7 @@ class AgentStepFinalOutputItem(TranscriptItem):
     run_id: str
     step_id: str
     text: str
+    usage: AgentStepUsage | None = None
     format: OutputFormat = OutputFormat.MARKDOWN
 
 
@@ -128,6 +136,36 @@ class RunOutputItem(TranscriptItem):
     step_type: str
     output: str
     format: OutputFormat = OutputFormat.SIMPLE
+
+
+@dataclass(frozen=True)
+class StepOutputItem(TranscriptItem):
+    run_id: str
+    step_type: str
+    output: str
+    format: OutputFormat = OutputFormat.SIMPLE
+    icon: str = "•"
+    muted: bool = False
+
+
+@dataclass(frozen=True)
+class StepNotifyOutputItem(TranscriptItem):
+    run_id: str
+    step_type: str
+    message: str
+    format: OutputFormat = OutputFormat.SIMPLE
+    icon: str = "•"
+    muted: bool = False
+
+
+@dataclass(frozen=True)
+class StepShellOutputItem(TranscriptItem):
+    run_id: str
+    step_type: str
+    output: str
+    format: OutputFormat = OutputFormat.SIMPLE
+    icon: str = "▫"
+    muted: bool = False
 
 
 @dataclass(frozen=True)
@@ -173,7 +211,7 @@ class CompletionState:
 
 @dataclass
 class TranscriptState:
-    mode: TranscriptMode = TranscriptMode.FLOW
+    mode: TranscriptMode = TranscriptMode.CHAT
     items: list[TranscriptItem] = field(default_factory=list)
 
 
@@ -196,7 +234,6 @@ class RunsTableState:
 class AgentUsageState:
     model: str
     total_tokens: int = 0
-    max_window_tokens: int = 0
 
 
 @dataclass
@@ -231,7 +268,7 @@ class ConsoleScreenState:
     def set_transcript(
         self,
         *,
-        mode: TranscriptMode = TranscriptMode.FLOW,
+        mode: TranscriptMode = TranscriptMode.CHAT,
         items: list[TranscriptItem] | None = None,
     ) -> None:
         self.transcript = TranscriptState(
@@ -266,8 +303,6 @@ class ConsoleScreenState:
         self.runs_table.rows = tuple(rows)
 
     def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
-        if agent_usage is None:
-            return
         self.agent_usage = agent_usage
 
     def load_session(

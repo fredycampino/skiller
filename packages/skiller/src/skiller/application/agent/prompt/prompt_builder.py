@@ -23,11 +23,11 @@ class AgentPromptBuilder:
         *,
         system: str,
         entries: list[AgentContextEntry],
-        tools: list[ToolConfig],
+        tools: tuple[ToolConfig, ...],
     ) -> LLMRequest:
         return LLMRequest(
             messages=tuple(self._build_messages(system=system, entries=entries)),
-            tools=tuple(tools),
+            tools=tools,
         )
 
     def _build_messages(

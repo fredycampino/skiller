@@ -71,7 +71,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=[])
+    request = builder.build_request(system="Be useful.", entries=entries, tools=())
 
     assert request.messages == (
         LLMMessage.system("Be useful."),
@@ -136,7 +136,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=[])
+    request = builder.build_request(system="Be useful.", entries=entries, tools=())
 
     assert request.messages == (
         LLMMessage.system("Be useful."),
@@ -217,7 +217,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=[])
+    request = builder.build_request(system="Be useful.", entries=entries, tools=())
 
     assert request.messages == (
         LLMMessage.system("Be useful."),
@@ -251,7 +251,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
     request = builder.build_request(
         system="Be useful.",
         entries=[],
-        tools=[],
+        tools=(),
     )
 
     assert request.messages == (
@@ -270,7 +270,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
     request = builder.build_request(
         system="Be useful.",
         entries=[],
-        tools=[tool],
+        tools=(tool,),
     )
 
     assert request.tools == (tool,)

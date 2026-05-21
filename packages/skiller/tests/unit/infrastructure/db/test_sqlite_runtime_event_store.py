@@ -7,8 +7,6 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
 )
 from skiller.domain.event.event_model import (
-    AgentAssistantMessageContext,
-    AgentBodyFinalMessage,
     AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -253,15 +251,9 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                 step_id="support_agent",
                 turn_id="turn-4",
                 agent_sequence=7,
-                body=AgentBodyFinalMessage(
+                body=AgentBodyToolMessage(
+                    total_tokens=2144,
                     text="Done.",
-                    context=AgentAssistantMessageContext(
-                        compaction_enabled=False,
-                        max_window_ratio=0.8,
-                        max_window_tokens=100_000,
-                        total_tokens=2144,
-                        model="MiniMax-M2.5",
-                    ),
                 ),
             ),
         )
@@ -275,24 +267,12 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
         step_id="support_agent",
         turn_id="turn-4",
         agent_sequence=7,
-        body=AgentBodyFinalMessage(
+        body=AgentBodyToolMessage(
+            total_tokens=2144,
             text="Done.",
-            context=AgentAssistantMessageContext(
-                compaction_enabled=False,
-                max_window_ratio=0.8,
-                max_window_tokens=100_000,
-                total_tokens=2144,
-                model="MiniMax-M2.5",
-            ),
         ),
     )
     assert event.model_dump(mode="json")["payload"] == {
+        "total_tokens": 2144,
         "text": "Done.",
-        "context": {
-            "compaction_enabled": False,
-            "max_window_ratio": 0.8,
-            "max_window_tokens": 100_000,
-            "total_tokens": 2144,
-            "model": "MiniMax-M2.5",
-        },
     }

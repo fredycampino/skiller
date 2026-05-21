@@ -35,6 +35,7 @@ It does not depend on runtime state.
 | `SKILL_STEP_NEXT_EMPTY` | `next` exists but is empty | `SKILL_STEP_NEXT_EMPTY: next requires non-empty target (step={step_id})` |
 | `SKILL_STEP_NEXT_NOT_FOUND` | `next` references an unknown `step_id` | `SKILL_STEP_NEXT_NOT_FOUND: next references unknown step_id (step={step_id}, next={target_step_id})` |
 | `SKILL_NOTIFY_MESSAGE_MISSING` | `notify` step has no `message` | `SKILL_NOTIFY_MESSAGE_MISSING: notify step requires message (step={step_id})` |
+| `SKILL_NOTIFY_FORMAT_UNSUPPORTED` | `notify.format` is not `simple`, `structured`, or `markdown` | `SKILL_NOTIFY_FORMAT_UNSUPPORTED: notify step format must be simple, structured or markdown (step={step_id}, format={format})` |
 | `SKILL_SEND_CHANNEL_MISSING` | `send` step has no `channel` | `SKILL_SEND_CHANNEL_MISSING: send step requires channel (step={step_id})` |
 | `SKILL_SEND_KEY_MISSING` | `send` step has no `key` | `SKILL_SEND_KEY_MISSING: send step requires key (step={step_id})` |
 | `SKILL_SEND_MESSAGE_MISSING` | `send` step has no `message` | `SKILL_SEND_MESSAGE_MISSING: send step requires message (step={step_id})` |

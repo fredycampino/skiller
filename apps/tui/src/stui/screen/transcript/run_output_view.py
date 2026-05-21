@@ -17,7 +17,6 @@ class RunOutputView(TranscriptView):
     def render(self, *, theme: TuiTheme) -> RenderableType:
         return render_run_output(
             theme=theme,
-            step_type=self.item.step_type,
             output=self.item.output,
             format=self.item.format,
         )

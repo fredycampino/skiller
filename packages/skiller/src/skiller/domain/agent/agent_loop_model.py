@@ -9,5 +9,8 @@ class AgentLoop:
     def has_next(self) -> bool:
         return self.turn_count < self.max_turns
 
+    def is_last_turn(self) -> bool:
+        return self.max_turns - self.turn_count == 1
+
     def advance(self) -> None:
         self.turn_count += 1

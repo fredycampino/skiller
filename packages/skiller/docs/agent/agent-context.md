@@ -195,7 +195,9 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
       "usage": {
         "prompt_tokens": 80,
         "completion_tokens": 16,
-        "total_tokens": 96
+        "total_tokens": 96,
+        "provider": "minimax",
+        "model": "MiniMax-M2.5"
       },
       "source_step_id": "support_agent",
       "created_at": "2026-04-22T21:40:03Z"
@@ -253,7 +255,9 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
       "usage": {
         "prompt_tokens": 63,
         "completion_tokens": 16,
-        "total_tokens": 79
+        "total_tokens": 79,
+        "provider": "minimax",
+        "model": "MiniMax-M2.5"
       },
       "source_step_id": "support_agent",
       "created_at": "2026-04-22T21:40:15Z"
@@ -370,8 +374,8 @@ selected entry is not a final assistant message, the estimate is `0`.
 - `agent_context_entries` stores the internal append-only memory used by the agent loop.
 - `agent_context_entries.payload_json` is the source of truth for each memory entry and may be
   large.
-- `agent_context_entries.usage_json` stores token usage for assistant response entries.
-  Context usage stats expose the latest final assistant usage.
+- `agent_context_entries.usage_json` stores token usage plus provider/model metadata
+  for assistant response entries. Context usage stats expose the latest final assistant usage.
 - `agent_context_entries.message_type` and `agent_context_entries.total_tokens` are indexed
   assistant metadata for context-window reads.
 - `events` remains an observability stream, not the functional source of truth.

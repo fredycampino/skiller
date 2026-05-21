@@ -9,8 +9,12 @@
 ```yaml
 - notify: show_reply
   message: '{{output_value("answer").data.reply}}'
+  format: markdown
   next: ask_user
 ```
+
+`format` is optional. Supported values are `simple`, `structured`, and `markdown`.
+When omitted, `simple` is used.
 
 ## Persistence
 
@@ -19,7 +23,8 @@
   "output": {
     "text": "hello back",
     "value": {
-      "message": "hello back"
+      "message": "hello back",
+      "format": "simple"
     },
     "body_ref": null
   }

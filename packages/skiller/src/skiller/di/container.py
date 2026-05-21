@@ -15,6 +15,7 @@ from skiller.application.agent.event.agent_event_truncator import (
     AgentEventOutputPolicy,
     AgentEventTruncator,
 )
+from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
@@ -76,8 +77,7 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 )
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
-from skiller.domain.agent.agent_config_model import AgentLLMClientType
-from skiller.domain.agent.agent_config_port import AgentConfigPort
+from skiller.domain.agent.agent_config_model import AgentLLMProviderConfig
 from skiller.infrastructure.config.json_agent_config_provider import JsonAgentConfigProvider
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
@@ -128,7 +128,7 @@ def build_runtime_container(
         config_path=Path(cfg.agent_config_path),
         env=os.environ,
     )
-    llm = _build_llm(agent_config)
+    llm_model = _build_llm_model_manager()
     mcp = DefaultMCP()
     shell_tool = _build_shell_tool(cfg)
     tool_process_runner = DefaultToolProcessRunner()
@@ -206,8 +206,7 @@ def build_runtime_container(
         store=store,
         runner=AgentRunner(
             agent_context_store=agent_context_store,
-            llm=llm,
-            tool_manager=tool_manager,
+            llm_model=llm_model,
             context_manager=agent_context_manager,
             error_mapper=AgentErrorMapper(),
             feedback=agent_feedback,
@@ -225,6 +224,7 @@ def build_runtime_container(
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=agent_config,
+            tool_manager=tool_manager,
         ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
@@ -321,28 +321,31 @@ def build_runtime_container(
     )
 
 
-def _build_llm(agent_config: AgentConfigPort) -> NullLLM | FakeLLM | OpenAILLM:
-    provider = agent_config.get_config().llm.default()
+def _build_llm_model_manager() -> LLMModelManager:
+    return LLMModelManager(
+        create_null_client=_create_null_llm,
+        create_fake_client=_create_fake_llm,
+        create_openai_client=_create_openai_llm,
+    )
 
-    if provider.client_type == AgentLLMClientType.NULL:
-        return NullLLM()
 
-    if provider.client_type == AgentLLMClientType.FAKE:
-        return FakeLLM(
-            model=provider.model,
-        )
+def _create_null_llm(provider: AgentLLMProviderConfig) -> NullLLM:
+    _ = provider
+    return NullLLM()
 
-    if provider.client_type == AgentLLMClientType.OPENAI_CHAT_COMPLETIONS:
-        return OpenAILLM(
-            api_key=provider.api_key,
-            base_url=provider.base_url,
-            model=provider.model,
-            timeout_seconds=provider.timeout_seconds,
-        )
 
-    raise ValueError(
-        f"Unsupported LLM client type='{provider.client_type.value}'. "
-        "Use 'null', 'fake' or 'openai_chat_completions'."
+def _create_fake_llm(provider: AgentLLMProviderConfig) -> FakeLLM:
+    return FakeLLM(
+        model=provider.model,
+    )
+
+
+def _create_openai_llm(provider: AgentLLMProviderConfig) -> OpenAILLM:
+    return OpenAILLM(
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        model=provider.model,
+        timeout_seconds=provider.timeout_seconds,
     )
 
 

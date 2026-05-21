@@ -7,6 +7,7 @@ from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
     StepExecutionStatus,
 )
+from skiller.domain.agent.agent_run_identity import AgentRun
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
@@ -29,14 +30,20 @@ class ExecuteAgentStepUseCase:
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
         agent_step = self.step_mapper.to_agent(current_step)
+        validation = self.config_reader.validate_agent_config()
+        if not validation.ok:
+            raise ValueError(validation.message)
+
         config = self.config_reader.read(
-            run_id=current_step.run_id,
             step=agent_step,
+        )
+        agent = AgentRun(
+            run_id=current_step.run_id,
+            agent_id=step_id,
         )
         runner_result = self.runner.execute(
             AgentRunnerRequest(
-                run_id=current_step.run_id,
-                step_id=step_id,
+                agent=agent,
                 config=config,
             )
         )
@@ -53,21 +60,29 @@ class ExecuteAgentStepUseCase:
             else None
         )
         output_data = {
-            "context_id": config.context_id,
+            "context_id": runner_result.context_id,
             "final": final,
             "turn_count": runner_result.turn_count,
             "tool_call_count": runner_result.tool_call_count,
             "stop_reason": runner_result.finish.value,
         }
+        if runner_result.usage is not None:
+            output_data["usage"] = {
+                "prompt_tokens": runner_result.usage.prompt_tokens,
+                "completion_tokens": runner_result.usage.completion_tokens,
+                "total_tokens": runner_result.usage.total_tokens,
+                "provider": runner_result.usage.provider,
+                "model": runner_result.usage.model,
+            }
         execution = StepExecution(
             step_type=current_step.step_type,
             input={
                 "system": config.system,
                 "task": config.task,
-                "context_id": config.context_id,
+                "context_id": runner_result.context_id,
                 "max_turns": config.config.loop.max_turns,
                 "max_tool_calls": config.config.loop.max_tool_calls,
-                "tools": list(config.tools),
+                "tools": [tool.name for tool in config.tools],
             },
             evaluation={"model": runner_result.response_model},
             output=AgentOutput(

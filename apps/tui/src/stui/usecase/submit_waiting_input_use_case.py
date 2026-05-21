@@ -58,7 +58,6 @@ class SubmitWaitingInputUseCase:
         self.context.activate_run(
             ack.run_id,
             skill_name=self.context.skill_name,
-            mode=self.context.mode,
             status=RunStatus.RUNNING,
         )
         state.load_session(run_id=ack.run_id)

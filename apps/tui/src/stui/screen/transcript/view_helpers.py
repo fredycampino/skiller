@@ -59,7 +59,6 @@ def agent_step_id_style(*, theme: TuiTheme, mode: TranscriptMode) -> str:
 def render_run_output(
     *,
     theme: TuiTheme,
-    step_type: str,
     output: str,
     format: OutputFormat,
 ) -> RenderableType:
@@ -68,28 +67,14 @@ def render_run_output(
         return Text("")
 
     parsed = try_parse_json_output(normalized)
-    indent = output_indent(step_type)
+    indent = output_indent()
     if format == OutputFormat.SIMPLE:
         rendered_simple = render_simple_output(normalized, parsed)
         if rendered_simple:
-            if step_type.strip().lower() == "agent":
-                return wrap_agent_renderable(Text(rendered_simple), theme=theme)
-            return Text(format_simple_output(rendered_simple, step_type=step_type))
-        if step_type.strip().lower() == "agent":
-            return wrap_agent_renderable(Text(normalized), theme=theme)
-        return Text(format_simple_output(normalized, step_type=step_type))
+            return Text(format_simple_output(rendered_simple))
+        return Text(format_simple_output(normalized))
 
     if format == OutputFormat.MARKDOWN:
-        if step_type.strip().lower() == "agent":
-            return wrap_agent_renderable(
-                render_agent_content(
-                    output=normalized,
-                    format=format,
-                    theme=theme,
-                    parsed=parsed,
-                ),
-                theme=theme,
-            )
         return render_markdown_output(
             normalized,
             parsed,
@@ -101,7 +86,7 @@ def render_run_output(
         return render_structured_output(parsed, normalized, indent=indent)
 
     if parsed is None:
-        return Text(format_simple_output(normalized, step_type=step_type))
+        return Text(format_simple_output(normalized))
     return render_structured_output(parsed, normalized, indent=indent)
 
 
@@ -110,7 +95,7 @@ def render_agent_assistant_content(
     item: AgentAssistantMessageItem,
     theme: TuiTheme,
 ) -> RenderableType:
-    renderable = render_agent_content(
+    renderable = render_message_content(
         output=item.text,
         format=item.format,
         theme=theme,
@@ -128,13 +113,29 @@ def wrap_agent_renderable(
     *,
     theme: TuiTheme,
 ) -> RenderableType:
+    return wrap_message_renderable(
+        renderable,
+        theme=theme,
+        icon=theme.agent_message_icon,
+        muted=False,
+    )
+
+
+def wrap_message_renderable(
+    renderable: RenderableType,
+    *,
+    theme: TuiTheme,
+    icon: str,
+    muted: bool = False,
+) -> RenderableType:
+    icon_style = theme.color_text_secondary if muted else theme.color_text_primary
     return prefixed_view(
         prefix=transcript_text(
-            theme.agent_message_icon,
-            style=theme.color_text_primary,
+            icon,
+            style=icon_style,
         ),
         content=TrimLeadingBlankLines(renderable),
-        prefix_width=1,
+        prefix_width=max(1, len(icon)),
     )
 
 
@@ -162,13 +163,20 @@ def render_structured_output(
     normalized: str,
     *,
     indent: int,
+    style: str = "",
 ) -> RenderableType:
     if parsed is None:
-        return Text(indent_block(normalized, spaces=indent))
+        return Text(indent_block(normalized, spaces=indent), style=style)
 
     render_value = parsed
     if isinstance(parsed, dict) and "value" in parsed:
         render_value = parsed["value"]
+
+    if style:
+        return Padding(
+            Text(format_structured_value(render_value), style=style),
+            (0, 0, 0, indent),
+        )
 
     return Padding(
         Pretty(render_value, indent_guides=False, expand_all=True),
@@ -192,12 +200,13 @@ def render_markdown_output(
     )
 
 
-def render_agent_content(
+def render_message_content(
     *,
     output: str,
     format: OutputFormat,
     theme: TuiTheme,
     parsed: object | None = None,
+    style: str = "",
 ) -> RenderableType:
     normalized = output.strip()
     if not normalized:
@@ -212,10 +221,15 @@ def render_agent_content(
         return MarkdownView(markdown_text, theme=theme).render()
 
     if format == OutputFormat.STRUCTURED:
-        return render_structured_output(resolved_parsed, normalized, indent=0)
+        return render_structured_output(
+            resolved_parsed,
+            normalized,
+            indent=0,
+            style=style,
+        )
 
     rendered_simple = render_simple_output(normalized, resolved_parsed)
-    return Text(rendered_simple or normalized)
+    return Text(rendered_simple or normalized, style=style)
 
 
 def extract_markdown_text(normalized: str, parsed: object | None) -> str:
@@ -224,6 +238,13 @@ def extract_markdown_text(normalized: str, parsed: object | None) -> str:
         if isinstance(text, str):
             return text
     return normalized
+
+
+def format_structured_value(value: object) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=True, indent=2)
+    except TypeError:
+        return str(value)
 
 
 @dataclass(frozen=True)
@@ -249,16 +270,12 @@ def line_is_blank(line: list[Segment]) -> bool:
     return not "".join(segment.text for segment in line).strip()
 
 
-def output_indent(step_type: str) -> int:
-    if step_type.strip().lower() == "agent":
-        return 0
+def output_indent() -> int:
     return 4
 
 
-def format_simple_output(text: str, *, step_type: str) -> str:
-    if step_type.strip().lower() != "agent":
-        return indent_block(text, spaces=4)
-    return text
+def format_simple_output(text: str) -> str:
+    return indent_block(text, spaces=4)
 
 
 def indent_block(text: str, *, spaces: int) -> str:

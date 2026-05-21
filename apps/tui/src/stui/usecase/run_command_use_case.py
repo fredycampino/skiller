@@ -8,14 +8,13 @@ from stui.port.run_port import (
     RunPort,
     RunRuntimeStatusKind,
 )
-from stui.usecase.normalize_command_use_case import Command, CommandKind
-from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
+from stui.usecase.normalize_command_use_case import Command
+from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
     PromptMode,
     RunAckItem,
-    TranscriptMode,
     UserInputItem,
     ViewStatusKind,
 )
@@ -30,13 +29,11 @@ class RunCommandResult:
 @dataclass(frozen=True)
 class RunCommandUseCase:
     """
-    Runs `/run` or `/chat` through the runtime.
+    Runs `/run` through the runtime.
 
     Runtime dispatch fails: record a dispatch error only.
     Runtime dispatch succeeds: activate run context and observe the new run.
     Runtime subscription: delegate replacement of the observed run to the port.
-    `/chat`: activate the run in chat mode.
-    `/run`: activate the run in flow mode.
     """
 
     run_port: RunPort
@@ -78,12 +75,11 @@ class RunCommandUseCase:
         self.context.activate_run(
             ack.run_id,
             skill_name=raw_args,
-            mode=_resolve_run_mode(command.kind),
             status=RunStatus.RUNNING,
         )
         state.load_session(run_id=ack.run_id)
         state.set_transcript(
-            mode=_resolve_transcript_mode(command.kind),
+            mode=state.transcript.mode,
             items=[RunAckItem(skill=raw_args, run_id=ack.run_id)],
         )
         state.set_autocompletion()
@@ -91,15 +87,3 @@ class RunCommandUseCase:
         state.set_status(kind=ViewStatusKind.RUNNING)
         self.events_port.subscribe(run_id=ack.run_id, listener=observer)
         return RunCommandResult(state=state, raw_args=raw_args)
-
-
-def _resolve_run_mode(command_kind: CommandKind) -> RunMode:
-    if command_kind == CommandKind.CHAT:
-        return RunMode.CHAT
-    return RunMode.FLOW
-
-
-def _resolve_transcript_mode(command_kind: CommandKind) -> TranscriptMode:
-    if command_kind == CommandKind.CHAT:
-        return TranscriptMode.CHAT
-    return TranscriptMode.FLOW

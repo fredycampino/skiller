@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 
 from stui.port.event_models import (
-    AgentAssistantMessageContextPayload,
-    AgentFinalAssistantMessagePayload,
+    AgentOutputValue,
     ErrorPayload,
     InputReceivedPayload,
     LogEvent,
@@ -14,11 +13,14 @@ from stui.port.event_models import (
     RunFinishedPayload,
     RunWaitingPayload,
     StepErrorPayload,
+    StepSuccessPayload,
+    WaitInputOutputValue,
 )
 from stui.port.run_port import CommandAck, CommandAckStatus
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentUsageState,
     ConsoleScreenState,
     UserInputItem,
     ViewStatusKind,
@@ -133,7 +135,7 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     assert context.status == RunStatus.FAILED
 
 
-def test_event_state_updates_agent_usage_from_final_assistant_message() -> None:
+def test_event_state_updates_agent_usage_from_agent_step_success() -> None:
     state = ConsoleScreenState()
     context = _context()
     use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
@@ -142,16 +144,25 @@ def test_event_state_updates_agent_usage_from_final_assistant_message() -> None:
         state=state,
         events=[
             _event(
-                LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+                LogEventType.STEP_SUCCESS,
                 sequence=2,
-                payload=AgentFinalAssistantMessagePayload(
-                    text="Done",
-                    context=AgentAssistantMessageContextPayload(
-                        compaction_enabled=False,
-                        max_window_ratio=0.8,
-                        max_window_tokens=1000000,
-                        total_tokens=3155,
-                        model="MiniMax-M2.5",
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Done",
+                        value=AgentOutputValue(
+                            data={
+                                "final": {"text": "Done"},
+                                "usage": {
+                                    "prompt_tokens": 3000,
+                                    "completion_tokens": 155,
+                                    "total_tokens": 3155,
+                                    "provider": "minimax",
+                                    "model": "MiniMax-M2.5",
+                                },
+                            }
+                        ),
+                        body_ref=None,
                     ),
                 ),
             )
@@ -161,7 +172,34 @@ def test_event_state_updates_agent_usage_from_final_assistant_message() -> None:
     assert state.agent_usage is not None
     assert state.agent_usage.model == "MiniMax-M2.5"
     assert state.agent_usage.total_tokens == 3155
-    assert state.agent_usage.max_window_tokens == 1000000
+
+
+def test_event_state_clears_agent_usage_when_agent_step_success_has_no_usage() -> None:
+    state = ConsoleScreenState(
+        agent_usage=AgentUsageState(model="MiniMax-M2.5", total_tokens=3155)
+    )
+    context = _context()
+    use_case = EventStateUseCase(context=context, agent_port=FakeAgentPort())
+
+    use_case.execute(
+        state=state,
+        events=[
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Done",
+                        value=AgentOutputValue(data={"final": {"text": "Done"}}),
+                        body_ref=None,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    assert state.agent_usage is None
 
 
 @pytest.mark.parametrize(
@@ -268,7 +306,7 @@ def _run_waiting_payload(prompt: str) -> RunWaitingPayload:
     return RunWaitingPayload(
         output=OutputPayload(
             text=prompt,
-            value={"prompt": prompt, "payload": None},
+            value=WaitInputOutputValue(prompt=prompt),
             body_ref=None,
         )
     )

@@ -82,7 +82,7 @@ def _run_context(
     *,
     run_id: str = "",
     skill_name: str = "",
-    mode: RunMode = RunMode.FLOW,
+    mode: RunMode = RunMode.CHAT,
     status: RunStatus = RunStatus.RUNNING,
 ) -> RunEventContext:
     return RunEventContext(
@@ -117,7 +117,6 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         context.activate_run(
             "run-1234",
             skill_name="wait_input_test",
-            mode=RunMode.CHAT,
             status=RunStatus.WAITING_INPUT,
         )
         use_case = SubmitWaitingInputUseCase(
@@ -190,7 +189,6 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
             context=_run_context(
                 run_id="run-1234",
                 skill_name="wait_input_test",
-                mode=RunMode.CHAT,
                 status=RunStatus.WAITING_INPUT,
             ),
         )
@@ -248,7 +246,6 @@ def test_submit_waiting_input_use_case_normalizes_user_text(
             context=_run_context(
                 run_id="run-1234",
                 skill_name="wait_input_test",
-                mode=RunMode.CHAT,
                 status=RunStatus.WAITING_INPUT,
             ),
         )

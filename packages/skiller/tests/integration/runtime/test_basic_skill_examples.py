@@ -8,6 +8,7 @@ from helpers.agent_runner import build_agent_runner
 
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
+from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
@@ -82,6 +83,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
+    agent_tool_manager = ToolManager(tools=[])
     tool_process_runner = DefaultToolProcessRunner()
     fail_run_use_case = FailRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
@@ -93,12 +95,13 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         runner=build_agent_runner(
             agent_context_store=agent_context_store,
             llm=NullLLM(),
-            tool_manager=None,
+            tool_manager=agent_tool_manager,
             append_runtime_event_use_case=append_runtime_event_use_case,
         ),
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=FakeAgentConfigPort(),
+            tool_manager=agent_tool_manager,
         ),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
@@ -195,7 +198,7 @@ def test_basic_skill_examples_succeed(
         assert main_event.payload == StepSuccessPayload(
             output={
                 "text": "notify smoke ok",
-                "value": {"message": "notify smoke ok"},
+                "value": {"message": "notify smoke ok", "format": "simple"},
                 "body_ref": None,
             },
         )

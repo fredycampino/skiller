@@ -28,6 +28,8 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
   real initialization logic, explicit re-exports, or tooling compatibility that requires it.
 - Trust the contract of a use case. Do not add defensive checks for states that should be impossible.
 - Prefer one clear error message over many overly specific status variants.
+- Do not hide non-trivial preparation inside constructor or function-call parameters. Use explicit
+  local variables; do not create private helpers for one or two simple statements unless asked.
 
 ## Read By Need
 
@@ -59,6 +61,7 @@ Use the documented repo flow in `references/workflow.md` unless the user says ot
 - Does each use case have one clear responsibility?
 - Is the service only coordinating use cases?
 - Would a new reader understand the happy path first?
+- Are constructor and function-call parameters simple names instead of inline transformations?
 - Are invalid cases reported with one clear message?
 - If behavior or step contracts changed, did you review the affected docs, especially `docs/steps/*` and `docs/guia_creacion_skills.md`?
 - If the task involves integration or release prep, did you follow `references/workflow.md` instead of an older manual flow?

@@ -11,13 +11,13 @@ from skiller.application.agent.event.agent_event_truncator import (
     AgentEventOutputPolicy,
     AgentEventTruncator,
 )
+from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.domain.agent.agent_config_model import AgentConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -28,8 +28,6 @@ from skiller.domain.agent.agent_context_model import (
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.event.event_model import (
-    AgentAssistantMessageContext,
-    AgentBodyFinalMessage,
     AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -148,7 +146,6 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
-        config: AgentConfig,
     ) -> None:
         if self.append_runtime_event_use_case is None:
             return
@@ -157,7 +154,6 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         if not isinstance(entry.payload, AgentAssistantMessagePayload):
             raise ValueError("Final assistant event requires AgentAssistantMessagePayload")
 
-        provider = config.llm.default()
         self.append_runtime_event_use_case.execute(
             entry.run_id,
             event_type=RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
@@ -165,15 +161,9 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
                 step_id=entry.source_step_id,
                 turn_id=entry.payload.turn_id,
                 agent_sequence=entry.sequence,
-                body=AgentBodyFinalMessage(
+                body=AgentBodyToolMessage(
+                    total_tokens=entry.payload.total_tokens or 0,
                     text=entry.payload.text,
-                    context=AgentAssistantMessageContext(
-                        compaction_enabled=config.context.compaction.enabled,
-                        max_window_ratio=config.context.compaction.max_total_tokens_ratio,
-                        max_window_tokens=provider.context_window_tokens,
-                        total_tokens=entry.payload.total_tokens or 0,
-                        model=provider.model,
-                    ),
                 ),
             ),
         )
@@ -286,10 +276,14 @@ def build_agent_runner(
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
     run_store = _FakeRunStore()
+    llm_model = LLMModelManager(
+        create_null_client=lambda provider: llm,
+        create_fake_client=lambda provider: llm,
+        create_openai_client=lambda provider: llm,
+    )
     return AgentRunner(
         agent_context_store=agent_context_store,
-        llm=llm,
-        tool_manager=tool_manager or ToolManager(tools=[]),
+        llm_model=llm_model,
         context_manager=AgentContextManager(
             agent_context_store=agent_context_store,
             prompt_builder=AgentPromptBuilder(),

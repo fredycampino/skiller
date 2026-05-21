@@ -30,7 +30,7 @@ class ListRunsUseCase:
         command: Command,
         limit: int = 20,
     ) -> ListRunsResult:
-        statuses, waiting_input_only = _resolve_runs_query(command)
+        statuses = _resolve_runs_query(command)
         try:
             runs = await asyncio.to_thread(
                 self.runs_port.list_runs,
@@ -46,9 +46,6 @@ class ListRunsUseCase:
             state.set_runs_table()
             _reset_prompt(state, mode=PromptMode.DEFAULT)
             return ListRunsResult(state=state)
-
-        if waiting_input_only:
-            runs = [run for run in runs if (run.wait_type or "").strip().lower() == "input"]
 
         state.transcript.items.append(UserInputItem(text=command.raw_text))
         state.set_runs_table(
@@ -66,15 +63,12 @@ def _reset_prompt(state: ConsoleScreenState, *, mode: PromptMode) -> None:
     state.set_prompt(mode=mode)
 
 
-def _resolve_runs_query(command: Command) -> tuple[list[str], bool]:
-    if command.kind == CommandKind.CHATS:
-        return ["WAITING"], True
-
+def _resolve_runs_query(command: Command) -> list[str]:
     if command.kind != CommandKind.RUNS:
-        return [], False
+        return []
 
     if not command.params:
-        return [], False
+        return []
 
     statuses: list[str] = []
     parts = list(command.params)
@@ -87,4 +81,4 @@ def _resolve_runs_query(command: Command) -> tuple[list[str], bool]:
             continue
         statuses.append(part)
         index += 1
-    return statuses, False
+    return statuses

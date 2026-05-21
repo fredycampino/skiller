@@ -16,7 +16,7 @@ from skiller.domain.agent.agent_context_model import (
 )
 from skiller.domain.agent.agent_context_stats_port import AgentContextStatsPort
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_run_scope import AgentRunScope
+from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
     AgentContextStats,
@@ -35,29 +35,29 @@ class SqliteAgentContextStore(
     def append_user_message(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         text: str,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.USER_MESSAGE,
             payload=AgentUserMessagePayload(text=text),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_assistant_message(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         turn_id: str,
         message_type: str,
         text: str,
         usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
@@ -66,18 +66,18 @@ class SqliteAgentContextStore(
                 total_tokens=usage.total_tokens if usage is not None else 0,
             ),
             usage=usage,
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_call(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         tool_call: AgentToolCall,
     ) -> AgentContextEntry:
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_CALL,
             payload=AgentToolCallPayload(
                 turn_id=tool_call.turn_id,
@@ -86,19 +86,19 @@ class SqliteAgentContextStore(
                 tool=tool_call.tool,
                 args=tool_call.args,
             ),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def append_tool_result(
         self,
         *,
-        scope: AgentRunScope,
+        context: AgentContext,
         tool_result: AgentToolResult,
     ) -> AgentContextEntry:
         result = tool_result.result
         return self._append_entry(
-            run_id=scope.run_id,
-            context_id=scope.context_id,
+            run_id=context.run_id,
+            context_id=context.context_id,
             entry_type=AgentContextEntryType.TOOL_RESULT,
             payload=AgentToolResultPayload(
                 turn_id=tool_result.turn_id,
@@ -110,7 +110,7 @@ class SqliteAgentContextStore(
                 text=result.text,
                 error=result.error,
             ),
-            source_step_id=scope.agent_id,
+            source_step_id=context.agent_id,
         )
 
     def _append_entry(
@@ -427,12 +427,17 @@ def _empty_usage() -> LLMUsage:
     )
 
 
-def _usage_to_dict(usage: LLMUsage) -> dict[str, int | None]:
-    return {
+def _usage_to_dict(usage: LLMUsage) -> dict[str, int | str | None]:
+    result: dict[str, int | str | None] = {
         "prompt_tokens": usage.prompt_tokens,
         "completion_tokens": usage.completion_tokens,
         "total_tokens": usage.total_tokens,
     }
+    if usage.provider is not None:
+        result["provider"] = usage.provider
+    if usage.model is not None:
+        result["model"] = usage.model
+    return result
 
 
 def _message_type(payload: AgentContextPayload) -> str | None:
@@ -460,6 +465,8 @@ def _usage_from_json(raw_usage: object) -> LLMUsage | None:
         prompt_tokens=_optional_int(parsed.get("prompt_tokens")),
         completion_tokens=_optional_int(parsed.get("completion_tokens")),
         total_tokens=_optional_int(parsed.get("total_tokens")),
+        provider=_optional_string(parsed.get("provider")),
+        model=_optional_string(parsed.get("model")),
     )
 
 
@@ -523,6 +530,15 @@ def _last_final_usage_from_entries(entries: list[AgentContextEntry]) -> LLMUsage
 
 def _optional_int(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
         return None
     return value
 

@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any
 
 from skiller.domain.step.skill_runner_port import SkillRunnerPort
+from skiller.domain.step.step_execution_model import NotifyOutputFormat
 from skiller.domain.step.step_type import StepType
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
@@ -302,6 +303,20 @@ class SkillCheckerUseCase:
             field, code, text = required_fields[step.step_type]
             if not str(step.body.get(field, "")).strip():
                 self._add(errors, code, f"{code}: {text} (step={step.step_id})")
+
+        if step.step_type == StepType.NOTIFY.value:
+            raw_format = step.body.get("format")
+            if raw_format is not None:
+                format_value = str(raw_format).strip()
+                supported_formats = {item.value for item in NotifyOutputFormat}
+                if format_value not in supported_formats:
+                    self._add(
+                        errors,
+                        "SKILL_NOTIFY_FORMAT_UNSUPPORTED",
+                        "SKILL_NOTIFY_FORMAT_UNSUPPORTED: notify step format must be "
+                        "simple, structured or markdown "
+                        f"(step={step.step_id}, format={format_value})",
+                    )
 
         if step.step_type == StepType.AGENT.value and not str(step.body.get("task", "")).strip():
             self._add(

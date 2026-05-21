@@ -65,7 +65,7 @@ Example:
 
 ↳ run(skill_name)
    created
-   [step_type] step_id
+[step_type] step_id
    {"message":"step result"}
   succeeded
 ```
@@ -154,7 +154,7 @@ A visible execution step should render as a compact line.
 Target shape:
 
 ```text
-   [step_type] step_id
+[step_type] step_id
 ```
 
 Rules:
@@ -163,6 +163,7 @@ Rules:
 - prefer step meaning over event naming
 - include `step_type`
 - include `step_id`
+- align non-wait step headers with the `agent` header baseline
 
 ### Wait Steps (`wait_input` / `wait_webhook` / `wait_channel`)
 
@@ -438,7 +439,7 @@ Conditional routing should render inline in a single compact line.
 Target shape:
 
 ```text
-   [switch] decide_exit → support_agent
+[switch] decide_exit → support_agent
 ```
 
 Rules:
@@ -456,7 +457,7 @@ It always belongs to the previous step line.
 Example:
 
 ```text
-   [step_type] step_id
+[step_type] step_id
     visible result
 ```
 
@@ -481,7 +482,7 @@ Use this when the visible result is essentially a short message.
 Structured output may render as a formatted block under the step:
 
 ```text
-   [step_type] step_id
+[step_type] step_id
     {
       "body_ref": null,
       "text": "visible result",
@@ -557,7 +558,7 @@ Target direction:
 ```text
 ↳ run(skill_name)
    created 018f78a1-8148-4948-9566-39f69a13692f
-   [step_type] step_id
+[step_type] step_id
   error:
    step failed
 ```
@@ -598,7 +599,7 @@ Target direction:
    ...
 › hola mundo
 ↳ resume(wait_input_test)
-   [notify] done
+[notify] done
     hola mundo
   succeeded
 ```
@@ -616,9 +617,9 @@ Rules:
 
 ↳ run(skill_name)
    created 018f78a1-8148-4948-9566-39f69a13692f
-   [notify] show_message
+[notify] show_message
     visible result
-   [shell] run_check
+[shell] run_check
     {
       "value": {
         "exit_code": 0,
@@ -647,7 +648,7 @@ Rules:
 
 ↳ run(skill_name)
    created 018f78a1-8148-4948-9566-39f69a13692f
-   [shell] run_check
+[shell] run_check
   error:
    command failed
 ```

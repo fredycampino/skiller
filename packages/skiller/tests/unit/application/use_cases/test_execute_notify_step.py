@@ -6,7 +6,7 @@ from skiller.application.use_cases.shared.step_execution_result import StepExecu
 from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
-from skiller.domain.step.step_execution_model import NotifyOutput
+from skiller.domain.step.step_execution_model import NotifyOutput, NotifyOutputFormat
 
 pytestmark = pytest.mark.unit
 
@@ -55,6 +55,14 @@ def test_notify_moves_current_to_explicit_next() -> None:
     assert result.next_step_id == "done"
     assert result.execution is not None
     assert result.execution.output == NotifyOutput(text="ok", message="ok")
+    assert result.execution.to_public_output_dict() == {
+        "text": "ok",
+        "value": {
+            "message": "ok",
+            "format": NotifyOutputFormat.SIMPLE,
+        },
+        "body_ref": None,
+    }
     assert next_step.context.step_executions["show_message"] == result.execution
     assert store.updated_runs == [
         {
@@ -88,6 +96,29 @@ def test_notify_marks_completed_when_next_is_missing() -> None:
     ]
 
 
+def test_notify_persists_declared_output_format() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step({"message": "**ok**", "format": "markdown"})
+
+    result = use_case.execute(next_step)
+
+    assert result.execution is not None
+    assert result.execution.output == NotifyOutput(
+        text="**ok**",
+        message="**ok**",
+        format=NotifyOutputFormat.MARKDOWN,
+    )
+    assert result.execution.to_public_output_dict() == {
+        "text": "**ok**",
+        "value": {
+            "message": "**ok**",
+            "format": NotifyOutputFormat.MARKDOWN,
+        },
+        "body_ref": None,
+    }
+
+
 def test_notify_rejects_empty_next_when_declared() -> None:
     store = _FakeStore()
     use_case = ExecuteNotifyStepUseCase(store=store)
@@ -95,6 +126,18 @@ def test_notify_rejects_empty_next_when_declared() -> None:
 
     with pytest.raises(ValueError, match="requires non-empty next"):
         use_case.execute(next_step)
+
+
+def test_notify_rejects_unknown_output_format() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step({"message": "ok", "format": "html"})
+
+    with pytest.raises(ValueError, match="unsupported format 'html'"):
+        use_case.execute(next_step)
+
+    assert next_step.context.step_executions == {}
+    assert store.updated_runs == []
 
 
 def test_notify_rejects_invalid_message_before_persisting_step_execution() -> None:

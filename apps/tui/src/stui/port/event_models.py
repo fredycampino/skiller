@@ -6,6 +6,89 @@ from typing import TypeAlias
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class AgentOutputValue:
+    data: JsonObject | None = None
+
+
+@dataclass(frozen=True)
+class AssignOutputValue:
+    assigned: JsonValue = None
+
+
+@dataclass(frozen=True)
+class SendOutputValue:
+    channel: str = ""
+    key: str = ""
+    message: str = ""
+    message_id: str | None = None
+
+
+class NotifyOutputFormat(StrEnum):
+    SIMPLE = "simple"
+    STRUCTURED = "structured"
+    MARKDOWN = "markdown"
+
+
+@dataclass(frozen=True)
+class NotifyOutputValue:
+    message: str
+    format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+
+
+@dataclass(frozen=True)
+class ShellOutputValue:
+    ok: bool = False
+    exit_code: int = 0
+    stdout: str = ""
+    stderr: str = ""
+
+
+@dataclass(frozen=True)
+class RouteOutputValue:
+    next_step_id: str = ""
+
+
+@dataclass(frozen=True)
+class WaitInputOutputValue:
+    prompt: str = ""
+    payload: JsonObject | None = None
+
+
+@dataclass(frozen=True)
+class WaitWebhookOutputValue:
+    webhook: str = ""
+    key: str = ""
+    payload: JsonObject | None = None
+
+
+@dataclass(frozen=True)
+class WaitChannelOutputValue:
+    channel: str = ""
+    key: str = ""
+    payload: JsonObject | None = None
+
+
+@dataclass(frozen=True)
+class McpOutputValue:
+    data: JsonObject | None = None
+
+
+OutputValue: TypeAlias = (
+    AgentOutputValue
+    | AssignOutputValue
+    | SendOutputValue
+    | NotifyOutputValue
+    | ShellOutputValue
+    | RouteOutputValue
+    | WaitInputOutputValue
+    | WaitWebhookOutputValue
+    | WaitChannelOutputValue
+    | McpOutputValue
+)
 
 
 class LogEventType(StrEnum):
@@ -29,7 +112,7 @@ class LogEventType(StrEnum):
 @dataclass(frozen=True)
 class OutputPayload:
     text: str
-    value: dict[str, JsonValue] | None
+    value: OutputValue | None
     body_ref: str | None
     text_ref: str | None = None
 
@@ -84,18 +167,9 @@ class AgentAssistantMessagePayload:
 
 
 @dataclass(frozen=True)
-class AgentAssistantMessageContextPayload:
-    compaction_enabled: bool
-    max_window_ratio: float
-    max_window_tokens: int
-    total_tokens: int
-    model: str
-
-
-@dataclass(frozen=True)
 class AgentFinalAssistantMessagePayload:
     text: str
-    context: AgentAssistantMessageContextPayload
+    total_tokens: int
 
 
 @dataclass(frozen=True)

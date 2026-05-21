@@ -19,6 +19,9 @@ from stui.screen.transcript.run_resume_view import RunResumeView
 from stui.screen.transcript.run_status_view import RunStatusView
 from stui.screen.transcript.run_step_view import RunStepView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
+from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
+from stui.screen.transcript.step_output_view import StepOutputView
+from stui.screen.transcript.step_shell_output_view import StepShellOutputView
 from stui.screen.transcript.user_input_view import UserInputView
 
 __all__ = [
@@ -41,5 +44,8 @@ __all__ = [
     "RunStatusView",
     "RunStepView",
     "RunWaitingInputView",
+    "StepNotifyOutputView",
+    "StepOutputView",
+    "StepShellOutputView",
     "UserInputView",
 ]

@@ -12,12 +12,25 @@ from stui.port.event_models import (
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
+    AgentOutputValue,
     AgentStopReason,
     AgentToolResultPayload,
     AgentToolResultStatus,
+    AssignOutputValue,
     LogEventType,
+    McpOutputValue,
+    NotifyOutputFormat,
+    NotifyOutputValue,
+    OutputValue,
+    RouteOutputValue,
     RunCreatePayload,
+    RunWaitingPayload,
+    SendOutputValue,
+    ShellOutputValue,
     StepSuccessPayload,
+    WaitChannelOutputValue,
+    WaitInputOutputValue,
+    WaitWebhookOutputValue,
 )
 
 pytestmark = pytest.mark.unit
@@ -108,8 +121,201 @@ def test_cli_log_event_adapter_parses_step_success_payload() -> None:
     assert isinstance(event.payload, StepSuccessPayload)
     assert event.payload.output.text == "hello"
     assert event.payload.output.text_ref == "data.reply"
-    assert event.payload.output.value == {"data": {"reply": "hello"}}
+    assert event.payload.output.value == AgentOutputValue(data={"reply": "hello"})
     assert event.payload.next_step_id == "ask_user"
+
+
+def test_cli_log_event_adapter_maps_notify_output_value() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "show_reply",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "**hello**",
+                        "value": {"message": "**hello**", "format": "markdown"},
+                        "body_ref": None,
+                    },
+                    "next": "ask_user",
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.text == "**hello**"
+    assert event.payload.output.value == NotifyOutputValue(
+        message="**hello**",
+        format=NotifyOutputFormat.MARKDOWN,
+    )
+
+
+def test_cli_log_event_adapter_defaults_notify_output_format() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "show_reply",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "hello",
+                        "value": {"message": "hello"},
+                        "body_ref": None,
+                    },
+                    "next": "ask_user",
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == NotifyOutputValue(
+        message="hello",
+        format=NotifyOutputFormat.SIMPLE,
+    )
+
+
+@pytest.mark.parametrize(
+    ("step_type", "value", "expected"),
+    [
+        (
+            "assign",
+            {"assigned": {"action": "retry"}},
+            AssignOutputValue(assigned={"action": "retry"}),
+        ),
+        (
+            "send",
+            {
+                "channel": "email",
+                "key": "summary",
+                "message": "done",
+                "message_id": "msg-1",
+            },
+            SendOutputValue(
+                channel="email",
+                key="summary",
+                message="done",
+                message_id="msg-1",
+            ),
+        ),
+        (
+            "shell",
+            {"ok": True, "exit_code": 0, "stdout": "ready", "stderr": ""},
+            ShellOutputValue(ok=True, exit_code=0, stdout="ready", stderr=""),
+        ),
+        (
+            "switch",
+            {"next_step_id": "when_sample"},
+            RouteOutputValue(next_step_id="when_sample"),
+        ),
+        (
+            "mcp",
+            {"data": {"status": "ok"}},
+            McpOutputValue(data={"status": "ok"}),
+        ),
+    ],
+)
+def test_cli_log_event_adapter_maps_step_success_output_values(
+    step_type: str,
+    value: dict[str, object],
+    expected: OutputValue,
+) -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "sample",
+                "step_type": step_type,
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "done",
+                        "value": value,
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == expected
+
+
+@pytest.mark.parametrize(
+    ("step_type", "value", "expected"),
+    [
+        (
+            "wait_input",
+            {"prompt": "Write a message.", "payload": None},
+            WaitInputOutputValue(prompt="Write a message."),
+        ),
+        (
+            "wait_webhook",
+            {"webhook": "deploy", "key": "status", "payload": {"ok": True}},
+            WaitWebhookOutputValue(
+                webhook="deploy",
+                key="status",
+                payload={"ok": True},
+            ),
+        ),
+        (
+            "wait_channel",
+            {"channel": "chat", "key": "message", "payload": {"text": "hello"}},
+            WaitChannelOutputValue(
+                channel="chat",
+                key="message",
+                payload={"text": "hello"},
+            ),
+        ),
+    ],
+)
+def test_cli_log_event_adapter_maps_run_waiting_output_values(
+    step_type: str,
+    value: dict[str, object],
+    expected: OutputValue,
+) -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "RUN_WAITING",
+                "step_id": "ask_user",
+                "step_type": step_type,
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "Write a message.",
+                        "value": value,
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, RunWaitingPayload)
+    assert event.payload.output.value == expected
 
 
 def test_cli_log_event_adapter_parses_agent_tool_result_payload() -> None:
@@ -187,13 +393,7 @@ def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() ->
                 "created_at": "2026-05-12T10:30:20Z",
                 "payload": {
                     "text": "Done",
-                    "context": {
-                        "compaction_enabled": False,
-                        "max_window_ratio": 0.8,
-                        "max_window_tokens": 1000000,
-                        "total_tokens": 2144,
-                        "model": "MiniMax-M2.5",
-                    },
+                    "total_tokens": 2144,
                 },
             }
         ]
@@ -202,8 +402,7 @@ def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() ->
     assert event.event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE
     assert isinstance(event.payload, AgentFinalAssistantMessagePayload)
     assert event.payload.text == "Done"
-    assert event.payload.context.total_tokens == 2144
-    assert event.payload.context.model == "MiniMax-M2.5"
+    assert event.payload.total_tokens == 2144
 
 
 def test_cli_log_event_adapter_parses_agent_lifecycle_payload() -> None:

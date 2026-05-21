@@ -5,6 +5,8 @@ from types import ModuleType
 from typing import Iterator
 
 from stui.di.container import build_tui_container
+from stui.di.strings import TuiStrings
+from stui.port.installation_state_port import InstallationState
 from stui.port.run_port import (
     CommandAck,
     CommandAckStatus,
@@ -28,14 +30,32 @@ def build_viewmodel(
     waiting_port,
     runs_port=None,
     agent_port=None,
+    installation_state_port=None,
+    strings: TuiStrings | None = None,
 ) -> ConsoleScreenViewModel:
     resolved_events_port = events_port or FakeEventsPort()
+    resolved_installation_state_port = (
+        installation_state_port or FakeInstallationStatePort()
+    )
+    if strings is None:
+        container = build_tui_container(
+            run_port=run_port,
+            events_port=resolved_events_port,
+            runs_port=runs_port,
+            waiting_port=waiting_port,
+            agent_port=agent_port,
+            installation_state_port=resolved_installation_state_port,
+        )
+        return container.build_viewmodel(session_key=session_key)
+
     container = build_tui_container(
+        strings=strings,
         run_port=run_port,
         events_port=resolved_events_port,
         runs_port=runs_port,
         waiting_port=waiting_port,
         agent_port=agent_port,
+        installation_state_port=resolved_installation_state_port,
     )
     return container.build_viewmodel(session_key=session_key)
 
@@ -135,3 +155,17 @@ class FakeEventsPort:
         self.unsubscribe_call_count += 1
         self.current_listener = None
         self.current_run_id = ""
+
+
+class FakeInstallationStatePort:
+    def __init__(
+        self,
+        state: InstallationState | None = None,
+    ) -> None:
+        self.state = state or InstallationState(
+            runtime_db_exists=True,
+            agent_config_exists=True,
+        )
+
+    def read(self) -> InstallationState:
+        return self.state

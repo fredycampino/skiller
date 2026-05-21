@@ -3,16 +3,22 @@ from helpers.agent_config import agent_runner_config
 
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
-from skiller.application.agent.runner_state import AgentRunnerState
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
     AgentUserMessagePayload,
 )
+from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.tool.tool_contract import ToolConfig
 
 pytestmark = pytest.mark.unit
+
+NOTIFY_TOOL_CONFIG = ToolConfig(
+    name="notify",
+    description="Send notification",
+    parameters_schema={"type": "object", "properties": {}},
+)
 
 
 def test_agent_context_manager_builds_llm_request_from_current_context() -> None:
@@ -36,27 +42,19 @@ def test_agent_context_manager_builds_llm_request_from_current_context() -> None
         agent_context_store=store,
         prompt_builder=AgentPromptBuilder(),
     )
-    state = AgentRunnerState(
+    context = AgentContext(
         run_id="run-1",
         agent_id="agent-1",
         context_id="ctx-1",
-        config=agent_runner_config(
-            task="Task",
-            system="Be useful.",
-            context_id="ctx-1",
-            max_turns=1,
-            tools=["notify"],
-        ),
-        enabled_tools=[
-            ToolConfig(
-                name="notify",
-                description="Send notification",
-                parameters_schema={"type": "object", "properties": {}},
-            )
-        ],
+    )
+    config = agent_runner_config(
+        task="Task",
+        system="Be useful.",
+        max_turns=1,
+        tools=(NOTIFY_TOOL_CONFIG,),
     )
 
-    result = manager.build_llm_request(state=state)
+    result = manager.build_llm_request(context=context, config=config)
 
     assert result.turn_id == "turn-2"
     assert [message.role.value for message in result.llm_request.messages] == [
@@ -106,21 +104,19 @@ def test_agent_context_manager_builds_window_context_without_changing_default_re
         agent_context_store=store,
         prompt_builder=AgentPromptBuilder(),
     )
-    state = AgentRunnerState(
+    context = AgentContext(
         run_id="run-1",
         agent_id="agent-1",
         context_id="ctx-1",
-        config=agent_runner_config(
-            task="Task",
-            system="Be useful.",
-            context_id="ctx-1",
-            max_turns=1,
-        ),
-        enabled_tools=[],
+    )
+    config = agent_runner_config(
+        task="Task",
+        system="Be useful.",
+        max_turns=1,
     )
 
-    default_result = manager.build_llm_request(state=state)
-    window_result = manager.build_window_context(state=state)
+    default_result = manager.build_llm_request(context=context, config=config)
+    window_result = manager.build_window_context(context=context, config=config)
 
     assert default_result.llm_request.messages[1].content == "Full context"
     assert window_result.context_id == "ctx-1"
@@ -175,20 +171,18 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
         agent_context_store=store,
         prompt_builder=AgentPromptBuilder(),
     )
-    state = AgentRunnerState(
+    context = AgentContext(
         run_id="run-1",
         agent_id="agent-1",
         context_id="ctx-1",
-        config=agent_runner_config(
-            task="Task",
-            system="Be useful.",
-            context_id="ctx-1",
-            max_turns=1,
-        ),
-        enabled_tools=[],
+    )
+    config = agent_runner_config(
+        task="Task",
+        system="Be useful.",
+        max_turns=1,
     )
 
-    result = manager.build_window_context(state=state)
+    result = manager.build_window_context(context=context, config=config)
 
     assert result.context_window_tokens == 80_000
     assert result.max_ratio == 0.8

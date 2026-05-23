@@ -3,26 +3,13 @@ import os
 from pathlib import Path
 
 from skiller.infrastructure.config.settings_model import Settings
-from skiller.infrastructure.tools.shell.config import resolve_shell_settings
 
 
 def get_settings() -> Settings:
     config = _load_config()
-    agent_config_path, agent_explicit = _resolve_agent_config_path()
-    agent_config = _load_json_config_file(
-        config_path=agent_config_path,
-        env_name="AGENT_AGENT_CONFIG_FILE",
-        explicit=agent_explicit,
-    )
-    agent_runtime_config = _extract_agent_runtime_config(agent_config)
-    if agent_runtime_config:
-        _merge_agent_config(config, agent_runtime_config)
-
-    shell_settings = resolve_shell_settings(agent_config_path)
 
     return Settings(
         db_path=_path_setting("AGENT_DB_PATH", config, ("runtime", "db_path"), "./runtime.db"),
-        agent_config_path=str(agent_config_path),
         log_level=_string_setting("AGENT_LOG_LEVEL", config, ("runtime", "log_level"), "INFO"),
         webhooks_host=_string_setting(
             "AGENT_WEBHOOKS_HOST",
@@ -48,38 +35,6 @@ def get_settings() -> Settings:
                 10,
             )
         ),
-        agent_shell_allowlist_enabled=shell_settings.allowlist_enabled,
-        agent_shell_allowlist_workspace=shell_settings.workspace,
-        agent_shell_allowlist_allow_env_prefix=shell_settings.allow_env_prefix,
-        agent_shell_allowlist_allowed_commands=shell_settings.allowed_commands,
-        agent_shell_sandbox_enabled=shell_settings.sandbox_enabled,
-        agent_event_output_truncate_enabled=_bool_setting(
-            "AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED",
-            config,
-            ("agent", "event_output", "truncate", "enabled"),
-            True,
-        ),
-        agent_event_output_max_text_chars=_positive_int_setting_with_fallback(
-            "AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS",
-            config,
-            primary_path=("agent", "event_output", "truncate", "max_text_chars"),
-            fallback_path=("agent", "event_output", "max_text_chars"),
-            default=600,
-        ),
-        agent_event_output_max_json_chars=_positive_int_setting_with_fallback(
-            "AGENT_EVENT_OUTPUT_MAX_JSON_CHARS",
-            config,
-            primary_path=("agent", "event_output", "truncate", "max_json_chars"),
-            fallback_path=("agent", "event_output", "max_json_chars"),
-            default=4000,
-        ),
-        agent_event_output_max_array_items=_positive_int_setting_with_fallback(
-            "AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS",
-            config,
-            primary_path=("agent", "event_output", "truncate", "max_array_items"),
-            fallback_path=("agent", "event_output", "max_array_items"),
-            default=20,
-        ),
     )
 
 
@@ -99,18 +54,6 @@ def _resolve_json_config_path(*, env_name: str, default_path: Path) -> tuple[Pat
     explicit_path = os.environ.get(env_name, "").strip()
     config_path = Path(explicit_path).expanduser() if explicit_path else default_path
     return config_path, bool(explicit_path)
-
-
-def _resolve_agent_config_path() -> tuple[Path, bool]:
-    explicit_path = os.environ.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-    if explicit_path:
-        return Path(explicit_path).expanduser(), True
-
-    local_path = Path("./agent.json")
-    if local_path.exists():
-        return local_path, False
-
-    return Path.home() / ".skiller" / "settings" / "agent.json", False
 
 
 def _load_json_config_file(
@@ -136,43 +79,6 @@ def _load_json_config_file(
     if not isinstance(payload, dict):
         raise RuntimeError(f"Config file must contain a JSON object: {config_path}")
     return payload
-
-
-def _merge_agent_config(config: dict[str, object], agent_config: dict[str, object]) -> None:
-    raw_current = config.get("agent")
-    current_agent = raw_current if isinstance(raw_current, dict) else {}
-    merged = _deep_merge_dicts(current_agent, agent_config)
-    config["agent"] = merged
-
-
-def _extract_agent_runtime_config(agent_config: dict[str, object]) -> dict[str, object]:
-    if not agent_config:
-        return {}
-
-    root_runtime = {
-        key: value
-        for key, value in agent_config.items()
-        if key not in {"agent", "llm", "shell"}
-    }
-
-    explicit = agent_config.get("agent")
-    if explicit is None:
-        return root_runtime
-    if not isinstance(explicit, dict):
-        raise RuntimeError("agent.json field 'agent' must be a JSON object")
-
-    return _deep_merge_dicts(root_runtime, explicit)
-
-
-def _deep_merge_dicts(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:
-    merged: dict[str, object] = dict(left)
-    for key, right_value in right.items():
-        left_value = merged.get(key)
-        if isinstance(left_value, dict) and isinstance(right_value, dict):
-            merged[key] = _deep_merge_dicts(left_value, right_value)
-            continue
-        merged[key] = right_value
-    return merged
 
 
 def _display_path(path: Path) -> str:
@@ -218,52 +124,6 @@ def _path_setting(
     if value.startswith("~"):
         return str(Path(value).expanduser())
     return value
-
-
-def _positive_int_setting_with_fallback(
-    env_name: str,
-    config: dict[str, object],
-    *,
-    primary_path: tuple[str, ...],
-    fallback_path: tuple[str, ...],
-    default: int,
-) -> int:
-    if env_name in os.environ:
-        value = os.environ[env_name]
-    else:
-        primary_value = _value_at(config, primary_path)
-        if primary_value is not None:
-            value = primary_value
-        else:
-            fallback_value = _value_at(config, fallback_path)
-            value = fallback_value if fallback_value is not None else default
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(f"{env_name} must be a positive integer") from exc
-    if parsed <= 0:
-        raise RuntimeError(f"{env_name} must be a positive integer")
-    return parsed
-
-
-def _bool_setting(
-    env_name: str,
-    config: dict[str, object],
-    path: tuple[str, ...],
-    default: bool,
-) -> bool:
-    value = _setting(env_name, config, path, default)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    if isinstance(value, (int, float)):
-        return bool(value)
-    raise RuntimeError(f"{env_name} must be a boolean")
 
 
 def _value_at(config: dict[str, object], path: tuple[str, ...]) -> object | None:

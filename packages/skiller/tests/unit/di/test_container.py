@@ -57,10 +57,8 @@ def test_build_llm_model_manager_creates_expected_client_on_demand(
 
 
 def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) -> None:
-    missing_agent_config = tmp_path / "missing-agent.json"
     settings = Settings(
         db_path=str(tmp_path / "runtime.db"),
-        agent_config_path=str(missing_agent_config),
     )
 
     build_runtime_container(settings=settings, skills_dir=str(tmp_path))

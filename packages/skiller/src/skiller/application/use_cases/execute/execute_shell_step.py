@@ -1,4 +1,5 @@
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.application.use_cases.shared.step_execution_result import (
     StepAdvance,
@@ -25,11 +26,13 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         self,
         store: RunStorePort,
         shell_tool: ShellProcessTool,
+        shell_config: ShellToolRuntimeConfig,
         process_runner: ToolProcessPort,
         agent_steering_store: SteeringPort,
     ) -> None:
         self.store = store
         self.shell_tool = shell_tool
+        self.shell_config = shell_config
         self.process_runner = process_runner
         self.agent_steering_store = agent_steering_store
 
@@ -56,14 +59,20 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         if shell_request_result.request is None:
             raise ValueError(f"Shell step '{step_id}' request returned no request")
         shell_request = shell_request_result.request
-        policy_result = self.shell_tool.policy(shell_request)
+        policy_result = self.shell_tool.policy(
+            config=self.shell_config,
+            request=shell_request,
+        )
         if not policy_result.ok:
             raise ValueError(policy_result.error or f"Shell step '{step_id}' was blocked")
         if policy_result.request is None:
             raise ValueError(f"Shell step '{step_id}' policy returned no request")
         shell_request = policy_result.request
 
-        process_request = self.shell_tool.call(shell_request)
+        process_request = self.shell_tool.call(
+            config=self.shell_config,
+            request=shell_request,
+        )
         result = self._execute_shell_process(
             run_id=current_step.run_id,
             step_id=step_id,
@@ -123,9 +132,9 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             )
         )
         if wait_result.status == ToolProcessWaitStatus.TIMEOUT:
+            timeout = _format_timeout(request.timeout)
             raise ValueError(
-                f"Shell step '{step_id}' timed out after "
-                f"{self.shell_tool.format_timeout(request.timeout)}"
+                f"Shell step '{step_id}' timed out after {timeout}"
             )
         if wait_result.status == ToolProcessWaitStatus.INTERRUPTED:
             raise ValueError(f"Shell step '{step_id}' was interrupted")
@@ -195,3 +204,11 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             next_step_id=next_step_id,
             execution=execution,
         )
+
+
+def _format_timeout(timeout: int | float | None) -> str:
+    if isinstance(timeout, int):
+        return f"{timeout}s"
+    if isinstance(timeout, float):
+        return f"{timeout:g}s"
+    return "unknown timeout"

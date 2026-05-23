@@ -3,6 +3,7 @@ from helpers.agent_config import agent_runner_config
 
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
+from skiller.application.tools.notify import NotifyTool
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -10,15 +11,10 @@ from skiller.domain.agent.agent_context_model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.tool.tool_contract import ToolConfig
 
 pytestmark = pytest.mark.unit
 
-NOTIFY_TOOL_CONFIG = ToolConfig(
-    name="notify",
-    description="Send notification",
-    parameters_schema={"type": "object", "properties": {}},
-)
+NOTIFY_TOOL_DEFINITION = NotifyTool()
 
 
 def test_agent_context_manager_builds_llm_request_from_current_context() -> None:
@@ -51,7 +47,7 @@ def test_agent_context_manager_builds_llm_request_from_current_context() -> None
         task="Task",
         system="Be useful.",
         max_turns=1,
-        tools=(NOTIFY_TOOL_CONFIG,),
+        tools=(NOTIFY_TOOL_DEFINITION,),
     )
 
     result = manager.build_llm_request(context=context, config=config)

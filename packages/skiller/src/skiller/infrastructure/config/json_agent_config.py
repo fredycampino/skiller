@@ -8,38 +8,38 @@ from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.infrastructure.config.agent_config_adapter import agent_config_from_json
+from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 
 
-class JsonAgentConfigProvider(AgentConfigPort):
+class JsonAgentConfig(AgentConfigPort):
     def __init__(
         self,
         *,
-        config_path: Path,
+        config_path_global: Path,
+        config_mapper: AgentConfigMapper,
         env: Mapping[str, str],
     ) -> None:
-        self.config_path = config_path
+        self.config_path_global = config_path_global
+        self.config_mapper = config_mapper
         self.env = env
 
-    def get_config(self) -> AgentConfig:
-        return agent_config_from_json(
-            self._load_config(),
-            env=self.env,
-        )
+    def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
+        return self.config_mapper.from_json(self._load_config(config_path=config_path))
 
-    def validate_config(self) -> AgentConfigValidation:
+    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
         try:
-            self.get_config()
+            self.get_config(config_path=config_path)
         except FileNotFoundError as exc:
             return AgentConfigValidation.invalid(
                 error=AgentConfigValidationErrorCode.CONFIG_NOT_FOUND,
                 message=str(exc),
             )
         except json.JSONDecodeError as exc:
+            resolved_config_path = self._resolve_config_path(config_path=config_path)
             return AgentConfigValidation.invalid(
                 error=AgentConfigValidationErrorCode.INVALID_JSON,
                 message=(
-                    f"Invalid JSON config file: {_display_path(self.config_path)} "
+                    f"Invalid JSON config file: {_display_path(resolved_config_path)} "
                     f"(line {exc.lineno}, column {exc.colno})"
                 ),
             )
@@ -51,17 +51,31 @@ class JsonAgentConfigProvider(AgentConfigPort):
 
         return AgentConfigValidation.valid()
 
-    def _load_config(self) -> dict[str, object]:
-        config_path = self.config_path.expanduser()
-        if not config_path.exists():
-            raise FileNotFoundError(f"Missing agent config file: {_display_path(config_path)}")
+    def _load_config(self, *, config_path: Path | None = None) -> dict[str, object]:
+        resolved_config_path = self._resolve_config_path(config_path=config_path)
+        if not resolved_config_path.exists():
+            raise FileNotFoundError(
+                f"Missing agent config file: {_display_path(resolved_config_path)}"
+            )
         try:
-            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            payload = json.loads(resolved_config_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             raise
         if not isinstance(payload, dict):
-            raise ValueError(f"Config file must contain a JSON object: {config_path}")
+            raise ValueError(f"Config file must contain a JSON object: {resolved_config_path}")
         return payload
+
+    def _resolve_config_path(self, *, config_path: Path | None = None) -> Path:
+        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
+        if explicit_path:
+            return Path(explicit_path).expanduser()
+
+        if config_path is not None:
+            expanded_config_path = config_path.expanduser()
+            if expanded_config_path.exists():
+                return expanded_config_path
+
+        return self.config_path_global.expanduser()
 
 
 def _validation_error_code(message: str) -> AgentConfigValidationErrorCode:
@@ -79,6 +93,8 @@ def _validation_error_code(message: str) -> AgentConfigValidationErrorCode:
         return AgentConfigValidationErrorCode.API_KEY_MISSING
     if message.startswith("Missing api_key_file:"):
         return AgentConfigValidationErrorCode.API_KEY_FILE_MISSING
+    if message.startswith("Tool '") or message.startswith("Unknown agent tool config:"):
+        return AgentConfigValidationErrorCode.INVALID_SCHEMA
     if " must be " in message:
         return AgentConfigValidationErrorCode.ENV_OVERRIDE_INVALID
     return AgentConfigValidationErrorCode.INVALID_SCHEMA

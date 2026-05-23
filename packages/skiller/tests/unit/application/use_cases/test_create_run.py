@@ -38,8 +38,8 @@ class _FakeSkillRunner:
         self.snapshot = snapshot
         self.load_calls: list[tuple[str, str]] = []
 
-    def load_skill(self, skill_source: str, skill_ref: str) -> object:
-        self.load_calls.append((skill_source, skill_ref))
+    def load(self, source: str, ref: str) -> object:
+        self.load_calls.append((source, ref))
         return self.snapshot
 
 

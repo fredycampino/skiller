@@ -51,7 +51,7 @@ System prompt from a file:
   - `{file: "./system.md"}`: load the prompt from a UTF-8 file next to the skill file
 - `task` (required): user request for this run; templates are allowed.
 - `tools` (optional): allowlist of tool names for this step.
-- `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `agent.loop.max_turns` from `agent.json`.
+- `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `loop.max_turns` from `agent.json`.
 - `next` (optional): next step after the agent step completes normally.
 
 `system.file` must be a relative path inside the skill directory. Absolute paths
@@ -59,7 +59,7 @@ and paths escaping the skill directory are rejected.
 
 Runtime-only limits:
 
-- `agent.loop.max_tool_calls`
+- `loop.max_tool_calls`
   - limits how many native `tool_calls` one assistant response may contain
   - this is configured in `agent.json`, not in the step YAML
 
@@ -298,7 +298,7 @@ creates `WAITING`, not the `agent` step itself.
 
 Exceeded per-turn tool limit:
 
-- if one assistant response contains more than `agent.loop.max_tool_calls` tool calls,
+- if one assistant response contains more than `loop.max_tool_calls` tool calls,
   the runtime does not execute any of them
 - instead, it appends corrective feedback to the agent context and asks the LLM again
 

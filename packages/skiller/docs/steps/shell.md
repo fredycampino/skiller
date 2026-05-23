@@ -56,6 +56,19 @@
 - if `check: true`, a non-zero exit code fails the step.
 - if `check: false`, a non-zero exit code still produces `STEP_SUCCESS` with `output.value.ok = false`.
 
+## Runtime Config
+
+The `shell` step does not load configuration from `.json`.
+
+Its `ShellToolRuntimeConfig` is injected by the runtime container with the default policy:
+
+- `workspace = ""`
+- `allowlist_enabled = false`
+- `allow_env_prefix = true`
+- `allowed_commands = ()`
+
+The step YAML only controls the execution request fields documented above: `command`, `cwd`, `env`, `timeout`, `check`, and `next`.
+
 Template access:
 
 ```text

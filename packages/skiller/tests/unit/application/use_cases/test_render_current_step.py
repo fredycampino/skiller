@@ -27,18 +27,18 @@ class _FakeSkillRunner:
         self.load_calls: list[tuple[str, str]] = []
         self.read_skill_file_calls: list[tuple[str, str, str]] = []
 
-    def load_skill(self, skill_source: str, skill_ref: str):  # noqa: ANN202
-        self.load_calls.append((skill_source, skill_ref))
+    def load(self, source: str, ref: str):  # noqa: ANN202
+        self.load_calls.append((source, ref))
         return self._skill
 
-    def render_step(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
+    def render(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
         self.render_calls.append({"step": step, "context": context})
         rendered = dict(step)
         rendered["rendered"] = True
         return rendered
 
-    def read_skill_file(self, skill_source: str, skill_ref: str, file_ref: str) -> str:
-        self.read_skill_file_calls.append((skill_source, skill_ref, file_ref))
+    def read_file(self, source: str, ref: str, file_ref: str) -> str:
+        self.read_skill_file_calls.append((source, ref, file_ref))
         return "Resolved system prompt"
 
 

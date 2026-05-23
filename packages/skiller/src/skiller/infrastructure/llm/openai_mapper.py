@@ -15,7 +15,7 @@ from skiller.domain.agent.llm_model import (
     LLMToolChoiceMode,
     LLMUsage,
 )
-from skiller.domain.tool.tool_contract import ToolConfig
+from skiller.domain.tool.tool_contract import ToolDefinition
 
 
 def to_openai_kwargs(request: LLMRequest, *, default_model: str) -> dict[str, object]:
@@ -24,7 +24,7 @@ def to_openai_kwargs(request: LLMRequest, *, default_model: str) -> dict[str, ob
         "messages": [_message_to_payload(message) for message in request.messages],
     }
     if request.tools:
-        payload["tools"] = [_tool_config_to_payload(tool) for tool in request.tools]
+        payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
     if request.tool_choice is not None:
         payload["tool_choice"] = _tool_choice_value(request.tool_choice)
     if request.response_format is not None:
@@ -218,13 +218,13 @@ def _tool_call_function_to_payload(
     }
 
 
-def _tool_config_to_payload(tool: ToolConfig) -> dict[str, object]:
+def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
     payload: dict[str, object] = {
         "type": "function",
         "function": {
             "name": tool.name,
             "description": tool.description,
-            "parameters": dict(tool.parameters_schema),
+            "parameters": dict(tool.schema().value),
         },
     }
     return payload

@@ -1,10 +1,10 @@
 # E. Max Turns
 
-Purpose: verify that `agent.loop.max_turns` stops an agent step that keeps
+Purpose: verify that `loop.max_turns` stops an agent step that keeps
 requesting more tool turns without producing a final answer.
 
 This test is different from `C-tool-call-limit.md`: it does not validate
-`agent.loop.max_tool_calls`. It validates that the agent runner stops after the
+`loop.max_tool_calls`. It validates that the agent runner stops after the
 configured number of assistant turns.
 
 Prompt:
@@ -41,7 +41,7 @@ Commands:
 Expected behavior:
 
 - The agent executes at most one shell tool call per assistant turn.
-- If `agent.loop.max_turns` is lower than the number of turns needed to finish,
+- If `loop.max_turns` is lower than the number of turns needed to finish,
   the agent runner stops before the final answer.
 - Agent context receives one max-turns control `user_message`.
 - Runtime emits `AGENT_MAX_TURNS_EXHAUSTED`.

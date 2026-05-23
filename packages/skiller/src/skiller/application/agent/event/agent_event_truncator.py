@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentToolCallPayload,
@@ -17,6 +18,16 @@ class AgentEventOutputPolicy:
     max_text_chars: int = 600
     max_json_chars: int = 4000
     max_array_items: int = 20
+
+    @classmethod
+    def from_config(cls, config: AgentEventOutputConfig) -> "AgentEventOutputPolicy":
+        truncate = config.truncate
+        return cls(
+            truncate_enabled=truncate.enabled,
+            max_text_chars=truncate.max_text_chars,
+            max_json_chars=truncate.max_json_chars,
+            max_array_items=truncate.max_array_items,
+        )
 
 
 class AgentEventTruncator:

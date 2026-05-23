@@ -2,6 +2,8 @@ import re
 import shlex
 from pathlib import Path
 
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
+
 
 class ShellCommandPolicy:
     _SEGMENT_OPERATORS: set[str] = {"&&", "||", ";", "|"}
@@ -22,23 +24,16 @@ class ShellCommandPolicy:
     def __init__(
         self,
         *,
-        workspace_root: str | None = None,
-        allowlist_enabled: bool = False,
-        allowed_commands: list[str] | None = None,
-        allow_env_prefix: bool = True,
-        sandbox_enabled: bool = False,
+        config: ShellToolRuntimeConfig,
     ) -> None:
-        if sandbox_enabled:
-            raise RuntimeError("shell sandbox is not implemented yet")
-
-        self.workspace_root = self._resolve_workspace_root(workspace_root)
-        self.allowlist_enabled = allowlist_enabled
+        self.workspace_root = self._resolve_workspace_root(config.workspace)
+        self.allowlist_enabled = config.allowlist_enabled
         self.allowed_commands = {
             command.strip()
-            for command in (allowed_commands or [])
+            for command in config.allowed_commands
             if isinstance(command, str) and command.strip()
         }
-        self.allow_env_prefix = allow_env_prefix
+        self.allow_env_prefix = config.allow_env_prefix
 
     def resolve_cwd(self, cwd: str | None) -> str:
         if cwd is None:

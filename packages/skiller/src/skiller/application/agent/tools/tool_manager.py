@@ -3,29 +3,25 @@ from enum import Enum
 
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.domain.tool.tool_contract import (
+    ConfiguredTool,
     Tool,
-    ToolConfig,
+    ToolDefinition,
     ToolInput,
     ToolPolicy,
     ToolPolicyResult,
     ToolRequest,
     ToolResult,
     ToolResultStatus,
-    ToolSpec,
+    ToolRuntimeConfig,
 )
-
-
-@dataclass(frozen=True)
-class _ToolBinding:
-    tool: ToolSpec
-    config: ToolConfig
 
 
 @dataclass(frozen=True)
 class PreparedTool:
     name: str
-    tool: ToolSpec
+    tool: ToolDefinition
     request: ToolRequest
+    config: ToolRuntimeConfig | None
 
 
 class ToolPrepareFailure(str, Enum):
@@ -47,33 +43,26 @@ class ToolPrepareResult:
 class ToolManager:
     def __init__(
         self,
-        tools: list[ToolSpec],
+        tools: list[ToolDefinition],
     ) -> None:
-        self._bindings_by_name: dict[str, _ToolBinding] = {}
+        self._tools_by_name: dict[str, ToolDefinition] = {}
 
         for tool in tools:
-            if tool.name in self._bindings_by_name:
+            if tool.name in self._tools_by_name:
                 raise ValueError(f"Agent tool '{tool.name}' is configured more than once")
 
-            tool_config = getattr(tool, "config", None)
-            if not isinstance(tool_config, ToolConfig):
-                raise ValueError(f"Agent tool '{tool.name}' does not have a config")
+            self._tools_by_name[tool.name] = tool
 
-            self._bindings_by_name[tool.name] = _ToolBinding(
-                tool=tool,
-                config=tool_config,
-            )
-
-    def get_tools(self, allowed_tools: list[str]) -> list[ToolSpec]:
-        resolved: list[ToolSpec] = []
+    def get_tools(self, allowed_tools: list[str]) -> list[ToolDefinition]:
+        resolved: list[ToolDefinition] = []
         for tool_type in allowed_tools:
-            resolved.append(self._get_binding(tool_type).tool)
+            resolved.append(self._get_tool(tool_type))
         return resolved
 
-    def get_tool_configs(self, allowed_tools: list[str]) -> list[ToolConfig]:
-        resolved: list[ToolConfig] = []
+    def get_tool_definitions(self, allowed_tools: list[str]) -> list[ToolDefinition]:
+        resolved: list[ToolDefinition] = []
         for tool_type in allowed_tools:
-            resolved.append(self._get_binding(tool_type).config)
+            resolved.append(self._get_tool(tool_type))
         return resolved
 
     def prepare(self, request: AgentToolRequest) -> ToolPrepareResult:
@@ -85,17 +74,32 @@ class ToolManager:
                 error_message=f"Tool '{request.tool}' is not allowed in this step",
             )
 
-        binding = self._bindings_by_name.get(request.tool)
-        if binding is None:
+        tool = self._tools_by_name.get(request.tool)
+        if tool is None:
             return ToolPrepareResult(
                 ok=False,
                 tool_name=request.tool,
                 error=ToolPrepareFailure.REQUEST_INVALID,
                 error_message=f"Tool '{request.tool}' is not configured",
             )
+        runtime_config = request.runtime_config
+        if runtime_config is not None and runtime_config.definition.name != request.tool:
+            return ToolPrepareResult(
+                ok=False,
+                tool_name=request.tool,
+                error=ToolPrepareFailure.REQUEST_INVALID,
+                error_message=f"Tool '{request.tool}' received mismatched runtime config",
+            )
+        if isinstance(tool, ConfiguredTool) and runtime_config is None:
+            return ToolPrepareResult(
+                ok=False,
+                tool_name=request.tool,
+                error=ToolPrepareFailure.REQUEST_INVALID,
+                error_message=f"Tool '{request.tool}' requires runtime config",
+            )
 
         try:
-            request_result = binding.tool.request(
+            request_result = tool.request(
                 ToolInput(
                     run_id=request.run_id,
                     step_id=request.step_id,
@@ -127,8 +131,11 @@ class ToolManager:
         typed_request = request_result.request
 
         try:
-            if isinstance(binding.tool, ToolPolicy):
-                policy_result = binding.tool.policy(typed_request)
+            if isinstance(tool, ToolPolicy):
+                policy_result = tool.policy(
+                    config=runtime_config,
+                    request=typed_request,
+                )
             else:
                 policy_result = ToolPolicyResult.allowed(typed_request)
         except Exception as exc:  # noqa: BLE001
@@ -158,8 +165,9 @@ class ToolManager:
             tool_name=request.tool,
             prepared=PreparedTool(
                 name=request.tool,
-                tool=binding.tool,
+                tool=tool,
                 request=policy_result.request,
+                config=runtime_config,
             ),
         )
 
@@ -169,7 +177,10 @@ class ToolManager:
                 raise ValueError(
                     f"Agent tool '{prepared.name}' does not support direct execution"
                 )
-            typed_result = prepared.tool.run(prepared.request)
+            typed_result = prepared.tool.run(
+                config=prepared.config,
+                request=prepared.request,
+            )
             if not isinstance(typed_result, ToolResult):
                 raise ValueError(f"Agent tool '{prepared.name}' returned invalid result")
             if typed_result.name != prepared.name:
@@ -186,8 +197,8 @@ class ToolManager:
                 error=str(exc).strip() or f"Agent tool '{prepared.name}' failed",
             )
 
-    def _get_binding(self, tool_name: str) -> _ToolBinding:
-        binding = self._bindings_by_name.get(tool_name)
-        if binding is None:
+    def _get_tool(self, tool_name: str) -> ToolDefinition:
+        tool = self._tools_by_name.get(tool_name)
+        if tool is None:
             raise ValueError(f"Agent tool '{tool_name}' is not configured")
-        return binding
+        return tool

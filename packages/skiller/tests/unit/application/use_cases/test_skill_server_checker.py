@@ -14,8 +14,8 @@ class _FakeSkillRunner:
         self.skill = skill
         self.calls: list[dict[str, str]] = []
 
-    def load_skill(self, skill_source: str, skill_ref: str) -> object:
-        self.calls.append({"skill_source": skill_source, "skill_ref": skill_ref})
+    def load(self, source: str, ref: str) -> object:
+        self.calls.append({"skill_source": source, "skill_ref": ref})
         return self.skill
 
 

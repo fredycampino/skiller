@@ -1,13 +1,16 @@
 from dataclasses import dataclass
+from typing import ClassVar
 
-from skiller.application.tools.notify.config import NotifyToolConfig
 from skiller.domain.tool.tool_contract import (
     Tool,
+    ToolDefinition,
     ToolInput,
     ToolRequest,
     ToolRequestResult,
     ToolResult,
     ToolResultStatus,
+    ToolRuntimeConfig,
+    ToolSchema,
 )
 
 
@@ -16,9 +19,21 @@ class NotifyToolRequest(ToolRequest):
     message: str
 
 
-class NotifyTool(Tool[NotifyToolRequest]):
-    name = "notify"
-    config = NotifyToolConfig()
+class NotifyTool(ToolDefinition[NotifyToolRequest], Tool[NotifyToolRequest]):
+    name: ClassVar[str] = "notify"
+    description: ClassVar[str] = "Send a notification message to the active channel"
+
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            value={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                },
+                "required": ["message"],
+                "additionalProperties": False,
+            }
+        )
 
     def request(self, input: ToolInput) -> ToolRequestResult[NotifyToolRequest]:
         try:
@@ -28,7 +43,12 @@ class NotifyTool(Tool[NotifyToolRequest]):
         except ValueError as exc:
             return ToolRequestResult.invalid(str(exc))
 
-    def run(self, request: NotifyToolRequest) -> ToolResult:
+    def run(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: NotifyToolRequest,
+    ) -> ToolResult:
         return ToolResult(
             name=self.name,
             status=ToolResultStatus.COMPLETED,

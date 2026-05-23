@@ -6,6 +6,7 @@ from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -24,7 +25,7 @@ from skiller.domain.agent.llm_model import (
     LLMUsage,
 )
 from skiller.domain.run.run_model import RunAgent
-from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus, ToolRuntimeConfigs
 from skiller.domain.tool.tool_execution_model import (
     AgentToolCall,
     AgentToolResult,
@@ -168,6 +169,8 @@ def _tool_request() -> ToolExecutionRequest:
         turn_id="turn-1",
         response=LLMResponse(ok=True),
         allowed_tools=["notify"],
+        runtime_configs=ToolRuntimeConfigs(),
+        event_config=AgentEventOutputConfig(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
     )

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
 
-from skiller.domain.tool.tool_contract import ToolConfig
+from skiller.domain.tool.tool_contract import ToolDefinition
 
 
 class LLMMessageRole(str, Enum):
@@ -127,7 +127,7 @@ class LLMResponseFormat:
 class LLMRequest:
     messages: tuple[LLMMessage, ...]
     model: str | None = None
-    tools: tuple[ToolConfig, ...] = ()
+    tools: tuple[ToolDefinition, ...] = ()
     tool_choice: LLMToolChoice | None = None
     response_format: LLMResponseFormat | None = None
     temperature: float | None = None

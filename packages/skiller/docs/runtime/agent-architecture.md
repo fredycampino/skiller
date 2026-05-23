@@ -6,7 +6,7 @@ Current runtime status:
 
 - `agent` V2 first slice is implemented
 - prompt-driven tool loop is active
-- current tools: `shell`, `notify`
+- current tools: `shell`, `notify`, `files`
 - provider-native tool calling is implemented
 - multi-tool turns are supported
 - streaming tool-call assembly is still open
@@ -31,7 +31,7 @@ stays in `RunWorkerService`. The inner agent loop stays in `ExecuteAgentStepUseC
 | `ToolExecutionPort` | domain | port | executes one agent tool batch |
 | `ToolProcessPort` | domain | port | controls OS-backed tool processes |
 | `ToolInput` | domain | model | wraps raw tool args and exposes typed helpers |
-| `ShellProcessTool`, `NotifyTool` | application | tool | reusable callable capabilities for the agent runtime |
+| `ShellProcessTool`, `NotifyTool`, `FilesTool` | application | tool | reusable callable capabilities for the agent runtime |
 | `AgentToolExecution` | application | service | persists agent tool context and runs process-backed tools |
 | `DefaultToolProcessRunner` | infrastructure | adapter | starts, polls, reads, and terminates tool processes |
 | `SqliteAgentContextStore` | infrastructure | adapter | persists `agent_context_entries` |

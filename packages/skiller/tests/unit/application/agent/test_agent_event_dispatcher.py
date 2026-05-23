@@ -4,9 +4,9 @@ import pytest
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
-from skiller.application.agent.event.agent_event_truncator import (
-    AgentEventOutputPolicy,
-    AgentEventTruncator,
+from skiller.domain.agent.agent_config_model import (
+    AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
 )
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
@@ -29,11 +29,9 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
-        AgentEventTruncator(
-            AgentEventOutputPolicy(max_text_chars=10),
-            OutputTruncator(),
-        ),
+        OutputTruncator(),
     )
+    event_output = _event_output(max_text_chars=10)
 
     publisher.emit_assistant_message(
         entry=AgentContextEntry(
@@ -51,7 +49,8 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             ),
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
-        )
+        ),
+        config=event_output,
     )
 
     assert len(store.events) == 1
@@ -71,11 +70,9 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
-        AgentEventTruncator(
-            AgentEventOutputPolicy(max_text_chars=10),
-            OutputTruncator(),
-        ),
+        OutputTruncator(),
     )
+    event_output = _event_output(max_text_chars=10)
 
     publisher.emit_final_assistant_message(
         entry=AgentContextEntry(
@@ -94,6 +91,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
         ),
+        config=event_output,
     )
 
     event = store.events[0]
@@ -108,7 +106,7 @@ def test_agent_event_publisher_emits_agent_lifecycle_events() -> None:
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
-        AgentEventTruncator(AgentEventOutputPolicy(), OutputTruncator()),
+        OutputTruncator(),
     )
 
     publisher.emit_interrupted(
@@ -139,8 +137,9 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
-        AgentEventTruncator(AgentEventOutputPolicy(), OutputTruncator()),
+        OutputTruncator(),
     )
+    event_output = AgentEventOutputConfig()
 
     publisher.emit_tool_call(
         entry=AgentContextEntry(
@@ -159,7 +158,8 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
             ),
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
-        )
+        ),
+        config=event_output,
     )
 
     event = store.events[0]
@@ -230,3 +230,11 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
 
     def get_last_event(self, run_id: str):  # noqa: ANN201
         raise NotImplementedError
+
+
+def _event_output(*, max_text_chars: int) -> AgentEventOutputConfig:
+    return AgentEventOutputConfig(
+        truncate=AgentEventOutputTruncateConfig(
+            max_text_chars=max_text_chars,
+        ),
+    )

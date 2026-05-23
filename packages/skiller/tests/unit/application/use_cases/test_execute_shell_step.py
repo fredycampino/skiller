@@ -1,6 +1,7 @@
 import pytest
 
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
@@ -110,7 +111,11 @@ def _build_use_case(
 ) -> ExecuteShellStepUseCase:
     return ExecuteShellStepUseCase(
         store=store or _FakeStore(),
-        shell_tool=ShellProcessTool(shell="/bin/bash", workspace_root="/workspace"),
+        shell_tool=ShellProcessTool(shell="/bin/bash"),
+        shell_config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            workspace="/workspace",
+        ),
         process_runner=process_runner or _FakeProcessRunner(),
         agent_steering_store=agent_steering_store or _FakeAgentSteeringStore(),
     )

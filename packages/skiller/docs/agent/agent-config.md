@@ -1,145 +1,93 @@
 # Agent Configuration
 
-This page documents agent-specific runtime configuration.
+This document describes the current `agent.json` contract as implemented by:
 
-Config files:
+- `JsonAgentConfig`
+- `AgentConfigMapper`
+- `AgentConfigModel`
+- `AgentConfig`
 
-```text
-./agent.json
-~/.skiller/settings/agent.json
-```
+## File Resolution
 
-`agent.json` is the primary user config file for agent-owned runtime features.
+The runtime selects one agent config file. It does not merge files.
 
-The runtime selects one agent config file. It does not merge `./agent.json` with
-`~/.skiller/settings/agent.json`; the first existing source in the resolution order wins.
+Resolution order:
 
-## Agent Loop
+1. `AGENT_AGENT_CONFIG_FILE`, when set
+2. `agent.json` next to the current skill `agent.yaml`, when present
+3. `~/.skiller/settings/agent.json`
 
-```json
-{
-  "agent": {
-    "loop": {
-      "max_turns": 10,
-      "max_tool_calls": 5
-    }
-  }
-}
-```
+If the selected file does not exist, config loading fails.
 
-### Fields
+## Root Shape
 
-- `agent.loop.max_turns`
-  - runner default for `agent` steps
-  - a step YAML `max_turns` value overrides this for that step
-- `agent.loop.max_tool_calls`
-  - maximum native `tool_calls` accepted from one assistant response
-  - a step YAML `max_tool_calls` value overrides this for that step
-  - if the assistant returns more than this limit, the runtime appends corrective
-    feedback to the agent context and asks the LLM again on the next turn
-
-### Resolution Order
-
-1. environment variables handled by the `AgentConfigPort` implementation
-2. `AGENT_AGENT_CONFIG_FILE`
-3. `./agent.json`
-4. `~/.skiller/settings/agent.json`
-5. adapter defaults in [`../../packages/skiller/src/skiller/infrastructure/config/agent_config_adapter.py`](../../packages/skiller/src/skiller/infrastructure/config/agent_config_adapter.py)
-
-Current adapter defaults:
-
-- `agent.loop.max_turns = 10`
-- `agent.loop.max_tool_calls = 5`
-
-## Agent Context Window
-
-```json
-{
-  "agent": {
-    "context": {
-      "compaction": {
-        "enabled": false,
-        "max_total_tokens_ratio": 0.8
-      }
-    }
-  }
-}
-```
-
-### Fields
-
-- `agent.context.compaction.enabled`
-  - reserved for future summarization or compaction behavior
-  - the current runner still uses a context window regardless of this flag
-- `agent.context.compaction.max_total_tokens_ratio`
-  - ratio applied to `llm.providers.<name>.context_window_tokens`
-  - defines the maximum token window used when reading agent context for the next LLM request
-
-Current adapter defaults:
-
-- `agent.context.compaction.enabled = false`
-- `agent.context.compaction.max_total_tokens_ratio = 0.8`
-
-## Shell Tool Policy
-
-```json
-{
-  "shell": {
-    "policy": {
-      "allowlist": {
-        "enabled": true,
-        "workspace": "~/projects/skiller",
-        "allow_env_prefix": true,
-        "allowed_commands": ["ls", "cat", "rg", "git", "pytest"]
-      },
-      "sandbox": {
-        "enabled": false
-      }
-    }
-  }
-}
-```
-
-### Fields
-
-- `shell.policy.allowlist.enabled`
-  - enables command allowlist enforcement
-- `shell.policy.allowlist.workspace`
-  - workspace root used by the shell tool
-- `shell.policy.allowlist.allow_env_prefix`
-  - allows `KEY=value cmd ...` prefixes before an allowed command
-- `shell.policy.allowlist.allowed_commands`
-  - allowlist of command names
-- `shell.policy.sandbox.enabled`
-  - reserved runtime flag for shell sandboxing
-
-### Resolution Order
-
-1. environment variables
-2. `AGENT_AGENT_CONFIG_FILE`
-3. `./agent.json`
-4. `~/.skiller/settings/agent.json`
-5. fallback shell config: [`../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json`](../../packages/skiller/src/skiller/infrastructure/tools/shell/config.json)
-
-Environment variables:
-
-- `AGENT_SHELL_ALLOWLIST_ENABLED`
-- `AGENT_SHELL_ALLOWLIST_WORKSPACE`
-- `AGENT_SHELL_ALLOWLIST_ALLOW_ENV_PREFIX`
-- `AGENT_SHELL_ALLOWLIST_ALLOWED_COMMANDS`
-- `AGENT_SHELL_SANDBOX_ENABLED`
-
-## LLM Providers
+`llm` is required. The other root fields are optional and use mapper/model defaults.
 
 ```json
 {
   "llm": {
-    "default_provider": "minimax",
+    "default_provider": "minimax-main",
     "providers": {
-      "minimax": {
+      "minimax-main": {
         "provider": "minimax",
         "client_type": "openai_chat_completions",
         "api_key_file": "~/.skiller/secrets/minimax_api_key",
+        "base_url": "https://api.minimax.io/v1",
+        "model": "MiniMax-M2.5",
+        "timeout_seconds": 30,
+        "context_window_tokens": 1000000
+      }
+    }
+  },
+  "loop": {
+    "max_turns": 10,
+    "max_tool_calls": 5
+  },
+  "context": {
+    "compaction": {
+      "enabled": false,
+      "max_total_tokens_ratio": 0.8
+    }
+  },
+  "event_output": {
+    "truncate": {
+      "enabled": true,
+      "max_text_chars": 600,
+      "max_json_chars": 4000,
+      "max_array_items": 20
+    }
+  },
+  "tools": {}
+}
+```
+
+The root field `agent` is explicitly rejected.
+
+## LLM
+
+`llm.default_provider` is a logical key into `llm.providers`.
+
+Each provider entry requires:
+
+- `provider`
+- `client_type`
+- `model`
+- `base_url`
+- `timeout_seconds`
+- `context_window_tokens`
+- one API key source: `api_key`, `api_key_env`, or `api_key_file`
+
+Provider entries are keyed by user-defined ids:
+
+```json
+{
+  "llm": {
+    "default_provider": "minimax-main",
+    "providers": {
+      "minimax-main": {
+        "provider": "minimax",
+        "client_type": "openai_chat_completions",
+        "api_key_env": "AGENT_MINIMAX_API_KEY",
         "base_url": "https://api.minimax.io/v1",
         "model": "MiniMax-M2.5",
         "timeout_seconds": 30,
@@ -150,50 +98,7 @@ Environment variables:
 }
 ```
 
-### Fields
-
-- `llm.default_provider`
-  - logical provider key selected by default
-- `llm.providers.<name>.provider`
-  - provider runtime type
-- `llm.providers.<name>.client_type`
-  - client implementation type used to call the provider API
-- `llm.providers.<name>.api_key`
-  - inline secret value
-- `llm.providers.<name>.api_key_env`
-  - environment variable name holding the secret
-- `llm.providers.<name>.api_key_file`
-  - file path containing the secret
-- `llm.providers.<name>.base_url`
-  - provider base URL
-- `llm.providers.<name>.model`
-  - provider model name
-  - validated against the supported model list for `provider`
-- `llm.providers.<name>.timeout_seconds`
-  - request timeout
-- `llm.providers.<name>.context_window_tokens`
-  - maximum model context window used by context management
-
-### Resolution Order
-
-1. environment variables
-2. `AGENT_AGENT_CONFIG_FILE`
-3. `./agent.json`
-4. `~/.skiller/settings/agent.json`
-
-Environment variables:
-
-- `AGENT_LLM_PROVIDER`
-- `AGENT_FAKE_MODEL`
-- `AGENT_MINIMAX_API_KEY`
-- `AGENT_MINIMAX_BASE_URL`
-- `AGENT_MINIMAX_MODEL`
-- `AGENT_MINIMAX_TIMEOUT_SECONDS`
-
-Model overrides from environment variables are validated after resolution. An unsupported
-override fails config loading.
-
-### Supported Provider Models
+Supported provider/model/client combinations:
 
 | Provider | Client type | Models |
 | --- | --- | --- |
@@ -202,61 +107,221 @@ override fails config loading.
 | `minimax` | `openai_chat_completions` | `MiniMax-M2.5`, `MiniMax-M2.7` |
 | `openai` | `openai_chat_completions` | `gpt-5.2`, `gpt-5.2-mini` |
 
-`provider` identifies the product/provider. `client_type` identifies the protocol adapter used
-to call it. A provider can use an OpenAI-compatible client without becoming an OpenAI provider.
+`provider` identifies the product/provider. `client_type` identifies the client protocol used to call it.
 
-## Agent Event Output Policy
+## LLM Env Overrides
+
+These env vars are supported:
+
+- `AGENT_LLM_PROVIDER`
+- `AGENT_<PROVIDER>_API_KEY`
+- `AGENT_<PROVIDER>_BASE_URL`
+- `AGENT_<PROVIDER>_MODEL`
+- `AGENT_<PROVIDER>_TIMEOUT_SECONDS`
+
+Provider-specific env vars apply only to the selected provider.
+
+Examples for `provider = "minimax"`:
+
+- `AGENT_MINIMAX_API_KEY`
+- `AGENT_MINIMAX_BASE_URL`
+- `AGENT_MINIMAX_MODEL`
+- `AGENT_MINIMAX_TIMEOUT_SECONDS`
+
+Environment model overrides are validated against the supported model list.
+
+## Loop
 
 ```json
 {
-  "agent": {
-    "event_output": {
-      "truncate": {
-        "enabled": true,
-        "max_text_chars": 600,
-        "max_json_chars": 4000,
-        "max_array_items": 20
-      }
+  "loop": {
+    "max_turns": 10,
+    "max_tool_calls": 5
+  }
+}
+```
+
+Fields:
+
+- `loop.max_turns`: default max LLM decision turns for an `agent` step
+- `loop.max_tool_calls`: max native tool calls accepted from one assistant response
+
+Defaults:
+
+- `loop.max_turns = 10`
+- `loop.max_tool_calls = 5`
+
+Env overrides:
+
+- `AGENT_LOOP_MAX_TURNS`
+- `AGENT_LOOP_MAX_TOOL_CALLS`
+
+Step YAML `max_turns` and `max_tool_calls` override these values for that step.
+
+## Context
+
+```json
+{
+  "context": {
+    "compaction": {
+      "enabled": false,
+      "max_total_tokens_ratio": 0.8
     }
   }
 }
 ```
 
-### Fields
+Fields:
 
-- `agent.event_output.truncate.enabled`
-  - enables output truncation
-- `agent.event_output.truncate.max_text_chars`
-  - maximum text size before truncation
-- `agent.event_output.truncate.max_json_chars`
-  - maximum serialized JSON size before truncation
-- `agent.event_output.truncate.max_array_items`
-  - maximum array items kept in sanitized output
+- `context.compaction.enabled`: reserved compaction flag
+- `context.compaction.max_total_tokens_ratio`: ratio applied to the provider `context_window_tokens`
 
-### Resolution Order
+Defaults:
 
-1. environment variables
-2. `AGENT_AGENT_CONFIG_FILE`
-3. `./agent.json`
-4. `~/.skiller/settings/agent.json`
-5. runtime defaults in [`../../packages/skiller/src/skiller/infrastructure/config/settings_model.py`](../../packages/skiller/src/skiller/infrastructure/config/settings_model.py)
+- `context.compaction.enabled = false`
+- `context.compaction.max_total_tokens_ratio = 0.8`
 
-## Legacy Compatibility
+There are no context env overrides in the current mapper.
 
-These keys are still accepted and map to `agent.event_output.truncate.*`:
+## Event Output
 
-- `agent.event_output.max_text_chars`
-- `agent.event_output.max_json_chars`
-- `agent.event_output.max_array_items`
+```json
+{
+  "event_output": {
+    "truncate": {
+      "enabled": true,
+      "max_text_chars": 600,
+      "max_json_chars": 4000,
+      "max_array_items": 20
+    }
+  }
+}
+```
 
-Environment variables:
+Fields:
+
+- `event_output.truncate.enabled`
+- `event_output.truncate.max_text_chars`
+- `event_output.truncate.max_json_chars`
+- `event_output.truncate.max_array_items`
+
+Defaults:
+
+- `event_output.truncate.enabled = true`
+- `event_output.truncate.max_text_chars = 600`
+- `event_output.truncate.max_json_chars = 4000`
+- `event_output.truncate.max_array_items = 20`
+
+Env overrides:
 
 - `AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED`
 - `AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS`
 - `AGENT_EVENT_OUTPUT_MAX_JSON_CHARS`
 - `AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS`
 
+The event output config is passed to agent event publishing when emitting agent messages, tool calls, and tool results.
+
+## Tools
+
+`tools` is optional.
+
+The mapper only accepts keys for tools registered in the runtime container. Current registered agent tools:
+
+- `shell`
+- `notify`
+- `files`
+
+Only tools that implement `ConfiguredTool` read runtime config from `agent.json`.
+
+Current state:
+
+- `shell` supports runtime config
+- `notify` does not read runtime config
+- `files` supports runtime config
+
+Valid shell config:
+
+```json
+{
+  "tools": {
+    "shell": {
+      "workspace": "",
+      "allowlist_enabled": false,
+      "allow_env_prefix": true,
+      "allowed_commands": []
+    }
+  }
+}
+```
+
+Shell config fields:
+
+- `tools.shell.workspace`
+- `tools.shell.allowlist_enabled`
+- `tools.shell.allow_env_prefix`
+- `tools.shell.allowed_commands`
+
+Shell config defaults:
+
+- `workspace = ""`
+- `allowlist_enabled = false`
+- `allow_env_prefix = true`
+- `allowed_commands = ()`
+
+Valid files config:
+
+```json
+{
+  "tools": {
+    "files": {
+      "read": ["."],
+      "write": ["."],
+      "all": []
+    }
+  }
+}
+```
+
+Files config fields:
+
+- `tools.files.read`
+- `tools.files.write`
+- `tools.files.all`
+
+Files config defaults:
+
+- `read = ()`
+- `write = ()`
+- `all = ()`
+
+`tools.files.all` grants both read and write access. `tools.files.read` only grants read access. `tools.files.write` grants write and edit access.
+
+Unknown tool config keys fail config mapping. Registered tools that do not implement `ConfiguredTool` do not read runtime config.
+
+There are no tool env overrides in the current mapper.
+
+## Validation Behavior
+
+Config loading uses the provider and mapper above.
+
+Config loading validates:
+
+- missing selected config file
+- invalid JSON
+- invalid schema
+- missing default LLM provider
+- unsupported provider model
+- unsupported provider/client pairing
+- missing API key source
+- missing API key env var
+- missing API key file
+- invalid env override values
+- invalid tool runtime config
+
 ## Related Docs
 
-- [`../configuration.md`](../configuration.md)
+- [`../config/config.md`](../config/config.md)
+- [`./agent-context.md`](./agent-context.md)
 - [`./agent-event.md`](./agent-event.md)
+- [`./agent-tool-dev.md`](./agent-tool-dev.md)
+- [`../steps/agent.md`](../steps/agent.md)

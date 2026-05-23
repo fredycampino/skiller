@@ -4,30 +4,30 @@ from skiller.application.agent.tools.tool_manager import ToolManager, ToolPrepar
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.tools.notify import NotifyToolRequest
 from skiller.application.tools.shell import ShellProcessTool, ShellToolRequest
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.domain.tool.tool_contract import (
-    ToolConfig,
+    ToolDefinition,
     ToolInput,
     ToolRequestResult,
     ToolResult,
     ToolResultStatus,
+    ToolRuntimeConfig,
+    ToolSchema,
 )
 
 pytestmark = pytest.mark.unit
 
 
-class _FakeCommandTool:
+class _FakeCommandTool(ToolDefinition[ShellToolRequest]):
+    name = "shell"
+    description = "Fake shell tool"
+
     def __init__(
         self,
         *,
         result: ToolResult | None = None,
         error: Exception | None = None,
     ) -> None:
-        self.name = "shell"
-        self.config = ToolConfig(
-            name="shell",
-            description="Fake shell tool",
-            parameters_schema={},
-        )
         self.result = result or ToolResult(
             name="shell",
             status=ToolResultStatus.COMPLETED,
@@ -38,12 +38,20 @@ class _FakeCommandTool:
         self.error = error
         self.run_calls: list[ShellToolRequest] = []
 
+    def schema(self) -> ToolSchema:
+        return ToolSchema(value={})
+
     def request(self, input: ToolInput) -> ToolRequestResult[ShellToolRequest]:
         return ToolRequestResult.valid(
             ShellToolRequest(command=input.require_string("command"))
         )
 
-    def run(self, request: ShellToolRequest) -> ToolResult:
+    def run(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: ShellToolRequest,
+    ) -> ToolResult:
         self.run_calls.append(request)
         if self.error is not None:
             raise self.error
@@ -51,24 +59,26 @@ class _FakeCommandTool:
 
 
 class _BrokenPolicyTool(_FakeCommandTool):
-    def policy(self, request: ShellToolRequest):
+    def policy(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: ShellToolRequest,
+    ):
         _ = request
         raise RuntimeError("policy boom")
 
 
-class _FakeNotifyTool:
+class _FakeNotifyTool(ToolDefinition[NotifyToolRequest]):
+    name = "notify"
+    description = "Fake notify tool"
+
     def __init__(
         self,
         *,
         result: ToolResult | None = None,
         error: Exception | None = None,
     ) -> None:
-        self.name = "notify"
-        self.config = ToolConfig(
-            name="notify",
-            description="Fake notify tool",
-            parameters_schema={},
-        )
         self.result = result or ToolResult(
             name="notify",
             status=ToolResultStatus.COMPLETED,
@@ -79,12 +89,20 @@ class _FakeNotifyTool:
         self.error = error
         self.run_calls: list[NotifyToolRequest] = []
 
+    def schema(self) -> ToolSchema:
+        return ToolSchema(value={})
+
     def request(self, input: ToolInput) -> ToolRequestResult[NotifyToolRequest]:
         return ToolRequestResult.valid(
             NotifyToolRequest(message=input.require_string("message"))
         )
 
-    def run(self, request: NotifyToolRequest) -> ToolResult:
+    def run(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: NotifyToolRequest,
+    ) -> ToolResult:
         self.run_calls.append(request)
         if self.error is not None:
             raise self.error
@@ -96,6 +114,7 @@ def _request(
     tool: str = "shell",
     allowed_tools: list[str] | None = None,
     args: dict[str, object] | None = None,
+    runtime_config: ToolRuntimeConfig | None = None,
 ) -> AgentToolRequest:
     return AgentToolRequest(
         run_id="run-1",
@@ -106,6 +125,7 @@ def _request(
         tool=tool,
         args=args or {"command": "pwd"},
         allowed_tools=allowed_tools or ["shell"],
+        runtime_config=runtime_config,
     )
 
 
@@ -126,10 +146,17 @@ def test_router_prepares_allowed_tool_without_executing_it() -> None:
 
 
 def test_router_prepares_process_tool_without_run_method() -> None:
-    shell_tool = ShellProcessTool(shell="/bin/bash", workspace_root="/workspace")
+    shell_tool = ShellProcessTool(shell="/bin/bash")
     router = ToolManager([shell_tool])
 
-    result = router.prepare(_request())
+    result = router.prepare(
+        _request(
+            runtime_config=ShellToolRuntimeConfig(
+                definition=ShellProcessTool,
+                workspace="/workspace",
+            ),
+        )
+    )
 
     assert result.ok is True
     assert result.prepared is not None
@@ -152,16 +179,16 @@ def test_router_executes_prepared_tool() -> None:
     assert command_tool.run_calls == [ShellToolRequest(command="pwd")]
 
 
-def test_router_exposes_tool_configs_in_allowlist_order() -> None:
+def test_router_exposes_tool_definitions_in_allowlist_order() -> None:
     command_tool = _FakeCommandTool()
     notify_tool = _FakeNotifyTool()
     router = ToolManager([command_tool, notify_tool])
 
-    configs = router.get_tool_configs(["notify", "shell"])
+    definitions = router.get_tool_definitions(["notify", "shell"])
 
-    assert configs == [
-        ToolConfig(name="notify", description="Fake notify tool", parameters_schema={}),
-        ToolConfig(name="shell", description="Fake shell tool", parameters_schema={}),
+    assert definitions == [
+        notify_tool,
+        command_tool,
     ]
 
 
@@ -176,10 +203,18 @@ def test_router_prepare_rejects_tool_outside_allowlist() -> None:
 
 
 def test_router_prepare_rejects_policy_blocked_tool() -> None:
-    shell_tool = ShellProcessTool(shell="/bin/bash", workspace_root="/workspace")
+    shell_tool = ShellProcessTool(shell="/bin/bash")
     router = ToolManager([shell_tool])
 
-    result = router.prepare(_request(args={"command": "cat /etc/passwd"}))
+    result = router.prepare(
+        _request(
+            args={"command": "cat /etc/passwd"},
+            runtime_config=ShellToolRuntimeConfig(
+                definition=ShellProcessTool,
+                workspace="/workspace",
+            ),
+        )
+    )
 
     assert result.ok is False
     assert result.error == ToolPrepareFailure.POLICY_BLOCKED

@@ -1,4 +1,9 @@
-from skiller.application.agent.event.agent_event_truncator import AgentEventTruncator
+from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.application.agent.event.agent_event_truncator import (
+    AgentEventOutputPolicy,
+    AgentEventTruncator,
+)
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -20,15 +25,16 @@ class AgentEventPublisher:
     def __init__(
         self,
         runtime_event_store: RuntimeEventStorePort,
-        truncator: AgentEventTruncator,
+        output_truncator: OutputTruncator,
     ) -> None:
         self.runtime_event_store = runtime_event_store
-        self.truncator = truncator
+        self.output_truncator = output_truncator
 
     def emit_assistant_message(
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Assistant event requires assistant_message entry")
@@ -37,7 +43,8 @@ class AgentEventPublisher:
         if entry.payload.message_type != "tool_calls":
             raise ValueError("Assistant event requires tool_calls message")
 
-        payload = self.truncator.truncate_assistant_message(entry.payload)
+        truncator = self._truncator(config=config)
+        payload = truncator.truncate_assistant_message(entry.payload)
         self.runtime_event_store.append_event(
             RuntimeEventDraft(
                 run_id=entry.run_id,
@@ -58,6 +65,7 @@ class AgentEventPublisher:
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Final assistant event requires assistant_message entry")
@@ -66,7 +74,8 @@ class AgentEventPublisher:
         if entry.payload.message_type != "final":
             raise ValueError("Final assistant event requires final message")
 
-        payload = self.truncator.truncate_assistant_message(entry.payload)
+        truncator = self._truncator(config=config)
+        payload = truncator.truncate_assistant_message(entry.payload)
         self.runtime_event_store.append_event(
             RuntimeEventDraft(
                 run_id=entry.run_id,
@@ -87,6 +96,7 @@ class AgentEventPublisher:
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
         if entry.entry_type != AgentContextEntryType.TOOL_CALL:
             raise ValueError("Tool call event requires tool_call entry")
@@ -101,7 +111,9 @@ class AgentEventPublisher:
                     step_id=entry.source_step_id,
                     turn_id=entry.payload.turn_id,
                     agent_sequence=entry.sequence,
-                    body=self.truncator.truncate_tool_call(entry.payload),
+                    body=self._truncator(config=config).truncate_tool_call(
+                        entry.payload,
+                    ),
                 ),
             )
         )
@@ -110,6 +122,7 @@ class AgentEventPublisher:
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
         if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
             raise ValueError("Tool result event requires tool_result entry")
@@ -124,10 +137,16 @@ class AgentEventPublisher:
                     step_id=entry.source_step_id,
                     turn_id=entry.payload.turn_id,
                     agent_sequence=entry.sequence,
-                    body=self.truncator.truncate_tool_result(entry.payload),
+                    body=self._truncator(config=config).truncate_tool_result(
+                        entry.payload,
+                    ),
                 ),
             )
         )
+
+    def _truncator(self, *, config: AgentEventOutputConfig) -> AgentEventTruncator:
+        policy = AgentEventOutputPolicy.from_config(config)
+        return AgentEventTruncator(policy, self.output_truncator)
 
     def emit_interrupted(
         self,

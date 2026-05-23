@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from skiller.domain.step.runner_port import RunnerPort
+
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
 _FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")
 _OUTPUT_VALUE_RE = re.compile(
@@ -15,7 +17,7 @@ _OUTPUT_VALUE_RE = re.compile(
 _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
 
 
-class FilesystemSkillRunner:
+class FilesystemSkillRunner(RunnerPort):
     def __init__(
         self,
         skills_dir: str | None = None,
@@ -24,72 +26,80 @@ class FilesystemSkillRunner:
             Path(skills_dir) if skills_dir is not None else _find_default_internal_agents_dir()
         )
 
-    def load_skill(self, skill_source: str, skill_ref: str) -> dict[str, Any]:
-        if skill_source == "internal":
+    def load(self, source: str, ref: str) -> dict[str, Any]:
+        if source == "internal":
             yaml_path, json_path = _resolve_internal_skill_paths(
                 catalog_dir=self.skills_dir,
-                skill_ref=skill_ref,
+                ref=ref,
             )
-        elif skill_source == "file":
-            path = Path(skill_ref)
+        elif source == "file":
+            path = Path(ref)
             suffix = path.suffix.lower()
             if suffix not in {".yaml", ".yml", ".json"}:
                 raise ValueError(f"Unsupported skill file extension: {path}")
             yaml_path = path if suffix in {".yaml", ".yml"} else Path("__missing__.yaml")
             json_path = path if suffix == ".json" else Path("__missing__.json")
         else:
-            raise ValueError(f"Unsupported skill source: {skill_source}")
+            raise ValueError(f"Unsupported skill source: {source}")
 
         if yaml_path.exists():
             return yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         if json_path.exists():
             return json.loads(json_path.read_text(encoding="utf-8"))
 
-        raise FileNotFoundError(f"Skill not found: source={skill_source} ref={skill_ref}")
+        raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
 
-    def read_skill_file(
+    def read_file(
         self,
-        skill_source: str,
-        skill_ref: str,
+        source: str,
+        ref: str,
         file_ref: str,
     ) -> str:
-        base_path = self._resolve_skill_base_path(
-            skill_source=skill_source,
-            skill_ref=skill_ref,
-        )
-        file_path = _resolve_skill_resource_path(
-            base_path=base_path,
-            file_ref=file_ref,
-        )
+        file_path = self.resolve_file_path(source, ref, file_ref)
         if not file_path.exists():
             raise FileNotFoundError(f"Skill file not found: {file_ref}")
         return file_path.read_text(encoding="utf-8")
 
-    def render_step(self, step: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    def resolve_file_path(
+        self,
+        source: str,
+        ref: str,
+        file_ref: str,
+    ) -> Path:
+        base_path = self._resolve_base_path(
+            source=source,
+            ref=ref,
+        )
+        return _resolve_file_path(
+            base_path=base_path,
+            file_ref=file_ref,
+        )
+
+    def render(self, step: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         rendered = deepcopy(step)
         render_context = dict(context)
         render_context.setdefault("env", dict(os.environ))
         return self._render_value(rendered, render_context)
 
-    def _resolve_skill_base_path(self, *, skill_source: str, skill_ref: str) -> Path:
-        if skill_source == "internal":
+    def _resolve_base_path(self, *, source: str, ref: str) -> Path:
+        if source == "internal":
             yaml_path, json_path = _resolve_internal_skill_paths(
                 catalog_dir=self.skills_dir,
-                skill_ref=skill_ref,
+                ref=ref,
             )
             if yaml_path.exists():
                 return yaml_path.parent
             if json_path.exists():
                 return json_path.parent
-            raise FileNotFoundError(f"Skill not found: source={skill_source} ref={skill_ref}")
+            raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
 
-        if skill_source == "file":
-            skill_path = Path(skill_ref)
+        if source == "file":
+            skill_path = Path(ref)
             if not skill_path.exists():
-                raise FileNotFoundError(f"Skill not found: source={skill_source} ref={skill_ref}")
+                raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
             return skill_path.parent
 
-        raise ValueError(f"Unsupported skill source: {skill_source}")
+        raise ValueError(f"Unsupported skill source: {source}")
 
     def _render_value(self, value: Any, context: dict[str, Any]) -> Any:
         if isinstance(value, dict):
@@ -235,8 +245,8 @@ def _find_default_internal_agents_dir() -> Path:
     return Path("packages/skiller/agents")
 
 
-def _resolve_internal_skill_paths(*, catalog_dir: Path, skill_ref: str) -> tuple[Path, Path]:
-    normalized_ref = skill_ref.strip().strip("/")
+def _resolve_internal_skill_paths(*, catalog_dir: Path, ref: str) -> tuple[Path, Path]:
+    normalized_ref = ref.strip().strip("/")
     nested_yaml_path = catalog_dir / normalized_ref / "agent.yaml"
     nested_json_path = catalog_dir / normalized_ref / "agent.json"
     if nested_yaml_path.exists() or nested_json_path.exists():
@@ -249,7 +259,7 @@ def _resolve_internal_skill_paths(*, catalog_dir: Path, skill_ref: str) -> tuple
     return flat_yaml_path, flat_json_path
 
 
-def _resolve_skill_resource_path(*, base_path: Path, file_ref: str) -> Path:
+def _resolve_file_path(*, base_path: Path, file_ref: str) -> Path:
     if not isinstance(file_ref, str) or not file_ref.strip():
         raise ValueError("Skill file reference must be a non-empty string")
 

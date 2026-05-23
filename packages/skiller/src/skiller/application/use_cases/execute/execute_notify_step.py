@@ -39,7 +39,10 @@ class ExecuteNotifyStepUseCase:
         if notify_request_result.request is None:
             raise ValueError(f"Notify step '{step_id}' request returned no request")
         notify_request = notify_request_result.request
-        notify_result = self.notify_tool.run(notify_request)
+        notify_result = self.notify_tool.run(
+            config=None,
+            request=notify_request,
+        )
         message = str(notify_result.data.get("message", ""))
         raw_format = step.get("format", NotifyOutputFormat.SIMPLE.value)
         try:

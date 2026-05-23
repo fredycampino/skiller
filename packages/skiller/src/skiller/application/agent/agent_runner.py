@@ -107,21 +107,25 @@ class AgentRunner:
                 )
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
+                    config=config.config.event_output,
                 )
                 state.finish_final(final_text)
                 turn_loop.advance()
                 break
 
             allowed_tools = [tool.name for tool in config.tools]
-            max_tool_calls = config.config.loop.max_tool_calls    
-            tool_execution_results = self.tool_execution.execute(ToolExecutionRequest(
+            max_tool_calls = config.config.loop.max_tool_calls
+            tool_execution_request = ToolExecutionRequest(
                 context=context,
                 turn_id=turn_id,
                 response=response,
                 allowed_tools=allowed_tools,
+                runtime_configs=config.config.tools,
+                event_config=config.config.event_output,
                 max_tool_calls=max_tool_calls,
                 turn_loop=turn_loop,
-            ))
+            )
+            tool_execution_results = self.tool_execution.execute(tool_execution_request)
             turn_loop.advance()
             state.record_tool_execution(tool_execution_results)
             if state.finish is None:
@@ -144,6 +148,7 @@ class AgentRunner:
                 )
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
+                    config=config.config.event_output,
                 )
                 state.finish_final(final_text)
                 break

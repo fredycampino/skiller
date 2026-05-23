@@ -1,43 +1,69 @@
 import os
 from dataclasses import replace
 from pathlib import Path
+from typing import ClassVar, Mapping
 
-from skiller.application.tools.shell.config import ShellToolConfig
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.tools.shell.models import ShellToolRequest
 from skiller.application.tools.shell.policy import ShellCommandPolicy
+from skiller.application.tools.shell.runtime_config_mapper import (
+    ShellToolRuntimeConfigMapper,
+)
 from skiller.domain.tool.tool_contract import (
+    ConfiguredTool,
     ProcessTool,
+    ToolDefinition,
     ToolInput,
     ToolPolicy,
     ToolPolicyResult,
     ToolRequestResult,
     ToolResult,
     ToolResultStatus,
+    ToolRuntimeConfig,
+    ToolSchema,
 )
 from skiller.domain.tool.tool_process_model import ToolProcessOutput, ToolProcessRequest
 
 
-class ShellProcessTool(ProcessTool[ShellToolRequest], ToolPolicy[ShellToolRequest]):
-    name = "shell"
-    config = ShellToolConfig()
+class ShellProcessTool(
+    ToolDefinition[ShellToolRequest],
+    ProcessTool[ShellToolRequest],
+    ToolPolicy[ShellToolRequest],
+    ConfiguredTool[ShellToolRuntimeConfig],
+):
+    name: ClassVar[str] = "shell"
+    description: ClassVar[str] = "Execute a shell command in the workspace"
 
     def __init__(
         self,
         *,
         shell: str | None = None,
-        workspace_root: str | None = None,
-        allowlist_enabled: bool = False,
-        allowed_commands: list[str] | None = None,
-        allow_env_prefix: bool = True,
-        sandbox_enabled: bool = False,
     ) -> None:
         self.shell = shell
-        self.command_policy = ShellCommandPolicy(
-            workspace_root=workspace_root,
-            allowlist_enabled=allowlist_enabled,
-            allowed_commands=allowed_commands,
-            allow_env_prefix=allow_env_prefix,
-            sandbox_enabled=sandbox_enabled,
+
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            value={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "cwd": {"type": "string"},
+                    "env": {"type": "object"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["command"],
+                "additionalProperties": False,
+            }
+        )
+
+    def to_runtime_config(
+        self,
+        raw: Mapping[str, object],
+    ) -> ShellToolRuntimeConfig:
+        mapper = ShellToolRuntimeConfigMapper()
+        return mapper.from_mapping(
+            raw=raw,
+            definition=type(self),
         )
 
     def request(self, input: ToolInput) -> ToolRequestResult[ShellToolRequest]:
@@ -53,10 +79,18 @@ class ShellProcessTool(ProcessTool[ShellToolRequest], ToolPolicy[ShellToolReques
         except ValueError as exc:
             return ToolRequestResult.invalid(str(exc))
 
-    def policy(self, request: ShellToolRequest) -> ToolPolicyResult[ShellToolRequest]:
-        effective_cwd = self.command_policy.resolve_cwd(request.cwd)
+    def policy(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: ShellToolRequest,
+    ) -> ToolPolicyResult[ShellToolRequest]:
+        if not isinstance(config, ShellToolRuntimeConfig):
+            return ToolPolicyResult.blocked("Tool 'shell' requires shell runtime config")
+        command_policy = ShellCommandPolicy(config=config)
+        effective_cwd = command_policy.resolve_cwd(request.cwd)
         try:
-            self.command_policy.validate_command(
+            command_policy.validate_command(
                 command=request.command,
                 effective_cwd=effective_cwd,
             )
@@ -64,10 +98,18 @@ class ShellProcessTool(ProcessTool[ShellToolRequest], ToolPolicy[ShellToolReques
             return ToolPolicyResult.blocked(str(exc))
         return ToolPolicyResult.allowed(replace(request, effective_cwd=effective_cwd))
 
-    def call(self, request: ShellToolRequest) -> ToolProcessRequest:
+    def call(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: ShellToolRequest,
+    ) -> ToolProcessRequest:
+        if not isinstance(config, ShellToolRuntimeConfig):
+            raise ValueError("Tool 'shell' requires shell runtime config")
+        command_policy = ShellCommandPolicy(config=config)
         return ToolProcessRequest(
             command=[self._resolve_shell(), "-lc", request.command],
-            cwd=request.effective_cwd or self.command_policy.resolve_cwd(request.cwd),
+            cwd=request.effective_cwd or command_policy.resolve_cwd(request.cwd),
             env=dict(request.env or {}),
             timeout=request.timeout,
         )
@@ -101,13 +143,6 @@ class ShellProcessTool(ProcessTool[ShellToolRequest], ToolPolicy[ShellToolReques
                 return candidate
 
         raise RuntimeError("No executable shell found. Tried $SHELL, /bin/bash and /bin/sh")
-
-    def format_timeout(self, timeout: int | float | None) -> str:
-        if isinstance(timeout, int):
-            return f"{timeout}s"
-        if isinstance(timeout, float):
-            return f"{timeout:g}s"
-        return "unknown timeout"
 
     def _build_summary_text(self, data: dict[str, object]) -> str:
         ok = bool(data.get("ok"))

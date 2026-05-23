@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 from helpers.agent_config import FakeAgentConfigPort
+from helpers.agent_config import agent_config as agent_config_factory
 from helpers.agent_runner import build_agent_runner
 
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
@@ -42,7 +45,7 @@ from skiller.domain.event.event_model import (
     runtime_event_payload_to_dict,
 )
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.run.steering_model import (
     SteeringAgentInterrupt,
     SteeringAgentMessage,
@@ -51,7 +54,16 @@ from skiller.domain.run.steering_model import (
 )
 from skiller.domain.step.step_execution_model import AgentOutput
 from skiller.domain.step.step_type import StepType
-from skiller.domain.tool.tool_contract import ToolConfig, ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_contract import (
+    ToolDefinition,
+    ToolInput,
+    ToolRequest,
+    ToolRequestResult,
+    ToolResult,
+    ToolResultStatus,
+    ToolRuntimeConfigs,
+    ToolSchema,
+)
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 pytestmark = pytest.mark.unit
@@ -71,6 +83,19 @@ class _FakeStore:
     def __init__(self) -> None:
         self.updated: list[dict[str, object]] = []
 
+    def get_run(self, run_id: str) -> Run:
+        return Run(
+            id=run_id,
+            source="internal",
+            ref="demo",
+            snapshot={"start": "support_agent", "steps": []},
+            status=RunStatus.RUNNING.value,
+            current="support_agent",
+            context=RunContext(inputs={}, step_executions={}),
+            created_at="2026-03-07 10:00:00",
+            updated_at="2026-03-07 10:00:00",
+        )
+
     def update_run(self, run_id: str, *, status=None, current=None, context=None) -> None:  # noqa: ANN001
         self.updated.append(
             {
@@ -80,6 +105,17 @@ class _FakeStore:
                 "context": context,
             }
         )
+
+
+class _FakeSkillRunner:
+    def resolve_file_path(
+        self,
+        source: str,
+        ref: str,
+        file_ref: str,
+    ) -> Path:
+        _ = (source, ref, file_ref)
+        return Path("__missing__/agent.json")
 
 
 class _FakeAgentContextStore:
@@ -286,9 +322,16 @@ class _FakeLLM:
         return LLMResponse(ok=True, content=str(value), model="fake")
 
 
-class _FakeTool:
+class _FakeTool(ToolDefinition[ToolRequest]):
     def __init__(self, name: str) -> None:
         self.name = name
+        self.description = f"Fake {name} tool"
+
+    def schema(self) -> ToolSchema:
+        return ToolSchema(value={})
+
+    def request(self, input: ToolInput) -> ToolRequestResult[ToolRequest]:
+        return ToolRequestResult.valid(ToolRequest())
 
 
 class _FakeToolManager:
@@ -304,19 +347,12 @@ class _FakeToolManager:
             text="ok",
             error=None,
         )
-        self.get_tool_configs_calls: list[list[str]] = []
+        self.get_tool_definitions_calls: list[list[str]] = []
         self.execute_prepared_calls: list[PreparedTool] = []
 
-    def get_tool_configs(self, allowed_tools: list[str]) -> list[ToolConfig]:
-        self.get_tool_configs_calls.append(list(allowed_tools))
-        return [
-            ToolConfig(
-                name=tool,
-                description=f"Fake {tool} tool",
-                parameters_schema={},
-            )
-            for tool in allowed_tools
-        ]
+    def get_tool_definitions(self, allowed_tools: list[str]) -> list[ToolDefinition]:
+        self.get_tool_definitions_calls.append(list(allowed_tools))
+        return [_FakeTool(name=tool) for tool in allowed_tools]
 
     def get_tools(self, allowed_tools: list[str]) -> list[_FakeTool]:
         return [_FakeTool(name=tool) for tool in allowed_tools]
@@ -329,6 +365,7 @@ class _FakeToolManager:
                 name=request.tool,
                 tool=_FakeTool(request.tool),
                 request=request,
+                config=request.runtime_config,
             ),
         )
 
@@ -406,7 +443,11 @@ def _build_use_case(
     append_runtime_event_use_case: _FakeAppendRuntimeEventUseCase | None = None,
 ) -> ExecuteAgentStepUseCase:
     resolved_tool_manager = tool_manager or _FakeToolManager()
-    resolved_agent_config = agent_config or FakeAgentConfigPort()
+    resolved_agent_config = agent_config or FakeAgentConfigPort(
+        config=agent_config_factory(
+            tools=ToolRuntimeConfigs(),
+        ),
+    )
     runner = build_agent_runner(
         agent_context_store=context_store,
         steering=steering,
@@ -420,6 +461,8 @@ def _build_use_case(
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=resolved_agent_config,
+            run_store=store,
+            skill_runner=_FakeSkillRunner(),
             tool_manager=resolved_tool_manager,
         ),
     )
@@ -620,7 +663,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             },
         },
     )
-    assert tool_manager.get_tool_configs_calls == [["notify"]]
+    assert tool_manager.get_tool_definitions_calls == [["notify"]]
     executed_requests = [
         prepared.request for prepared in tool_manager.execute_prepared_calls
     ]
@@ -634,6 +677,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             tool="notify",
             args={"message": "hello"},
             allowed_tools=["notify"],
+            runtime_config=None,
         )
     ]
     assert len(llm.calls) == 2

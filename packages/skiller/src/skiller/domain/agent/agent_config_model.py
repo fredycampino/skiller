@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
+from skiller.domain.tool.tool_contract import ToolRuntimeConfigs
+
 
 class AgentLLMProviderType(str, Enum):
     NULL = "null"
@@ -86,3 +88,4 @@ class AgentConfig:
     loop: AgentLoopConfig = field(default_factory=AgentLoopConfig)
     context: AgentContextConfig = field(default_factory=AgentContextConfig)
     event_output: AgentEventOutputConfig = field(default_factory=AgentEventOutputConfig)
+    tools: ToolRuntimeConfigs = field(default_factory=ToolRuntimeConfigs)

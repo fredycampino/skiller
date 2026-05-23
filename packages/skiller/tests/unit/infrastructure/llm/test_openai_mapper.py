@@ -13,13 +13,36 @@ from skiller.domain.agent.llm_model import (
     LLMToolCallFunction,
     LLMToolChoice,
 )
-from skiller.domain.tool.tool_contract import ToolConfig
+from skiller.domain.tool.tool_contract import (
+    ToolDefinition,
+    ToolInput,
+    ToolRequest,
+    ToolRequestResult,
+    ToolSchema,
+)
 from skiller.infrastructure.llm.openai_mapper import (
     to_openai_kwargs,
     to_port_llm_response,
 )
 
 pytestmark = pytest.mark.unit
+
+
+class _ShellTool(ToolDefinition[ToolRequest]):
+    name = "shell"
+    description = "run command"
+
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            value={
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+            }
+        )
+
+    def request(self, input: ToolInput) -> ToolRequestResult[ToolRequest]:
+        _ = input
+        return ToolRequestResult.valid(ToolRequest())
 
 
 def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
@@ -30,14 +53,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
         ),
         model="gpt-5.2",
         tools=(
-            ToolConfig(
-                name="shell",
-                description="run command",
-                parameters_schema={
-                    "type": "object",
-                    "properties": {"command": {"type": "string"}},
-                },
-            ),
+            _ShellTool(),
         ),
         tool_choice=LLMToolChoice.tool("shell"),
         response_format=LLMResponseFormat(

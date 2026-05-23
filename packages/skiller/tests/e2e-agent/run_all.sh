@@ -87,6 +87,8 @@ else:
 run_case "minimal" ./minimal/run.sh "2026-05-16"
 echo
 run_case "tools-calls" ./tools-calls/run.sh
+echo
+run_case "files-tool" ./files-tool/run.sh
 
 if [[ "${failures}" -gt 0 ]]; then
   exit 1

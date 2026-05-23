@@ -3,7 +3,7 @@
 ## Precedence
 
 ```text
-env -> explicit file -> local file -> global file -> default feature config.json
+env -> explicit file -> skill-local file -> global file -> default feature config.json
 ```
 
 ## env variables
@@ -21,8 +21,8 @@ User configuration files:
 - `AGENT_AGENT_CONFIG_FILE`
   - explicit agent config path
   - highest priority file source for agent-owned config
-- `./agent.json`
-  - local agent config for the current workspace
+- `agent.json` next to the current skill `agent.yaml`
+  - skill-local agent config
   - selected instead of the global agent config when present
 - `~/.skiller/settings/config.json`
   - general
@@ -31,7 +31,7 @@ User configuration files:
 - `~/.skiller/settings/agent.json`
   - agent only
   - agent-specific user config
-  - used only when no explicit or local agent config is selected
+  - used only when no explicit or skill-local agent config is selected
 - `~/.skiller/settings/local.json`
   - server, tunnel, and local process config
   - machine-local runtime config
@@ -60,8 +60,8 @@ Example:
 | global runtime (`runtime.*`) | `config.json` | this document | implemented |
 | webhooks (`webhooks.*`) | `config.json` | `../cli/tool-server.md` | implemented |
 | whatsapp bridge (`whatsapp.bridge.*`) | `config.json` | `../cli/tool-whatsapp.md` | implemented |
-| agent loop (`agent.loop.*`) | `agent.json` | `../agent/agent-config.md`, `../steps/agent.md` | implemented |
-| agent event output (`agent.event_output.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
-| shell tool policy (`shell.*`) | `agent.json` | `../agent/agent-config.md`, `../agent/agent-tools.md` | implemented |
+| agent loop (`loop.*`) | `agent.json` | `../agent/agent-config.md`, `../steps/agent.md` | implemented |
+| agent event output (`event_output.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
+| shell tool policy (`tools.shell.*`) | `agent.json` | `../agent/agent-config.md`, `../agent/agent-tools.md` | implemented |
 | llm providers (`llm.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
 | local server / tunnels / local processes | `local.json` | `../cli/tool-server.md`, `../cli/tool-cloudflared.md`, `../cli/tool-whatsapp.md` | implemented |

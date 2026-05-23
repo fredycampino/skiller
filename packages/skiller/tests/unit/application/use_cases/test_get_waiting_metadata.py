@@ -26,7 +26,7 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-1" else None)
     skill_runner = SimpleNamespace(
-        render_step=lambda step, context: {
+        render=lambda step, context: {
             **step,
             "key": context["inputs"]["asset"],
         }
@@ -58,7 +58,7 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
     )
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-2" else None)
-    skill_runner = SimpleNamespace(render_step=lambda step, context: step)
+    skill_runner = SimpleNamespace(render=lambda step, context: step)
 
     result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-2")
 
@@ -86,7 +86,7 @@ def test_get_waiting_metadata_returns_channel_data() -> None:
     )
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-3" else None)
-    skill_runner = SimpleNamespace(render_step=lambda step, context: step)
+    skill_runner = SimpleNamespace(render=lambda step, context: step)
 
     result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-3")
 

@@ -7,7 +7,7 @@ from typing import Any
 from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.step.skill_runner_port import SkillRunnerPort
+from skiller.domain.step.runner_port import RunnerPort
 
 
 class RenderMcpConfigStatus(str, Enum):
@@ -23,7 +23,7 @@ class RenderMcpConfigResult:
 
 
 class RenderMcpConfigUseCase:
-    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: RunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 
@@ -57,7 +57,7 @@ class RenderMcpConfigUseCase:
                 f"MCP server '{server_name}' not declared in skill '{run.ref}'"
             )
 
-        rendered = self.skill_runner.render_step(raw_config, next_step.context.to_dict())
+        rendered = self.skill_runner.render(raw_config, next_step.context.to_dict())
         if not isinstance(rendered, dict):
             return self._invalid(f"Invalid rendered MCP configuration for server '{server_name}'")
 

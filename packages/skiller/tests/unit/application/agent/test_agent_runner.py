@@ -10,6 +10,7 @@ from skiller.application.agent.tools.tool_manager import (
     ToolPrepareResult,
 )
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
+from skiller.application.tools.notify import NotifyTool
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntry,
     AgentContextEntryType,
@@ -40,16 +41,12 @@ from skiller.domain.run.steering_model import (
     SteeringItem,
     SteeringItemType,
 )
-from skiller.domain.tool.tool_contract import ToolConfig, ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 pytestmark = pytest.mark.unit
 
-NOTIFY_TOOL_CONFIG = ToolConfig(
-    name="notify",
-    description="Fake notify tool",
-    parameters_schema={},
-)
+NOTIFY_TOOL_DEFINITION = NotifyTool()
 
 
 class _FakeAgentContextStore:
@@ -265,6 +262,7 @@ class _FakeToolManager:
                 name=request.tool,
                 tool=_FakeTool(request.tool),
                 request=request,
+                config=request.runtime_config,
             ),
         )
 
@@ -429,7 +427,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
                 system="You are a support agent.",
                 task="Inspect the issue.",
                 max_turns=3,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
                 max_tool_calls=5,
             ),
         )
@@ -511,7 +509,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
                 max_tool_calls=5,
             ),
         )
@@ -613,7 +611,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
                 max_tool_calls=5,
             ),
         )
@@ -687,7 +685,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
                 max_tool_calls=5,
             ),
         )
@@ -746,7 +744,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
                 system="Be useful.",
                 task="Hi",
                 max_turns=1,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
             ),
         )
     )
@@ -812,7 +810,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
                 system="Be useful.",
                 task="Hi",
                 max_turns=4,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
             ),
         )
     )
@@ -897,7 +895,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
-                tools=(NOTIFY_TOOL_CONFIG,),
+                tools=(NOTIFY_TOOL_DEFINITION,),
             ),
         )
     )

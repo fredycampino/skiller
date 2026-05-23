@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from skiller.domain.agent.agent_config_model import (
     AgentConfig,
@@ -15,15 +15,19 @@ from skiller.domain.agent.agent_config_model import (
     AgentLLMProviderType,
     AgentLoopConfig,
 )
+from skiller.domain.tool.tool_contract import (
+    ConfiguredTool,
+    ToolDefinition,
+    ToolRuntimeConfig,
+    ToolRuntimeConfigs,
+)
+from skiller.infrastructure.config.agent_config_schema import (
+    AgentConfigModel,
+    EventOutputConfigModel,
+    LLMProviderConfigModel,
+    LoopConfigModel,
+)
 
-DEFAULT_AGENT_LOOP_MAX_TURNS = 10
-DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS = 5
-DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED = False
-DEFAULT_AGENT_CONTEXT_COMPACTION_MAX_TOTAL_TOKENS_RATIO = 0.8
-DEFAULT_AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED = True
-DEFAULT_AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS = 600
-DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS = 4000
-DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS = 20
 SUPPORTED_LLM_PROVIDER_MODELS = {
     AgentLLMProviderType.NULL: ("null",),
     AgentLLMProviderType.FAKE: ("fake", "fake-llm"),
@@ -38,124 +42,66 @@ SUPPORTED_LLM_PROVIDER_CLIENT_TYPES = {
 }
 
 
-class _AgentConfigModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+class AgentConfigMapper:
+    def __init__(
+        self,
+        *,
+        env: Mapping[str, str],
+        tools: tuple[ToolDefinition, ...] = (),
+    ) -> None:
+        self.env = env
+        self.tools = tools
 
-    llm: "_LLMConfigModel"
-    agent: "_AgentRuntimeConfigModel" = Field(default_factory=lambda: _AgentRuntimeConfigModel())
+    def from_json(self, raw_config: dict[str, object]) -> AgentConfig:
+        if "agent" in raw_config:
+            raise ValueError("agent.json field 'agent' is not supported")
 
+        try:
+            config = AgentConfigModel.model_validate(raw_config)
+        except ValidationError as exc:
+            raise ValueError(f"Invalid agent config: {exc}") from exc
 
-class _LLMConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+        default_provider = self.env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
+        providers: dict[str, AgentLLMProviderConfig] = {}
+        for provider_id, provider in config.llm.providers.items():
+            selected = provider_id == default_provider
+            provider_config = _build_provider_config(
+                provider=provider,
+                selected=selected,
+                env=self.env,
+            )
+            providers[provider_id] = provider_config
 
-    default_provider: str
-    providers: dict[str, "_LLMProviderConfigModel"]
-
-
-class _LLMProviderConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    provider: AgentLLMProviderType
-    client_type: AgentLLMClientType
-    model: str
-    base_url: str
-    timeout_seconds: float = Field(gt=0)
-    context_window_tokens: int = Field(gt=0)
-    api_key: str | None = None
-    api_key_env: str | None = None
-    api_key_file: str | None = None
-
-
-class _AgentRuntimeConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    loop: "_LoopConfigModel" = Field(default_factory=lambda: _LoopConfigModel())
-    context: "_ContextConfigModel" = Field(default_factory=lambda: _ContextConfigModel())
-    event_output: "_EventOutputConfigModel" = Field(
-        default_factory=lambda: _EventOutputConfigModel(),
-    )
-
-
-class _LoopConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    max_turns: int = Field(default=DEFAULT_AGENT_LOOP_MAX_TURNS, gt=0)
-    max_tool_calls: int = Field(default=DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS, gt=0)
-
-
-class _ContextConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    compaction: "_CompactionConfigModel" = Field(
-        default_factory=lambda: _CompactionConfigModel(),
-    )
-
-
-class _CompactionConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED
-    max_total_tokens_ratio: float = Field(
-        default=DEFAULT_AGENT_CONTEXT_COMPACTION_MAX_TOTAL_TOKENS_RATIO,
-        gt=0,
-        le=1,
-    )
-
-
-class _EventOutputConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    truncate: "_EventOutputTruncateConfigModel" = Field(
-        default_factory=lambda: _EventOutputTruncateConfigModel(),
-    )
-
-
-class _EventOutputTruncateConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = DEFAULT_AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED
-    max_text_chars: int = Field(default=DEFAULT_AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS, gt=0)
-    max_json_chars: int = Field(default=DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS, gt=0)
-    max_array_items: int = Field(default=DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS, gt=0)
-
-
-def agent_config_from_json(
-    raw_config: dict[str, object],
-    *,
-    env: Mapping[str, str],
-) -> AgentConfig:
-    try:
-        config = _AgentConfigModel.model_validate(raw_config)
-    except ValidationError as exc:
-        raise ValueError(f"Invalid agent config: {exc}") from exc
-
-    default_provider = env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
-    return AgentConfig(
-        llm=AgentLLMConfig(
+        compaction = AgentContextCompactionConfig(
+            enabled=config.context.compaction.enabled,
+            max_total_tokens_ratio=config.context.compaction.max_total_tokens_ratio,
+        )
+        context = AgentContextConfig(
+            compaction=compaction,
+        )
+        llm = AgentLLMConfig(
             default_provider=default_provider,
-            providers={
-                provider_id: _build_provider_config(
-                    provider=provider,
-                    selected=provider_id == default_provider,
-                    env=env,
-                )
-                for provider_id, provider in config.llm.providers.items()
-            },
-        ),
-        loop=_build_loop_config(config.agent.loop, env=env),
-        context=AgentContextConfig(
-            compaction=AgentContextCompactionConfig(
-                enabled=config.agent.context.compaction.enabled,
-                max_total_tokens_ratio=config.agent.context.compaction.max_total_tokens_ratio,
-            ),
-        ),
-        event_output=_build_event_output_config(config.agent.event_output, env=env),
-    )
+            providers=providers,
+        )
+        loop = _build_loop_config(config.loop, env=self.env)
+        event_output = _build_event_output_config(config.event_output, env=self.env)
+        tools = _build_tool_runtime_configs(
+            raw_tools=config.tools,
+            tools=self.tools,
+        )
+
+        return AgentConfig(
+            llm=llm,
+            loop=loop,
+            context=context,
+            event_output=event_output,
+            tools=tools,
+        )
 
 
 def _build_provider_config(
     *,
-    provider: _LLMProviderConfigModel,
+    provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> AgentLLMProviderConfig:
@@ -174,9 +120,29 @@ def _build_provider_config(
     )
 
 
+def _build_tool_runtime_configs(
+    *,
+    raw_tools: dict[str, dict[str, object]],
+    tools: tuple[ToolDefinition, ...],
+) -> ToolRuntimeConfigs:
+    known_tool_names = {tool.name for tool in tools}
+    unknown_tool_names = sorted(set(raw_tools) - known_tool_names)
+    if unknown_tool_names:
+        unknown_values = ", ".join(unknown_tool_names)
+        raise ValueError(f"Unknown agent tool config: {unknown_values}")
+
+    runtime_config_items: list[ToolRuntimeConfig] = []
+    for tool in tools:
+        if not isinstance(tool, ConfiguredTool):
+            continue
+        raw_tool = raw_tools.get(tool.name, {})
+        runtime_config_items.append(tool.to_runtime_config(raw_tool))
+    return ToolRuntimeConfigs(items=tuple(runtime_config_items))
+
+
 def _validate_provider_client_type(
     *,
-    provider: _LLMProviderConfigModel,
+    provider: LLMProviderConfigModel,
 ) -> None:
     supported_client_types = SUPPORTED_LLM_PROVIDER_CLIENT_TYPES.get(provider.provider, ())
     if provider.client_type in supported_client_types:
@@ -207,7 +173,7 @@ def _validate_provider_model(
 
 
 def _build_loop_config(
-    loop: _LoopConfigModel,
+    loop: LoopConfigModel,
     *,
     env: Mapping[str, str],
 ) -> AgentLoopConfig:
@@ -222,7 +188,7 @@ def _build_loop_config(
 
 
 def _build_event_output_config(
-    event_output: _EventOutputConfigModel,
+    event_output: EventOutputConfigModel,
     *,
     env: Mapping[str, str],
 ) -> AgentEventOutputConfig:
@@ -251,7 +217,7 @@ def _build_event_output_config(
 
 def _resolve_api_key(
     *,
-    provider: _LLMProviderConfigModel,
+    provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> str:
@@ -281,7 +247,7 @@ def _resolve_api_key(
 
 def _provider_timeout_seconds(
     *,
-    provider: _LLMProviderConfigModel,
+    provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> float:

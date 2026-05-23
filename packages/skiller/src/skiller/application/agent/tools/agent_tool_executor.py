@@ -86,7 +86,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 text=request.response.content,
                 usage=request.response.usage,
             )
-            self.event_publisher.emit_assistant_message(entry=assistant_message_entry)
+            self.event_publisher.emit_assistant_message(
+                entry=assistant_message_entry,
+                config=request.event_config,
+            )
             state.parent_sequence = assistant_message_entry.sequence
 
         for raw_tool_call in request.response.tool_calls:
@@ -129,8 +132,12 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 request=request,
                 tool_call=agent_tool_call,
             )
-            self.event_publisher.emit_tool_call(entry=tool_call_entry)
+            self.event_publisher.emit_tool_call(
+                entry=tool_call_entry,
+                config=request.event_config,
+            )
 
+            runtime_config = request.runtime_configs.get(agent_tool_call.tool)
             prepare_result = self.tool_manager.prepare(
                 AgentToolRequest(
                     run_id=request.context.run_id,
@@ -141,6 +148,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                     tool=agent_tool_call.tool,
                     args=agent_tool_call.args,
                     allowed_tools=request.allowed_tools,
+                    runtime_config=runtime_config,
                 )
             )
             # Process tools run through the managed process runner.
@@ -217,7 +225,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 request=request,
                 tool_result=agent_tool_result,
             )
-            self.event_publisher.emit_tool_result(entry=tool_result_entry)
+            self.event_publisher.emit_tool_result(
+                entry=tool_result_entry,
+                config=request.event_config,
+            )
             state.add(
                 ToolExecutionResult(
                     tool_call_id=raw_tool_call.id,
@@ -237,7 +248,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         if not isinstance(tool, ProcessTool):
             raise ValueError(f"Agent tool '{prepared.name}' is not a ProcessTool")
 
-        process_request = tool.call(prepared.request)
+        process_request = tool.call(
+            config=prepared.config,
+            request=prepared.request,
+        )
         handle = self.process_runner.popen(process_request)
         wait_result = self.process_runner.wait(
             ToolProcessWait(

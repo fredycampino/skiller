@@ -1,8 +1,14 @@
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generic, Mapping, Protocol, TypeVar, runtime_checkable
+from typing import Any, ClassVar, Generic, Mapping, Protocol, TypeVar, runtime_checkable
 
 from skiller.domain.tool.tool_process_model import ToolProcessOutput, ToolProcessRequest
+
+
+@dataclass(frozen=True)
+class ToolSchema:
+    value: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -59,11 +65,42 @@ class ToolInput:
         return result
 
 
+RequestT = TypeVar("RequestT", bound=ToolRequest)
+
+
+class ToolDefinition(ABC, Generic[RequestT]):
+    name: ClassVar[str]
+    description: ClassVar[str]
+
+    @abstractmethod
+    def schema(self) -> ToolSchema: ...
+
+    @abstractmethod
+    def request(self, input: ToolInput) -> "ToolRequestResult[RequestT]": ...
+
+
 @dataclass(frozen=True)
-class ToolConfig:
-    name: str
-    description: str
-    parameters_schema: Mapping[str, object] = field(default_factory=dict)
+class ToolRuntimeConfig:
+    definition: type[ToolDefinition]
+
+
+@dataclass(frozen=True)
+class ToolRuntimeConfigs:
+    items: tuple[ToolRuntimeConfig, ...] = ()
+
+    def __post_init__(self) -> None:
+        names: set[str] = set()
+        for item in self.items:
+            name = item.definition.name
+            if name in names:
+                raise RuntimeError(f"Duplicated runtime config for tool '{name}'")
+            names.add(name)
+
+    def get(self, name: str) -> ToolRuntimeConfig | None:
+        for item in self.items:
+            if item.definition.name == name:
+                return item
+        return None
 
 
 class ToolResultStatus(str, Enum):
@@ -78,9 +115,6 @@ class ToolResult:
     data: dict[str, Any]
     text: str | None = None
     error: str | None = None
-
-
-RequestT = TypeVar("RequestT", bound=ToolRequest)
 
 
 @dataclass(frozen=True)
@@ -98,22 +132,35 @@ class ToolRequestResult(Generic[RequestT]):
         return cls(ok=False, error=error)
 
 
-@runtime_checkable
-class ToolSpec(Protocol):
-    name: str
-    config: ToolConfig
-
-    def request(self, input: ToolInput) -> ToolRequestResult[ToolRequest]: ...
+ConfigT = TypeVar("ConfigT", bound=ToolRuntimeConfig)
 
 
 @runtime_checkable
-class Tool(ToolSpec, Protocol[RequestT]):
-    def run(self, request: RequestT) -> ToolResult: ...
+class ConfiguredTool(Protocol[ConfigT]):
+    def to_runtime_config(
+        self,
+        raw: Mapping[str, object],
+    ) -> ConfigT: ...
 
 
 @runtime_checkable
-class ProcessTool(ToolSpec, Protocol[RequestT]):
-    def call(self, request: RequestT) -> ToolProcessRequest: ...
+class Tool(Protocol[RequestT]):
+    def run(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: RequestT,
+    ) -> ToolResult: ...
+
+
+@runtime_checkable
+class ProcessTool(Protocol[RequestT]):
+    def call(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: RequestT,
+    ) -> ToolProcessRequest: ...
 
     def result(self, output: ToolProcessOutput) -> ToolResult: ...
 
@@ -135,4 +182,9 @@ class ToolPolicyResult(Generic[RequestT]):
 
 @runtime_checkable
 class ToolPolicy(Protocol[RequestT]):
-    def policy(self, request: RequestT) -> ToolPolicyResult[RequestT]: ...
+    def policy(
+        self,
+        *,
+        config: ToolRuntimeConfig | None,
+        request: RequestT,
+    ) -> ToolPolicyResult[RequestT]: ...

@@ -12,10 +12,6 @@ from skiller.application.agent.context.agent_context_publisher import (
 from skiller.application.agent.event.agent_event_publisher import (
     AgentEventPublisher,
 )
-from skiller.application.agent.event.agent_event_truncator import (
-    AgentEventOutputPolicy,
-    AgentEventTruncator,
-)
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import (
@@ -25,6 +21,10 @@ from skiller.application.agent.tools.tool_manager import (
 )
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
+from skiller.domain.agent.agent_config_model import (
+    AgentEventOutputConfig,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -53,7 +53,10 @@ from skiller.domain.run.steering_model import (
     SteeringItem,
     SteeringItemType,
 )
-from skiller.domain.tool.tool_contract import ToolResultStatus
+from skiller.domain.tool.tool_contract import (
+    ToolResultStatus,
+    ToolRuntimeConfigs,
+)
 from skiller.domain.tool.tool_execution_model import (
     AgentToolCall,
     AgentToolResult,
@@ -203,6 +206,8 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         turn_id="turn-1",
         response=response,
         allowed_tools=["notify"],
+        runtime_configs=ToolRuntimeConfigs(),
+        event_config=AgentEventOutputConfig(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
     )
@@ -312,10 +317,7 @@ def _build_executor(
         context_publisher=context_publisher,
         event_publisher=AgentEventPublisher(
             store,
-            AgentEventTruncator(
-                AgentEventOutputPolicy(),
-                OutputTruncator(),
-            ),
+            OutputTruncator(),
         ),
         steering=steering or _FakeSteering(),
         tool_manager=tool_manager or ToolManager(
@@ -360,6 +362,14 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
             ),
         ),
         allowed_tools=["shell", "notify"],
+        runtime_configs=ToolRuntimeConfigs(
+            items=(
+                ShellToolRuntimeConfig(
+                    definition=ShellProcessTool,
+                ),
+            ),
+        ),
+        event_config=AgentEventOutputConfig(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
     )
@@ -608,7 +618,9 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Assistant event requires assistant_message entry")
         if not isinstance(entry.payload, AgentAssistantMessagePayload):
@@ -619,7 +631,9 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if entry.entry_type != AgentContextEntryType.TOOL_CALL:
             raise ValueError("Tool call event requires tool_call entry")
         if not isinstance(entry.payload, AgentToolCallPayload):
@@ -630,7 +644,9 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
             raise ValueError("Tool result event requires tool_result entry")
         if not isinstance(entry.payload, AgentToolResultPayload):

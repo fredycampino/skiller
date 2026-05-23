@@ -1,0 +1,27 @@
+{
+  "llm": {
+    "default_provider": "minimax-main",
+    "providers": {
+      "minimax-main": {
+        "provider": "minimax",
+        "client_type": "openai_chat_completions",
+        "api_key_file": "~/.skiller/secrets/minimax_api_key",
+        "base_url": "https://api.minimax.io/v1",
+        "model": "MiniMax-M2.5",
+        "timeout_seconds": 30,
+        "context_window_tokens": 1000000
+      }
+    }
+  },
+  "loop": {
+    "max_turns": 10,
+    "max_tool_calls": 5
+  },
+  "tools": {
+    "files": {
+      "read": ["packages/skiller/tests/e2e-agent/files-tool/workspace"],
+      "write": ["packages/skiller/tests/e2e-agent/files-tool/workspace"],
+      "all": []
+    }
+  }
+}

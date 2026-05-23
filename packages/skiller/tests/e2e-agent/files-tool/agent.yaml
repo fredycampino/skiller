@@ -1,0 +1,23 @@
+name: agent_files_tool_e2e
+description: "Agent files tool writes and reads a text file"
+version: "0.1"
+start: files_write_read
+
+inputs:
+  file_path: string
+  expected_content: string
+
+steps:
+  - agent: files_write_read
+    system: |
+      You are a deterministic test agent.
+      Follow the task exactly and keep responses minimal.
+    task: |
+      First call the files tool with action exactly write, path exactly {{inputs.file_path}}, and content exactly {{inputs.expected_content}}.
+      After the write result, call the files tool with action exactly read and path exactly {{inputs.file_path}}.
+      Make at most one files call per assistant response.
+      After the read result, return final text exactly done.
+    tools:
+      - files
+    max_turns: 3
+    max_tool_calls: 2

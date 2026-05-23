@@ -3,12 +3,12 @@ from typing import Any
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.run_step_model import find_run_step
-from skiller.domain.step.skill_runner_port import SkillRunnerPort
+from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.step_type import StepType
 
 
 class GetWaitingMetadataUseCase:
-    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: RunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 
@@ -35,7 +35,7 @@ class GetWaitingMetadataUseCase:
         except ValueError:
             return None
 
-        step = self.skill_runner.render_step(parsed_step.body, run.context.to_dict())
+        step = self.skill_runner.render(parsed_step.body, run.context.to_dict())
         if not isinstance(step, dict):
             return None
 

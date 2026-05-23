@@ -30,11 +30,11 @@ class _FakeSkillRunner:
         self.render_calls: list[dict[str, object]] = []
         self.load_calls: list[tuple[str, str]] = []
 
-    def load_skill(self, skill_source: str, skill_ref: str):  # noqa: ANN202
-        self.load_calls.append((skill_source, skill_ref))
+    def load(self, source: str, ref: str):  # noqa: ANN202
+        self.load_calls.append((source, ref))
         return self._skill
 
-    def render_step(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
+    def render(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
         self.render_calls.append({"step": step, "context": context})
         return self._render_value(dict(step), context)
 

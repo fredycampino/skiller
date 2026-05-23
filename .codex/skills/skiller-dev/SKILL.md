@@ -30,6 +30,9 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 - Prefer one clear error message over many overly specific status variants.
 - Do not hide non-trivial preparation inside constructor or function-call parameters. Use explicit
   local variables; do not create private helpers for one or two simple statements unless asked.
+- Do not put architectural responsibility in large top-level functions. If a function coordinates
+  dependencies, owns a workflow, parses a whole external contract, or keeps growing, model it as an
+  object with a clear role such as adapter, mapper, resolver, manager, use case, store, or tool.
 
 ## Read By Need
 

@@ -5,11 +5,11 @@ from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import SkillSource
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.run_step_model import validate_skill_snapshot
-from skiller.domain.step.skill_runner_port import SkillRunnerPort
+from skiller.domain.step.runner_port import RunnerPort
 
 
 class CreateRunUseCase:
-    def __init__(self, store: RunStorePort, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, store: RunStorePort, skill_runner: RunnerPort) -> None:
         self.store = store
         self.skill_runner = skill_runner
 
@@ -21,7 +21,7 @@ class CreateRunUseCase:
         skill_source: str = SkillSource.INTERNAL.value,
     ) -> str:
         run_id = str(uuid.uuid4())
-        raw_skill = self.skill_runner.load_skill(skill_source, skill_ref)
+        raw_skill = self.skill_runner.load(skill_source, skill_ref)
         try:
             snapshot = validate_skill_snapshot(raw_skill)
         except ValueError as exc:

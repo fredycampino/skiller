@@ -42,7 +42,7 @@ The loop must stay deterministic and easy to reason about:
 | --- | --- | --- | --- |
 | valid tool call | append `tool_call`, prepare tool, execute tool | append `tool_result` when execution returns a `ToolResult` | continue batch |
 | invalid tool-call JSON | append corrective feedback for the agent | append one corrective `user_message`; no `tool_call` is appended for that invalid call | continue batch |
-| more than `agent.loop.max_tool_calls` | reject the whole batch before executing any tool | append one corrective `user_message`; append no `tool_call` or `tool_result` for the batch | next agent turn |
+| more than `loop.max_tool_calls` | reject the whole batch before executing any tool | append one corrective `user_message`; append no `tool_call` or `tool_result` for the batch | next agent turn |
 | user interrupt before a tool starts | stop the current tool batch | append one control `user_message`; already executed tools stay persisted | finish `interrupted` |
 | process tool interruption while waiting | terminate the process and stop the current tool batch | append one control `user_message`; no `tool_result` for the interrupted tool | finish `interrupted` |
 | batch completes | return control to the agent runner | no extra end marker is persisted | next agent turn |
@@ -85,11 +85,11 @@ reasons.
 
 | limit case | action | agent context effect | next state |
 | --- | --- | --- | --- |
-| within `agent.loop.max_tool_calls` | accept the batch | append entries according to the tool batch shape | continue batch, then next agent turn |
-| exceeds `agent.loop.max_tool_calls` | reject the batch before any tool execution | append one corrective `user_message` | next agent turn |
-| within `agent.loop.max_turns` | continue normal agent turns | append entries produced by each turn | continue |
+| within `loop.max_tool_calls` | accept the batch | append entries according to the tool batch shape | continue batch, then next agent turn |
+| exceeds `loop.max_tool_calls` | reject the batch before any tool execution | append one corrective `user_message` | next agent turn |
+| within `loop.max_turns` | continue normal agent turns | append entries produced by each turn | continue |
 | last remaining turn with tools enabled | append last-turn warning before the LLM request | append one control `user_message` once per agent scope | continue |
-| exhausts `agent.loop.max_turns` without final answer | stop without creating a final assistant message | append one control `user_message`; emit `AGENT_MAX_TURNS_EXHAUSTED` | finish `max_turns_exhausted` |
+| exhausts `loop.max_turns` without final answer | stop without creating a final assistant message | append one control `user_message`; emit `AGENT_MAX_TURNS_EXHAUSTED` | finish `max_turns_exhausted` |
 | interrupt before `max_turns` is exhausted | stop because of steering, not numeric budget | append one control `user_message`; emit `AGENT_INTERRUPTED` | finish `interrupted` |
 
 ## Notes

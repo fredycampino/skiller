@@ -7,10 +7,6 @@ from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
-from skiller.application.agent.event.agent_event_truncator import (
-    AgentEventOutputPolicy,
-    AgentEventTruncator,
-)
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
@@ -18,6 +14,7 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -120,7 +117,9 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if self.append_runtime_event_use_case is None:
             return
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
@@ -146,7 +145,9 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if self.append_runtime_event_use_case is None:
             return
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
@@ -172,7 +173,9 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if self.append_runtime_event_use_case is None:
             return
         if entry.entry_type != AgentContextEntryType.TOOL_CALL:
@@ -195,7 +198,9 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
         self,
         *,
         entry: AgentContextEntry,
+        config: AgentEventOutputConfig,
     ) -> None:
+        _ = config
         if self.append_runtime_event_use_case is None:
             return
         if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
@@ -254,10 +259,7 @@ def build_tool_execution(
         context_publisher=context_publisher,
         event_publisher=AgentEventPublisher(
             runtime_event_store,
-            AgentEventTruncator(
-                AgentEventOutputPolicy(),
-                OutputTruncator(),
-            ),
+            OutputTruncator(),
         ),
         steering=steering or _NullSteering(),
         tool_manager=tool_manager or ToolManager(tools=[]),
@@ -297,10 +299,7 @@ def build_agent_runner(
         ),
         event_publisher=AgentEventPublisher(
             runtime_event_store,
-            AgentEventTruncator(
-                AgentEventOutputPolicy(),
-                OutputTruncator(),
-            ),
+            OutputTruncator(),
         ),
         tool_execution=build_tool_execution(
             agent_context_store=agent_context_store,

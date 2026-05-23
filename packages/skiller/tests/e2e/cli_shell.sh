@@ -21,7 +21,6 @@ SH
 chmod +x "${script_path}"
 
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_SHELL_ALLOWLIST_WORKSPACE="${tmpdir}"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 if [[ ! -x "${runtime_python}" ]]; then

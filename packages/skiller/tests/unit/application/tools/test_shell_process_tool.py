@@ -1,6 +1,7 @@
 import pytest
 
 from skiller.application.tools.shell import ShellProcessTool, ShellToolRequest
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.domain.tool.tool_contract import ToolInput, ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_process_model import ToolProcessOutput, ToolProcessRequest
 
@@ -13,7 +14,11 @@ _GIT_STATUS_OUTPUT = (
 
 
 def test_shell_process_tool_builds_process_request() -> None:
-    tool = ShellProcessTool(shell="/bin/zsh", workspace_root="/workspace")
+    tool = ShellProcessTool(shell="/bin/zsh")
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        workspace="/workspace",
+    )
 
     raw_request = tool.request(
         ToolInput(
@@ -30,11 +35,17 @@ def test_shell_process_tool_builds_process_request() -> None:
     )
     assert raw_request.ok is True
     assert raw_request.request is not None
-    policy_result = tool.policy(raw_request.request)
+    policy_result = tool.policy(
+        config=config,
+        request=raw_request.request,
+    )
 
     assert policy_result.ok is True
     assert policy_result.request is not None
-    request = tool.call(policy_result.request)
+    request = tool.call(
+        config=config,
+        request=policy_result.request,
+    )
 
     assert request == ToolProcessRequest(
         command=["/bin/zsh", "-lc", "pytest -q"],
@@ -45,23 +56,34 @@ def test_shell_process_tool_builds_process_request() -> None:
 
 
 def test_shell_process_tool_rejects_command_outside_workspace() -> None:
-    tool = ShellProcessTool(shell="/bin/bash", workspace_root="/workspace")
+    tool = ShellProcessTool(shell="/bin/bash")
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        workspace="/workspace",
+    )
 
-    result = tool.policy(ShellToolRequest(command="cat /etc/passwd"))
+    result = tool.policy(
+        config=config,
+        request=ShellToolRequest(command="cat /etc/passwd"),
+    )
 
     assert result.ok is False
     assert result.error == "shell command path escapes workspace"
 
 
 def test_shell_process_tool_rejects_command_outside_allowlist() -> None:
-    tool = ShellProcessTool(
-        shell="/bin/bash",
-        workspace_root="/workspace",
+    tool = ShellProcessTool(shell="/bin/bash")
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        workspace="/workspace",
         allowlist_enabled=True,
-        allowed_commands=["git"],
+        allowed_commands=("git",),
     )
 
-    result = tool.policy(ShellToolRequest(command="pytest -q"))
+    result = tool.policy(
+        config=config,
+        request=ShellToolRequest(command="pytest -q"),
+    )
 
     assert result.ok is False
     assert result.error == "shell command blocked by allowlist policy: 'pytest' is not allowed"

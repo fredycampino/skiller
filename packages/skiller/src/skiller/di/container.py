@@ -11,10 +11,6 @@ from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
-from skiller.application.agent.event.agent_event_truncator import (
-    AgentEventOutputPolicy,
-    AgentEventTruncator,
-)
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
@@ -24,8 +20,10 @@ from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.query_service import RunQueryService
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.tools.files import FilesTool
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsUseCase
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -78,7 +76,10 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.domain.agent.agent_config_model import AgentLLMProviderConfig
-from skiller.infrastructure.config.json_agent_config_provider import JsonAgentConfigProvider
+from skiller.domain.step.runner_port import RunnerPort
+from skiller.domain.tool.tool_contract import ToolDefinition
+from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
+from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
@@ -121,20 +122,32 @@ def build_runtime_container(
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
-    skill_runner = FilesystemSkillRunner(
+    skill_runner: RunnerPort = FilesystemSkillRunner(
         skills_dir=skills_dir,
     )
-    agent_config = JsonAgentConfigProvider(
-        config_path=Path(cfg.agent_config_path),
+    shell_tool = ShellProcessTool()
+    notify_tool = NotifyTool()
+    files_tool = FilesTool()
+    agent_tools = (
+        shell_tool,
+        notify_tool,
+        files_tool,
+    )
+    agent_config = JsonAgentConfig(
+        config_path_global=Path.home() / ".skiller" / "settings" / "agent.json",
+        config_mapper=AgentConfigMapper(
+            env=os.environ,
+            tools=agent_tools,
+        ),
         env=os.environ,
     )
     llm_model = _build_llm_model_manager()
     mcp = DefaultMCP()
-    shell_tool = _build_shell_tool(cfg)
+    shell_runtime_config = _build_shell_runtime_config()
     tool_process_runner = DefaultToolProcessRunner()
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender(cfg)
-    tool_manager = _build_agent_tool_manager(cfg)
+    tool_manager = _build_agent_tool_manager(agent_tools)
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
         store=runtime_bootstrap,
@@ -175,12 +188,6 @@ def build_runtime_container(
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
-    agent_event_output_policy = AgentEventOutputPolicy(
-        truncate_enabled=cfg.agent_event_output_truncate_enabled,
-        max_text_chars=cfg.agent_event_output_max_text_chars,
-        max_json_chars=cfg.agent_event_output_max_json_chars,
-        max_array_items=cfg.agent_event_output_max_array_items,
-    )
     agent_feedback = AgentRunnerFeedback()
     agent_context_publisher = AgentContextPublisher(
         agent_context_store,
@@ -197,10 +204,7 @@ def build_runtime_container(
     )
     agent_event_publisher = AgentEventPublisher(
         runtime_event_store,
-        AgentEventTruncator(
-            agent_event_output_policy,
-            OutputTruncator(),
-        ),
+        OutputTruncator(),
     )
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
@@ -224,6 +228,8 @@ def build_runtime_container(
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=agent_config,
+            run_store=store,
+            skill_runner=skill_runner,
             tool_manager=tool_manager,
         ),
     )
@@ -240,6 +246,7 @@ def build_runtime_container(
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
+        shell_config=shell_runtime_config,
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
     )
@@ -349,20 +356,17 @@ def _create_openai_llm(provider: AgentLLMProviderConfig) -> OpenAILLM:
     )
 
 
-def _build_agent_tool_manager(settings: Settings) -> ToolManager:
+def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:
     return ToolManager(
-        tools=[
-            _build_shell_tool(settings),
-            NotifyTool(),
-        ],
+        tools=list(tools),
     )
 
 
-def _build_shell_tool(settings: Settings) -> ShellProcessTool:
-    return ShellProcessTool(
-        workspace_root=settings.agent_shell_allowlist_workspace or None,
-        allowlist_enabled=settings.agent_shell_allowlist_enabled,
-        allowed_commands=list(settings.agent_shell_allowlist_allowed_commands),
-        allow_env_prefix=settings.agent_shell_allowlist_allow_env_prefix,
-        sandbox_enabled=settings.agent_shell_sandbox_enabled,
+def _build_shell_runtime_config() -> ShellToolRuntimeConfig:
+    return ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        workspace="",
+        allowlist_enabled=False,
+        allow_env_prefix=True,
+        allowed_commands=(),
     )

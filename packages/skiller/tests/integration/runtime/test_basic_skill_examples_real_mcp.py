@@ -20,6 +20,7 @@ from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.run_worker_service import RunWorkerService
 from skiller.application.runtime_application_service import RuntimeApplicationService
 from skiller.application.tools.shell import ShellProcessTool
+from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
@@ -123,6 +124,8 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=FakeAgentConfigPort(),
+            run_store=store,
+            skill_runner=skill_runner,
             tool_manager=agent_tool_manager,
         ),
     )
@@ -135,6 +138,13 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
+        shell_config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            workspace="",
+            allowlist_enabled=False,
+            allow_env_prefix=True,
+            allowed_commands=(),
+        ),
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
     )

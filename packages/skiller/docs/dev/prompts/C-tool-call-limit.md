@@ -1,6 +1,6 @@
 # C. Tool Call Limit
 
-Purpose: verify that `agent.loop.max_tool_calls` rejects one assistant response
+Purpose: verify that `loop.max_tool_calls` rejects one assistant response
 that contains too many tool calls.
 
 Prompt:
@@ -33,7 +33,7 @@ Expected behavior:
 
 Notes:
 
-- The default fallback is `agent.loop.max_tool_calls = 5`, so 6 calls should
+- The default fallback is `loop.max_tool_calls = 5`, so 6 calls should
   exceed the default limit.
 - This is a prompt-based manual test. It only validates the limit if the LLM
   emits the 6 tool calls in one assistant response.

@@ -24,6 +24,7 @@ steps:
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell
+      - files
     max_turns: 10
     next: ask_user
 

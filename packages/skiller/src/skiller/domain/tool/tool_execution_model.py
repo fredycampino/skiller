@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.tool.tool_contract import ToolResult
+from skiller.domain.tool.tool_contract import ToolResult, ToolRuntimeConfigs
 
 
 class ToolExecutionStatus(str, Enum):
@@ -29,6 +30,8 @@ class ToolExecutionRequest:
     turn_id: str
     response: LLMResponse
     allowed_tools: list[str]
+    runtime_configs: ToolRuntimeConfigs
+    event_config: AgentEventOutputConfig
     max_tool_calls: int
     turn_loop: AgentLoop
 

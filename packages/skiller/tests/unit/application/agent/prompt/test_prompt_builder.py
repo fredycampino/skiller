@@ -1,13 +1,13 @@
 import pytest
 
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
+from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.llm_model import (
     LLMMessage,
     LLMToolCall,
     LLMToolCallFunction,
 )
-from skiller.domain.tool.tool_contract import ToolConfig
 
 pytestmark = pytest.mark.unit
 
@@ -261,11 +261,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
 
 def test_agent_prompt_builder_adds_tools_to_request() -> None:
     builder = AgentPromptBuilder()
-    tool = ToolConfig(
-        name="shell",
-        description="Run shell command",
-        parameters_schema={"type": "object"},
-    )
+    tool = ShellProcessTool()
 
     request = builder.build_request(
         system="Be useful.",

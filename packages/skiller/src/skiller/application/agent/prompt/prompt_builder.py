@@ -14,7 +14,7 @@ from skiller.domain.agent.llm_model import (
     LLMToolCall,
     LLMToolCallFunction,
 )
-from skiller.domain.tool.tool_contract import ToolConfig
+from skiller.domain.tool.tool_contract import ToolDefinition
 
 
 class AgentPromptBuilder:
@@ -23,7 +23,7 @@ class AgentPromptBuilder:
         *,
         system: str,
         entries: list[AgentContextEntry],
-        tools: tuple[ToolConfig, ...],
+        tools: tuple[ToolDefinition, ...],
     ) -> LLMRequest:
         return LLMRequest(
             messages=tuple(self._build_messages(system=system, entries=entries)),

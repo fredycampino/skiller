@@ -30,12 +30,13 @@ class ExecuteAgentStepUseCase:
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
         agent_step = self.step_mapper.to_agent(current_step)
-        validation = self.config_reader.validate_agent_config()
+        validation = self.config_reader.validate_agent_config(current_step=current_step)
         if not validation.ok:
             raise ValueError(validation.message)
 
         config = self.config_reader.read(
             step=agent_step,
+            current_step=current_step,
         )
         agent = AgentRun(
             run_id=current_step.run_id,

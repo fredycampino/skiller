@@ -1,7 +1,11 @@
 import pytest
 
 from skiller.application.tools.notify import NotifyTool
-from skiller.domain.tool.tool_contract import ToolInput, ToolResult, ToolResultStatus
+from skiller.domain.tool.tool_contract import (
+    ToolInput,
+    ToolResult,
+    ToolResultStatus,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -19,7 +23,10 @@ def test_notify_tool_returns_result() -> None:
     assert request.ok is True
     assert request.request is not None
 
-    result = tool.run(request.request)
+    result = tool.run(
+        config=None,
+        request=request.request,
+    )
 
     assert result == ToolResult(
         name="notify",

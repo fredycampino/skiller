@@ -15,12 +15,6 @@ trap 'rm -rf "${tmpdir}"' EXIT
 
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
 
-export AGENT_SHELL_ALLOWLIST_ENABLED=true
-export AGENT_SHELL_ALLOWLIST_WORKSPACE="."
-export AGENT_SHELL_ALLOWLIST_ALLOW_ENV_PREFIX=false
-export AGENT_SHELL_ALLOWLIST_ALLOWED_COMMANDS="pwd,printf"
-export AGENT_SHELL_SANDBOX_ENABLED=false
-
 run_case() {
   local yaml_path="$1"
   local mode="$2"

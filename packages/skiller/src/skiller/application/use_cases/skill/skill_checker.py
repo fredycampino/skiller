@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.domain.step.skill_runner_port import SkillRunnerPort
+from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.step_execution_model import NotifyOutputFormat
 from skiller.domain.step.step_type import StepType
 
@@ -41,7 +41,7 @@ class _ParsedStep:
 
 
 class SkillCheckerUseCase:
-    def __init__(self, skill_runner: SkillRunnerPort) -> None:
+    def __init__(self, skill_runner: RunnerPort) -> None:
         self.skill_runner = skill_runner
 
     def execute(
@@ -50,7 +50,7 @@ class SkillCheckerUseCase:
         *,
         skill_source: str,
     ) -> SkillCheckResult:
-        raw_skill = self.skill_runner.load_skill(skill_source, skill_ref)
+        raw_skill = self.skill_runner.load(skill_source, skill_ref)
         errors: list[SkillCheckError] = []
 
         if not isinstance(raw_skill, dict):

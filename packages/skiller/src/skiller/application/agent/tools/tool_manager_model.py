@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from skiller.domain.tool.tool_contract import ToolRuntimeConfig
+
 
 @dataclass(frozen=True)
 class AgentToolRequest:
@@ -12,3 +14,4 @@ class AgentToolRequest:
     tool: str
     args: dict[str, Any]
     allowed_tools: list[str]
+    runtime_config: ToolRuntimeConfig | None

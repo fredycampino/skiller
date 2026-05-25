@@ -3,11 +3,12 @@ import pytest
 from skiller.application.use_cases.execute.execute_wait_channel_step import (
     ExecuteWaitChannelStepUseCase,
 )
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import WaitChannelOutput
+from skiller.domain.step.step_execution_result_model import StepExecutionStatus
+from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType

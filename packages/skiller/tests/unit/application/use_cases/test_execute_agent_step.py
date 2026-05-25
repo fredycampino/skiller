@@ -15,8 +15,6 @@ from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
-from skiller.application.use_cases.render.render_current_step import CurrentStep
-from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
@@ -52,7 +50,9 @@ from skiller.domain.run.steering_model import (
     SteeringItem,
     SteeringItemType,
 )
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import AgentOutput
+from skiller.domain.step.step_execution_result_model import StepExecutionStatus
 from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,

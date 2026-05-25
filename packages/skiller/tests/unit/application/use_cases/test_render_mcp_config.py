@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
@@ -11,6 +10,8 @@ from skiller.application.use_cases.render.render_mcp_config import (
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
+from skiller.domain.step.current_step_model import CurrentStep
+from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
 

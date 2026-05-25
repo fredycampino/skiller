@@ -10,13 +10,13 @@ from skiller.application.agent.config.step_config_reader import (
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep
 from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_contract import ToolDefinition

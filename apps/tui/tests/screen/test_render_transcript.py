@@ -4,6 +4,7 @@ import pytest
 from rich.console import Console
 from rich.text import Text
 
+from stui.di.strings import TuiStrings
 from stui.screen.markdown import MarkdownView
 from stui.screen.theme import DEFAULT_TUI_THEME
 from stui.screen.transcript.agent_final_assistant_message_view import (
@@ -13,8 +14,10 @@ from stui.screen.transcript.agent_tool_call_view import AgentToolCallView
 from stui.screen.transcript.agent_tool_result_view import AgentToolResultView
 from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.render_transcript import RenderTranscript
-from stui.screen.transcript.run_status_view import RunStatusView
+from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
+from stui.screen.transcript.run_waiting_webhook_view import RunWaitingWebhookView
+from stui.screen.transcript.step_error_view import StepErrorView
 from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
 from stui.screen.transcript.step_output_view import StepOutputView
 from stui.screen.transcript.step_shell_output_view import StepShellOutputView
@@ -23,8 +26,10 @@ from stui.viewmodel.console_screen_state import (
     AgentToolCallItem,
     AgentToolResultItem,
     InfoItem,
-    RunStatusItem,
+    RunFinishedItem,
     RunWaitingInputItem,
+    RunWaitingWebhookItem,
+    StepErrorItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -160,6 +165,62 @@ def test_active_notify_keeps_latest_notify_primary_before_wait() -> None:
     assert views[1] is wait
 
 
+def test_active_notify_mutes_notify_before_webhook_wait() -> None:
+    notify = StepNotifyOutputView(
+        item=StepNotifyOutputItem(
+            run_id="run-1",
+            step_type="notify",
+            message="Trigger the webhook.",
+            muted=True,
+        )
+    )
+    wait = RunWaitingWebhookView(
+        item=RunWaitingWebhookItem(
+            run_id="run-1",
+            step_type="wait_webhook",
+            step_id="wait_authorization",
+            webhook="example-auth",
+            key="GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
+        )
+    )
+
+    views = RenderTranscript()._active_notify(views=[notify, wait])  # noqa: SLF001
+
+    assert isinstance(views[0], StepNotifyOutputView)
+    assert views[0].item.muted is True
+    assert views[1] is wait
+
+
+def test_active_webhook_wait_only_keeps_latest_webhook_warning() -> None:
+    previous = RunWaitingWebhookView(
+        item=RunWaitingWebhookItem(
+            run_id="run-1",
+            step_type="wait_webhook",
+            step_id="first",
+            webhook="first-webhook",
+            key="first-key",
+            muted=False,
+        )
+    )
+    latest = RunWaitingWebhookView(
+        item=RunWaitingWebhookItem(
+            run_id="run-1",
+            step_type="wait_webhook",
+            step_id="latest",
+            webhook="latest-webhook",
+            key="latest-key",
+            muted=True,
+        )
+    )
+
+    views = RenderTranscript()._active_webhook_wait(views=[previous, latest])  # noqa: SLF001
+
+    assert isinstance(views[0], RunWaitingWebhookView)
+    assert isinstance(views[1], RunWaitingWebhookView)
+    assert views[0].item.muted is True
+    assert views[1].item.muted is False
+
+
 def test_active_step_output_marks_latest_step_output_as_primary() -> None:
     previous = StepOutputView(
         item=StepOutputItem(
@@ -272,14 +333,69 @@ def test_final_assistant_message_view_renders_blank_line() -> None:
     assert console.export_text() == "\n"
 
 
-def test_run_status_view_renders_finished_as_muted_text() -> None:
-    view = RunStatusView(item=RunStatusItem(run_id="run-1", status="succeeded"))
+def test_run_finished_view_renders_finished_as_muted_text() -> None:
+    view = RunFinishedView(item=RunFinishedItem(run_id="run-1", status="succeeded"))
 
     renderable = view.render(theme=DEFAULT_TUI_THEME)
 
     assert isinstance(renderable, Text)
-    assert renderable.plain == "  Run finished"
+    assert renderable.plain == "  succeeded"
     assert str(renderable.style) == DEFAULT_TUI_THEME.color_text_muted
+
+
+def test_run_finished_view_renders_failed_as_muted_text() -> None:
+    view = RunFinishedView(
+        item=RunFinishedItem(
+            run_id="run-1",
+            status="error",
+            message="shell command path escapes workspace",
+        )
+    )
+
+    renderable = view.render(theme=DEFAULT_TUI_THEME)
+
+    assert isinstance(renderable, Text)
+    assert renderable.plain == "  failed"
+    assert str(renderable.style) == DEFAULT_TUI_THEME.color_text_muted
+
+
+def test_step_error_view_renders_error_detail() -> None:
+    view = StepErrorView(
+        item=StepErrorItem(
+            run_id="run-1",
+            step_id="register_auth_webhook",
+            step_type="shell",
+            message="shell command path escapes workspace",
+        )
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    assert console.export_text().rstrip() == "× shell command path escapes workspace"
+
+
+def test_run_waiting_webhook_view_renders_icon_and_message() -> None:
+    view = RunWaitingWebhookView(
+        item=RunWaitingWebhookItem(
+            run_id="run-1",
+            step_type="wait_webhook",
+            step_id="wait_authorization",
+            webhook="example-auth",
+            key="GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
+        ),
+        strings=TuiStrings(waiting_webhook_message="Waiting webhook"),
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    lines = [line.rstrip() for line in console.export_text().splitlines()]
+    assert lines == [
+        "",
+        "↯ Waiting webhook:",
+        "  example-auth/GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
+    ]
 
 
 def test_render_markdown_inline_code_has_no_background() -> None:

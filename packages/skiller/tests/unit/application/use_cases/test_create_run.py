@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.domain.run.run_context_model import RunContext
 
 pytestmark = pytest.mark.unit
@@ -50,7 +50,9 @@ def test_create_run_generates_uuid_for_store() -> None:
     )
     use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
-    run_id = use_case.execute("notify_test", {"message": "ok"})
+    run_id = use_case.execute(
+        CreateRunInput(skill_ref="notify_test", inputs={"message": "ok"})
+    )
 
     assert str(uuid.UUID(run_id)) == run_id
     assert store.create_calls == [
@@ -74,7 +76,7 @@ def test_create_run_generates_uuid_when_called_without_inputs() -> None:
     )
     use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
-    run_id = use_case.execute("notify_test", {})
+    run_id = use_case.execute(CreateRunInput(skill_ref="notify_test", inputs={}))
 
     assert run_id == store.create_calls[0]["run_id"]
     assert str(uuid.UUID(run_id)) == run_id
@@ -86,4 +88,4 @@ def test_create_run_rejects_invalid_skill_payload() -> None:
     use_case = CreateRunUseCase(store=store, skill_runner=skill_runner)
 
     with pytest.raises(ValueError, match="Invalid skill format"):
-        use_case.execute("notify_test", {})
+        use_case.execute(CreateRunInput(skill_ref="notify_test", inputs={}))

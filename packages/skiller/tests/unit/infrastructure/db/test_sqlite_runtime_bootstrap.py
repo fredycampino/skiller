@@ -19,6 +19,15 @@ def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -
     assert _table_exists(db_path, "runs") is True
     assert _table_exists(db_path, "agent_context_entries") is True
     assert _table_exists(db_path, "webhook_registrations") is True
+    assert _table_columns(db_path, "webhook_registrations") >= {
+        "webhook",
+        "secret",
+        "method",
+        "auth",
+        "payload_source",
+        "enabled",
+        "created_at",
+    }
 
 
 def test_sqlite_runtime_bootstrap_resets_outdated_database(tmp_path) -> None:
@@ -58,3 +67,9 @@ def _count_rows(db_path, table: str) -> int:  # noqa: ANN001
         row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     assert row is not None
     return int(row[0])
+
+
+def _table_columns(db_path, table: str) -> set[str]:  # noqa: ANN001
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}

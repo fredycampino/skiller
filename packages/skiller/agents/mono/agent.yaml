@@ -30,11 +30,11 @@ steps:
       Shell and file access are limited by their configured runtime policies.
     task: '{{output_value("ask_user").payload.text}}'
     tools:
-      - notify
       - shell
       - files
     max_turns: 20
     next: ask_user
 
-  - notify: done
-    message: "Mono closed."
+  - assign: done
+    values:
+      status: "closed"

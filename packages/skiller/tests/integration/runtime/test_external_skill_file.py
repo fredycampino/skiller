@@ -11,8 +11,8 @@ from helpers.agent_runner import build_agent_runner
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.tools.tool_manager import ToolManager
-from skiller.application.run_worker_service import RunWorkerService
-from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -21,8 +21,12 @@ from skiller.application.use_cases.execute.execute_agent_step import (
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_wait_input_step import (
     ExecuteWaitInputStepUseCase,
 )
@@ -30,8 +34,15 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
     ExecuteWaitWebhookStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
-from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
+from skiller.application.use_cases.ingress.handle_input import (
+    HandleInputInput,
+    HandleInputUseCase,
+)
+from skiller.application.use_cases.ingress.handle_webhook import (
+    HandleWebhookInput,
+    HandleWebhookUseCase,
+)
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.render.render_current_step import (
@@ -42,15 +53,19 @@ from skiller.application.use_cases.render.render_mcp_config import RenderMcpConf
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.mark_notify_action_done import (
+    MarkNotifyActionDoneUseCase,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.application.waits.service import WaitApplicationService
 from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
@@ -79,12 +94,20 @@ class _FakeChannelSender:
         _ = channel
         return True
 
+    def send_text(self, *, channel: str, key: str, message: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            channel=channel,
+            key=key,
+            message=message,
+            message_id="message-1",
+        )
+
 
 def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
     return SqliteRuntimeEventStore(store.db_path)
 
 
-def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
+def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
@@ -92,11 +115,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
     )
-    webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
     tool_process_runner = DefaultToolProcessRunner()
+    channel_sender = _FakeChannelSender()
     fail_run_use_case = FailRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
@@ -124,6 +147,10 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         mcp=mcp,
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_send_step_use_case = ExecuteSendStepUseCase(
+        store=store,
+        channel_sender=channel_sender,
+    )
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
@@ -139,6 +166,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_channel_step_use_case = ExecuteWaitChannelStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=external_event_store,
+    )
     execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
         run_store=store,
         wait_store=store,
@@ -149,7 +181,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         wait_store=store,
         external_event_store=external_event_store,
     )
-    run_worker_service = RunWorkerService(
+    run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -159,14 +191,16 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_assign_step_use_case=execute_assign_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_send_step_use_case=execute_send_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_channel_step_use_case=execute_wait_channel_step_use_case,
         execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
 
-    runtime = RuntimeApplicationService(
+    runtime = RunApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SqliteRuntimeBootstrap(store.db_path),
         ),
@@ -179,12 +213,32 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         skill_server_checker_use_case=SkillServerCheckerUseCase(
             skill_runner=skill_runner,
             server_status=_FakeServerStatus(),
-            channel_sender=_FakeChannelSender(),
+            channel_sender=channel_sender,
         ),
+        resume_run_use_case=ResumeRunUseCase(store=store),
+        mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
+            store=store,
+            events=runtime_event_store,
+        ),
+        get_run_status_use_case=GetRunStatusUseCase(store),
+        run_executor=run_executor,
+    )
+    return runtime
+
+
+def _build_waits(store: SqliteStateStore) -> WaitApplicationService:
+    runtime_event_store = SqliteRuntimeEventStore(store.db_path)
+    external_event_store = SqliteExternalEventStore(store.db_path)
+    webhook_registry = SqliteWebhookRegistry(store.db_path)
+    return WaitApplicationService(
         handle_input_use_case=HandleInputUseCase(
             run_store=store,
             external_event_store=external_event_store,
             runtime_event_store=runtime_event_store,
+        ),
+        handle_channel_use_case=HandleChannelUseCase(
+            external_event_store=external_event_store,
+            wait_store=store,
         ),
         handle_webhook_use_case=HandleWebhookUseCase(
             external_event_store=external_event_store,
@@ -193,12 +247,7 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
-        resume_run_use_case=ResumeRunUseCase(store=store),
-        interrupt_agent_use_case=SimpleNamespace(execute=lambda run_id: None),
-        get_run_status_use_case=GetRunStatusUseCase(store),
-        run_worker_service=run_worker_service,
     )
-    return runtime
 
 
 def test_run_external_skill_file_succeeds() -> None:
@@ -221,15 +270,17 @@ def test_run_external_skill_file_succeeds() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
 
-        run = store.get_run(run_result["run_id"])
-        assert run_result["status"] == "SUCCEEDED"
+        run = store.get_run(run_result.run_id)
+        assert run_result.status.value == "SUCCEEDED"
         assert run is not None
         assert run.source == "file"
         assert run.ref == str(skill_path)
         assert run.snapshot["name"] == "external_notify"
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         notify_event = _step_success_event(events, step_id="show_message")
         assert notify_event.payload.output["value"]["message"] == "external ok"
 
@@ -257,10 +308,12 @@ def test_external_notify_can_read_shell_output_value() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
 
-        run = store.get_run(run_result["run_id"])
-        assert run_result["status"] == "SUCCEEDED"
+        run = store.get_run(run_result.run_id)
+        assert run_result.status.value == "SUCCEEDED"
         assert run is not None
         notify_output = run.context.step_executions["summarize_tunnels"].output.to_public_dict()
         assert notify_output["value"]["message"] == ("x" * 400) + "\n"
@@ -291,7 +344,9 @@ def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
             store=store, skill_runner=skill_runner
         )
 
-        run_id = create_run_use_case.execute(str(skill_path), {}, skill_source="file")
+        run_id = create_run_use_case.execute(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
         get_start_step_use_case.execute(run_id)
 
         skill_path.write_text(
@@ -341,11 +396,13 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
-        run_id = run_result["run_id"]
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={"pr": "42"}, skill_source="file")
+        )
+        run_id = run_result.run_id
         run = store.get_run(run_id)
 
-        assert run_result["status"] == "WAITING"
+        assert run_result.status.value == "WAITING"
         assert run is not None
         assert run.status == "WAITING"
 
@@ -359,8 +416,8 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
 
-        assert resume_result["resume_status"] == "RESUMED"
-        assert resume_result["status"] == "WAITING"
+        assert resume_result.resume_status.value == "RESUMED"
+        assert resume_result.status.value == "WAITING"
         assert resumed_run is not None
         assert resumed_run.status == "WAITING"
 
@@ -397,27 +454,35 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {"pr": "42"}, skill_source="file")
-        run_id = run_result["run_id"]
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={"pr": "42"}, skill_source="file")
+        )
+        run_id = run_result.run_id
 
-        assert run_result["status"] == "WAITING"
+        assert run_result.status.value == "WAITING"
 
-        matched_runs = runtime.handle_webhook(
-            "github-pr-merged", "42", {"merged": True}, dedup_key="dedup-1"
+        waits = _build_waits(store)
+        matched_runs = waits.handle_webhook(
+            HandleWebhookInput(
+                webhook="github-pr-merged",
+                key="42",
+                payload={"merged": True},
+                dedup_key="dedup-1",
+            )
         )
         matched_run = store.get_run(run_id)
 
-        assert matched_runs["accepted"] is True
-        assert matched_runs["duplicate"] is False
-        assert matched_runs["matched_runs"] == [run_id]
+        assert matched_runs.accepted is True
+        assert matched_runs.duplicate is False
+        assert matched_runs.run_ids == [run_id]
         assert matched_run is not None
         assert matched_run.status == "WAITING"
 
         resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
 
-        assert resume_result["resume_status"] == "RESUMED"
-        assert resume_result["status"] == "SUCCEEDED"
+        assert resume_result.resume_status.value == "RESUMED"
+        assert resume_result.status.value == "SUCCEEDED"
         assert resumed_run is not None
         assert resumed_run.status == "SUCCEEDED"
 
@@ -459,27 +524,29 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
-        run_id = run_result["run_id"]
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
+        run_id = run_result.run_id
 
-        assert run_result["status"] == "WAITING"
+        assert run_result.status.value == "WAITING"
 
-        input_result = runtime.handle_input(run_id, text="database timeout")
+        waits = _build_waits(store)
+        input_result = waits.handle_input(
+            HandleInputInput(run_id=run_id, text="database timeout")
+        )
         waiting_run = store.get_run(run_id)
 
-        assert input_result == {
-            "accepted": True,
-            "run_id": run_id,
-            "matched_runs": [run_id],
-        }
+        assert input_result.accepted is True
+        assert input_result.run_ids == [run_id]
         assert waiting_run is not None
         assert waiting_run.status == "WAITING"
 
         resume_result = runtime.resume_run(run_id)
         resumed_run = store.get_run(run_id)
 
-        assert resume_result["resume_status"] == "RESUMED"
-        assert resume_result["status"] == "SUCCEEDED"
+        assert resume_result.resume_status.value == "RESUMED"
+        assert resume_result.status.value == "SUCCEEDED"
         assert resumed_run is not None
         assert resumed_run.status == "SUCCEEDED"
         assert (
@@ -537,22 +604,22 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
-        run_id = run_result["run_id"]
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
+        run_id = run_result.run_id
 
-        assert run_result["status"] == "WAITING"
+        assert run_result.status.value == "WAITING"
 
-        first_input = runtime.handle_input(run_id, text="first reply")
+        waits = _build_waits(store)
+        first_input = waits.handle_input(HandleInputInput(run_id=run_id, text="first reply"))
         first_resume = runtime.resume_run(run_id)
         run_after_first_resume = store.get_run(run_id)
 
-        assert first_input == {
-            "accepted": True,
-            "run_id": run_id,
-            "matched_runs": [run_id],
-        }
-        assert first_resume["resume_status"] == "RESUMED"
-        assert first_resume["status"] == "WAITING"
+        assert first_input.accepted is True
+        assert first_input.run_ids == [run_id]
+        assert first_resume.resume_status.value == "RESUMED"
+        assert first_resume.status.value == "WAITING"
         assert run_after_first_resume is not None
         assert run_after_first_resume.status == "WAITING"
         assert run_after_first_resume.current == "ask_user"
@@ -560,17 +627,14 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
             "value"
         ]["payload"] == {"text": "first reply"}
 
-        second_input = runtime.handle_input(run_id, text="second reply")
+        second_input = waits.handle_input(HandleInputInput(run_id=run_id, text="second reply"))
         second_resume = runtime.resume_run(run_id)
         run_after_second_resume = store.get_run(run_id)
 
-        assert second_input == {
-            "accepted": True,
-            "run_id": run_id,
-            "matched_runs": [run_id],
-        }
-        assert second_resume["resume_status"] == "RESUMED"
-        assert second_resume["status"] == "WAITING"
+        assert second_input.accepted is True
+        assert second_input.run_ids == [run_id]
+        assert second_resume.resume_status.value == "RESUMED"
+        assert second_resume.status.value == "WAITING"
         assert run_after_second_resume is not None
         assert run_after_second_resume.status == "WAITING"
         assert run_after_second_resume.current == "ask_user"

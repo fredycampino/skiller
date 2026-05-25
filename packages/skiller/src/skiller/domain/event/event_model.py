@@ -21,6 +21,7 @@ class RuntimeEventType(StrEnum):
     STEP_ERROR = "STEP_ERROR"
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
+    ACTION_DONE = "ACTION_DONE"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
     AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
     AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
@@ -69,6 +70,12 @@ class StepErrorPayload:
 
 
 @dataclass(frozen=True)
+class ActionDonePayload:
+    action_type: str
+    status: str
+
+
+@dataclass(frozen=True)
 class AgentBodyToolMessage:
     total_tokens: int
     text: str
@@ -108,6 +115,7 @@ RuntimeEventPayload: TypeAlias = (
     | StepStartedPayload
     | StepSuccessPayload
     | StepErrorPayload
+    | ActionDonePayload
     | AgentEventPayload
     | AgentLifecyclePayload
     | InputReceivedPayload
@@ -243,6 +251,12 @@ def runtime_event_payload_from_dict(
     if event_type == RuntimeEventType.STEP_ERROR:
         return StepErrorPayload(
             error=str(value.get("error", "")),
+        )
+
+    if event_type == RuntimeEventType.ACTION_DONE:
+        return ActionDonePayload(
+            action_type=str(value.get("action_type", "")),
+            status=str(value.get("status", "")),
         )
 
     if event_type == RuntimeEventType.INPUT_RECEIVED:

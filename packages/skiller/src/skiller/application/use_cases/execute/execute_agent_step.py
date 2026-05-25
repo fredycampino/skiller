@@ -2,16 +2,16 @@ from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.runner_state import AgentRunnerRequest
-from skiller.application.use_cases.render.render_current_step import CurrentStep
-from skiller.application.use_cases.shared.step_execution_result import (
-    StepAdvance,
-    StepExecutionStatus,
-)
 from skiller.domain.agent.agent_run_identity import AgentRun
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import AgentOutput, StepExecution
+from skiller.domain.step.step_execution_result_model import (
+    StepAdvance,
+    StepExecutionStatus,
+)
 
 
 class ExecuteAgentStepUseCase:

@@ -9,7 +9,11 @@ from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.log_event_mapper import LogEventMapper
 from stui.port.event_models import ErrorPayload, LogEvent, LogEventType
-from stui.port.event_port import LogEventsListener, LogEventsObserver
+from stui.port.event_port import (
+    DEFAULT_POLL_INTERVAL_SECONDS,
+    LogEventsListener,
+    LogEventsObserver,
+)
 from stui.port.run_port import RunPort, RunRuntimeStatus
 
 _STOP_EVENT_TYPES = {
@@ -30,7 +34,6 @@ class CliLogEventSource(Protocol):
 
 @dataclass
 class LogsEventObserver(LogEventsObserver):
-    interval_seconds: float = 0.5
     logs: CliLogEventSource = field(default_factory=CliLogEventAdapter)
     mapper: LogEventMapper = field(default_factory=LogEventMapper)
     run_port: RunPort | None = None
@@ -40,11 +43,31 @@ class LogsEventObserver(LogEventsObserver):
     _last_seen_sequence: int = field(default=0, init=False, repr=False)
     _pending_stop: bool = field(default=False, init=False, repr=False)
     _observer_error_count: int = field(default=0, init=False, repr=False)
+    _current_interval_seconds: float = field(
+        default=DEFAULT_POLL_INTERVAL_SECONDS,
+        init=False,
+        repr=False,
+    )
 
-    def subscribe(self, *, run_id: str, listener: LogEventsListener) -> None:
+    def subscribe(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    ) -> None:
         normalized_run_id = run_id.strip()
         if not normalized_run_id:
             raise RuntimeError("log observer requires run_id")
+
+        if (
+            self._run_id == normalized_run_id
+            and self._listener is listener
+            and self._task is asyncio.current_task()
+        ):
+            self._current_interval_seconds = interval_seconds
+            self._pending_stop = False
+            return
 
         last_seen_sequence = self._last_seen_sequence
         if self._run_id != normalized_run_id:
@@ -55,6 +78,7 @@ class LogsEventObserver(LogEventsObserver):
         self._listener = listener
         self._last_seen_sequence = last_seen_sequence
         self._pending_stop = False
+        self._current_interval_seconds = interval_seconds
         self._task = asyncio.create_task(self._poll_loop(listener))
 
     def unsubscribe(self) -> None:
@@ -79,14 +103,14 @@ class LogsEventObserver(LogEventsObserver):
             while self._listener is listener:
                 events = await asyncio.to_thread(self._list_next_events, listener)
                 if events:
-                    listener.notify(events)
                     self._last_seen_sequence = max(event.sequence for event in events)
                     self._pending_stop = _ends_in_stop(events)
+                    listener.notify(events)
                 elif self._pending_stop:
                     self._listener = None
                     self._pending_stop = False
                     return
-                await asyncio.sleep(self.interval_seconds)
+                await asyncio.sleep(self._current_interval_seconds)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

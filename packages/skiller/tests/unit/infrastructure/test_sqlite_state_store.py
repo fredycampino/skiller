@@ -7,6 +7,11 @@ from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     RuntimeEventType,
 )
+from skiller.domain.event.webhook_registration_model import (
+    WebhookAuth,
+    WebhookMethod,
+    WebhookPayloadSource,
+)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.steering_model import (
@@ -14,6 +19,9 @@ from skiller.domain.run.steering_model import (
     SteeringAgentMessage,
 )
 from skiller.domain.step.step_execution_model import (
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyOpenUrlAction,
     NotifyOutput,
     StepExecution,
     SwitchOutput,
@@ -57,6 +65,24 @@ def _notify_execution(message: str) -> StepExecution:
         input={"message": message},
         evaluation={},
         output=NotifyOutput(text=message, message=message),
+    )
+
+
+def _notify_action_execution(status: NotifyActionStatus) -> StepExecution:
+    return StepExecution(
+        step_type=StepType.NOTIFY,
+        input={"message": "Authorize the app"},
+        evaluation={},
+        output=NotifyOutput(
+            text="Authorize the app",
+            message="Authorize the app",
+            action_type=NotifyActionType.OPEN_URL,
+            action=NotifyOpenUrlAction(
+                label="Open authorization",
+                url="https://example.com/oauth/start",
+                status=status,
+            ),
+        ),
     )
 
 
@@ -130,6 +156,34 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     assert (
         run.context.step_executions["start"].to_persisted_dict()
         == _when_execution("good", 85).to_persisted_dict()
+    )
+
+
+def test_get_run_uses_persisted_notify_action_status(tmp_path) -> None:
+    db_path = tmp_path / "persisted-notify-action.db"
+    store = SqliteStateStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+
+    run_id = store.create_run(
+        "internal",
+        "demo",
+        {"start": "auth_link", "steps": [{"notify": "auth_link"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id="550e8400-e29b-41d4-a716-446655440003",
+    )
+    context = RunContext(
+        inputs={},
+        step_executions={"auth_link": _notify_action_execution(NotifyActionStatus.DONE)},
+    )
+
+    store.update_run(run_id, status=RunStatus.RUNNING, current="auth_link", context=context)
+
+    run = store.get_run(run_id)
+
+    assert run is not None
+    assert (
+        run.context.step_executions["auth_link"].to_persisted_dict()
+        == _notify_action_execution(NotifyActionStatus.DONE).to_persisted_dict()
     )
 
 
@@ -525,10 +579,25 @@ def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:
     registry = SqliteWebhookRegistry(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
-    registry.register_webhook("github-ci", "secret-1")
-    registry.register_webhook("market-signal", "secret-2")
+    registry.register_webhook(
+        "github-ci",
+        "secret-1",
+        method=WebhookMethod.POST,
+        auth=WebhookAuth.SIGNED,
+        payload_source=WebhookPayloadSource.BODY_JSON,
+    )
+    registry.register_webhook(
+        "market-signal",
+        "secret-2",
+        method=WebhookMethod.POST,
+        auth=WebhookAuth.SIGNED,
+        payload_source=WebhookPayloadSource.BODY_JSON,
+    )
 
     webhooks = registry.list_webhook_registrations()
 
     assert sorted(item["webhook"] for item in webhooks) == ["github-ci", "market-signal"]
+    assert all(item["method"] == "POST" for item in webhooks)
+    assert all(item["auth"] == "signed" for item in webhooks)
+    assert all(item["payload_source"] == "body_json" for item in webhooks)
     assert all("created_at" in item for item in webhooks)

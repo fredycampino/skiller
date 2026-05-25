@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 from textual import events
-from textual.widgets import Static, TextArea
+from textual.widgets import Button, Static, TextArea
 
 from apps.tui.tests.support import (
     FakeAgentPort,
@@ -15,8 +15,11 @@ from apps.tui.tests.support import (
     make_runs_port_item,
     patched_to_thread,
 )
+from stui.di.strings import TuiStrings
+from stui.screen import console_screen as console_screen_module
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
+from stui.screen.notify_action_view import NotifyActionView
 from stui.screen.transcript_log import TranscriptLog
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
@@ -25,6 +28,7 @@ from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     AgentStepFinalOutputItem,
     InfoItem,
+    NotifyActionState,
     OutputFormat,
     PromptMode,
     RunStepItem,
@@ -35,6 +39,12 @@ from stui.viewmodel.console_screen_state import (
 )
 
 pytestmark = pytest.mark.unit
+
+LONG_NOTIFY_ACTION_MESSAGE = (
+    "Authorize the app with the external provider. This message is intentionally "
+    "long so the TUI notification can show how action text wraps while keeping "
+    "the button aligned on the right side."
+)
 
 
 def test_console_screen_clears_prompt_after_local_submit() -> None:
@@ -217,6 +227,33 @@ def test_console_screen_compacts_multiline_paste_into_single_line_reference() ->
     asyncio.run(run())
 
 
+def test_console_screen_pastes_single_line_once_and_strips_trailing_newline() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        command = "/run openai-auth"
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            prompt = app.query_one("#prompt", TextArea)
+            prompt.post_message(events.Paste(command))
+            await pilot.pause()
+
+            assert prompt.text == command
+
+            prompt.text = ""
+            prompt.cursor_location = (0, 0)
+            prompt.post_message(events.Paste(f"{command}\n"))
+            await pilot.pause()
+
+            assert prompt.text == command
+
+    asyncio.run(run())
+
+
 def test_console_screen_submits_decoded_multiline_paste_text() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
@@ -284,6 +321,241 @@ def test_console_screen_shows_icon_when_session_is_main() -> None:
             assert footer_right.content == "◌"
 
     asyncio.run(run())
+
+
+def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        action_state = _notify_action_state()
+        calls: list[tuple[str, str, str]] = []
+
+        def record_open_notify_action_link(
+            *,
+            run_id: str,
+            step_id: str,
+            url: str,
+        ) -> None:
+            calls.append((run_id, step_id, url))
+
+        viewmodel.state.set_notify_action(action_state)
+        viewmodel.open_notify_action_link = (  # type: ignore[method-assign]
+            record_open_notify_action_link
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            status = app.query_one("#status", Static)
+            prompt_row = app.query_one("#prompt-row")
+            message = app.query_one("#notify-action-message", Static)
+            view = app.query_one("#notify-action", NotifyActionView)
+            open_link = app.query_one("#notify-action-open-link", Button)
+            open_link.focus()
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert view.size.width >= 28
+            assert status.region.bottom == view.region.bottom
+            assert status.region.bottom == prompt_row.region.y
+            assert view.region.right == prompt_row.region.right
+            assert message.size.height > 1
+            assert open_link.region.y > message.region.bottom
+            assert open_link.region.right == view.region.right - 2
+            assert str(open_link.label) == "Open authorization"
+
+        assert calls == [
+            ("run-1", "auth_link", "https://example.com/oauth/start"),
+        ]
+
+    asyncio.run(run())
+
+
+def test_console_screen_routes_notify_action_done_to_viewmodel() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+            strings=TuiStrings(notify_action_done_label="complete"),
+        )
+        action_state = _notify_action_state()
+        calls: list[tuple[str, str]] = []
+
+        def record_done_notify_action(
+            *,
+            run_id: str,
+            step_id: str,
+        ) -> None:
+            calls.append((run_id, step_id))
+
+        viewmodel.state.set_notify_action(action_state)
+        viewmodel.done_notify_action = (  # type: ignore[method-assign]
+            record_done_notify_action
+        )
+        app = ConsoleScreen(
+            viewmodel=viewmodel,
+            strings=TuiStrings(notify_action_done_label="complete"),
+        )
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            done = app.query_one("#notify-action-done", Button)
+
+            await pilot.click("#notify-action-done")
+            await pilot.pause()
+
+            assert str(done.label) == "complete"
+
+        assert calls == [("run-1", "auth_link")]
+
+    asyncio.run(run())
+
+
+def test_console_screen_moves_focus_from_prompt_to_notify_action_with_right() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.set_notify_action(_notify_action_state())
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            prompt = app.query_one("#prompt", TextArea)
+            done = app.query_one("#notify-action-done", Button)
+            prompt.focus()
+
+            await pilot.press("right")
+            await pilot.pause()
+
+            assert app.focused is done
+
+    asyncio.run(run())
+
+
+def test_console_screen_moves_focus_between_notify_action_buttons_with_arrows() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.set_notify_action(_notify_action_state())
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            prompt = app.query_one("#prompt", TextArea)
+            done = app.query_one("#notify-action-done", Button)
+            open_link = app.query_one("#notify-action-open-link", Button)
+            done.focus()
+
+            await pilot.press("right")
+            await pilot.pause()
+
+            assert app.focused is open_link
+
+            open_link.focus()
+            await pilot.press("left")
+            await pilot.pause()
+
+            assert app.focused is done
+
+            done.focus()
+            await pilot.press("left")
+            await pilot.pause()
+
+            assert app.focused is prompt
+
+            open_link.focus()
+            await pilot.press("right")
+            await pilot.pause()
+
+            assert app.focused is prompt
+
+    asyncio.run(run())
+
+
+def test_console_screen_keeps_right_arrow_in_prompt_without_notify_action() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            prompt = app.query_one("#prompt", TextArea)
+            prompt.focus()
+
+            await pilot.press("right")
+            await pilot.pause()
+
+            assert app.focused is prompt
+
+    asyncio.run(run())
+
+
+def _notify_action_state() -> NotifyActionState:
+    return NotifyActionState(
+        run_id="run-1",
+        step_id="auth_link",
+        message=LONG_NOTIFY_ACTION_MESSAGE,
+        label="Open authorization",
+        url="https://example.com/oauth/start",
+        status="pending",
+    )
+
+
+def test_run_console_screen_enables_textual_mouse(monkeypatch: pytest.MonkeyPatch) -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=NeverCalledRunPort(),
+        waiting_port=NeverCalledWaitingPort(),
+        runs_port=FakeRunsPort(),
+    )
+    run_calls: list[dict[str, object]] = []
+
+    class FakeContainer:
+        strings = console_screen_module.DEFAULT_TUI_STRINGS
+
+        def build_viewmodel(self, *, session_key: str) -> object:
+            return viewmodel
+
+    def fake_build_tui_container(
+        *,
+        theme: object,
+        strings: object,
+    ) -> FakeContainer:
+        return FakeContainer()
+
+    def fake_run(
+        self: ConsoleScreen,
+        **kwargs: object,
+    ) -> str:
+        run_calls.append(kwargs)
+        return "main"
+
+    monkeypatch.setattr(
+        console_screen_module,
+        "build_tui_container",
+        fake_build_tui_container,
+    )
+    monkeypatch.setattr(ConsoleScreen, "run", fake_run)
+
+    result = console_screen_module.run_console_screen(session_key="main")
+
+    assert result == "main"
+    assert run_calls == [{"mouse": True}]
 
 
 def test_console_screen_escape_interrupts_running_chat_agent() -> None:
@@ -525,6 +797,45 @@ def test_console_screen_renders_notify_output_like_agent_message() -> None:
             notify_index = rendered_lines.index("[notify] show_message")
 
             assert rendered_lines[notify_index + 1] == "• Hola mundo"
+
+    asyncio.run(run())
+
+
+def test_console_screen_rerenders_transcript_after_resize() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        url = (
+            "http://127.0.0.1:8001/webhooks/example-auth/"
+            "GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl"
+        )
+        viewmodel.state.transcript.items.append(
+            StepNotifyOutputItem(
+                run_id="run-1",
+                step_type="notify",
+                message=f"Fake authorization mode\n\n```text\n{url}\n```",
+                format=OutputFormat.MARKDOWN,
+            )
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            transcript = app.query_one("#transcript-log", TranscriptLog)
+            rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+
+            assert any("…" in line for line in rendered_lines)
+
+            await pilot.resize_terminal(120, 24)
+            await pilot.pause(0.2)
+
+            rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+
+            assert any(url in line for line in rendered_lines)
 
     asyncio.run(run())
 

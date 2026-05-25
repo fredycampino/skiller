@@ -1,6 +1,6 @@
 from typing import Any
 
-from skiller.application.use_cases.render.render_current_step import CurrentStep
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep
 from skiller.domain.step.step_type import StepType
 

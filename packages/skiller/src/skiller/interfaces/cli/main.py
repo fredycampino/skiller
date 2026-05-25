@@ -358,6 +358,15 @@ def build_parser() -> argparse.ArgumentParser:
     agent_stats_parser.add_argument("run_id")
     agent_stats_parser.add_argument("--agent", required=True)
 
+    action_parser = sub.add_parser("action", help="Runtime action operations")
+    action_sub = action_parser.add_subparsers(dest="action_command", required=True)
+    action_done_parser = action_sub.add_parser(
+        "done",
+        help="Mark a notify action as done",
+    )
+    action_done_parser.add_argument("run_id")
+    action_done_parser.add_argument("step_id")
+
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
     status_parser.add_argument(
@@ -482,6 +491,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Register a webhook channel and generate its secret",
     )
     register_parser.add_argument("webhook", help="Webhook channel name")
+    register_parser.add_argument(
+        "--method",
+        default="POST",
+        choices=["GET", "POST"],
+        help="HTTP method accepted by the webhook endpoint",
+    )
+    register_parser.add_argument(
+        "--auth",
+        default="signed",
+        choices=["signed", "none"],
+        help="Webhook endpoint authentication mode",
+    )
+    register_parser.add_argument(
+        "--payload-source",
+        default="body_json",
+        choices=["body_json", "query"],
+        help="Where the webhook endpoint reads the event payload from",
+    )
 
     webhook_sub.add_parser("list", help="List registered webhook channels")
 
@@ -515,8 +542,15 @@ def main(argv: list[str] | None = None) -> int:
 
     container = build_runtime_container()
     controller = RuntimeController(
-        runtime_service=container.runtime_service,
+        agent_service=container.agent_service,
+        agent_mapper=container.agent_mapper,
+        run_service=container.run_service,
+        run_mapper=container.run_mapper,
         query_service=container.query_service,
+        wait_service=container.wait_service,
+        input_wait_mapper=container.input_wait_mapper,
+        channel_wait_mapper=container.channel_wait_mapper,
+        webhook_wait_mapper=container.webhook_wait_mapper,
     )
     controller.initialize()
 
@@ -982,6 +1016,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "OK" else 1
 
+    if args.command == "action" and args.action_command == "done":
+        result = controller.action_done(args.run_id, args.step_id)
+        print(json.dumps(result, indent=2))
+        return 0 if result["done"] else 1
+
     if args.command == "delete":
         result = controller.delete_run(args.run_id)
         print(json.dumps(result, indent=2))
@@ -1068,7 +1107,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "webhook" and args.webhook_command == "register":
-        result = controller.register_webhook(args.webhook)
+        result = controller.register_webhook(
+            args.webhook,
+            method=args.method,
+            auth=args.auth,
+            payload_source=args.payload_source,
+        )
         if result["status"] == "REGISTERED":
             result["webhook_url"] = (
                 f"http://{container.settings.webhooks_host}:{container.settings.webhooks_port}"

@@ -11,6 +11,15 @@ from skiller.domain.wait.wait_store_port import WaitStorePort
 
 
 @dataclass(frozen=True)
+class HandleChannelInput:
+    channel: str
+    key: str
+    payload: dict[str, Any]
+    external_id: str | None = None
+    dedup_key: str = ""
+
+
+@dataclass(frozen=True)
 class HandleChannelResult:
     accepted: bool
     duplicate: bool
@@ -28,15 +37,12 @@ class HandleChannelUseCase:
         self.external_event_store = external_event_store
         self.wait_store = wait_store
 
-    def execute(
-        self,
-        channel: str,
-        key: str,
-        payload: dict[str, Any],
-        *,
-        external_id: str | None = None,
-        dedup_key: str,
-    ) -> HandleChannelResult:
+    def execute(self, request: HandleChannelInput) -> HandleChannelResult:
+        channel = request.channel
+        key = request.key
+        payload = request.payload
+        external_id = request.external_id
+        dedup_key = request.dedup_key
         if not channel or not key:
             return HandleChannelResult(
                 accepted=False,

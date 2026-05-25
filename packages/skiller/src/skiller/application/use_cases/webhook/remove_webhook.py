@@ -22,7 +22,7 @@ class RemoveWebhookUseCase:
         self.registry = registry
 
     def execute(self, webhook: str) -> RemoveWebhookResult:
-        normalized = webhook.strip()
+        normalized = webhook
         if not normalized:
             return RemoveWebhookResult(
                 status=RemoveWebhookStatus.INVALID_WEBHOOK,

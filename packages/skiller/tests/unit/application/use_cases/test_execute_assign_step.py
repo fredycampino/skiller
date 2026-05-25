@@ -1,12 +1,13 @@
 import pytest
 
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import AssignOutput
+from skiller.domain.step.step_execution_result_model import StepExecutionStatus
+from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
 

@@ -15,15 +15,21 @@ from apps.tui.tests.support import (
 )
 from stui.di.strings import TuiStrings
 from stui.port.event_models import (
+    ActionOpenUrlValue,
     AgentOutputValue,
     LogEvent,
     LogEventPayload,
     LogEventType,
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyActionValue,
     OutputPayload,
     RunFinishedPayload,
     RunWaitingPayload,
     StepStartedPayload,
+    StepSuccessPayload,
     WaitInputOutputValue,
+    WaitWebhookOutputValue,
 )
 from stui.port.run_port import (
     CommandAck,
@@ -42,6 +48,8 @@ from stui.usecase import (
 from stui.usecase import (
     submit_waiting_input_use_case as submit_waiting_input_use_case_module,
 )
+from stui.usecase.done_notify_action_use_case import DoneNotifyActionResult
+from stui.usecase.open_notify_action_use_case import OpenNotifyActionResult
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     CompletionItem,
@@ -49,11 +57,12 @@ from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
     InfoItem,
+    NotifyActionState,
     PromptMode,
     RunAckItem,
+    RunFinishedItem,
     RunOutputItem,
     RunResumeItem,
-    RunStatusItem,
     RunStepItem,
     RunWaitingInputItem,
     StepOutputItem,
@@ -102,6 +111,17 @@ def _waiting_output(prompt: str = "") -> OutputPayload:
     return OutputPayload(
         text=prompt,
         value=WaitInputOutputValue(prompt=prompt),
+        body_ref=None,
+    )
+
+
+def _waiting_webhook_output() -> OutputPayload:
+    return OutputPayload(
+        text="",
+        value=WaitWebhookOutputValue(
+            webhook="example-auth",
+            key="GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
+        ),
         body_ref=None,
     )
 
@@ -159,6 +179,37 @@ class FakeWaitingPort:
     def send_input(self, *, run_id: str, text: str) -> WaitingInputAck:
         self.called_with.append((run_id, text))
         return self.ack
+
+
+class _FakeOpenNotifyActionUseCase:
+    def __init__(self) -> None:
+        self.called_with: list[tuple[str, str, str]] = []
+
+    def execute(
+        self,
+        *,
+        state: ConsoleScreenState,
+        run_id: str,
+        step_id: str,
+        url: str,
+    ) -> OpenNotifyActionResult:
+        self.called_with.append((run_id, step_id, url))
+        return OpenNotifyActionResult(state=state)
+
+
+class _FakeDoneNotifyActionUseCase:
+    def __init__(self) -> None:
+        self.called_with: list[tuple[str, str]] = []
+
+    def execute(
+        self,
+        *,
+        state: ConsoleScreenState,
+        run_id: str,
+        step_id: str,
+    ) -> DoneNotifyActionResult:
+        self.called_with.append((run_id, step_id))
+        return DoneNotifyActionResult(state=state)
 
 
 def attach_run_observer(
@@ -369,6 +420,85 @@ def test_notify_clears_interrupt_pending_when_run_leaves_running_chat() -> None:
     )
 
     assert viewmodel.state.prompt.mode == PromptMode.DEFAULT
+
+
+def test_notify_projects_pending_notify_action_to_screen_state() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+
+    viewmodel.notify(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                step_id="auth_link",
+                step_type="notify",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Authorize the app",
+                        value=NotifyActionValue(
+                            message="Authorize the app",
+                            action_type=NotifyActionType.OPEN_URL,
+                            action=ActionOpenUrlValue(
+                                label="Open authorization",
+                                url="https://example.com/oauth/start",
+                                status=NotifyActionStatus.PENDING,
+                            ),
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            )
+        ]
+    )
+
+    assert viewmodel.state.notify_action == NotifyActionState(
+        run_id="run-1234",
+        step_id="auth_link",
+        message="Authorize the app",
+        label="Open authorization",
+        url="https://example.com/oauth/start",
+        status="pending",
+    )
+
+
+def test_open_notify_action_link_calls_use_case() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+    use_case = _FakeOpenNotifyActionUseCase()
+    object.__setattr__(viewmodel._use_cases, "open_notify_action", use_case)  # noqa: SLF001
+
+    viewmodel.open_notify_action_link(
+        run_id="run-1",
+        step_id="auth_link",
+        url="https://example.com/oauth/start",
+    )
+
+    assert use_case.called_with == [
+        ("run-1", "auth_link", "https://example.com/oauth/start"),
+    ]
+
+
+def test_done_notify_action_calls_use_case() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+    use_case = _FakeDoneNotifyActionUseCase()
+    object.__setattr__(viewmodel._use_cases, "done_notify_action", use_case)  # noqa: SLF001
+
+    viewmodel.done_notify_action(
+        run_id="run-1",
+        step_id="auth_link",
+    )
+
+    assert use_case.called_with == [("run-1", "auth_link")]
 
 
 def test_prompt_change_hides_non_matching_queries() -> None:
@@ -693,7 +823,7 @@ def test_console_screen_viewmodel_subscribes_and_applies_log_events() -> None:
     assert events_port.subscribe_calls == ["run-1234"]
     assert viewmodel.state.view_status.kind == ViewStatusKind.HIDDEN
     assert isinstance(viewmodel.state.transcript.items[0], RunStepItem)
-    assert isinstance(viewmodel.state.transcript.items[1], RunStatusItem)
+    assert isinstance(viewmodel.state.transcript.items[1], RunFinishedItem)
     assert viewmodel.state.transcript.items[0].step_id == "show_message"
     assert viewmodel.state.transcript.items[0].step_type == "notify"
     assert viewmodel.state.transcript.items[1].status == "succeeded"
@@ -765,17 +895,21 @@ def test_console_screen_viewmodel_does_not_send_plain_text_when_waiting_not_inpu
             _event(
                 LogEventType.RUN_WAITING,
                 step_type="wait_webhook",
-                payload=RunWaitingPayload(output=_waiting_output()),
+                payload=RunWaitingPayload(output=_waiting_webhook_output()),
             )
         ]
     )
+    previous_items = list(viewmodel.state.transcript.items)
 
     async def run() -> None:
         await viewmodel.submit("hola")
 
     asyncio.run(run())
 
-    assert isinstance(viewmodel.state.transcript.items[-1], InfoItem)
+    assert viewmodel.state.transcript.items == previous_items
+    assert viewmodel.state.view_status.kind == ViewStatusKind.WAITING
+    assert viewmodel.state.prompt.text == ""
+    assert viewmodel.state.prompt.cursor_position == 0
 
 
 def test_console_screen_viewmodel_maps_waiting_input_rejection() -> None:
@@ -938,4 +1072,3 @@ def test_console_screen_viewmodel_uses_skill_name_on_resume_after_wait_input() -
         submit_waiting_input_use_case_module,
     ):
         asyncio.run(run())
-

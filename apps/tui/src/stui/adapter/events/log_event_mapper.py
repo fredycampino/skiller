@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.port.event_models import (
+    ActionDonePayload,
+    ActionOpenUrlValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -20,6 +22,9 @@ from stui.port.event_models import (
     LogEventPayload,
     LogEventType,
     McpOutputValue,
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
     OutputPayload,
@@ -57,6 +62,24 @@ class NotifyOutputValueModel(BaseModel):
 
     message: str = ""
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+
+
+class ActionOpenUrlValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    url: str
+    status: NotifyActionStatus
+    auto_open: bool = False
+
+
+class NotifyActionValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = ""
+    format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+    action_type: NotifyActionType
+    action: ActionOpenUrlValueModel
 
 
 class RunCreateModel(BaseModel):
@@ -173,6 +196,13 @@ class InputReceivedModel(BaseModel):
     payload: JsonObject
 
 
+class ActionDoneModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_type: NotifyActionType
+    status: NotifyActionStatus
+
+
 class AgentAssistantMessageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -270,6 +300,13 @@ class LogEventMapper:
             model = _validate_model(RunFinishedModel, payload, "payload")
             return RunFinishedPayload(status=model.status, error=model.error)
 
+        if event_type == LogEventType.ACTION_DONE:
+            model = _validate_model(ActionDoneModel, payload, "payload")
+            return ActionDonePayload(
+                action_type=model.action_type,
+                status=model.status,
+            )
+
         if event_type == LogEventType.INPUT_RECEIVED:
             model = _validate_model(InputReceivedModel, payload, "payload")
             return InputReceivedPayload(payload=model.payload)
@@ -357,7 +394,24 @@ def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputV
         )
 
     if normalized_step_type == "notify":
-        model = _validate_model(NotifyOutputValueModel, output_value, "output.value")
+        if output_value.get("action") is not None:
+            model = _validate_model(NotifyActionValueModel, output_value, "output.value")
+            return NotifyActionValue(
+                message=model.message,
+                format=model.format,
+                action_type=model.action_type,
+                action=ActionOpenUrlValue(
+                    label=model.action.label,
+                    url=model.action.url,
+                    status=model.action.status,
+                    auto_open=model.action.auto_open,
+                ),
+            )
+        model = _validate_model(
+            NotifyOutputValueModel,
+            _notify_output_payload(output_value),
+            "output.value",
+        )
         return NotifyOutputValue(
             message=model.message,
             format=model.format,
@@ -409,6 +463,15 @@ def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputV
         return McpOutputValue(data=model.data)
 
     raise RuntimeError(f"unsupported output step type: {step_type}")
+
+
+def _notify_output_payload(value: JsonObject) -> JsonObject:
+    payload: JsonObject = {
+        "message": value.get("message", ""),
+    }
+    if "format" in value:
+        payload["format"] = value["format"]
+    return payload
 
 
 def _validate_model(

@@ -36,8 +36,8 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 ## Read By Need
 
-- For readability and control-flow rules, read `SKILL.md -> references/code-style.md`.
-- For architecture boundaries and allowed dependencies, read `SKILL.md -> references/architecture-rules.md`.
+- For readability and control-flow rules, read `packages/skiller/docs/architecture/code-style.md`.
+- For architecture boundaries and allowed dependencies, read `packages/skiller/docs/architecture/architecture.md`.
 - For runtime patterns used in this repo, read `SKILL.md -> references/runtime-patterns.md`.
 - For test taxonomy and what counts as unit/integration/e2e here, read `SKILL.md -> references/testing-rules.md`.
 - For the general pre-commit checklist used in this repo, read `SKILL.md -> references/pre-commit-checklist.md`.

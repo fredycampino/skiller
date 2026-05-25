@@ -16,6 +16,7 @@ Status values:
 | `skiller status` | Read one run status. | stable |
 | `skiller runs` | List recent runs. | stable |
 | `skiller logs` | Read raw runtime events for a run. | stable |
+| `skiller action` | Update persisted runtime action state. | stable |
 | `skiller input` | Human input operations. | stable |
 | `skiller webhook` | Webhook ingress and registration operations. | stable |
 | `skiller agent` | Agent control operations. | experimental |

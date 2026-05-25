@@ -25,7 +25,7 @@ steps:
     tools:
       - shell
       - files
-    max_turns: 10
+    max_turns: 20
     next: ask_user
 
   - notify: done

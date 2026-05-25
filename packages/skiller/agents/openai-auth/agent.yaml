@@ -1,0 +1,84 @@
+name: openai-auth
+description: "Authorize and verify OpenAI Codex credentials using the local callback flow"
+version: "0.1"
+start: explain_authorization
+
+inputs: {}
+
+steps:
+  - notify: explain_authorization
+    format: markdown
+    message: |
+      This flow will authorize OpenAI Codex using the local callback endpoint:
+
+      ```text
+      http://localhost:1455/auth/callback
+      ```
+
+      Credentials will be saved in:
+
+      ```text
+      ~/.skiller/secrets/openai-auth.json
+      ```
+    next: prepare_authorization
+
+  - shell: prepare_authorization
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py prepare
+    cwd: .
+    timeout: 15
+    check: true
+    next: start_callback_server
+
+  - shell: start_callback_server
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py start-callback-server
+    cwd: .
+    timeout: 15
+    check: true
+    next: open_authorization_url
+
+  - notify: open_authorization_url
+    format: markdown
+    message: "Authorize OpenAI Codex in your browser."
+    action:
+      type: open_url
+      label: "Open OpenAI authorization"
+      url: '{{output_value("prepare_authorization").stdout}}'
+      auto_open: true
+    next: wait_authorization_callback
+
+  - shell: wait_authorization_callback
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py wait-callback
+    cwd: .
+    timeout: 960
+    check: true
+    next: exchange_authorization_code
+
+  - shell: exchange_authorization_code
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py exchange-token
+    cwd: .
+    timeout: 60
+    check: true
+    next: require_credentials
+
+  - shell: require_credentials
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py status --require
+    cwd: .
+    timeout: 15
+    check: true
+    next: verify_credentials
+
+  - shell: verify_credentials
+    command: python3 packages/skiller/agents/openai-auth/openai_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.2}"
+    cwd: .
+    timeout: 120
+    check: true
+    next: credentials_ready
+
+  - notify: credentials_ready
+    format: markdown
+    message: |
+      OpenAI Codex credentials are valid.
+
+      ```text
+      {{output_value("verify_credentials").stdout}}
+      ```

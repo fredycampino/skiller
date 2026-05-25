@@ -9,6 +9,8 @@ from textual.widgets import Static, TextArea
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.viewmodel.console_screen_state import PromptState
 
+MAX_INLINE_PASTE_CHARS = 160
+
 
 class PromptTextArea(TextArea):
     def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
@@ -17,9 +19,16 @@ class PromptTextArea(TextArea):
         self._multiline_paste_payloads: dict[str, str] = {}
 
     async def _on_paste(self, event: events.Paste) -> None:
-        normalized_text = event.text.replace("\r\n", "\n").replace("\r", "\n")
-        if "\n" not in normalized_text:
+        normalized_text = event.text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+        is_short_single_line = (
+            len(normalized_text.splitlines()) <= 1
+            and len(normalized_text) <= MAX_INLINE_PASTE_CHARS
+        )
+        if is_short_single_line:
+            event.text = normalized_text
             await super()._on_paste(event)
+            event.prevent_default()
+            event.stop()
             return
 
         self._multiline_paste_count += 1
@@ -169,7 +178,8 @@ def text_offset_to_location(text: str, cursor_position: int) -> tuple[int, int]:
 
 
 def compact_pasted_prompt_text(text: str, *, paste_count: int) -> str:
-    if "\n" not in text:
+    text = text.rstrip("\n")
+    if len(text.splitlines()) <= 1 and len(text) <= MAX_INLINE_PASTE_CHARS:
         return text
 
     lines = text.splitlines()

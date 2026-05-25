@@ -18,10 +18,28 @@ pytestmark = pytest.mark.unit
 @dataclass
 class FakeInvoker:
     completed: subprocess.CompletedProcess[str]
+    calls: list[tuple[str, ...]]
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        _ = args
+        self.calls.append(args)
         return self.completed
+
+
+def _invoker(
+    *,
+    returncode: int = 0,
+    stdout: str = '{"run_id": "run-1234", "status": "CREATED", "worker_pid": 3}',
+    stderr: str = "",
+) -> FakeInvoker:
+    return FakeInvoker(
+        calls=[],
+        completed=subprocess.CompletedProcess(
+            args=["python", "-m", "skiller"],
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+        ),
+    )
 
 
 def test_cli_run_adapter_rejects_empty_args() -> None:
@@ -35,36 +53,43 @@ def test_cli_run_adapter_rejects_empty_args() -> None:
 
 def test_cli_run_adapter_returns_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-            args=["python", "-m", "skiller"],
-            returncode=0,
-            stdout='{"run_id": "run-1234", "status": "CREATED", "worker_pid": 3}',
-            stderr="",
-        ))
-    )
+    invoker = _invoker()
+    adapter = CliRunAdapter(invoker=invoker)
+
     result = adapter.run("ant")
 
     assert result.run_id == "run-1234"
     assert result.status == RunRuntimeStatusKind.CREATED
     assert result.worker_pid == 3
+    assert invoker.calls == [("run", "ant", "--detach")]
+
+
+def test_cli_run_adapter_runs_yaml_path_as_external_skill_file() -> None:
+    invoker = _invoker()
+    adapter = CliRunAdapter(invoker=invoker)
+
+    result = adapter.run("/virtual/notify_cli_e2e.yaml")
+
+    assert result.error.kind == RunDispatchErrorKind.NONE
+    assert invoker.calls == [
+        (
+            "run",
+            "--file",
+            "/virtual/notify_cli_e2e.yaml",
+            "--detach",
+        )
+    ]
 
 
 def test_cli_run_adapter_returns_runtime_status(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=0,
-                stdout=(
-                    '{"status": "WAITING", "wait_type": "input", '
-                    '"prompt": "Write a message", '
-                    '"last_event_sequence": "42", "last_event_type": "RUN_WAITING"}'
-                ),
-                stderr="",
-            )
+        invoker=_invoker(
+            stdout=(
+                '{"status": "WAITING", "wait_type": "input", '
+                '"prompt": "Write a message", '
+                '"last_event_sequence": "42", "last_event_type": "RUN_WAITING"}'
+            ),
         )
     )
 
@@ -83,14 +108,7 @@ def test_cli_run_adapter_returns_none_when_status_command_fails(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=1,
-                stdout="",
-                stderr="boom",
-            )
-        )
+        invoker=_invoker(returncode=1, stdout="", stderr="boom")
     )
 
     result = adapter.status("run-1234")
@@ -103,14 +121,7 @@ def test_cli_run_adapter_returns_none_when_status_payload_is_invalid(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=0,
-                stdout="not-json",
-                stderr="",
-            )
-        )
+        invoker=_invoker(stdout="not-json")
     )
 
     result = adapter.status("run-1234")
@@ -123,14 +134,7 @@ def test_cli_run_adapter_returns_none_when_status_is_unknown(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=0,
-                stdout='{"status": "BOGUS"}',
-                stderr="",
-            )
-        )
+        invoker=_invoker(stdout='{"status": "BOGUS"}')
     )
 
     result = adapter.status("run-1234")
@@ -141,13 +145,7 @@ def test_cli_run_adapter_returns_none_when_status_is_unknown(
 def test_cli_run_adapter_returns_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-            args=["python", "-m", "skiller"],
-            returncode=1,
-            stdout="",
-            stderr="boom",
-        ))
+        invoker=_invoker(returncode=1, stdout="", stderr="boom")
     )
 
     result = adapter.run("ant")
@@ -161,9 +159,7 @@ def test_cli_run_adapter_returns_dispatch_error_when_skill_is_not_found(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-            args=["python", "-m", "skiller"],
+        invoker=_invoker(
             returncode=1,
             stdout="",
             stderr=(
@@ -171,7 +167,7 @@ def test_cli_run_adapter_returns_dispatch_error_when_skill_is_not_found(
                 '  File "/tmp/x.py", line 1, in <module>\n'
                 "FileNotFoundError: Skill not found: source=internal ref=av\n"
             ),
-        ))
+        )
     )
     result = adapter.run("av")
 
@@ -184,13 +180,10 @@ def test_cli_run_adapter_returns_run_not_found_when_skill_is_invalid(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=1,
-                stdout="",
-                stderr="Invalid skill format for 'broken'. Skill requires non-empty root 'start'",
-            )
+        invoker=_invoker(
+            returncode=1,
+            stdout="",
+            stderr="Invalid skill format for 'broken'. Skill requires non-empty root 'start'",
         )
     )
 
@@ -206,13 +199,10 @@ def test_cli_run_adapter_returns_run_not_found_when_skill_is_invalid(
 def test_cli_run_adapter_returns_invalid_args_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=1,
-                stdout="",
-                stderr="Invalid --arg 'foo'. Expected key=value.",
-            )
+        invoker=_invoker(
+            returncode=1,
+            stdout="",
+            stderr="Invalid --arg 'foo'. Expected key=value.",
         )
     )
 
@@ -227,13 +217,10 @@ def test_cli_run_adapter_returns_worker_start_failed_error(
 ) -> None:
     _ = monkeypatch
     adapter = CliRunAdapter(
-        invoker=FakeInvoker(
-            subprocess.CompletedProcess(
-                args=["python", "-m", "skiller"],
-                returncode=1,
-                stdout="",
-                stderr="worker process did not start",
-            )
+        invoker=_invoker(
+            returncode=1,
+            stdout="",
+            stderr="worker process did not start",
         )
     )
 

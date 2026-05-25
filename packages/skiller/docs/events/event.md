@@ -64,6 +64,7 @@ RuntimeEventPayload: TypeAlias = (
     | StepStartedPayload
     | StepSuccessPayload
     | StepErrorPayload
+    | ActionDonePayload
     | AgentEventPayload
     | AgentLifecyclePayload
     | InputReceivedPayload
@@ -81,6 +82,7 @@ class RuntimeEventType(StrEnum):
     STEP_ERROR = "STEP_ERROR"
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
+    ACTION_DONE = "ACTION_DONE"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
     AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
     AGENT_TOOL_CALL = "AGENT_TOOL_CALL"
@@ -213,6 +215,30 @@ Runtime events describe run and step lifecycle transitions.
   "created_at": "2026-05-12T10:30:16Z",
   "payload": {
     "error": "Agent step 'answer' failed"
+  }
+}
+```
+
+### `ACTION_DONE`
+
+`ACTION_DONE` is emitted when `skiller action done <run_id> <step_id>` changes
+a notify action from `pending` to `done`.
+
+Idempotent calls for an already done action do not emit another event.
+
+```json
+{
+  "sequence": 109,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "ACTION_DONE",
+  "step_id": "auth_link",
+  "step_type": "notify",
+  "agent_sequence": null,
+  "created_at": "2026-05-12T10:30:21Z",
+  "payload": {
+    "action_type": "open_url",
+    "status": "done"
   }
 }
 ```

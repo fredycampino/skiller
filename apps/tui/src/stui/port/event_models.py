@@ -33,10 +33,35 @@ class NotifyOutputFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
+class NotifyActionType(StrEnum):
+    OPEN_URL = "open_url"
+
+
+class NotifyActionStatus(StrEnum):
+    PENDING = "pending"
+    DONE = "done"
+
+
+@dataclass(frozen=True)
+class ActionOpenUrlValue:
+    label: str
+    url: str
+    status: NotifyActionStatus = NotifyActionStatus.PENDING
+    auto_open: bool = False
+
+
 @dataclass(frozen=True)
 class NotifyOutputValue:
     message: str
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+
+
+@dataclass(frozen=True)
+class NotifyActionValue:
+    message: str
+    action: ActionOpenUrlValue
+    format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+    action_type: NotifyActionType = NotifyActionType.OPEN_URL
 
 
 @dataclass(frozen=True)
@@ -82,6 +107,7 @@ OutputValue: TypeAlias = (
     | AssignOutputValue
     | SendOutputValue
     | NotifyOutputValue
+    | NotifyActionValue
     | ShellOutputValue
     | RouteOutputValue
     | WaitInputOutputValue
@@ -99,6 +125,7 @@ class LogEventType(StrEnum):
     STEP_ERROR = "STEP_ERROR"
     RUN_WAITING = "RUN_WAITING"
     RUN_FINISHED = "RUN_FINISHED"
+    ACTION_DONE = "ACTION_DONE"
     INPUT_RECEIVED = "INPUT_RECEIVED"
     AGENT_ASSISTANT_MESSAGE = "AGENT_ASSISTANT_MESSAGE"
     AGENT_FINAL_ASSISTANT_MESSAGE = "AGENT_FINAL_ASSISTANT_MESSAGE"
@@ -158,6 +185,12 @@ class RunFinishedPayload:
 @dataclass(frozen=True)
 class InputReceivedPayload:
     payload: dict[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class ActionDonePayload:
+    action_type: NotifyActionType
+    status: NotifyActionStatus
 
 
 @dataclass(frozen=True)
@@ -225,6 +258,7 @@ LogEventPayload: TypeAlias = (
     | RunWaitingPayload
     | RunFinishedPayload
     | InputReceivedPayload
+    | ActionDonePayload
     | AgentAssistantMessagePayload
     | AgentFinalAssistantMessagePayload
     | AgentToolCallPayload

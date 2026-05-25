@@ -183,6 +183,125 @@ def test_skill_checker_rejects_unsupported_notify_format() -> None:
     ]
 
 
+def test_skill_checker_accepts_notify_action() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "auth_link",
+                "steps": [
+                    {
+                        "notify": "auth_link",
+                        "message": "Authorize the app",
+                        "action": {
+                            "type": "open_url",
+                            "label": "Open authorization",
+                            "url": "https://example.com/oauth/start",
+                            "auto_open": True,
+                        },
+                    }
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.VALID
+    assert result.errors == []
+
+
+def test_skill_checker_accepts_notify_action_url_template() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "build_url",
+                "steps": [
+                    {
+                        "shell": "build_url",
+                        "command": "printf https://example.com/oauth/start",
+                        "next": "auth_link",
+                    },
+                    {
+                        "notify": "auth_link",
+                        "message": "Authorize the app",
+                        "action": {
+                            "type": "open_url",
+                            "label": "Open authorization",
+                            "url": '{{output_value("build_url").stdout}}',
+                        },
+                    },
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.VALID
+    assert result.errors == []
+
+
+def test_skill_checker_rejects_notify_action_with_invalid_auto_open() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "auth_link",
+                "steps": [
+                    {
+                        "notify": "auth_link",
+                        "message": "Authorize the app",
+                        "action": {
+                            "type": "open_url",
+                            "label": "Open authorization",
+                            "url": "https://example.com/oauth/start",
+                            "auto_open": "false",
+                        },
+                    }
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.INVALID
+    assert [item.code for item in result.errors] == [
+        "SKILL_NOTIFY_ACTION_AUTO_OPEN_INVALID"
+    ]
+
+
+def test_skill_checker_rejects_notify_action_with_unsupported_url() -> None:
+    use_case = SkillCheckerUseCase(
+        skill_runner=_FakeSkillRunner(
+            {
+                "name": "demo",
+                "start": "auth_link",
+                "steps": [
+                    {
+                        "notify": "auth_link",
+                        "message": "Authorize the app",
+                        "action": {
+                            "type": "open_url",
+                            "label": "Open authorization",
+                            "url": "mailto:test@example.com",
+                        },
+                    }
+                ],
+            }
+        )
+    )
+
+    result = use_case.execute("demo", skill_source="internal")
+
+    assert result.status == SkillCheckStatus.INVALID
+    assert [item.code for item in result.errors] == [
+        "SKILL_NOTIFY_ACTION_URL_UNSUPPORTED"
+    ]
+
+
 def test_skill_checker_rejects_unsupported_helper() -> None:
     use_case = SkillCheckerUseCase(
         skill_runner=_FakeSkillRunner(

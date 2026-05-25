@@ -10,6 +10,14 @@ from skiller.domain.wait.wait_store_port import WaitStorePort
 
 
 @dataclass(frozen=True)
+class HandleWebhookInput:
+    webhook: str
+    key: str
+    payload: dict[str, Any]
+    dedup_key: str
+
+
+@dataclass(frozen=True)
 class HandleWebhookResult:
     accepted: bool
     duplicate: bool
@@ -27,9 +35,10 @@ class HandleWebhookUseCase:
         self.external_event_store = external_event_store
         self.wait_store = wait_store
 
-    def execute(
-        self, webhook: str, key: str, payload: dict[str, Any], *, dedup_key: str
-    ) -> HandleWebhookResult:
+    def execute(self, request: HandleWebhookInput) -> HandleWebhookResult:
+        webhook = request.webhook
+        key = request.key
+        payload = request.payload
         if not webhook or not key:
             return HandleWebhookResult(
                 accepted=False,
@@ -47,7 +56,7 @@ class HandleWebhookUseCase:
 
         canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         final_dedup_key = (
-            dedup_key
+            request.dedup_key
             or hashlib.sha256(f"{webhook}|{key}|{canonical_payload}".encode("utf-8")).hexdigest()
         )
 

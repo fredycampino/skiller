@@ -5,7 +5,7 @@ from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
 from skiller.infrastructure.db.sqlite_agent_context_store import ensure_agent_context_schema
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
-SQLITE_RUNTIME_DB_VERSION = 1
+SQLITE_RUNTIME_DB_VERSION = 2
 
 
 class SqliteRuntimeBootstrap(SqliteRepository, RuntimeBootstrapPort):
@@ -134,6 +134,9 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS webhook_registrations (
           webhook TEXT PRIMARY KEY,
           secret TEXT NOT NULL,
+          method TEXT NOT NULL DEFAULT 'POST',
+          auth TEXT NOT NULL DEFAULT 'signed',
+          payload_source TEXT NOT NULL DEFAULT 'body_json',
           enabled INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );

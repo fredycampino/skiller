@@ -26,9 +26,16 @@ class AutoCompleteView(Static):
     def on_mount(self) -> None:
         self._refresh()
 
-    def set_state(self, state: CompletionState | None) -> None:
+    def set_state(
+        self,
+        state: CompletionState | None,
+        *,
+        reserve_space: bool = False,
+    ) -> None:
         self._state = state
-        self.display = bool(state and state.visible and state.items)
+        active = self.is_visible()
+        self.display = active or reserve_space
+        self.styles.visibility = "visible" if active else "hidden"
         self._refresh()
 
     def is_visible(self) -> bool:

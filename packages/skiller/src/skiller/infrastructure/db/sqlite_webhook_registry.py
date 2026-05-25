@@ -1,25 +1,51 @@
 from typing import Any
 
+from skiller.domain.event.webhook_registration_model import (
+    WebhookAuth,
+    WebhookMethod,
+    WebhookPayloadSource,
+)
 from skiller.domain.event.webhook_registry_port import WebhookRegistryPort
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteWebhookRegistry(SqliteRepository, WebhookRegistryPort):
-    def register_webhook(self, webhook: str, secret: str) -> None:
+    def register_webhook(
+        self,
+        webhook: str,
+        secret: str,
+        *,
+        method: WebhookMethod,
+        auth: WebhookAuth,
+        payload_source: WebhookPayloadSource,
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO webhook_registrations (webhook, secret, enabled)
-                VALUES (?, ?, 1)
+                INSERT INTO webhook_registrations (
+                  webhook,
+                  secret,
+                  method,
+                  auth,
+                  payload_source,
+                  enabled
+                )
+                VALUES (?, ?, ?, ?, ?, 1)
                 """,
-                (webhook, secret),
+                (
+                    webhook,
+                    secret,
+                    method.value,
+                    auth.value,
+                    payload_source.value,
+                ),
             )
 
     def get_webhook_registration(self, webhook: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT webhook, secret, enabled, created_at
+                SELECT webhook, secret, method, auth, payload_source, enabled, created_at
                 FROM webhook_registrations
                 WHERE webhook = ?
                 """,
@@ -30,6 +56,9 @@ class SqliteWebhookRegistry(SqliteRepository, WebhookRegistryPort):
         return {
             "webhook": row["webhook"],
             "secret": row["secret"],
+            "method": row["method"],
+            "auth": row["auth"],
+            "payload_source": row["payload_source"],
             "enabled": bool(row["enabled"]),
             "created_at": row["created_at"],
         }
@@ -38,7 +67,7 @@ class SqliteWebhookRegistry(SqliteRepository, WebhookRegistryPort):
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT webhook, secret, enabled, created_at
+                SELECT webhook, secret, method, auth, payload_source, enabled, created_at
                 FROM webhook_registrations
                 ORDER BY created_at DESC, webhook ASC
                 """
@@ -47,6 +76,9 @@ class SqliteWebhookRegistry(SqliteRepository, WebhookRegistryPort):
             {
                 "webhook": row["webhook"],
                 "secret": row["secret"],
+                "method": row["method"],
+                "auth": row["auth"],
+                "payload_source": row["payload_source"],
                 "enabled": bool(row["enabled"]),
                 "created_at": row["created_at"],
             }

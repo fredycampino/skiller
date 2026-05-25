@@ -19,11 +19,13 @@ from stui.screen.transcript.dispatch_error_view import DispatchErrorView
 from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.intro_view import IntroView
 from stui.screen.transcript.run_ack_view import RunAckView
+from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_output_view import RunOutputView
 from stui.screen.transcript.run_resume_view import RunResumeView
-from stui.screen.transcript.run_status_view import RunStatusView
 from stui.screen.transcript.run_step_view import RunStepView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
+from stui.screen.transcript.run_waiting_webhook_view import RunWaitingWebhookView
+from stui.screen.transcript.step_error_view import StepErrorView
 from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
 from stui.screen.transcript.step_output_view import StepOutputView
 from stui.screen.transcript.step_shell_output_view import StepShellOutputView
@@ -38,11 +40,13 @@ from stui.viewmodel.console_screen_state import (
     DispatchErrorItem,
     InfoItem,
     RunAckItem,
+    RunFinishedItem,
     RunOutputItem,
     RunResumeItem,
-    RunStatusItem,
     RunStepItem,
     RunWaitingInputItem,
+    RunWaitingWebhookItem,
+    StepErrorItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -82,11 +86,35 @@ class RenderTranscript:
         views = self._map_chat_views(items=items)
         views = self._active_step_output(views=views)
         views = self._active_notify(views=views)
+        views = self._active_webhook_wait(views=views)
         views = self._active_tool(views=views)
         renderables: list[RenderableType] = []
         for view in views:
             renderables.append(view.render(theme=theme))
         return renderables
+
+    def _active_webhook_wait(
+        self,
+        *,
+        views: list[TranscriptView],
+    ) -> list[TranscriptView]:
+        if not views:
+            return views
+
+        latest_index = len(views) - 1
+        active_views: list[TranscriptView] = []
+        for index, view in enumerate(views):
+            if isinstance(view, RunWaitingWebhookView):
+                muted = index != latest_index
+                active_views.append(
+                    RunWaitingWebhookView(
+                        item=replace(view.item, muted=muted),
+                        strings=view.strings,
+                    )
+                )
+                continue
+            active_views.append(view)
+        return active_views
 
     def _active_step_output(
         self,
@@ -234,6 +262,8 @@ class RenderTranscript:
             return AgentStepFinalOutputView(item=item)
         if isinstance(item, AgentSystemNoticeItem):
             return AgentSystemNoticeView(item=item)
+        if isinstance(item, StepErrorItem):
+            return StepErrorView(item=item)
         if isinstance(item, StepNotifyOutputItem):
             return StepNotifyOutputView(item=item)
         if isinstance(item, StepOutputItem):
@@ -242,8 +272,10 @@ class RenderTranscript:
             return StepShellOutputView(item=item)
         if isinstance(item, RunOutputItem):
             return RunOutputView(item=item)
-        if isinstance(item, RunStatusItem):
-            return RunStatusView(item=item)
+        if isinstance(item, RunFinishedItem):
+            return RunFinishedView(item=item)
         if isinstance(item, RunWaitingInputItem):
             return RunWaitingInputView(item=item)
+        if isinstance(item, RunWaitingWebhookItem):
+            return RunWaitingWebhookView(item=item, strings=self.strings)
         return InfoView(item=InfoItem(text=""))

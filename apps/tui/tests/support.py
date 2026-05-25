@@ -6,6 +6,7 @@ from typing import Iterator
 
 from stui.di.container import build_tui_container
 from stui.di.strings import TuiStrings
+from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.installation_state_port import InstallationState
 from stui.port.run_port import (
     CommandAck,
@@ -28,6 +29,7 @@ def build_viewmodel(
     run_port,
     events_port=None,
     waiting_port,
+    notify_action_port=None,
     runs_port=None,
     agent_port=None,
     installation_state_port=None,
@@ -43,6 +45,7 @@ def build_viewmodel(
             events_port=resolved_events_port,
             runs_port=runs_port,
             waiting_port=waiting_port,
+            notify_action_port=notify_action_port,
             agent_port=agent_port,
             installation_state_port=resolved_installation_state_port,
         )
@@ -54,6 +57,7 @@ def build_viewmodel(
         events_port=resolved_events_port,
         runs_port=runs_port,
         waiting_port=waiting_port,
+        notify_action_port=notify_action_port,
         agent_port=agent_port,
         installation_state_port=resolved_installation_state_port,
     )
@@ -140,16 +144,24 @@ class FakeAgentPort:
 class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribe_calls: list[str] = []
+        self.subscribe_interval_calls: list[float] = []
         self.unsubscribe_call_count = 0
         self.current_run_id = current_run_id
         self.current_listener = current_listener
 
-    def subscribe(self, *, run_id: str, listener: object) -> None:
+    def subscribe(
+        self,
+        *,
+        run_id: str,
+        listener: object,
+        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    ) -> None:
         if self.current_listener is not None:
             self.unsubscribe()
         self.current_listener = listener
         self.current_run_id = run_id
         self.subscribe_calls.append(run_id)
+        self.subscribe_interval_calls.append(interval_seconds)
 
     def unsubscribe(self) -> None:
         self.unsubscribe_call_count += 1

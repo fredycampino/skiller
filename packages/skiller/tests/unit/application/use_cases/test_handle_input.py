@@ -2,7 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
+from skiller.application.use_cases.ingress.handle_input import (
+    HandleInputInput,
+    HandleInputUseCase,
+)
 from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     runtime_event_payload_to_dict,
@@ -71,7 +74,7 @@ def test_handle_input_rejects_missing_text() -> None:
         runtime_event_store=store,
     )
 
-    result = use_case.execute("run-1", text="")
+    result = use_case.execute(HandleInputInput(run_id="run-1", text=""))
 
     assert result.accepted is False
     assert result.error == "text is required"
@@ -90,7 +93,7 @@ def test_handle_input_rejects_when_current_step_is_not_wait_input() -> None:
         runtime_event_store=store,
     )
 
-    result = use_case.execute("run-1", text="hello")
+    result = use_case.execute(HandleInputInput(run_id="run-1", text="hello"))
 
     assert result.accepted is False
     assert result.error == "Run 'run-1' current step 'show_message' is not wait_input"
@@ -109,7 +112,7 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
         runtime_event_store=store,
     )
 
-    result = use_case.execute("run-1", text="database timeout")
+    result = use_case.execute(HandleInputInput(run_id="run-1", text="database timeout"))
 
     assert result.accepted is True
     assert result.run_ids == ["run-1"]

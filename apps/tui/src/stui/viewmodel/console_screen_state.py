@@ -159,6 +159,30 @@ class StepNotifyOutputItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class StepNotifyActionItem(TranscriptItem):
+    run_id: str
+    step_id: str
+    step_type: str
+    message: str
+    action_type: str
+    label: str
+    url: str
+    status: str
+    auto_open: bool = False
+    icon: str = "•"
+    muted: bool = False
+
+
+@dataclass(frozen=True)
+class NotifyActionDoneItem(TranscriptItem):
+    run_id: str
+    step_id: str
+    step_type: str
+    action_type: str
+    status: str
+
+
+@dataclass(frozen=True)
 class StepShellOutputItem(TranscriptItem):
     run_id: str
     step_type: str
@@ -169,7 +193,15 @@ class StepShellOutputItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
-class RunStatusItem(TranscriptItem):
+class StepErrorItem(TranscriptItem):
+    run_id: str
+    step_id: str
+    step_type: str
+    message: str
+
+
+@dataclass(frozen=True)
+class RunFinishedItem(TranscriptItem):
     run_id: str
     status: str
     message: str = ""
@@ -181,6 +213,17 @@ class RunWaitingInputItem(TranscriptItem):
     step_type: str
     step_id: str
     prompt: str = ""
+
+
+@dataclass(frozen=True)
+class RunWaitingWebhookItem(TranscriptItem):
+    run_id: str
+    step_type: str
+    step_id: str
+    webhook: str
+    key: str
+    icon: str = "↯"
+    muted: bool = False
 
 
 @dataclass(frozen=True)
@@ -242,6 +285,17 @@ class ViewStatusState:
     message: str = ""
 
 
+@dataclass(frozen=True)
+class NotifyActionState:
+    run_id: str
+    step_id: str
+    message: str
+    label: str
+    url: str
+    status: str
+    auto_open: bool = False
+
+
 @dataclass
 class ConsoleScreenState:
     session_key: str = "main"
@@ -251,6 +305,7 @@ class ConsoleScreenState:
     agent_usage: AgentUsageState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
+    notify_action: NotifyActionState | None = None
 
     def set_prompt(
         self,
@@ -304,6 +359,12 @@ class ConsoleScreenState:
 
     def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
         self.agent_usage = agent_usage
+
+    def set_notify_action(
+        self,
+        notify_action: NotifyActionState | None = None,
+    ) -> None:
+        self.notify_action = notify_action
 
     def load_session(
         self,

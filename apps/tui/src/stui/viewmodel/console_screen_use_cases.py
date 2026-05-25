@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
+from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
@@ -12,6 +13,10 @@ from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
 from stui.usecase.normalize_command_use_case import NormalizeCommandUseCase
+from stui.usecase.open_notify_action_use_case import OpenNotifyActionUseCase
+from stui.usecase.project_notify_action_use_case import (
+    ProjectNotifyActionUseCase,
+)
 from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
@@ -35,7 +40,10 @@ class ConsoleScreenUseCases:
     list_runs: ListRunsUseCase
     normalize_command: NormalizeCommandUseCase
     event_state: EventStateUseCase
+    done_notify_action: DoneNotifyActionUseCase
+    open_notify_action: OpenNotifyActionUseCase
     prompt_enter: PromptEnterUseCase
+    project_notify_action: ProjectNotifyActionUseCase
     project_transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
     start_console: StartConsoleUseCase

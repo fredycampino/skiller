@@ -16,6 +16,12 @@ from skiller.domain.wait.source_type import SourceType
 
 
 @dataclass(frozen=True)
+class HandleInputInput:
+    run_id: str
+    text: str
+
+
+@dataclass(frozen=True)
 class HandleInputResult:
     accepted: bool
     run_ids: list[str]
@@ -34,7 +40,9 @@ class HandleInputUseCase:
         self.external_event_store = external_event_store
         self.runtime_event_store = runtime_event_store
 
-    def execute(self, run_id: str, *, text: str) -> HandleInputResult:
+    def execute(self, request: HandleInputInput) -> HandleInputResult:
+        run_id = request.run_id
+        text = request.text
         if not run_id:
             return HandleInputResult(accepted=False, run_ids=[], error="run_id is required")
         if not text:

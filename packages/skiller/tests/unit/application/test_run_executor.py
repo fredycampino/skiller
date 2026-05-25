@@ -2,24 +2,18 @@ from dataclasses import dataclass
 
 import pytest
 
-from skiller.application.run_worker_service import RunWorkerService, RunWorkerStatus
+from skiller.application.runs.executor import RunExecutionStatus, RunExecutor
 from skiller.application.use_cases.render.render_current_step import (
-    CurrentStep,
-    CurrentStepStatus,
     RenderCurrentStepResult,
-    StepType,
 )
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigStatus
-from skiller.application.use_cases.shared.step_execution_result import (
-    StepAdvance,
-    StepExecutionStatus,
-)
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,
     runtime_event_payload_to_dict,
 )
 from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.step.current_step_model import CurrentStep, CurrentStepStatus
 from skiller.domain.step.step_execution_model import (
     NotifyOutput,
     SendOutput,
@@ -28,6 +22,11 @@ from skiller.domain.step.step_execution_model import (
     WaitInputOutput,
     WaitWebhookOutput,
 )
+from skiller.domain.step.step_execution_result_model import (
+    StepAdvance,
+    StepExecutionStatus,
+)
+from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
 
@@ -175,11 +174,11 @@ def _build_service(
     wait_results: list[StepAdvance] | None = None,
     mcp_render_result: _FakeRenderMcpConfigResult | None = None,
     notify_error: Exception | None = None,
-) -> tuple[RunWorkerService, _FakeCompleteRunUseCase, _FakeFailRunUseCase]:
+) -> tuple[RunExecutor, _FakeCompleteRunUseCase, _FakeFailRunUseCase]:
     complete_run_use_case = _FakeCompleteRunUseCase()
     fail_run_use_case = _FakeFailRunUseCase()
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
-    service = RunWorkerService(
+    service = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -209,7 +208,7 @@ def test_worker_returns_run_not_found() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.RUN_NOT_FOUND
+    assert result.status == RunExecutionStatus.RUN_NOT_FOUND
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
 
@@ -243,7 +242,7 @@ def test_worker_executes_shell_step() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert result.status == RunExecutionStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls[:2] == [
@@ -307,7 +306,7 @@ def test_worker_executes_send_step() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert result.status == RunExecutionStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls[:2] == [
@@ -349,7 +348,7 @@ def test_worker_completes_run_when_renderer_reports_done() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert result.status == RunExecutionStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls == [
@@ -389,7 +388,7 @@ def test_worker_returns_waiting_when_wait_step_blocks() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.WAITING
+    assert result.status == RunExecutionStatus.WAITING
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls == [
@@ -442,7 +441,7 @@ def test_worker_returns_waiting_when_wait_input_step_blocks() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.WAITING
+    assert result.status == RunExecutionStatus.WAITING
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls == [
@@ -507,7 +506,7 @@ def test_worker_loops_on_next_and_then_completes() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.SUCCEEDED
+    assert result.status == RunExecutionStatus.SUCCEEDED
     assert complete_run_use_case.calls == ["run-1"]
     assert fail_run_use_case.calls == []
     assert service.append_runtime_event_use_case.calls == [
@@ -574,7 +573,7 @@ def test_worker_fails_invalid_skill_state() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.FAILED
+    assert result.status == RunExecutionStatus.FAILED
     assert result.error == "Run 'run-1' is invalid: status=CurrentStepStatus.INVALID_SKILL"
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == [
@@ -598,7 +597,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.FAILED
+    assert result.status == RunExecutionStatus.FAILED
     assert result.error == "notify failed"
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == [{"run_id": "run-1", "error": "notify failed"}]
@@ -647,7 +646,7 @@ def test_worker_fails_when_step_type_is_not_supported() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.FAILED
+    assert result.status == RunExecutionStatus.FAILED
     assert result.error is not None
     assert "Unsupported step type 'custom' in step 'start'" in result.error
     assert complete_run_use_case.calls == []
@@ -670,7 +669,7 @@ def test_worker_fails_when_mcp_config_is_invalid() -> None:
 
     result = service.run("run-1")
 
-    assert result.status == RunWorkerStatus.FAILED
+    assert result.status == RunExecutionStatus.FAILED
     assert result.error == "missing transport"
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == [{"run_id": "run-1", "error": "missing transport"}]

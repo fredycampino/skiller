@@ -7,6 +7,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
 )
 from skiller.domain.event.event_model import (
+    ActionDonePayload,
     AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -137,6 +138,50 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
         "tool_call_id": "call-1",
         "tool": "shell",
         "args": {"command": "pwd"},
+    }
+
+
+def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
+    db_path = tmp_path / "runtime-action-done-events.db"
+    run_store = SqliteStateStore(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440032"
+    run_store.create_run(
+        "internal",
+        "skill",
+        {"start": "auth_link", "steps": [{"notify": "auth_link"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    event_id = runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.ACTION_DONE,
+            step_id="auth_link",
+            step_type="notify",
+            payload=ActionDonePayload(
+                action_type="open_url",
+                status="done",
+            ),
+        )
+    )
+
+    events = runtime_event_store.list_events(run_id)
+
+    assert len(events) == 1
+    assert events[0].id == event_id
+    assert events[0].type == RuntimeEventType.ACTION_DONE
+    assert events[0].step_id == "auth_link"
+    assert events[0].step_type == "notify"
+    assert events[0].payload == ActionDonePayload(
+        action_type="open_url",
+        status="done",
+    )
+    assert events[0].model_dump(mode="json")["payload"] == {
+        "action_type": "open_url",
+        "status": "done",
     }
 
 

@@ -1,0 +1,200 @@
+from types import SimpleNamespace
+
+import pytest
+
+from skiller.application.agents.mapper import AgentServiceMapper
+from skiller.application.runs.mapper import RunServiceMapper
+from skiller.application.runs.models import RunResult
+from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookResult
+from skiller.application.use_cases.run.mark_notify_action_done import (
+    MarkNotifyActionDoneResult,
+    MarkNotifyActionDoneStatus,
+)
+from skiller.application.use_cases.webhook.register_webhook import (
+    RegisterWebhookResult,
+    RegisterWebhookStatus,
+)
+from skiller.application.waits.channel_mapper import ChannelWaitMapper
+from skiller.application.waits.input_mapper import InputWaitMapper
+from skiller.application.waits.webhook_mapper import WebhookWaitMapper
+from skiller.domain.event.webhook_registration_model import (
+    WebhookAuth,
+    WebhookMethod,
+    WebhookPayloadSource,
+)
+from skiller.domain.run.run_model import RunStatus
+from skiller.interfaces.runtime_controller import RuntimeController
+
+pytestmark = pytest.mark.unit
+
+
+class _FakeAgentService:
+    pass
+
+
+class _FakeRunService:
+    def __init__(self) -> None:
+        self.create_request = None
+        self.mark_action_call = None
+
+    def initialize(self) -> None:
+        pass
+
+    def create_run(self, request):  # noqa: ANN001, ANN201
+        self.create_request = request
+        return RunResult(run_id="run-1", status=RunStatus.CREATED)
+
+    def mark_notify_action_done(self, request):  # noqa: ANN001, ANN201
+        self.mark_action_call = request
+        return MarkNotifyActionDoneResult(
+            run_id=request.run_id,
+            step_id=request.step_id,
+            status=MarkNotifyActionDoneStatus.DONE,
+            changed=True,
+        )
+
+
+class _FakeWaitService:
+    def __init__(self) -> None:
+        self.register_request = None
+        self.handle_request = None
+
+    def register_webhook(self, request):  # noqa: ANN001, ANN201
+        self.register_request = request
+        return RegisterWebhookResult(
+            status=RegisterWebhookStatus.REGISTERED,
+            webhook=request.webhook,
+            method=request.method,
+            auth=request.auth,
+            payload_source=request.payload_source,
+            secret="secret-1",
+            enabled=True,
+        )
+
+    def handle_webhook(self, request):  # noqa: ANN001, ANN201
+        self.handle_request = request
+        return HandleWebhookResult(
+            accepted=True,
+            duplicate=False,
+            run_ids=["run-1"],
+        )
+
+
+def _controller(
+    wait_service: _FakeWaitService,
+    run_service: _FakeRunService | None = None,
+) -> RuntimeController:
+    final_run_service = run_service or _FakeRunService()
+    return RuntimeController(
+        agent_service=_FakeAgentService(),
+        agent_mapper=AgentServiceMapper(),
+        run_service=final_run_service,
+        run_mapper=RunServiceMapper(),
+        query_service=SimpleNamespace(),
+        wait_service=wait_service,
+        input_wait_mapper=InputWaitMapper(),
+        channel_wait_mapper=ChannelWaitMapper(),
+        webhook_wait_mapper=WebhookWaitMapper(),
+    )
+
+
+def test_controller_maps_create_run_to_typed_service_input() -> None:
+    run_service = _FakeRunService()
+    controller = _controller(_FakeWaitService(), run_service=run_service)
+
+    result = controller.create_run(
+        " notify_test ",
+        {"message": "ok"},
+        skill_source="internal",
+    )
+
+    assert run_service.create_request.skill_ref == "notify_test"
+    assert run_service.create_request.inputs == {"message": "ok"}
+    assert run_service.create_request.skill_source == "internal"
+    assert result == {"run_id": "run-1", "status": "CREATED"}
+
+
+def test_controller_maps_action_done_to_run_service() -> None:
+    run_service = _FakeRunService()
+    controller = _controller(_FakeWaitService(), run_service=run_service)
+
+    result = controller.action_done(" run-1 ", " auth_link ")
+
+    assert run_service.mark_action_call.run_id == "run-1"
+    assert run_service.mark_action_call.step_id == "auth_link"
+    assert result == {
+        "run_id": "run-1",
+        "step_id": "auth_link",
+        "status": "DONE",
+        "done": True,
+        "changed": True,
+    }
+
+
+def test_controller_maps_register_webhook_to_typed_service_input() -> None:
+    wait_service = _FakeWaitService()
+    controller = _controller(wait_service)
+
+    result = controller.register_webhook(
+        " example-auth ",
+        method="get",
+        auth="none",
+        payload_source="query",
+    )
+
+    assert wait_service.register_request.webhook == "example-auth"
+    assert wait_service.register_request.method == WebhookMethod.GET
+    assert wait_service.register_request.auth == WebhookAuth.NONE
+    assert wait_service.register_request.payload_source == WebhookPayloadSource.QUERY
+    assert result == {
+        "webhook": "example-auth",
+        "status": "REGISTERED",
+        "method": "GET",
+        "auth": "none",
+        "payload_source": "query",
+        "secret": "secret-1",
+        "enabled": True,
+    }
+
+
+def test_controller_rejects_invalid_register_webhook_params_before_service() -> None:
+    wait_service = _FakeWaitService()
+    controller = _controller(wait_service)
+
+    result = controller.register_webhook(
+        "example-auth",
+        method="GET",
+        auth="none",
+        payload_source="body_json",
+    )
+
+    assert wait_service.register_request is None
+    assert result == {
+        "webhook": "example-auth",
+        "status": "INVALID_CONFIG",
+        "error": "webhook method and payload source must be POST/body_json or GET/query",
+    }
+
+
+def test_controller_maps_receive_webhook_to_typed_service_input() -> None:
+    wait_service = _FakeWaitService()
+    controller = _controller(wait_service)
+
+    result = controller.receive_webhook(
+        " github ",
+        " 42 ",
+        {"ok": True},
+        dedup_key=" delivery-1 ",
+    )
+
+    assert wait_service.handle_request.webhook == "github"
+    assert wait_service.handle_request.key == "42"
+    assert wait_service.handle_request.payload == {"ok": True}
+    assert wait_service.handle_request.dedup_key == "delivery-1"
+    assert result == {
+        "accepted": True,
+        "duplicate": False,
+        "webhook": "github",
+        "key": "42",
+        "matched_runs": ["run-1"],
+    }

@@ -10,13 +10,14 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
-from textual.widgets import DataTable, Static, TextArea
+from textual.widgets import Button, DataTable, Static, TextArea
 
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.runs_port import RunsPortItem
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.markdown import MarkdownView
+from stui.screen.notify_action_view import NotifyActionView
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
     RunRowMode,
@@ -66,12 +67,29 @@ class ConsoleScreen(App[str]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            TranscriptLog(id="transcript-log", auto_scroll=False, highlight=False, markup=False),
+            TranscriptLog(
+                id="transcript-log",
+                auto_scroll=False,
+                highlight=False,
+                markup=False,
+                min_width=0,
+            ),
             Container(
                 RunsTableView(id="runs-table", visible=False),
                 id="runs-table-area",
             ),
-            ScreenStatusView(id="status", theme=self.ui_theme),
+            Horizontal(
+                ScreenStatusView(id="status", theme=self.ui_theme),
+                Container(
+                    NotifyActionView(
+                        id="notify-action",
+                        theme=self.ui_theme,
+                        strings=self.ui_strings,
+                    ),
+                    id="notify-action-area",
+                ),
+                id="status-row",
+            ),
             PromptView(theme=self.ui_theme),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             Horizontal(
@@ -89,6 +107,8 @@ class ConsoleScreen(App[str]):
         self._prompt_view().focus_prompt()
 
     def on_key(self, event: events.Key) -> None:
+        if self._handle_notify_action_focus_key(event):
+            return
         if event.key == "up":
             self.action_transcript_scroll_up()
             event.stop()
@@ -107,6 +127,11 @@ class ConsoleScreen(App[str]):
         elif event.key == "end":
             self.action_transcript_end()
             event.stop()
+
+    def on_resize(self, _: events.Resize) -> None:
+        if self._transcript_log().size.width <= 0:
+            return
+        self.set_timer(0.05, self.viewmodel.screen_resized)
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         self.action_transcript_scroll_up()
@@ -127,6 +152,13 @@ class ConsoleScreen(App[str]):
         )
 
     async def action_submit(self) -> None:
+        if self._focused_notify_action_done():
+            self._done_notify_action()
+            return
+        if self._focused_notify_action_link():
+            self._open_notify_action_link()
+            return
+
         prompt = self._prompt()
         normalized_text = prompt.normalized_text()
         if self.state.runs_table.visible:
@@ -202,6 +234,85 @@ class ConsoleScreen(App[str]):
         )
         self._prompt_view().focus_prompt()
 
+    @on(NotifyActionView.OpenLink)
+    def on_notify_action_open_link(self, event: NotifyActionView.OpenLink) -> None:
+        event.stop()
+        self._open_notify_action_link()
+
+    @on(NotifyActionView.Done)
+    def on_notify_action_done(self, event: NotifyActionView.Done) -> None:
+        event.stop()
+        self._done_notify_action()
+
+    def _focused_notify_action_link(self) -> bool:
+        focused = self.focused
+        if focused is None:
+            return False
+        return focused.id == "notify-action-open-link"
+
+    def _focused_notify_action_done(self) -> bool:
+        focused = self.focused
+        if focused is None:
+            return False
+        return focused.id == "notify-action-done"
+
+    def _focused_notify_action_button(self) -> bool:
+        return self._focused_notify_action_link() or self._focused_notify_action_done()
+
+    def _focused_prompt(self) -> bool:
+        focused = self.focused
+        if focused is None:
+            return False
+        return focused.id == "prompt"
+
+    def _handle_notify_action_focus_key(self, event: events.Key) -> bool:
+        if event.key not in {"left", "right"}:
+            return False
+        if self.state.notify_action is None:
+            return False
+        if self._focused_prompt() and event.key == "right":
+            self.query_one("#notify-action-done", Button).focus()
+            event.stop()
+            return True
+        if self._focused_notify_action_done() and event.key == "right":
+            self.query_one("#notify-action-open-link", Button).focus()
+            event.stop()
+            return True
+        if self._focused_notify_action_done() and event.key == "left":
+            self._prompt_view().focus_prompt()
+            event.stop()
+            return True
+        if self._focused_notify_action_link() and event.key == "left":
+            self.query_one("#notify-action-done", Button).focus()
+            event.stop()
+            return True
+        if self._focused_notify_action_link() and event.key == "right":
+            self._prompt_view().focus_prompt()
+            event.stop()
+            return True
+        return False
+
+    def _open_notify_action_link(self) -> None:
+        if self.state.notify_action is None:
+            return
+        notify_action = self.state.notify_action
+        self.viewmodel.open_notify_action_link(
+            run_id=notify_action.run_id,
+            step_id=notify_action.step_id,
+            url=notify_action.url,
+        )
+        self._prompt_view().focus_prompt()
+
+    def _done_notify_action(self) -> None:
+        if self.state.notify_action is None:
+            return
+        notify_action = self.state.notify_action
+        self.viewmodel.done_notify_action(
+            run_id=notify_action.run_id,
+            step_id=notify_action.step_id,
+        )
+        self._prompt_view().focus_prompt()
+
     def _refresh_status(self, *, new_state: ConsoleScreenState) -> None:
         try:
             status = self.query_one("#status", ScreenStatusView)
@@ -220,6 +331,13 @@ class ConsoleScreen(App[str]):
             return
         footer_left.update(_build_footer_left_text(state=new_state))
         footer_right.update(self._build_footer_right_text(state=new_state))
+
+    def _refresh_notify_action(self, *, new_state: ConsoleScreenState) -> None:
+        try:
+            notify_action = self.query_one("#notify-action", NotifyActionView)
+        except NoMatches:
+            return
+        notify_action.set_state(new_state.notify_action)
 
     def _build_footer_right_text(self, *, state: ConsoleScreenState | None = None) -> str:
         screen_state = state or self.state
@@ -279,6 +397,7 @@ class ConsoleScreen(App[str]):
         self._refresh_runs_visibility(new_state=new_state)
         self._refresh_prompt(new_state=new_state)
         self._refresh_status(new_state=new_state)
+        self._refresh_notify_action(new_state=new_state)
         self._refresh_autocomplete(new_state=new_state)
         self._refresh_footer(new_state=new_state)
 
@@ -287,7 +406,10 @@ class ConsoleScreen(App[str]):
 
     def _refresh_autocomplete(self, *, new_state: ConsoleScreenState) -> None:
         autocomplete = self._autocomplete_view()
-        autocomplete.set_state(new_state.autocompletion)
+        autocomplete.set_state(
+            new_state.autocompletion,
+            reserve_space=new_state.prompt.text.startswith("/"),
+        )
 
     def _refresh_transcript(self, *, new_state: ConsoleScreenState) -> None:
         transcript = self._transcript_log()
@@ -369,7 +491,7 @@ def run_console_screen(
         theme=theme,
         strings=container.strings,
     )
-    result = app.run(mouse=False)
+    result = app.run(mouse=True)
     return result or session_key
 
 

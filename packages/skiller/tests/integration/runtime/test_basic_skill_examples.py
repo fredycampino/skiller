@@ -9,8 +9,8 @@ from helpers.agent_runner import build_agent_runner
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.tools.tool_manager import ToolManager
-from skiller.application.run_worker_service import RunWorkerService
-from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -19,29 +19,35 @@ from skiller.application.use_cases.execute.execute_agent_step import (
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_input_step import (
+    ExecuteWaitInputStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_wait_webhook_step import (
     ExecuteWaitWebhookStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.render.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.mark_notify_action_done import (
+    MarkNotifyActionDoneUseCase,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
-from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
@@ -49,7 +55,6 @@ from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternal
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -68,12 +73,20 @@ class _FakeChannelSender:
         _ = channel
         return True
 
+    def send_text(self, *, channel: str, key: str, message: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            channel=channel,
+            key=key,
+            message=message,
+            message_id="message-1",
+        )
+
 
 def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
     return SqliteRuntimeEventStore(store.db_path)
 
 
-def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
+def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
@@ -81,11 +94,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
     )
-    webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
     tool_process_runner = DefaultToolProcessRunner()
+    channel_sender = _FakeChannelSender()
     fail_run_use_case = FailRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
@@ -113,6 +126,10 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         mcp=mcp,
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_send_step_use_case = ExecuteSendStepUseCase(
+        store=store,
+        channel_sender=channel_sender,
+    )
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
@@ -128,12 +145,22 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_channel_step_use_case = ExecuteWaitChannelStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=external_event_store,
+    )
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=external_event_store,
+    )
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
         wait_store=store,
         external_event_store=external_event_store,
     )
-    run_worker_service = RunWorkerService(
+    run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -143,13 +170,16 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_assign_step_use_case=execute_assign_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_send_step_use_case=execute_send_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_channel_step_use_case=execute_wait_channel_step_use_case,
+        execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
 
-    runtime = RuntimeApplicationService(
+    runtime = RunApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SqliteRuntimeBootstrap(store.db_path),
         ),
@@ -162,19 +192,15 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         skill_server_checker_use_case=SkillServerCheckerUseCase(
             skill_runner=skill_runner,
             server_status=_FakeServerStatus(),
-            channel_sender=_FakeChannelSender(),
+            channel_sender=channel_sender,
         ),
-        handle_webhook_use_case=HandleWebhookUseCase(
-            external_event_store=external_event_store,
-            wait_store=store,
-        ),
-        list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
-        register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
-        remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),
-        interrupt_agent_use_case=SimpleNamespace(execute=lambda run_id: None),
+        mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
+            store=store,
+            events=runtime_event_store,
+        ),
         get_run_status_use_case=GetRunStatusUseCase(store),
-        run_worker_service=run_worker_service,
+        run_executor=run_executor,
     )
     return runtime
 
@@ -190,12 +216,12 @@ def test_basic_skill_examples_succeed(
         SqliteRuntimeBootstrap(store.db_path).init_db()
 
         runtime = _build_runtime(store)
-        run_result = runtime.run(skill_ref, inputs)
+        run_result = runtime.run(CreateRunInput(skill_ref=skill_ref, inputs=inputs))
 
-        run_id = run_result["run_id"]
+        run_id = run_result.run_id
         run = store.get_run(run_id)
         assert run is not None
-        assert run_result["status"] == "SUCCEEDED"
+        assert run_result.status.value == "SUCCEEDED"
         assert run.status == "SUCCEEDED"
 
         events = _event_store(store).list_events(run_id)
@@ -243,12 +269,16 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
-            str(skill_path), {"issue": "dependency timeout"}, skill_source="file"
+            CreateRunInput(
+                skill_ref=str(skill_path),
+                inputs={"issue": "dependency timeout"},
+                skill_source="file",
+            )
         )
 
-        run = store.get_run(run_result["run_id"])
+        run = store.get_run(run_result.run_id)
         assert run is not None
-        assert run_result["status"] == "SUCCEEDED"
+        assert run_result.status.value == "SUCCEEDED"
         assert run.context.step_executions["prepare_action"].output.to_public_dict() == {
             "text": "Values assigned.",
             "value": {
@@ -261,7 +291,7 @@ def test_assign_step_succeeds_from_external_skill_file() -> None:
             "body_ref": None,
         }
 
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         assign_event = _step_success_event(events, step_id="prepare_action")
         notify_event = _step_success_event(events, step_id="done")
 
@@ -316,18 +346,20 @@ def test_switch_step_routes_to_matching_branch_from_external_skill_file() -> Non
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
 
-        run = store.get_run(run_result["run_id"])
+        run = store.get_run(run_result.run_id)
         assert run is not None
-        assert run_result["status"] == "SUCCEEDED"
+        assert run_result.status.value == "SUCCEEDED"
         assert run.context.step_executions["decide_action"].output.to_public_dict() == {
             "text": "Route selected: retry_notice.",
             "value": {"next_step_id": "retry_notice"},
             "body_ref": None,
         }
 
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         switch_event = _step_success_event(events, step_id="decide_action")
         notify_event = _step_success_event(events, step_id="retry_notice")
 
@@ -378,18 +410,20 @@ def test_when_step_routes_to_first_matching_branch_from_external_skill_file() ->
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(str(skill_path), {}, skill_source="file")
+        run_result = runtime.run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
 
-        run = store.get_run(run_result["run_id"])
+        run = store.get_run(run_result.run_id)
         assert run is not None
-        assert run_result["status"] == "SUCCEEDED"
+        assert run_result.status.value == "SUCCEEDED"
         assert run.context.step_executions["decide_score"].output.to_public_dict() == {
             "text": "Route selected: good.",
             "value": {"next_step_id": "good"},
             "body_ref": None,
         }
 
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         when_event = _step_success_event(events, step_id="decide_score")
         notify_event = _step_success_event(events, step_id="good")
 

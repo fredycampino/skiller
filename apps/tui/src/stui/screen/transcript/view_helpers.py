@@ -127,12 +127,17 @@ def wrap_message_renderable(
     theme: TuiTheme,
     icon: str,
     muted: bool = False,
+    icon_style: str = "",
 ) -> RenderableType:
-    icon_style = theme.color_text_secondary if muted else theme.color_text_primary
+    resolved_icon_style = icon_style
+    if not resolved_icon_style:
+        resolved_icon_style = (
+            theme.color_text_secondary if muted else theme.color_text_primary
+        )
     return prefixed_view(
         prefix=transcript_text(
             icon,
-            style=icon_style,
+            style=resolved_icon_style,
         ),
         content=TrimLeadingBlankLines(renderable),
         prefix_width=max(1, len(icon)),

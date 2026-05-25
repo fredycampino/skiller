@@ -1,8 +1,8 @@
 import pytest
 
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
-from skiller.application.use_cases.render.render_current_step import CurrentStep
 from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit

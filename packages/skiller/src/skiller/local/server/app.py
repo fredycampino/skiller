@@ -24,6 +24,18 @@ def _build_signature(secret: str, raw_body: bytes) -> str:
     return f"sha256={digest}"
 
 
+def _registration_method(registration: dict[str, Any]) -> str:
+    return str(registration.get("method") or "POST").strip().upper()
+
+
+def _registration_auth(registration: dict[str, Any]) -> str:
+    return str(registration.get("auth") or "signed").strip().lower()
+
+
+def _registration_payload_source(registration: dict[str, Any]) -> str:
+    return str(registration.get("payload_source") or "body_json").strip().lower()
+
+
 def _channel_token_file() -> Path:
     settings = get_settings()
     home = Path.home()
@@ -50,31 +62,47 @@ def create_app() -> Any:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/webhooks/{webhook}/{key}")
-    async def receive_webhook(
+    async def handle_webhook_request(
+        *,
+        method: str,
         webhook: str,
         key: str,
         request: Request,
-        x_signature: str | None = Header(default=None),
-        x_webhook_id: str | None = Header(default=None),
+        x_signature: str | None,
+        x_webhook_id: str | None,
     ) -> dict[str, Any]:
         registration = _load_registration(webhook)
         if registration is None:
             raise HTTPException(status_code=404, detail=f"Webhook '{webhook}' is not registered")
         if not bool(registration.get("enabled", False)):
             raise HTTPException(status_code=403, detail=f"Webhook '{webhook}' is disabled")
-        if not x_signature:
-            raise HTTPException(status_code=401, detail="Missing signature")
+        if method != _registration_method(registration):
+            raise HTTPException(status_code=405, detail="Webhook method is not allowed")
 
         raw_body = await request.body()
-        expected_signature = _build_signature(str(registration["secret"]), raw_body)
-        if not hmac.compare_digest(x_signature, expected_signature):
-            raise HTTPException(status_code=401, detail="Invalid signature")
+        auth = _registration_auth(registration)
+        if auth not in {"signed", "none"}:
+            raise HTTPException(status_code=500, detail="Invalid webhook auth configuration")
+        if auth == "signed":
+            if not x_signature:
+                raise HTTPException(status_code=401, detail="Missing signature")
+            expected_signature = _build_signature(str(registration["secret"]), raw_body)
+            if not hmac.compare_digest(x_signature, expected_signature):
+                raise HTTPException(status_code=401, detail="Invalid signature")
 
-        try:
-            payload = json.loads(raw_body.decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=400, detail="Payload must be a JSON object") from exc
+        payload_source = _registration_payload_source(registration)
+        if payload_source not in {"body_json", "query"}:
+            raise HTTPException(status_code=500, detail="Invalid webhook payload configuration")
+        if payload_source == "body_json":
+            try:
+                payload = json.loads(raw_body.decode("utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=400,
+                    detail="Payload must be a JSON object",
+                ) from exc
+        else:
+            payload = dict(request.query_params)
 
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="Payload must be a JSON object")
@@ -83,6 +111,40 @@ def create_app() -> Any:
             return launcher.receive_webhook(webhook, key, payload, dedup_key=x_webhook_id)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/webhooks/{webhook}/{key}")
+    async def receive_webhook_post(
+        webhook: str,
+        key: str,
+        request: Request,
+        x_signature: str | None = Header(default=None),
+        x_webhook_id: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        return await handle_webhook_request(
+            method="POST",
+            webhook=webhook,
+            key=key,
+            request=request,
+            x_signature=x_signature,
+            x_webhook_id=x_webhook_id,
+        )
+
+    @app.get("/webhooks/{webhook}/{key}")
+    async def receive_webhook_get(
+        webhook: str,
+        key: str,
+        request: Request,
+        x_signature: str | None = Header(default=None),
+        x_webhook_id: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        return await handle_webhook_request(
+            method="GET",
+            webhook=webhook,
+            key=key,
+            request=request,
+            x_signature=x_signature,
+            x_webhook_id=x_webhook_id,
+        )
 
     @app.post("/channels/{channel}/{key}")
     async def receive_channel(

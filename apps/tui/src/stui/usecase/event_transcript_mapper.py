@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from stui.port.event_models import (
+    ActionDonePayload,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -15,6 +16,7 @@ from stui.port.event_models import (
     InputReceivedPayload,
     LogEvent,
     LogEventType,
+    NotifyActionValue,
     NotifyOutputValue,
     OutputPayload,
     RouteOutputValue,
@@ -24,6 +26,7 @@ from stui.port.event_models import (
     StepErrorPayload,
     StepSuccessPayload,
     WaitInputOutputValue,
+    WaitWebhookOutputValue,
 )
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
@@ -34,10 +37,14 @@ from stui.viewmodel.console_screen_state import (
     AgentToolCallItem,
     AgentToolResultItem,
     DispatchErrorItem,
+    NotifyActionDoneItem,
     OutputFormat,
-    RunStatusItem,
+    RunFinishedItem,
     RunStepItem,
     RunWaitingInputItem,
+    RunWaitingWebhookItem,
+    StepErrorItem,
+    StepNotifyActionItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -63,6 +70,17 @@ class EventTranscriptMapper:
     ) -> TranscriptItem | None:
         if event.event_type in {LogEventType.RUN_CREATE, LogEventType.RUN_RESUME}:
             return None
+
+        if event.event_type == LogEventType.ACTION_DONE:
+            payload = _payload(event, ActionDonePayload)
+            return NotifyActionDoneItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_id=event.step_id or "",
+                step_type=event.step_type or "",
+                action_type=payload.action_type.value,
+                status=payload.status.value,
+            )
 
         if event.event_type == LogEventType.INPUT_RECEIVED:
             payload = _payload(event, InputReceivedPayload)
@@ -134,7 +152,7 @@ class EventTranscriptMapper:
 
         if (
             event.event_type == LogEventType.STEP_STARTED
-            and event.step_type == "wait_input"
+            and event.step_type in {"wait_input", "wait_webhook"}
         ):
             return None
 
@@ -171,6 +189,22 @@ class EventTranscriptMapper:
             and event.step_type == "notify"
         ):
             payload = _payload(event, StepSuccessPayload)
+            if isinstance(payload.output.value, NotifyActionValue):
+                output_value = payload.output.value
+                return StepNotifyActionItem(
+                    sequence=event.sequence,
+                    run_id=event.run_id,
+                    step_id=event.step_id,
+                    step_type=event.step_type,
+                    message=output_value.message,
+                    action_type=output_value.action_type.value,
+                    label=output_value.action.label,
+                    url=output_value.action.url,
+                    status=output_value.action.status.value,
+                    auto_open=output_value.action.auto_open,
+                    icon="•",
+                    muted=False,
+                )
             output_value = cast(NotifyOutputValue, payload.output.value)
             return StepNotifyOutputItem(
                 sequence=event.sequence,
@@ -211,10 +245,11 @@ class EventTranscriptMapper:
 
         if event.event_type == LogEventType.STEP_ERROR:
             payload = _payload(event, StepErrorPayload)
-            return RunStatusItem(
+            return StepErrorItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                status="error",
+                step_id=event.step_id or "",
+                step_type=event.step_type or "",
                 message=payload.error or "step failed",
             )
 
@@ -235,6 +270,22 @@ class EventTranscriptMapper:
                 prompt=_waiting_prompt(payload.output),
             )
 
+        if (
+            event.event_type == LogEventType.RUN_WAITING
+            and event.step_type == "wait_webhook"
+        ):
+            payload = _payload(event, RunWaitingPayload)
+            value = cast(WaitWebhookOutputValue, payload.output.value)
+            return RunWaitingWebhookItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_type="wait_webhook",
+                step_id=event.step_id,
+                webhook=value.webhook,
+                key=value.key,
+                icon="↯",
+            )
+
         if event.event_type == LogEventType.RUN_WAITING:
             return None
 
@@ -242,16 +293,16 @@ class EventTranscriptMapper:
             payload = _payload(event, RunFinishedPayload)
             normalized_status = payload.status.strip().lower()
             if normalized_status == "succeeded":
-                return RunStatusItem(
+                return RunFinishedItem(
                     sequence=event.sequence,
                     run_id=event.run_id,
                     status="succeeded",
                 )
-            return RunStatusItem(
+            return RunFinishedItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 status="error",
-                message=payload.error or normalized_status or "failed",
+                message="failed",
             )
 
         return None

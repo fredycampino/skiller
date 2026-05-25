@@ -17,9 +17,12 @@ from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
+from skiller.application.agents.mapper import AgentServiceMapper
+from skiller.application.agents.service import AgentApplicationService
 from skiller.application.query_service import RunQueryService
-from skiller.application.run_worker_service import RunWorkerService
-from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.mapper import RunServiceMapper
+from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.files import FilesTool
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
@@ -68,6 +71,9 @@ from skiller.application.use_cases.run.create_run import CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.mark_notify_action_done import (
+    MarkNotifyActionDoneUseCase,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
 from skiller.application.use_cases.skill.skill_server_checker import (
@@ -75,6 +81,10 @@ from skiller.application.use_cases.skill.skill_server_checker import (
 )
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.application.waits.channel_mapper import ChannelWaitMapper
+from skiller.application.waits.input_mapper import InputWaitMapper
+from skiller.application.waits.service import WaitApplicationService
+from skiller.application.waits.webhook_mapper import WebhookWaitMapper
 from skiller.domain.agent.agent_config_model import AgentLLMProviderConfig
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
@@ -103,8 +113,15 @@ from skiller.infrastructure.tools.webhooks.default_server_status import DefaultS
 @dataclass(frozen=True)
 class RuntimeContainer:
     settings: Settings
-    runtime_service: RuntimeApplicationService
+    agent_service: AgentApplicationService
+    agent_mapper: AgentServiceMapper
+    run_service: RunApplicationService
+    run_mapper: RunServiceMapper
     query_service: RunQueryService
+    wait_service: WaitApplicationService
+    input_wait_mapper: InputWaitMapper
+    channel_wait_mapper: ChannelWaitMapper
+    webhook_wait_mapper: WebhookWaitMapper
 
 
 def build_runtime_container(
@@ -159,6 +176,10 @@ def build_runtime_container(
     complete_run_use_case = CompleteRunUseCase(store)
     fail_run_use_case = FailRunUseCase(store)
     get_start_step_use_case = GetStartStepUseCase(store=store)
+    mark_notify_action_done_use_case = MarkNotifyActionDoneUseCase(
+        store=store,
+        events=runtime_event_store,
+    )
     handle_input_use_case = HandleInputUseCase(
         run_store=store,
         external_event_store=external_event_store,
@@ -275,7 +296,7 @@ def build_runtime_container(
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(runtime_event_store)
     get_runs_use_case = GetRunsUseCase(run_query)
-    run_worker_service = RunWorkerService(
+    run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -299,8 +320,15 @@ def build_runtime_container(
         get_runs_use_case=get_runs_use_case,
         get_waiting_metadata_use_case=get_waiting_metadata_use_case,
     )
-
-    runtime_service = RuntimeApplicationService(
+    wait_service = WaitApplicationService(
+        handle_input_use_case=handle_input_use_case,
+        handle_channel_use_case=handle_channel_use_case,
+        handle_webhook_use_case=handle_webhook_use_case,
+        list_webhooks_use_case=list_webhooks_use_case,
+        register_webhook_use_case=register_webhook_use_case,
+        remove_webhook_use_case=remove_webhook_use_case,
+    )
+    run_service = RunApplicationService(
         bootstrap_runtime_use_case=bootstrap_runtime_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
@@ -309,22 +337,32 @@ def build_runtime_container(
         get_start_step_use_case=get_start_step_use_case,
         skill_checker_use_case=skill_checker_use_case,
         skill_server_checker_use_case=skill_server_checker_use_case,
-        handle_input_use_case=handle_input_use_case,
-        handle_webhook_use_case=handle_webhook_use_case,
-        handle_channel_use_case=handle_channel_use_case,
-        list_webhooks_use_case=list_webhooks_use_case,
-        register_webhook_use_case=register_webhook_use_case,
-        remove_webhook_use_case=remove_webhook_use_case,
         resume_run_use_case=resume_run_use_case,
+        mark_notify_action_done_use_case=mark_notify_action_done_use_case,
+        get_run_status_use_case=get_run_status_use_case,
+        run_executor=run_executor,
+    )
+    run_mapper = RunServiceMapper()
+    input_wait_mapper = InputWaitMapper()
+    channel_wait_mapper = ChannelWaitMapper()
+    webhook_wait_mapper = WebhookWaitMapper()
+
+    agent_service = AgentApplicationService(
         interrupt_agent_use_case=interrupt_agent_use_case,
         get_agent_stats_use_case=get_agent_stats_use_case,
-        get_run_status_use_case=get_run_status_use_case,
-        run_worker_service=run_worker_service,
     )
+    agent_mapper = AgentServiceMapper()
     return RuntimeContainer(
         settings=cfg,
-        runtime_service=runtime_service,
+        agent_service=agent_service,
+        agent_mapper=agent_mapper,
+        run_service=run_service,
+        run_mapper=run_mapper,
         query_service=query_service,
+        wait_service=wait_service,
+        input_wait_mapper=input_wait_mapper,
+        channel_wait_mapper=channel_wait_mapper,
+        webhook_wait_mapper=webhook_wait_mapper,
     )
 
 

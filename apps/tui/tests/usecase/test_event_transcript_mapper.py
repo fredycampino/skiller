@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from stui.port.event_models import (
+    ActionDonePayload,
+    ActionOpenUrlValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -17,16 +19,22 @@ from stui.port.event_models import (
     LogEvent,
     LogEventPayload,
     LogEventType,
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
     OutputPayload,
     RouteOutputValue,
+    RunFinishedPayload,
     RunResumePayload,
     RunWaitingPayload,
     ShellOutputValue,
+    StepErrorPayload,
     StepStartedPayload,
     StepSuccessPayload,
     WaitInputOutputValue,
+    WaitWebhookOutputValue,
 )
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
@@ -37,8 +45,13 @@ from stui.viewmodel.console_screen_state import (
     AgentToolCallItem,
     AgentToolResultItem,
     DispatchErrorItem,
+    NotifyActionDoneItem,
     OutputFormat,
+    RunFinishedItem,
     RunWaitingInputItem,
+    RunWaitingWebhookItem,
+    StepErrorItem,
+    StepNotifyActionItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -101,6 +114,33 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
     assert isinstance(items[2], AgentToolResultItem)
     assert items[1].command == "git status --short"
     assert items[2].preview == "Command completed successfully."
+
+
+def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.ACTION_DONE,
+                sequence=2,
+                step_id="auth_link",
+                step_type="notify",
+                payload=ActionDonePayload(
+                    action_type=NotifyActionType.OPEN_URL,
+                    status=NotifyActionStatus.DONE,
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], NotifyActionDoneItem)
+    assert items[0].run_id == "run-1"
+    assert items[0].step_id == "auth_link"
+    assert items[0].step_type == "notify"
+    assert items[0].action_type == "open_url"
+    assert items[0].status == "done"
 
 
 def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_output() -> None:
@@ -227,6 +267,50 @@ def test_event_transcript_mapper_uses_notify_output_format() -> None:
     assert len(items) == 1
     assert isinstance(items[0], StepNotifyOutputItem)
     assert items[0].format == OutputFormat.MARKDOWN
+
+
+def test_event_transcript_mapper_uses_notify_action_as_step_notify_action() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="auth_link",
+                step_type="notify",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Authorize the app",
+                        value=NotifyActionValue(
+                            message="Authorize the app",
+                            action_type=NotifyActionType.OPEN_URL,
+                            action=ActionOpenUrlValue(
+                                label="Open authorization",
+                                url="https://example.com/oauth/start",
+                                status=NotifyActionStatus.PENDING,
+                                auto_open=True,
+                            ),
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepNotifyActionItem)
+    assert items[0].step_id == "auth_link"
+    assert items[0].step_type == "notify"
+    assert items[0].message == "Authorize the app"
+    assert items[0].action_type == "open_url"
+    assert items[0].label == "Open authorization"
+    assert items[0].url == "https://example.com/oauth/start"
+    assert items[0].status == "pending"
+    assert items[0].auto_open is True
+    assert items[0].icon == "•"
+    assert items[0].muted is False
 
 
 def test_event_transcript_mapper_uses_generic_step_success_as_step_output() -> None:
@@ -477,6 +561,45 @@ def test_event_transcript_mapper_renders_waiting_output() -> None:
     assert items[0].prompt == "Write a message."
 
 
+def test_event_transcript_mapper_renders_waiting_webhook_output() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_STARTED,
+                step_id="wait_authorization",
+                step_type="wait_webhook",
+                payload=StepStartedPayload(),
+            ),
+            _event(
+                LogEventType.RUN_WAITING,
+                sequence=2,
+                step_id="wait_authorization",
+                step_type="wait_webhook",
+                payload=RunWaitingPayload(
+                    output=OutputPayload(
+                        text="",
+                        value=WaitWebhookOutputValue(
+                            webhook="example-auth",
+                            key="GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], RunWaitingWebhookItem)
+    assert items[0].step_type == "wait_webhook"
+    assert items[0].step_id == "wait_authorization"
+    assert items[0].webhook == "example-auth"
+    assert items[0].key == "GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl"
+    assert items[0].icon == "↯"
+
+
 def test_event_transcript_mapper_surfaces_observer_loop_error() -> None:
     mapper = EventTranscriptMapper()
 
@@ -492,6 +615,49 @@ def test_event_transcript_mapper_surfaces_observer_loop_error() -> None:
     assert len(items) == 1
     assert isinstance(items[0], DispatchErrorItem)
     assert items[0].message == "RuntimeError: boom"
+
+
+def test_event_transcript_mapper_uses_step_error_item_for_step_error() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_ERROR,
+                step_id="register_auth_webhook",
+                step_type="shell",
+                payload=StepErrorPayload(error="shell command path escapes workspace"),
+            )
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], StepErrorItem)
+    assert items[0].step_id == "register_auth_webhook"
+    assert items[0].step_type == "shell"
+    assert items[0].message == "shell command path escapes workspace"
+
+
+def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished(
+) -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_FINISHED,
+                payload=RunFinishedPayload(
+                    status="FAILED",
+                    error="shell command path escapes workspace",
+                ),
+            )
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], RunFinishedItem)
+    assert items[0].status == "error"
+    assert items[0].message == "failed"
 
 
 def _event(

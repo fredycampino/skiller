@@ -1,48 +1,57 @@
+import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from skiller.interfaces.cli import main as cli_main
 
+SKILL_NAME = "unit_skill"
+SKILL_FILE = "/virtual/unit_skill"
+
 
 class _FakeController:
-    def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def __init__(self, *args: object, **kwargs: object) -> None:
         _ = (args, kwargs)
+        self.initialized = False
         self.create_run_calls: list[tuple[str, dict[str, str], str]] = []
         self.start_worker_calls: list[str] = []
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
         self.interrupt_agent_calls: list[str] = []
         self.agent_stats_calls: list[dict[str, str]] = []
+        self.action_done_calls: list[dict[str, str]] = []
         self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
-        self.receive_calls: list[tuple[str, str, dict[str, str], str | None]] = []
+        self.receive_webhook_calls: list[tuple[str, str, dict[str, object], str | None]] = []
         self.receive_channel_calls: list[
-            tuple[str, str, dict[str, str], str | None, str | None]
+            tuple[str, str, dict[str, object], str | None, str | None]
         ] = []
+        self.register_webhook_calls: list[tuple[str, str, str, str]] = []
         self.logs_calls: list[dict[str, object]] = []
         self.status_calls: list[dict[str, object]] = []
-        self.list_runs_calls: list[tuple[int, list[str] | None]] = []
-        self.run_result = {"run_id": "run-1", "status": "CREATED"}
-        self.start_worker_result = {
+        self.list_runs_calls: list[tuple[int, list[str]]] = []
+        self.run_result: dict[str, object] = {"run_id": "run-1", "status": "CREATED"}
+        self.start_worker_result: dict[str, object] = {
             "run_id": "run-1",
             "start_status": "PREPARED",
             "status": "CREATED",
         }
-        self.run_worker_result = {"run_id": "run-1", "status": "SUCCEEDED"}
-        self.run_error: ValueError | None = None
-        self.logs_result = [
+        self.run_worker_result: dict[str, object] = {
+            "run_id": "run-1",
+            "status": "SUCCEEDED",
+        }
+        self.logs_result: list[dict[str, object]] = [
             {
                 "id": "evt-1",
                 "type": "STEP_SUCCESS",
                 "payload": {
-                    "step": "done",
-                    "step_type": "notify",
                     "output": {
                         "text": "done",
                         "value": {"message": "done", "format": "simple"},
                         "body_ref": None,
                     },
+                    "next": None,
                 },
             }
         ]
@@ -54,22 +63,23 @@ class _FakeController:
             {
                 "id": "run-1",
                 "status": "WAITING",
-                "ref": "webhook_signal_oracle",
+                "ref": "unit_skill",
                 "current": "wait_signal",
-                "updated_at": "2026-03-18 11:42:10",
             }
         ]
         self.list_webhooks_result: list[dict[str, object]] = [
             {
                 "webhook": "github-ci",
                 "secret": "secret-123",
+                "method": "POST",
+                "auth": "signed",
+                "payload_source": "body_json",
                 "enabled": True,
-                "created_at": "2026-03-19 10:00:00",
             }
         ]
 
     def initialize(self) -> None:
-        return None
+        self.initialized = True
 
     def create_run(
         self,
@@ -77,21 +87,19 @@ class _FakeController:
         inputs: dict[str, str],
         *,
         skill_source: str = "internal",
-    ) -> dict[str, str]:
-        if self.run_error is not None:
-            raise self.run_error
+    ) -> dict[str, object]:
         self.create_run_calls.append((skill_ref, inputs, skill_source))
         return dict(self.run_result)
 
-    def start_worker(self, run_id: str) -> dict[str, str]:
+    def start_worker(self, run_id: str) -> dict[str, object]:
         self.start_worker_calls.append(run_id)
         return dict(self.start_worker_result)
 
-    def run_worker(self, run_id: str) -> dict[str, str]:
+    def run_worker(self, run_id: str) -> dict[str, object]:
         self.run_worker_calls.append(run_id)
         return dict(self.run_worker_result)
 
-    def resume(self, run_id: str) -> dict[str, str]:
+    def resume(self, run_id: str) -> dict[str, object]:
         self.resume_calls.append(run_id)
         return {"run_id": run_id, "resume_status": "RESUMED", "status": "WAITING"}
 
@@ -109,26 +117,19 @@ class _FakeController:
         return {
             "run_id": run_id,
             "agent_id": agent_id,
-            "context_id": "ctx-1",
             "status": "OK",
             "ok": True,
-            "stats": {
-                "context": {
-                    "entries": {
-                        "total": 1,
-                        "user_messages": 0,
-                        "assistant_messages": 1,
-                        "tool_calls": 0,
-                        "tool_results": 0,
-                    },
-                    "usage": {
-                        "entries": 1,
-                        "total_prompt_tokens": 100,
-                        "total_response_tokens": 25,
-                        "total_tokens": 125,
-                    },
-                }
-            },
+            "stats": {"context": {"usage": {"total_tokens": 125}}},
+        }
+
+    def action_done(self, run_id: str, step_id: str) -> dict[str, object]:
+        self.action_done_calls.append({"run_id": run_id, "step_id": step_id})
+        return {
+            "run_id": run_id,
+            "step_id": step_id,
+            "status": "DONE",
+            "done": True,
+            "changed": True,
         }
 
     def delete_run(self, run_id: str) -> dict[str, object]:
@@ -175,17 +176,22 @@ class _FakeController:
         limit: int = 20,
         statuses: list[str] | None = None,
     ) -> list[dict[str, object]]:
-        self.list_runs_calls.append((limit, statuses))
+        normalized_statuses = statuses or []
+        self.list_runs_calls.append((limit, normalized_statuses))
         return list(self.list_runs_result)
+
+    def receive_input(self, run_id: str, *, text: str) -> dict[str, object]:
+        self.receive_input_calls.append((run_id, text))
+        return {"accepted": True, "run_id": run_id, "matched_runs": [run_id]}
 
     def receive_webhook(
         self,
         webhook: str,
         key: str,
-        payload: dict[str, str],
+        payload: dict[str, object],
         dedup_key: str | None = None,
     ) -> dict[str, object]:
-        self.receive_calls.append((webhook, key, payload, dedup_key))
+        self.receive_webhook_calls.append((webhook, key, payload, dedup_key))
         return {
             "accepted": True,
             "duplicate": False,
@@ -194,19 +200,11 @@ class _FakeController:
             "matched_runs": ["run-1"],
         }
 
-    def receive_input(self, run_id: str, *, text: str) -> dict[str, object]:
-        self.receive_input_calls.append((run_id, text))
-        return {
-            "accepted": True,
-            "run_id": run_id,
-            "matched_runs": [run_id],
-        }
-
     def receive_channel(
         self,
         channel: str,
         key: str,
-        payload: dict[str, str],
+        payload: dict[str, object],
         *,
         external_id: str | None = None,
         dedup_key: str | None = None,
@@ -220,10 +218,21 @@ class _FakeController:
             "matched_runs": ["run-1"],
         }
 
-    def register_webhook(self, webhook: str) -> dict[str, object]:
+    def register_webhook(
+        self,
+        webhook: str,
+        *,
+        method: str = "POST",
+        auth: str = "signed",
+        payload_source: str = "body_json",
+    ) -> dict[str, object]:
+        self.register_webhook_calls.append((webhook, method, auth, payload_source))
         return {
             "webhook": webhook,
             "status": "REGISTERED",
+            "method": method,
+            "auth": auth,
+            "payload_source": payload_source,
             "secret": "secret-123",
             "enabled": True,
         }
@@ -232,22 +241,7 @@ class _FakeController:
         return list(self.list_webhooks_result)
 
     def remove_webhook(self, webhook: str) -> dict[str, object]:
-        return {
-            "webhook": webhook,
-            "status": "REMOVED",
-            "removed": True,
-        }
-
-
-@pytest.fixture
-def fake_container() -> SimpleNamespace:
-    return SimpleNamespace(
-        runtime_service=object(),
-        query_service=object(),
-        settings=SimpleNamespace(
-            db_path="/tmp/test.db", webhooks_host="127.0.0.1", webhooks_port=8001
-        ),
-    )
+        return {"webhook": webhook, "status": "REMOVED", "removed": True}
 
 
 class _FakeWorkerProcessService:
@@ -267,14 +261,61 @@ class _FakeWorkerProcessService:
         return SimpleNamespace(command="resume", pid=303, run_id=run_id)
 
 
-def test_main_without_args_runs_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture
+def fake_container() -> SimpleNamespace:
+    return SimpleNamespace(
+        agent_service=object(),
+        agent_mapper=object(),
+        run_service=object(),
+        run_mapper=object(),
+        query_service=object(),
+        wait_service=object(),
+        input_wait_mapper=object(),
+        channel_wait_mapper=object(),
+        webhook_wait_mapper=object(),
+        settings=SimpleNamespace(
+            db_path="/tmp/test.db",
+            webhooks_host="127.0.0.1",
+            webhooks_port=8001,
+        ),
+    )
+
+
+def _install_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    controller: _FakeController,
+    *,
+    worker_process_service: _FakeWorkerProcessService | None = None,
+) -> None:
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
+    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    if worker_process_service is not None:
+        monkeypatch.setattr(
+            cli_main,
+            "WorkerProcessService",
+            lambda: worker_process_service,
+        )
+
+
+def _read_json(capsys: pytest.CaptureFixture[str]) -> tuple[dict[str, Any], str]:
+    captured = capsys.readouterr()
+    return json.loads(captured.out), captured.err
+
+
+def _read_json_list(capsys: pytest.CaptureFixture[str]) -> tuple[list[dict[str, Any]], str]:
+    captured = capsys.readouterr()
+    return json.loads(captured.out), captured.err
+
+
+def test_main_without_args_runs_tui(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"run_tui": False}
 
     def fake_run_tui() -> str:
         called["run_tui"] = True
         return "session-key"
 
-    monkeypatch.setattr("stui.app.run_tui", fake_run_tui)
+    monkeypatch.setattr(cli_main, "_load_tui_runner", lambda: fake_run_tui)
 
     exit_code = cli_main.main([])
 
@@ -295,150 +336,71 @@ def test_version_prints_package_version(
     assert capsys.readouterr().out == "skiller 1.2.3\n"
 
 
-def test_run_internal_skill_by_name(
+def test_run_internal_skill_dispatches_worker_and_watches_status(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
     monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
 
-    exit_code = cli_main.main(["run", "notify_test", "--arg", "message=ok"])
+    exit_code = cli_main.main(["run", SKILL_NAME, "--arg", "message=ok"])
 
-    captured = capsys.readouterr()
+    data, stderr = _read_json(capsys)
     assert exit_code == 0
-    assert controller.create_run_calls == [("notify_test", {"message": "ok"}, "internal")]
+    assert controller.initialized is True
+    assert controller.create_run_calls == [(SKILL_NAME, {"message": "ok"}, "internal")]
     assert worker_process_service.calls == [("start", "run-1")]
-    assert '"run_id": "run-1"' in captured.out
-    assert '"worker_pid": 101' in captured.out
-    assert '"status": "SUCCEEDED"' in captured.out
-    assert "[1] CREATED" in captured.err
-    assert "[1] RUNNING" in captured.err
-    assert "[1] STEP_SUCCESS" in captured.err
-    assert "[1] SUCCEEDED" in captured.err
+    assert data["run_id"] == "run-1"
+    assert data["worker_pid"] == 101
+    assert data["status"] == "SUCCEEDED"
+    assert "[1] CREATED" in stderr
+    assert "[1] RUNNING" in stderr
+    assert "[1] STEP_SUCCESS" in stderr
+    assert "[1] SUCCEEDED" in stderr
 
 
-def test_run_external_skill_by_file(
+def test_run_file_selection_forwards_path_without_loading_file(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
+    exit_code = cli_main.main(
+        ["run", "--file", SKILL_FILE, "--arg", "message=ok", "--detach"]
+    )
 
-    exit_code = cli_main.main(["run", "--file", "/tmp/demo.yaml", "--arg", "message=ok"])
-
-    captured = capsys.readouterr()
+    data, stderr = _read_json(capsys)
     assert exit_code == 0
-    assert controller.create_run_calls == [("/tmp/demo.yaml", {"message": "ok"}, "file")]
-    assert '"status": "SUCCEEDED"' in captured.out
-
-
-def test_run_can_include_logs_in_response(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-    worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
-
-    exit_code = cli_main.main(["run", "notify_test", "--logs"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.logs_calls[-1] == {
-        "run_id": "run-1",
-        "after_sequence": None,
-        "limit": None,
-    }
-    assert '"logs": [' in captured.out
-    assert '"type": "STEP_SUCCESS"' in captured.out
-
-
-def test_run_detach_returns_after_dispatch_without_watching(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-    worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
-
-    exit_code = cli_main.main(["run", "notify_test", "--detach"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.create_run_calls == [("notify_test", {}, "internal")]
+    assert controller.create_run_calls == [(SKILL_FILE, {"message": "ok"}, "file")]
     assert worker_process_service.calls == [("start", "run-1")]
     assert controller.status_calls == []
     assert controller.logs_calls == []
-    assert '"run_id": "run-1"' in captured.out
-    assert '"worker_pid": 101' in captured.out
-    assert '"status": "CREATED"' in captured.out
-    assert captured.err == ""
+    assert data["status"] == "CREATED"
+    assert stderr == ""
 
 
-def test_run_can_start_server_when_waiting(
+def test_run_waiting_result_merges_wait_metadata(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-    worker_process_service = _FakeWorkerProcessService()
-
-    class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                endpoint="http://127.0.0.1:8001/health",
-                pid=1234,
-                started=True,
-                running=True,
-                managed=True,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
-
-    exit_code = cli_main.main(["run", "notify_test", "--start-server"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"status": "SUCCEEDED"' in captured.out
-    assert '"server_started": true' in captured.out
-    assert '"server_pid": 1234' in captured.out
-
-
-def test_run_waiting_result_includes_waiting_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     controller.status_results = [
         {
             "id": "run-1",
@@ -449,74 +411,93 @@ def test_run_waiting_result_includes_waiting_metadata(
         }
     ]
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
     monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
 
-    exit_code = cli_main.main(["run", "wait_input_test"])
+    exit_code = cli_main.main(["run", SKILL_NAME])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert '"status": "WAITING"' in captured.out
-    assert '"wait_type": "input"' in captured.out
-    assert '"prompt": "Write a short summary"' in captured.out
+    assert data["status"] == "WAITING"
+    assert data["current"] == "ask_user"
+    assert data["wait_type"] == "input"
+    assert data["prompt"] == "Write a short summary"
 
 
-def test_run_fails_when_webhooks_requested_but_process_does_not_start(
+def test_run_can_start_server_before_dispatching_worker(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
 
     class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
+        def __init__(self, settings: object) -> None:
             self.settings = settings
 
-        def start(self):
-            raise RuntimeError("server process did not become ready")
+        def start(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                endpoint="http://127.0.0.1:8001/health",
+                pid=1234,
+                started=True,
+                running=True,
+                managed=True,
+            )
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
     monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
 
-    exit_code = cli_main.main(["run", "notify_test", "--start-server"])
+    exit_code = cli_main.main(["run", SKILL_NAME, "--start-server"])
 
-    captured = capsys.readouterr()
-    assert exit_code == 1
-    assert '"status": "CREATED"' in captured.out
-    assert '"server_started": false' in captured.out
-    assert "server process did not become ready" in captured.out
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert data["server_started"] is True
+    assert data["server_pid"] == 1234
+    assert worker_process_service.calls == [("start", "run-1")]
 
 
-def test_run_failure_with_start_server_can_include_logs(
+def test_run_start_server_failure_can_include_logs(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
     class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
+        def __init__(self, settings: object) -> None:
             self.settings = settings
 
-        def start(self):
+        def start(self) -> SimpleNamespace:
             raise RuntimeError("server process did not become ready")
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
     monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
 
-    exit_code = cli_main.main(["run", "notify_test", "--start-server", "--logs"])
+    exit_code = cli_main.main(["run", SKILL_NAME, "--start-server", "--logs"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 1
+    assert data["server_started"] is False
+    assert data["error"] == "server process did not become ready"
+    assert "logs" in data
     assert controller.logs_calls == [
         {
             "run_id": "run-1",
@@ -524,831 +505,112 @@ def test_run_failure_with_start_server_can_include_logs(
             "limit": None,
         }
     ]
-    assert '"logs": [' in captured.out
-
-
-def test_server_start_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                endpoint="http://127.0.0.1:8001/health",
-                pid=1234,
-                started=True,
-                running=True,
-                managed=True,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-
-    exit_code = cli_main.main(["server", "start"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"started": true' in captured.out
-    assert '"running": true' in captured.out
-    assert '"managed_by_skiller": true' in captured.out
-    assert '"pid": 1234' in captured.out
-
-
-def test_server_status_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def status(self):
-            return SimpleNamespace(
-                endpoint="http://127.0.0.1:8001/health",
-                pid=1234,
-                running=True,
-                managed=True,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-
-    exit_code = cli_main.main(["server", "status"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"running": true' in captured.out
-    assert '"managed_by_skiller": true' in captured.out
-
-
-def test_server_stop_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWebhookProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                endpoint="http://127.0.0.1:8001/health",
-                pid=1234,
-                running=False,
-                stopped=True,
-                managed=True,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-
-    exit_code = cli_main.main(["server", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": true' in captured.out
-
-
-def test_agent_interrupt_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(["agent", "interrupt", "run-1"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.interrupt_agent_calls == ["run-1"]
-    assert '"status": "ENQUEUED"' in captured.out
-    assert '"type": "agent_interrupt"' in captured.out
-
-
-def test_agent_stats_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(
-        ["agent", "stats", "run-1", "--agent", "support_agent"]
-    )
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.agent_stats_calls == [
-        {"run_id": "run-1", "agent_id": "support_agent"}
-    ]
-    assert '"status": "OK"' in captured.out
-    assert '"total_tokens": 125' in captured.out
-
-
-def test_cloudflared_start_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                origin_url="http://127.0.0.1:8001",
-                pid=2233,
-                started=True,
-                running=True,
-                managed=True,
-                tunnel_name="skillerwh",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
-
-    exit_code = cli_main.main(["cloudflared", "start"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"started": true' in captured.out
-    assert '"managed_by_skiller": true' in captured.out
-    assert '"tunnel_name": "skillerwh"' in captured.out
-
-
-def test_cloudflared_status_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def status(self):
-            return SimpleNamespace(
-                origin_url="http://127.0.0.1:8001",
-                pid=2233,
-                running=True,
-                managed=False,
-                tunnel_name="skillerwh",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
-
-    exit_code = cli_main.main(["cloudflared", "status"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"running": true' in captured.out
-    assert '"managed_by_skiller": false' in captured.out
-
-
-def test_cloudflared_stop_command_for_managed_process(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                origin_url="http://127.0.0.1:8001",
-                pid=2233,
-                running=False,
-                stopped=True,
-                managed=True,
-                tunnel_name="skillerwh",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
-
-    exit_code = cli_main.main(["cloudflared", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": true' in captured.out
-    assert '"managed_by_skiller": true' in captured.out
-
-
-def test_cloudflared_stop_command_does_not_fail_for_external_process(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                origin_url="http://127.0.0.1:8001",
-                pid=2233,
-                running=True,
-                stopped=False,
-                managed=False,
-                tunnel_name="skillerwh",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredProcessService", _FakeCloudflaredProcessService)
-
-    exit_code = cli_main.main(["cloudflared", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": false' in captured.out
-    assert '"managed_by_skiller": false' in captured.out
-
-
-def test_cloudflared_ensure_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredEnsureService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def ensure(self, *, domain: str):
-            assert domain == "campino.me"
-            return SimpleNamespace(
-                authenticated=True,
-                tunnel_name="skillerwh",
-                tunnel_id="11111111-1111-1111-1111-111111111111",
-                hostname="skillerwh.campino.me",
-                created=True,
-                dns_status="created",
-                config_path="/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml",
-                home="/tmp/cloudflared-home",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredEnsureService", _FakeCloudflaredEnsureService)
-
-    exit_code = cli_main.main(["cloudflared", "ensure", "--domain", "campino.me"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"tunnel_name": "skillerwh"' in captured.out
-    assert '"hostname": "skillerwh.campino.me"' in captured.out
-    assert '"dns_status": "created"' in captured.out
-    assert (
-        '"config_path": "/tmp/cloudflared-home/.cloudflared/skillerwh-config.yml"' in captured.out
-    )
-
-
-def test_cloudflared_login_start_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredLoginService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                authenticated=False,
-                started=True,
-                running=True,
-                pid=8899,
-                home="/tmp/cloudflared-home",
-                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
-                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
-
-    exit_code = cli_main.main(["cloudflared", "login", "start"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"started": true' in captured.out
-    assert '"pid": 8899' in captured.out
-    assert '"cert_path": "/tmp/cloudflared-home/.cloudflared/cert.pem"' in captured.out
-
-
-def test_cloudflared_login_status_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredLoginService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def status(self):
-            return SimpleNamespace(
-                authenticated=True,
-                running=False,
-                pid=None,
-                home="/tmp/cloudflared-home",
-                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
-                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
-
-    exit_code = cli_main.main(["cloudflared", "login", "status"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"authenticated": true' in captured.out
-    assert '"running": false' in captured.out
-
-
-def test_cloudflared_login_stop_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeCloudflaredLoginService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                authenticated=False,
-                stopped=True,
-                running=False,
-                pid=8899,
-                home="/tmp/cloudflared-home",
-                cert_path="/tmp/cloudflared-home/.cloudflared/cert.pem",
-                log_path="/tmp/cloudflared-home/.skiller/cloudflared/login.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "CloudflaredLoginService", _FakeCloudflaredLoginService)
-
-    exit_code = cli_main.main(["cloudflared", "login", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": true' in captured.out
-    assert '"log_path": "/tmp/cloudflared-home/.skiller/cloudflared/login.log"' in captured.out
-
-
-def test_whatsapp_pair_start_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppPairService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                paired=False,
-                started=True,
-                running=False,
-                pid=4455,
-                state="paired",
-                qr_count=2,
-                home="/tmp/whatsapp-home",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
-
-    exit_code = cli_main.main(["whatsapp", "pair", "start"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"started": true' in captured.out
-    assert '"pid": 4455' in captured.out
-    assert '"state": "paired"' in captured.out
-    assert '"session_path": "/tmp/whatsapp-home/.skiller/whatsapp/session"' in captured.out
-
-
-def test_whatsapp_pair_status_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppPairService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def status(self):
-            return SimpleNamespace(
-                paired=True,
-                running=False,
-                pid=None,
-                state="paired",
-                qr_count=3,
-                home="/tmp/whatsapp-home",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
-
-    exit_code = cli_main.main(["whatsapp", "pair", "status"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"paired": true' in captured.out
-    assert '"qr_count": 3' in captured.out
-    assert '"running": false' in captured.out
-
-
-def test_whatsapp_pair_stop_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppPairService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                paired=False,
-                stopped=True,
-                running=False,
-                pid=4455,
-                state="stopped",
-                qr_count=4,
-                home="/tmp/whatsapp-home",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                log_path="/tmp/whatsapp-home/.skiller/whatsapp/pair.log",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
-
-    exit_code = cli_main.main(["whatsapp", "pair", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": true' in captured.out
-    assert '"pid": 4455' in captured.out
-
-
-def test_whatsapp_pair_reset_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    calls: list[str] = []
-
-    class _FakeWhatsAppProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            calls.append("stop_bridge")
-            return SimpleNamespace(stopped=True)
-
-    class _FakeWhatsAppPairService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def reset(self):
-            calls.append("reset_pair")
-            return SimpleNamespace(
-                reset=True,
-                paired=False,
-                stopped_pairing=False,
-                home="/tmp/whatsapp-home",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
-    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
-
-    exit_code = cli_main.main(["whatsapp", "pair", "reset"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert calls == ["stop_bridge", "reset_pair"]
-    assert '"reset": true' in captured.out
-    assert '"paired": false' in captured.out
-    assert '"stopped_bridge": true' in captured.out
-    assert '"stopped_pairing": false' in captured.out
-    assert '"session_path": "/tmp/whatsapp-home/.skiller/whatsapp/session"' in captured.out
-
-
-def test_whatsapp_start_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def start(self):
-            return SimpleNamespace(
-                started=True,
-                running=True,
-                managed=True,
-                paired=True,
-                state="connected",
-                qr_count=0,
-                queue_length=2,
-                endpoint="http://127.0.0.1:8002/health",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                pid=5566,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
-
-    exit_code = cli_main.main(["whatsapp", "start"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"started": true' in captured.out
-    assert '"managed_by_skiller": true' in captured.out
-    assert '"queue_length": 2' in captured.out
-
-
-def test_whatsapp_status_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def status(self):
-            return SimpleNamespace(
-                running=True,
-                managed=False,
-                paired=True,
-                state="connected",
-                qr_count=0,
-                queue_length=5,
-                endpoint="http://127.0.0.1:8002/health",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                pid=None,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
-
-    exit_code = cli_main.main(["whatsapp", "status"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"running": true' in captured.out
-    assert '"managed_by_skiller": false' in captured.out
-    assert '"queue_length": 5' in captured.out
-
-
-def test_whatsapp_stop_command(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    class _FakeWhatsAppProcessService:
-        def __init__(self, settings) -> None:  # noqa: ANN001
-            self.settings = settings
-
-        def stop(self):
-            return SimpleNamespace(
-                stopped=True,
-                running=False,
-                managed=True,
-                paired=True,
-                state="stopped",
-                qr_count=0,
-                queue_length=0,
-                endpoint="http://127.0.0.1:8002/health",
-                session_path="/tmp/whatsapp-home/.skiller/whatsapp/session",
-                pid=5566,
-            )
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(
-        cli_main,
-        "RuntimeController",
-        lambda **_: _FakeController(None, None, None),
-    )
-    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
-
-    exit_code = cli_main.main(["whatsapp", "stop"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"stopped": true' in captured.out
-    assert '"state": "stopped"' in captured.out
+    assert worker_process_service.calls == []
 
 
 def test_run_rejects_missing_or_duplicated_skill_selection(
-    monkeypatch: pytest.MonkeyPatch, fake_container: SimpleNamespace
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", _FakeController)
+    _install_runtime(monkeypatch, fake_container, _FakeController())
 
     with pytest.raises(SystemExit) as missing:
         cli_main.main(["run"])
     assert missing.value.code == 2
 
     with pytest.raises(SystemExit) as duplicated:
-        cli_main.main(["run", "notify_test", "--file", "/tmp/demo.yaml"])
+        cli_main.main(["run", SKILL_NAME, "--file", SKILL_FILE])
     assert duplicated.value.code == 2
 
 
-def test_resume_run(
+def test_resume_dispatches_worker_process(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
     exit_code = cli_main.main(["resume", "run-123"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.resume_calls == []
     assert worker_process_service.calls == [("resume", "run-123")]
-    assert '"resume_status": "DISPATCHED"' in captured.out
+    assert data == {
+        "run_id": "run-123",
+        "resume_status": "DISPATCHED",
+        "worker_pid": 303,
+    }
 
 
-def test_worker_start_prepares_and_launches_execution(
+def test_worker_start_prepares_run_and_launches_worker_process(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
     exit_code = cli_main.main(["worker", "start", "run-123"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.start_worker_calls == ["run-123"]
     assert worker_process_service.calls == [("run", "run-123")]
-    assert '"start_status": "PREPARED"' in captured.out
+    assert data["start_status"] == "PREPARED"
+    assert data["worker_pid"] == 202
 
 
-def test_worker_run_executes_prepared_run(
+@pytest.mark.parametrize(
+    ("argv", "expected_call", "expected_status"),
+    [
+        (["worker", "run", "run-123"], "run_worker_calls", "SUCCEEDED"),
+        (["worker", "resume", "run-123"], "resume_calls", "RESUMED"),
+    ],
+)
+def test_worker_commands_delegate_to_runtime_controller(
+    argv: list[str],
+    expected_call: str,
+    expected_status: str,
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    exit_code = cli_main.main(argv)
 
-    exit_code = cli_main.main(["worker", "run", "run-123"])
-
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.run_worker_calls == ["run-123"]
-    assert '"status": "SUCCEEDED"' in captured.out
+    assert getattr(controller, expected_call) == ["run-123"]
+    assert expected_status in data.values()
 
 
-def test_worker_resume_reuses_runtime_resume(
+def test_logs_command_forwards_cursor_options(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(["worker", "resume", "run-123"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.resume_calls == ["run-123"]
-    assert '"resume_status": "RESUMED"' in captured.out
-
-
-def test_logs_accepts_cursor_options(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
     exit_code = cli_main.main(["logs", "run-123", "--after", "10", "--limit", "50"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json_list(capsys)
     assert exit_code == 0
     assert controller.logs_calls == [
         {
@@ -1357,7 +619,7 @@ def test_logs_accepts_cursor_options(
             "limit": 50,
         }
     ]
-    assert '"type": "STEP_SUCCESS"' in captured.out
+    assert data[0]["type"] == "STEP_SUCCESS"
 
 
 def test_logs_help_describes_raw_events_and_cursor(
@@ -1374,192 +636,122 @@ def test_logs_help_describes_raw_events_and_cursor(
     assert "status.last_event_sequence" in captured.out
 
 
-def test_status_can_include_waiting_metadata(
+def test_status_command_can_request_runtime_context(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-    controller.status_results = [
-        {
-            "id": "run-1",
-            "ref": "webhook_signal_oracle",
-            "status": "WAITING",
-            "current": "wait_signal",
-            "wait_type": "webhook",
-            "webhook": "market-signal",
-            "key": "btc-usd",
-        }
-    ]
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(["status", "run-1"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert '"wait_type": "webhook"' in captured.out
-    assert '"webhook": "market-signal"' in captured.out
-    assert '"key": "btc-usd"' in captured.out
-    assert controller.status_calls == [
-        {
-            "run_id": "run-1",
-            "include_context": False,
-        }
-    ]
-
-
-def test_status_can_include_runtime_context(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     controller.status_results = [
         {
             "id": "run-1",
             "status": "WAITING",
             "current": "ask_user",
-            "context": {
-                "inputs": {},
-                "step_executions": {},
-            },
+            "context": {"inputs": {}, "step_executions": {}},
         }
     ]
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    _install_runtime(monkeypatch, fake_container, controller)
 
     exit_code = cli_main.main(["status", "run-1", "--context"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.status_calls == [
-        {
-            "run_id": "run-1",
-            "include_context": True,
-        }
-    ]
-    assert '"context": {' in captured.out
+    assert controller.status_calls == [{"run_id": "run-1", "include_context": True}]
+    assert data["context"] == {"inputs": {}, "step_executions": {}}
 
 
-def test_runs_lists_recent_runs(
+def test_runs_command_normalizes_status_filters(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(["runs", "--limit", "5"])
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert controller.list_runs_calls == [(5, [])]
-    assert '"id": "run-1"' in captured.out
-    assert '"ref": "webhook_signal_oracle"' in captured.out
-
-
-def test_runs_accepts_status_filters(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController(None, None, None)
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
     exit_code = cli_main.main(["runs", "--status", "waiting", "--limit", "5"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json_list(capsys)
     assert exit_code == 0
     assert controller.list_runs_calls == [(5, ["WAITING"])]
-    assert '"status": "WAITING"' in captured.out
+    assert data[0]["id"] == "run-1"
 
 
-def test_delete_deletes_run(
+def test_delete_command_delegates_to_runtime_controller(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
     exit_code = cli_main.main(["delete", "run-1"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.delete_run_calls == ["run-1"]
-    assert '"status": "DELETED"' in captured.out
-    assert '"deleted": true' in captured.out
+    assert data == {"run_id": "run-1", "status": "DELETED", "deleted": True}
 
 
-def test_webhook_receive_uses_webhook_and_key(
+def test_action_done_command_marks_runtime_action(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
-    worker_process_service = _FakeWorkerProcessService()
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    exit_code = cli_main.main(["action", "done", "run-1", "auth_link"])
 
-    exit_code = cli_main.main(
-        ["webhook", "receive", "github-pr-merged", "42", "--json", '{"ok":true}']
-    )
-
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.receive_calls == [("github-pr-merged", "42", {"ok": True}, None)]
-    assert worker_process_service.calls == [("resume", "run-1")]
-    assert '"accepted": true' in captured.out
-    assert '"duplicate": false' in captured.out
-    assert '"matched_runs": [' in captured.out
-    assert '"resumed_runs": [' in captured.out
+    assert controller.action_done_calls == [
+        {"run_id": "run-1", "step_id": "auth_link"}
+    ]
+    assert data == {
+        "run_id": "run-1",
+        "step_id": "auth_link",
+        "status": "DONE",
+        "done": True,
+        "changed": True,
+    }
 
 
-def test_input_receive_uses_run_id_and_text(
+def test_input_receive_stores_input_and_resumes_matched_runs(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
     exit_code = cli_main.main(["input", "receive", "run-1", "--text", "database timeout"])
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.receive_input_calls == [("run-1", "database timeout")]
     assert worker_process_service.calls == [("resume", "run-1")]
-    assert '"accepted": true' in captured.out
-    assert '"matched_runs": [' in captured.out
-    assert '"resumed_runs": [' in captured.out
+    assert data["resumed_runs"] == ["run-1"]
 
 
-def test_channel_receive_uses_channel_and_key(
+def test_channel_receive_forwards_payload_and_resumes_matched_runs(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
     worker_process_service = _FakeWorkerProcessService()
-
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-    monkeypatch.setattr(cli_main, "WorkerProcessService", lambda: worker_process_service)
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
     exit_code = cli_main.main(
         [
@@ -1571,71 +763,325 @@ def test_channel_receive_uses_channel_and_key(
             '{"text":"hola"}',
             "--external-id",
             "msg-1",
+            "--dedup-key",
+            "dedup-1",
         ]
     )
 
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.receive_channel_calls == [
-        ("whatsapp", "172584771580071@lid", {"text": "hola"}, "msg-1", None)
+        ("whatsapp", "172584771580071@lid", {"text": "hola"}, "msg-1", "dedup-1")
     ]
     assert worker_process_service.calls == [("resume", "run-1")]
-    assert '"accepted": true' in captured.out
-    assert '"channel": "whatsapp"' in captured.out
-    assert '"key": "172584771580071@lid"' in captured.out
-    assert '"resumed_runs": [' in captured.out
+    assert data["resumed_runs"] == ["run-1"]
 
 
-def test_webhook_register(
+def test_webhook_receive_forwards_payload_and_resumes_matched_runs(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
+    worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    exit_code = cli_main.main(
+        [
+            "webhook",
+            "receive",
+            "github-pr-merged",
+            "42",
+            "--json",
+            '{"ok":true}',
+            "--dedup-key",
+            "delivery-1",
+        ]
+    )
 
-    exit_code = cli_main.main(["webhook", "register", "github-ci"])
-
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert '"status": "REGISTERED"' in captured.out
-    assert '"secret": "secret-123"' in captured.out
-    assert '"webhook_url": "http://127.0.0.1:8001/webhooks/github-ci/{key}"' in captured.out
+    assert controller.receive_webhook_calls == [
+        ("github-pr-merged", "42", {"ok": True}, "delivery-1")
+    ]
+    assert worker_process_service.calls == [("resume", "run-1")]
+    assert data["resumed_runs"] == ["run-1"]
 
 
-def test_webhook_list(
+def test_webhook_register_forwards_ingress_options_and_prints_url(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
+    exit_code = cli_main.main(
+        [
+            "webhook",
+            "register",
+            "example-auth",
+            "--method",
+            "GET",
+            "--auth",
+            "none",
+            "--payload-source",
+            "query",
+        ]
+    )
 
-    exit_code = cli_main.main(["webhook", "list"])
-
-    captured = capsys.readouterr()
+    data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert '"webhook": "github-ci"' in captured.out
-    assert '"enabled": true' in captured.out
+    assert controller.register_webhook_calls == [
+        ("example-auth", "GET", "none", "query")
+    ]
+    assert data["webhook_url"] == "http://127.0.0.1:8001/webhooks/example-auth/{key}"
 
 
-def test_webhook_remove(
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["webhook", "list"], {"webhook": "github-ci", "enabled": True}),
+        (["webhook", "remove", "github-ci"], {"webhook": "github-ci", "removed": True}),
+    ],
+)
+def test_webhook_list_and_remove_are_controller_passthroughs(
+    argv: list[str],
+    expected: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    controller = _FakeController(None, None, None)
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
 
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: fake_container)
-    monkeypatch.setattr(cli_main, "RuntimeController", lambda **_: controller)
-
-    exit_code = cli_main.main(["webhook", "remove", "github-ci"])
+    exit_code = cli_main.main(argv)
 
     captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    if isinstance(data, list):
+        data = data[0]
     assert exit_code == 0
-    assert '"status": "REMOVED"' in captured.out
-    assert '"removed": true' in captured.out
+    for key, value in expected.items():
+        assert data[key] == value
+
+
+@pytest.mark.parametrize(
+    ("argv", "controller_calls", "expected_status"),
+    [
+        (
+            ["agent", "interrupt", "run-1"],
+            "interrupt_agent_calls",
+            "ENQUEUED",
+        ),
+        (
+            ["agent", "stats", "run-1", "--agent", "support_agent"],
+            "agent_stats_calls",
+            "OK",
+        ),
+    ],
+)
+def test_agent_commands_delegate_to_runtime_controller(
+    argv: list[str],
+    controller_calls: str,
+    expected_status: str,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(argv)
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert getattr(controller, controller_calls)
+    assert data["status"] == expected_status
+
+
+def _local_process_result() -> SimpleNamespace:
+    return SimpleNamespace(
+        authenticated=True,
+        cert_path="/virtual/cloudflared/cert.pem",
+        endpoint="http://127.0.0.1:8001/health",
+        home="/virtual/service-home",
+        log_path="/virtual/service.log",
+        managed=True,
+        origin_url="http://127.0.0.1:8001",
+        paired=True,
+        pid=1234,
+        qr_count=1,
+        queue_length=2,
+        running=False,
+        session_path="/virtual/whatsapp/session",
+        started=True,
+        state="ready",
+        stopped=True,
+        tunnel_name="skillerwh",
+    )
+
+
+def _local_process_service_class(result: SimpleNamespace):
+    class _FakeLocalProcessService:
+        calls: list[tuple[str, object]] = []
+
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def start(self) -> SimpleNamespace:
+            self.__class__.calls.append(("start", self.settings))
+            return result
+
+        def status(self) -> SimpleNamespace:
+            self.__class__.calls.append(("status", self.settings))
+            return result
+
+        def stop(self) -> SimpleNamespace:
+            self.__class__.calls.append(("stop", self.settings))
+            return result
+
+    return _FakeLocalProcessService
+
+
+@pytest.mark.parametrize(
+    ("argv", "service_name", "method", "expected_key"),
+    [
+        (["server", "start"], "WebhookProcessService", "start", "started"),
+        (["server", "status"], "WebhookProcessService", "status", "running"),
+        (["server", "stop"], "WebhookProcessService", "stop", "stopped"),
+        (["cloudflared", "start"], "CloudflaredProcessService", "start", "started"),
+        (["cloudflared", "status"], "CloudflaredProcessService", "status", "running"),
+        (["cloudflared", "stop"], "CloudflaredProcessService", "stop", "stopped"),
+        (
+            ["cloudflared", "login", "start"],
+            "CloudflaredLoginService",
+            "start",
+            "authenticated",
+        ),
+        (
+            ["cloudflared", "login", "status"],
+            "CloudflaredLoginService",
+            "status",
+            "authenticated",
+        ),
+        (
+            ["cloudflared", "login", "stop"],
+            "CloudflaredLoginService",
+            "stop",
+            "stopped",
+        ),
+        (["whatsapp", "start"], "WhatsAppProcessService", "start", "started"),
+        (["whatsapp", "status"], "WhatsAppProcessService", "status", "running"),
+        (["whatsapp", "stop"], "WhatsAppProcessService", "stop", "stopped"),
+        (["whatsapp", "pair", "start"], "WhatsAppPairService", "start", "paired"),
+        (["whatsapp", "pair", "status"], "WhatsAppPairService", "status", "paired"),
+        (["whatsapp", "pair", "stop"], "WhatsAppPairService", "stop", "stopped"),
+    ],
+)
+def test_local_process_commands_dispatch_to_selected_service(
+    argv: list[str],
+    service_name: str,
+    method: str,
+    expected_key: str,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+    service_class = _local_process_service_class(_local_process_result())
+    monkeypatch.setattr(cli_main, service_name, service_class)
+
+    exit_code = cli_main.main(argv)
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert service_class.calls == [(method, fake_container.settings)]
+    assert expected_key in data
+
+
+def test_cloudflared_ensure_forwards_domain(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    class _FakeCloudflaredEnsureService:
+        calls: list[tuple[str, object]] = []
+
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def ensure(self, *, domain: str) -> SimpleNamespace:
+            self.__class__.calls.append((domain, self.settings))
+            return SimpleNamespace(
+                authenticated=True,
+                tunnel_name="skillerwh",
+                tunnel_id="11111111-1111-1111-1111-111111111111",
+                hostname=f"skillerwh.{domain}",
+                created=True,
+                dns_status="created",
+                config_path="/virtual/cloudflared/config",
+                home="/virtual/cloudflared",
+            )
+
+    monkeypatch.setattr(cli_main, "CloudflaredEnsureService", _FakeCloudflaredEnsureService)
+
+    exit_code = cli_main.main(["cloudflared", "ensure", "--domain", "campino.me"])
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert _FakeCloudflaredEnsureService.calls == [("campino.me", fake_container.settings)]
+    assert data["hostname"] == "skillerwh.campino.me"
+    assert data["dns_status"] == "created"
+
+
+def test_whatsapp_pair_reset_stops_bridge_before_reset(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+    calls: list[str] = []
+
+    class _FakeWhatsAppProcessService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def stop(self) -> SimpleNamespace:
+            calls.append("stop_bridge")
+            return SimpleNamespace(stopped=True)
+
+    class _FakeWhatsAppPairService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def reset(self) -> SimpleNamespace:
+            calls.append("reset_pair")
+            return SimpleNamespace(
+                reset=True,
+                paired=False,
+                stopped_pairing=False,
+                home="/virtual/whatsapp",
+                session_path="/virtual/whatsapp/session",
+            )
+
+    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
+    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
+
+    exit_code = cli_main.main(["whatsapp", "pair", "reset"])
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert calls == ["stop_bridge", "reset_pair"]
+    assert data["reset"] is True
+    assert data["stopped_bridge"] is True

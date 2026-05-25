@@ -4,10 +4,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.runner_port import RunnerPort
+from skiller.domain.step.step_type import StepType
 
 
 class RenderMcpConfigStatus(str, Enum):

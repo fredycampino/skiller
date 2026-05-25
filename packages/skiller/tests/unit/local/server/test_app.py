@@ -34,7 +34,14 @@ def test_receive_webhook_calls_launcher(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {"webhook": webhook, "secret": "secret", "enabled": True},
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "enabled": True,
+        },
     )
     monkeypatch.setattr(
         webhooks_app.launcher,
@@ -68,13 +75,82 @@ def test_receive_webhook_calls_launcher(monkeypatch: pytest.MonkeyPatch) -> None
     assert response.json()["key"] == "42"
 
 
+def test_receive_webhook_get_reads_query_payload_without_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "GET",
+            "auth": "none",
+            "payload_source": "query",
+            "enabled": True,
+        },
+    )
+    monkeypatch.setattr(
+        webhooks_app.launcher,
+        "receive_webhook",
+        lambda webhook, key, payload, dedup_key=None: {
+            "accepted": True,
+            "duplicate": False,
+            "webhook": webhook,
+            "key": key,
+            "payload": payload,
+            "dedup_key": dedup_key,
+        },
+    )
+
+    response = _request(
+        "GET",
+        "/webhooks/example-auth/state-1?code=code-1&state=state-1",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["accepted"] is True
+    assert response.json()["webhook"] == "example-auth"
+    assert response.json()["key"] == "state-1"
+    assert response.json()["payload"] == {"code": "code-1", "state": "state-1"}
+
+
+def test_receive_webhook_rejects_unregistered_method(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "enabled": True,
+        },
+    )
+
+    response = _request("GET", "/webhooks/test/42?ok=true")
+
+    assert response.status_code == 405
+    assert response.json()["detail"] == "Webhook method is not allowed"
+
+
 def test_receive_webhook_rejects_non_object_payload() -> None:
     body = ["bad"]
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {"webhook": webhook, "secret": "secret", "enabled": True},
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "enabled": True,
+        },
     )
     response = _request(
         "POST",
@@ -97,7 +173,14 @@ def test_receive_webhook_requires_signature_when_registered(
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {"webhook": webhook, "secret": "secret", "enabled": True},
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "enabled": True,
+        },
     )
 
     response = _request("POST", "/webhooks/test/42", json={"ok": True})
@@ -119,7 +202,14 @@ def test_receive_webhook_rejects_invalid_signature(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {"webhook": webhook, "secret": "secret", "enabled": True},
+        lambda webhook: {
+            "webhook": webhook,
+            "secret": "secret",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "enabled": True,
+        },
     )
 
     response = _request(

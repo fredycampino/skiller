@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from stui.port.event_models import LogEvent
-from stui.port.event_port import EventsPort, LogEventsListener, LogEventsObserver
+from stui.port.event_port import (
+    DEFAULT_POLL_INTERVAL_SECONDS,
+    EventsPort,
+    LogEventsListener,
+    LogEventsObserver,
+)
 
 DEFAULT_MAX_EVENTS_WINDOW = 10
 
@@ -20,7 +25,13 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
     event_observer: LogEventsObserver
     _subscription: _ActiveSubscription | None = field(default=None, init=False, repr=False)
 
-    def subscribe(self, *, run_id: str, listener: LogEventsListener) -> None:
+    def subscribe(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    ) -> None:
         normalized_run_id = run_id.strip()
         if not normalized_run_id:
             raise RuntimeError("events port requires run_id")
@@ -32,7 +43,11 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
             )
         else:
             subscription.listener = listener
-        self.event_observer.subscribe(run_id=normalized_run_id, listener=self)
+        self.event_observer.subscribe(
+            run_id=normalized_run_id,
+            listener=self,
+            interval_seconds=interval_seconds,
+        )
 
     def unsubscribe(self) -> None:
         self.event_observer.unsubscribe()

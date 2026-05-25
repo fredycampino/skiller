@@ -50,10 +50,40 @@ class NotifyOutputFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
+class NotifyActionType(StrEnum):
+    OPEN_URL = "open_url"
+
+
+class NotifyActionStatus(StrEnum):
+    PENDING = "pending"
+    DONE = "done"
+
+
+@dataclass(frozen=True)
+class NotifyOpenUrlAction:
+    label: str = ""
+    url: str = ""
+    status: NotifyActionStatus = NotifyActionStatus.PENDING
+    auto_open: bool = False
+
+
 @dataclass(frozen=True)
 class NotifyOutput(OutputBase):
     message: str = ""
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
+    action_type: NotifyActionType | None = None
+    action: NotifyOpenUrlAction | None = None
+
+    def to_public_dict(self) -> dict[str, Any]:
+        payload = super().to_public_dict()
+        value = payload.get("value")
+        if isinstance(value, dict):
+            if value.get("action_type") is None:
+                value.pop("action_type", None)
+            if value.get("action") is None:
+                value.pop("action", None)
+            payload["value"] = value or None
+        return payload
 
 
 @dataclass(frozen=True)
@@ -122,8 +152,8 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
     body_ref = raw.get("body_ref")
     value = raw.get("value")
     output_fields = value if isinstance(value, dict) else {}
-    if step_type == StepType.NOTIFY and "format" in output_fields:
-        output_fields["format"] = NotifyOutputFormat(str(output_fields["format"]))
+    if step_type == StepType.NOTIFY:
+        output_fields = _build_notify_output_fields(output_fields)
     return output_type(
         text=str(text),
         text_ref=(
@@ -138,6 +168,35 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
         ),
         **output_fields,
     )
+
+
+def _build_notify_output_fields(output_fields: dict[str, Any]) -> dict[str, Any]:
+    fields = dict(output_fields)
+    if "format" in fields:
+        fields["format"] = NotifyOutputFormat(str(fields["format"]))
+
+    if "action_type" in fields and fields["action_type"] is not None:
+        fields["action_type"] = NotifyActionType(str(fields["action_type"]))
+
+    if fields.get("action_type") == NotifyActionType.OPEN_URL:
+        raw_action = fields.get("action")
+        action = raw_action if isinstance(raw_action, dict) else {}
+        raw_auto_open = action.get("auto_open", False)
+        if not isinstance(raw_auto_open, bool):
+            raise ValueError("notify action auto_open must be boolean")
+        fields["action"] = NotifyOpenUrlAction(
+            label=str(action.get("label", "")),
+            url=str(action.get("url", "")),
+            status=NotifyActionStatus(
+                str(action.get("status", NotifyActionStatus.PENDING.value))
+            ),
+            auto_open=raw_auto_open,
+        )
+        return fields
+
+    fields["action_type"] = None
+    fields["action"] = None
+    return fields
 
 
 @dataclass(frozen=True)

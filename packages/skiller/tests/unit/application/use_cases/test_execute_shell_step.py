@@ -3,12 +3,13 @@ import pytest
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType, SteeringStepInterrupt
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import ShellOutput
+from skiller.domain.step.step_execution_result_model import StepExecutionStatus
+from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_process_model import (
     ToolProcessHandle,
     ToolProcessOutput,
@@ -221,7 +222,33 @@ def test_execute_shell_step_raises_on_non_zero_exit_when_check_is_true() -> None
     use_case = _build_use_case(process_runner=process_runner)
     context = RunContext(inputs={}, step_executions={})
 
-    with pytest.raises(ValueError, match="failed with exit code 7"):
+    with pytest.raises(ValueError, match="Shell step 'run_tests' failed: boom"):
+        use_case.execute(
+            CurrentStep(
+                run_id="run-1",
+                step_index=0,
+                step_id="run_tests",
+                step_type=StepType.SHELL,
+                step={"command": "exit 7"},
+                context=context,
+            )
+        )
+
+    assert context.step_executions == {}
+
+
+def test_execute_shell_step_keeps_legacy_non_zero_error_when_stderr_is_empty() -> None:
+    process_runner = _FakeProcessRunner(
+        output=ToolProcessOutput(
+            exit_code=7,
+            stdout="",
+            stderr="",
+        )
+    )
+    use_case = _build_use_case(process_runner=process_runner)
+    context = RunContext(inputs={}, step_executions={})
+
+    with pytest.raises(ValueError, match="Shell step 'run_tests' failed: $"):
         use_case.execute(
             CurrentStep(
                 run_id="run-1",

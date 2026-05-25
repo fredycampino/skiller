@@ -6,7 +6,7 @@ import pytest
 
 from stui.adapter.default_events_port import DEFAULT_MAX_EVENTS_WINDOW, DefaultEventsPort
 from stui.port.event_models import InputReceivedPayload, LogEvent, LogEventType
-from stui.port.event_port import LogEventsListener
+from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS, LogEventsListener
 
 pytestmark = pytest.mark.unit
 
@@ -26,10 +26,18 @@ class FakeLogEventsListener(LogEventsListener):
 @dataclass
 class FakeLogEventsObserver:
     subscribe_calls: list[tuple[str, LogEventsListener]] = field(default_factory=list)
+    subscribe_interval_calls: list[float] = field(default_factory=list)
     unsubscribe_calls: int = 0
 
-    def subscribe(self, *, run_id: str, listener: LogEventsListener) -> None:
+    def subscribe(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    ) -> None:
         self.subscribe_calls.append((run_id, listener))
+        self.subscribe_interval_calls.append(interval_seconds)
 
     def unsubscribe(self) -> None:
         self.unsubscribe_calls += 1
@@ -51,7 +59,19 @@ def test_subscribe_uses_self_as_observer_listener() -> None:
     port.subscribe(run_id=" run-1 ", listener=listener)
 
     assert observer.subscribe_calls == [("run-1", port)]
+    assert observer.subscribe_interval_calls == [DEFAULT_POLL_INTERVAL_SECONDS]
     assert port.get_max_page() == 25
+
+
+def test_subscribe_forwards_poll_interval() -> None:
+    observer = FakeLogEventsObserver()
+    listener = FakeLogEventsListener(max_page=25)
+    port = DefaultEventsPort(event_observer=observer)
+
+    port.subscribe(run_id="run-1", listener=listener, interval_seconds=1.0)
+
+    assert observer.subscribe_calls == [("run-1", port)]
+    assert observer.subscribe_interval_calls == [1.0]
 
 
 def test_notify_without_subscription_is_ignored() -> None:

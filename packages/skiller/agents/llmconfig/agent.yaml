@@ -27,10 +27,10 @@ steps:
   - switch: route_action
     value: '{{output_value("select_action").payload.text}}'
     cases:
-      "1": minimax_config
-      minimax: minimax_config
-      MiniMax: minimax_config
-      MINIMAX: minimax_config
+      "1": minimax_prepare_config
+      minimax: minimax_prepare_config
+      MiniMax: minimax_prepare_config
+      MINIMAX: minimax_prepare_config
       "2": later_run
       later: later_run
       Config Later: later_run
@@ -43,34 +43,21 @@ steps:
     default: invalid_action
 
   - notify: invalid_action
-    format: markdown
-    message: |
-      Invalid option.
-
-      Choose an option:
-
-      1. MiniMax
-      2. Config Later
-      3. Exit App
+    message: "Invalid option. Type minimax, later, or exit."
     next: select_action
 
-  - notify: minimax_config
-    format: markdown
-    message: |
-      # MiniMax LLM config
+  - shell: minimax_prepare_config
+    command: |
+      set -eu
 
-      Create these two files:
+      settings_dir="$HOME/.skiller/settings"
+      secrets_dir="$HOME/.skiller/secrets"
+      config_file="$settings_dir/agent.json"
+      secret_file="$secrets_dir/minimax_api_key"
 
-      ```text
-      ~/.skiller/settings/agent.json
-      ~/.skiller/secrets/minimax_api_key
-      ```
+      mkdir -p "$settings_dir" "$secrets_dir"
 
-      The `minimax_api_key` file must contain only your MiniMax API key.
-
-      Use this content for `~/.skiller/settings/agent.json`:
-
-      ```json
+      cat > "$config_file" <<JSON
       {
         "llm": {
           "default_provider": "minimax",
@@ -82,23 +69,67 @@ steps:
               "base_url": "https://api.minimax.io/v1",
               "timeout_seconds": 60,
               "context_window_tokens": 80000,
-              "api_key_file": "~/.skiller/secrets/minimax_api_key"
+              "api_key_file": "$secret_file"
             }
           }
         }
       }
-      ```
+      JSON
 
-      Do not paste your API key into the transcript. After creating the files, run the agent you wanted to use again.
+      if [ ! -f "$secret_file" ]; then
+        umask 077
+        printf '%s\n' 'PASTE_MINIMAX_API_KEY_HERE' > "$secret_file"
+        secret_status='created placeholder'
+      else
+        secret_status='kept existing file'
+      fi
+
+      printf '%s\n' 'MiniMax config prepared.'
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Secret: $secret_file ($secret_status)"
+      printf '%s\n' ''
+      printf '%s\n' 'Next: open the secret file and replace its content with your MiniMax API key.'
+      printf '%s\n' 'Do not paste the API key in this transcript.'
+      sleep 1
+    cwd: .
+    timeout: 15
+    check: true
+    next: confirm_minimax_secret
+
+  - wait_input: confirm_minimax_secret
+    prompt: "After editing the key file, type ok"
+    next: route_minimax_confirmation
+
+  - switch: route_minimax_confirmation
+    value: '{{output_value("confirm_minimax_secret").payload.text}}'
+    cases:
+      ok: verify_minimax
+      OK: verify_minimax
+      Ok: verify_minimax
+      done: verify_minimax
+      Done: verify_minimax
+      ready: verify_minimax
+      Ready: verify_minimax
+    default: confirm_again
+
+  - notify: confirm_again
+    message: "Type ok when the MiniMax API key is saved in the secret file."
+    next: confirm_minimax_secret
+
+  - agent: verify_minimax
+    system: |
+      You are a configuration check agent.
+      Reply with one short sentence.
+    task: "Say that the MiniMax agent configuration works."
+    tools: []
+    max_turns: 1
+    next: done
+
+  - notify: done
+    message: "MiniMax responded. Agent configuration is ready."
 
   - notify: later_run
-    format: markdown
-    message: |
-      LLM config postponed.
-
-      Run `llmconfig` when you are ready.
+    message: "LLM config postponed. Run llmconfig when you are ready."
 
   - notify: exit_run
-    format: markdown
-    message: |
-      LLM config closed.
+    message: "LLM config closed."

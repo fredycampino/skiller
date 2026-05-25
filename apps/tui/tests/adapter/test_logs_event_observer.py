@@ -77,8 +77,8 @@ def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer = LogsEventObserver(logs=adapter)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -109,8 +109,8 @@ def test_logs_event_observer_uses_listener_max_page(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer = LogsEventObserver(logs=adapter)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         await asyncio.sleep(0)
 
         assert adapter.called_with[0] == ("run-1", None, 25)
@@ -139,12 +139,12 @@ def test_logs_event_observer_keeps_cursor_when_resubscribing_same_run(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
+        observer = LogsEventObserver(logs=adapter)
 
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
@@ -178,9 +178,9 @@ def test_logs_event_observer_does_not_stop_on_historical_waiting(
     async def run() -> None:
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-        observer = LogsEventObserver(interval_seconds=0.0, logs=adapter)
+        observer = LogsEventObserver(logs=adapter)
 
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -190,6 +190,65 @@ def test_logs_event_observer_does_not_stop_on_historical_waiting(
             ("run-1", None, 100),
             ("run-1", 2, 100),
             ("run-1", 4, 100),
+        ]
+
+    asyncio.run(run())
+
+
+def test_logs_event_observer_continues_when_resubscribed_during_notify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    adapter = FakeLogEventAdapter(
+        [
+            [_run_waiting_event(sequence=1, step_type="wait_webhook")],
+            [],
+            [_step_started_event(sequence=2), _run_waiting_event(sequence=3)],
+        ]
+    )
+
+    class ResubscribingListener(FakeLogEventsListener):
+        def __init__(self) -> None:
+            super().__init__()
+            self.observer: LogsEventObserver | None = None
+
+        def notify(self, events: list[LogEvent]) -> None:
+            super().notify(events)
+            if events[-1].step_type != "wait_webhook":
+                return
+            assert self.observer is not None
+            self.observer.subscribe(
+                run_id="run-1",
+                listener=self,
+                interval_seconds=1.0,
+            )
+
+    listener = ResubscribingListener()
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        observer = LogsEventObserver(logs=adapter)
+        listener.observer = observer
+
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert [event.sequence for event in listener.events] == [1, 2, 3]
+        assert adapter.called_with == [
+            ("run-1", None, 100),
+            ("run-1", 1, 100),
+            ("run-1", 1, 100),
+            ("run-1", 3, 100),
         ]
 
     asyncio.run(run())
@@ -206,7 +265,6 @@ def test_logs_event_observer_notifies_observer_loop_error(
         adapter = FailingLogEventAdapter()
         listener = FakeLogEventsListener()
         observer = LogsEventObserver(
-            interval_seconds=0.0,
             logs=adapter,
             run_port=FakeRunPort(
                 status=RunRuntimeStatus(
@@ -219,7 +277,7 @@ def test_logs_event_observer_notifies_observer_loop_error(
             ),
         )
 
-        observer.subscribe(run_id="run-1", listener=listener)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
         task = observer._task
         assert task is not None
 
@@ -253,20 +311,24 @@ def _step_started_event(*, sequence: int) -> CliLogEvent:
     )
 
 
-def _run_waiting_event(*, sequence: int) -> CliLogEvent:
+def _run_waiting_event(*, sequence: int, step_type: str = "wait_input") -> CliLogEvent:
+    value = {"prompt": "Write a message.", "payload": None}
+    if step_type == "wait_webhook":
+        value = {"webhook": "auth", "key": "token", "payload": None}
+
     return CliLogEvent(
         sequence=sequence,
         id=f"evt-{sequence}",
         run_id="run-1",
         type=LogEventType.RUN_WAITING,
         step_id="ask_user",
-        step_type="wait_input",
+        step_type=step_type,
         agent_sequence=None,
         created_at="2026-05-12T10:30:17Z",
         payload={
             "output": {
                 "text": "Write a message.",
-                "value": {"prompt": "Write a message.", "payload": None},
+                "value": value,
                 "body_ref": None,
             }
         },

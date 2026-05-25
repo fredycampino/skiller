@@ -67,6 +67,7 @@ else:
 
 run_cli "cli_notify.sh" ./cli_notify.sh
 echo
+run_cli "cli_notify_link.sh" ./cli_notify_link.sh
 echo
 run_cli "cli_assign.sh" ./cli_assign.sh "dependency timeout"
 echo

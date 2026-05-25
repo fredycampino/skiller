@@ -4,12 +4,14 @@ from dataclasses import dataclass
 
 from stui.adapter.cli_agent_adapter import CliAgentAdapter
 from stui.adapter.cli_invoker import CliInvoker
+from stui.adapter.cli_notify_action_adapter import CliNotifyActionAdapter
 from stui.adapter.cli_run_adapter import CliRunAdapter
 from stui.adapter.cli_runs_adapter import CliRunsAdapter
 from stui.adapter.cli_waiting_adapter import CliWaitingAdapter
 from stui.adapter.default_agent_port import DefaultAgentPort
 from stui.adapter.default_events_port import DefaultEventsPort
 from stui.adapter.default_installation_state_port import DefaultInstallationStatePort
+from stui.adapter.default_notify_action_port import DefaultNotifyActionPort
 from stui.adapter.default_run_port import DefaultRunPort
 from stui.adapter.default_runs_port import DefaultRunsPort
 from stui.adapter.default_waiting_port import DefaultWaitingPort
@@ -19,11 +21,13 @@ from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.agent_port import AgentPort
 from stui.port.event_port import EventsPort
 from stui.port.installation_state_port import InstallationStatePort
+from stui.port.notify_action_port import NotifyActionPort
 from stui.port.run_port import RunPort
 from stui.port.runs_port import RunsPort
 from stui.port.waiting_port import WaitingPort
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
+from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
@@ -34,6 +38,10 @@ from stui.usecase.move_completion_use_case import (
 )
 from stui.usecase.normalize_command_use_case import (
     NormalizeCommandUseCase,
+)
+from stui.usecase.open_notify_action_use_case import OpenNotifyActionUseCase
+from stui.usecase.project_notify_action_use_case import (
+    ProjectNotifyActionUseCase,
 )
 from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
@@ -63,6 +71,7 @@ class TuiContainer:
     events_port: EventsPort
     runs_port: RunsPort
     waiting_port: WaitingPort
+    notify_action_port: NotifyActionPort
     agent_port: AgentPort
     installation_state_port: InstallationStatePort
     run_event_context: RunEventContext
@@ -84,6 +93,7 @@ def build_tui_container(
     events_port: EventsPort | None = None,
     runs_port: RunsPort | None = None,
     waiting_port: WaitingPort | None = None,
+    notify_action_port: NotifyActionPort | None = None,
     agent_port: AgentPort | None = None,
     installation_state_port: InstallationStatePort | None = None,
     cli_invoker: CliInvoker | None = None,
@@ -107,6 +117,9 @@ def build_tui_container(
     resolved_waiting_port = waiting_port or DefaultWaitingPort(
         command_adapter=CliWaitingAdapter(invoker=resolved_cli_invoker),
     )
+    resolved_notify_action_port = notify_action_port or DefaultNotifyActionPort(
+        command_adapter=CliNotifyActionAdapter(invoker=resolved_cli_invoker),
+    )
     resolved_installation_state_port = (
         installation_state_port or DefaultInstallationStatePort()
     )
@@ -127,7 +140,15 @@ def build_tui_container(
         event_state=EventStateUseCase(
             context=run_event_context,
             agent_port=resolved_agent_port,
+            events_port=resolved_events_port,
         ),
+        done_notify_action=DoneNotifyActionUseCase(
+            notify_action_port=resolved_notify_action_port,
+        ),
+        open_notify_action=OpenNotifyActionUseCase(
+            notify_action_port=resolved_notify_action_port,
+        ),
+        project_notify_action=ProjectNotifyActionUseCase(),
         project_transcript=ProjectTranscriptUseCase(),
         prompt_enter=PromptEnterUseCase(),
         run_command=RunCommandUseCase(
@@ -161,6 +182,7 @@ def build_tui_container(
         events_port=resolved_events_port,
         runs_port=resolved_runs_port,
         waiting_port=resolved_waiting_port,
+        notify_action_port=resolved_notify_action_port,
         agent_port=resolved_agent_port,
         installation_state_port=resolved_installation_state_port,
         run_event_context=run_event_context,

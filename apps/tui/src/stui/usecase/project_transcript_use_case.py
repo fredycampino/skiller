@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
+    NotifyActionDoneItem,
     RunOutputItem,
     RunResumeItem,
     RunStepItem,
+    StepNotifyActionItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -22,12 +24,14 @@ class ProjectTranscriptUseCase:
         *,
         state: ConsoleScreenState,
     ) -> list[TranscriptItem]:
-        if state.transcript.mode != TranscriptMode.CHAT:
-            return list(state.transcript.items)
-
         visible_items: list[TranscriptItem] = []
         for item in state.transcript.items:
-            if _should_hide_in_chat_mode(item):
+            if isinstance(item, (StepNotifyActionItem, NotifyActionDoneItem)):
+                continue
+            if (
+                state.transcript.mode == TranscriptMode.CHAT
+                and _should_hide_in_chat_mode(item)
+            ):
                 continue
             visible_items.append(item)
         return visible_items

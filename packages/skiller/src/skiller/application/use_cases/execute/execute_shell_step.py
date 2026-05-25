@@ -1,15 +1,15 @@
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
-from skiller.application.use_cases.render.render_current_step import CurrentStep
-from skiller.application.use_cases.shared.step_execution_result import (
-    StepAdvance,
-    StepExecutionStatus,
-)
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.run.steering_model import SteeringStepInterrupt
 from skiller.domain.shared.steering_port import SteeringPort
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import ShellOutput, StepExecution
+from skiller.domain.step.step_execution_result_model import (
+    StepAdvance,
+    StepExecutionStatus,
+)
 from skiller.domain.tool.tool_contract import ToolInput, ToolResult
 from skiller.domain.tool.tool_process_model import (
     ToolProcessInterrupt,
@@ -81,8 +81,8 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
 
         result_data = result.data
         if check and bool(result_data.get("ok")) is False:
-            exit_code = int(result_data.get("exit_code", 0))
-            raise ValueError(f"Shell step '{step_id}' failed with exit code {exit_code}")
+            stderr = str(result_data.get("stderr", "")).strip()
+            raise ValueError(f"Shell step '{step_id}' failed: {stderr}")
 
         output_payload = self._build_output_payload(result)
         execution = StepExecution(

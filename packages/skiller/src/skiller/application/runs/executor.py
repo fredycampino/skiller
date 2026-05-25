@@ -23,10 +23,7 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.render.render_current_step import (
-    CurrentStep,
-    CurrentStepStatus,
     RenderCurrentStepUseCase,
-    StepType,
 )
 from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
@@ -35,10 +32,6 @@ from skiller.application.use_cases.render.render_mcp_config import (
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
-from skiller.application.use_cases.shared.step_execution_result import (
-    StepAdvance,
-    StepExecutionStatus,
-)
 from skiller.domain.event.event_model import (
     RunFinishedPayload,
     RuntimeEventType,
@@ -47,9 +40,15 @@ from skiller.domain.event.event_model import (
     StepStartedPayload,
     StepSuccessPayload,
 )
+from skiller.domain.step.current_step_model import CurrentStep, CurrentStepStatus
+from skiller.domain.step.step_execution_result_model import (
+    StepAdvance,
+    StepExecutionStatus,
+)
+from skiller.domain.step.step_type import StepType
 
 
-class RunWorkerStatus(str, Enum):
+class RunExecutionStatus(str, Enum):
     RUN_NOT_FOUND = CurrentStepStatus.RUN_NOT_FOUND.value
     WAITING = CurrentStepStatus.WAITING.value
     SUCCEEDED = CurrentStepStatus.SUCCEEDED.value
@@ -58,13 +57,13 @@ class RunWorkerStatus(str, Enum):
 
 
 @dataclass(frozen=True)
-class RunWorkerResult:
+class RunExecutionResult:
     run_id: str
-    status: RunWorkerStatus
+    status: RunExecutionStatus
     error: str | None = None
 
 
-class RunWorkerService:
+class RunExecutor:
     def __init__(
         self,
         complete_run_use_case: CompleteRunUseCase,
@@ -101,7 +100,7 @@ class RunWorkerService:
         self.execute_wait_webhook_step_use_case = execute_wait_webhook_step_use_case
         self.execute_wait_channel_step_use_case = execute_wait_channel_step_use_case
 
-    def run(self, run_id: str) -> RunWorkerResult:
+    def run(self, run_id: str) -> RunExecutionResult:
         current_step: CurrentStep | None = None
         try:
             while True:
@@ -109,32 +108,28 @@ class RunWorkerService:
                 status = result.status
 
                 if status == CurrentStepStatus.RUN_NOT_FOUND:
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.RUN_NOT_FOUND)
+                    return self.finish(run_id, RunExecutionStatus.RUN_NOT_FOUND)
 
                 if status == CurrentStepStatus.DONE:
                     self.complete_run_use_case.execute(run_id)
-                    self._append_run_finished(run_id, status=RunWorkerStatus.SUCCEEDED)
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.SUCCEEDED)
+                    self._append_run_finished(run_id, status=RunExecutionStatus.SUCCEEDED)
+                    return self.finish(run_id, RunExecutionStatus.SUCCEEDED)
 
                 if status == CurrentStepStatus.CANCELLED:
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.CANCELLED)
+                    return self.finish(run_id, RunExecutionStatus.CANCELLED)
 
                 if status == CurrentStepStatus.WAITING:
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.WAITING)
+                    return self.finish(run_id, RunExecutionStatus.WAITING)
 
                 if status == CurrentStepStatus.SUCCEEDED:
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.SUCCEEDED)
+                    return self.finish(run_id, RunExecutionStatus.SUCCEEDED)
 
                 if status == CurrentStepStatus.FAILED:
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.FAILED)
+                    return self.finish(run_id, RunExecutionStatus.FAILED)
 
                 if status in {CurrentStepStatus.INVALID_SKILL, CurrentStepStatus.INVALID_STEP}:
                     error = f"Run '{run_id}' is invalid: status={status}"
-                    self.fail_run_use_case.execute(run_id, error=error)
-                    self._append_run_finished(run_id, status=RunWorkerStatus.FAILED, error=error)
-                    return RunWorkerResult(
-                        run_id=run_id, status=RunWorkerStatus.FAILED, error=error
-                    )
+                    return self.fail(run_id, step=None, error=error)
 
                 current_step = result.current_step
                 is_ready = status == CurrentStepStatus.READY and current_step
@@ -154,22 +149,53 @@ class RunWorkerService:
                 if execution_result.status == StepExecutionStatus.COMPLETED:
                     self._append_step_success(run_id, current_step, execution_result)
                     self.complete_run_use_case.execute(run_id)
-                    self._append_run_finished(run_id, status=RunWorkerStatus.SUCCEEDED)
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.SUCCEEDED)
+                    self._append_run_finished(run_id, status=RunExecutionStatus.SUCCEEDED)
+                    return self.finish(run_id, RunExecutionStatus.SUCCEEDED)
 
                 if execution_result.status == StepExecutionStatus.WAITING:
                     self._append_run_waiting(run_id, current_step, execution_result)
-                    return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.WAITING)
+                    return self.finish(run_id, RunExecutionStatus.WAITING)
 
                 raise ValueError(f"Unsupported step execution status '{execution_result.status}'")
 
         except Exception as exc:  # noqa: BLE001
-            error = str(exc)
-            if current_step is not None:
-                self._append_step_error(run_id, current_step, error)
-            self.fail_run_use_case.execute(run_id, error=error)
-            self._append_run_finished(run_id, status=RunWorkerStatus.FAILED, error=error)
-            return RunWorkerResult(run_id=run_id, status=RunWorkerStatus.FAILED, error=error)
+            return self.fail(run_id, step=current_step, error=str(exc))
+
+    def finish(
+        self,
+        run_id: str,
+        status: RunExecutionStatus,
+    ) -> RunExecutionResult:
+        result = RunExecutionResult(run_id=run_id, status=status)
+        self.on_finish(result)
+        return result
+
+    def fail(
+        self,
+        run_id: str,
+        *,
+        step: CurrentStep | None,
+        error: str,
+    ) -> RunExecutionResult:
+        if step is not None:
+            self._append_step_error(run_id, step, error)
+
+        self.fail_run_use_case.execute(run_id, error=error)
+        self._append_run_finished(run_id, status=RunExecutionStatus.FAILED, error=error)
+
+        result = RunExecutionResult(
+            run_id=run_id,
+            status=RunExecutionStatus.FAILED,
+            error=error,
+        )
+        self.on_error(result)
+        return result
+
+    def on_finish(self, result: RunExecutionResult) -> None:
+        pass
+
+    def on_error(self, result: RunExecutionResult) -> None:
+        pass
 
     def _execute_ready_step(self, current_step: CurrentStep) -> StepAdvance:
         if current_step.step_type == StepType.AGENT:
@@ -284,7 +310,7 @@ class RunWorkerService:
         self,
         run_id: str,
         *,
-        status: RunWorkerStatus,
+        status: RunExecutionStatus,
         error: str | None = None,
     ) -> None:
         self.append_runtime_event_use_case.execute(

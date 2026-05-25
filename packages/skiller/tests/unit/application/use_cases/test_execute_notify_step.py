@@ -1,12 +1,19 @@
 import pytest
 
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
-from skiller.application.use_cases.render.render_current_step import CurrentStep, StepType
-from skiller.application.use_cases.shared.step_execution_result import StepExecutionStatus
 from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
-from skiller.domain.step.step_execution_model import NotifyOutput, NotifyOutputFormat
+from skiller.domain.step.current_step_model import CurrentStep
+from skiller.domain.step.step_execution_model import (
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyOpenUrlAction,
+    NotifyOutput,
+    NotifyOutputFormat,
+)
+from skiller.domain.step.step_execution_result_model import StepExecutionStatus
+from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
 
@@ -119,6 +126,53 @@ def test_notify_persists_declared_output_format() -> None:
     }
 
 
+def test_notify_persists_action_with_pending_status() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step(
+        {
+            "message": "Authorize the app",
+            "action": {
+                "type": "open_url",
+                "label": "Open authorization",
+                "url": "https://example.com/oauth/start",
+                "auto_open": True,
+            },
+        }
+    )
+
+    result = use_case.execute(next_step)
+
+    assert result.execution is not None
+    assert result.execution.output == NotifyOutput(
+        text="Authorize the app",
+        message="Authorize the app",
+        format=NotifyOutputFormat.SIMPLE,
+        action_type=NotifyActionType.OPEN_URL,
+        action=NotifyOpenUrlAction(
+            label="Open authorization",
+            url="https://example.com/oauth/start",
+            status=NotifyActionStatus.PENDING,
+            auto_open=True,
+        ),
+    )
+    assert result.execution.to_public_output_dict() == {
+        "text": "Authorize the app",
+        "value": {
+            "message": "Authorize the app",
+            "format": NotifyOutputFormat.SIMPLE,
+            "action_type": NotifyActionType.OPEN_URL,
+            "action": {
+                "label": "Open authorization",
+                "url": "https://example.com/oauth/start",
+                "status": NotifyActionStatus.PENDING,
+                "auto_open": True,
+            },
+        },
+        "body_ref": None,
+    }
+
+
 def test_notify_rejects_empty_next_when_declared() -> None:
     store = _FakeStore()
     use_case = ExecuteNotifyStepUseCase(store=store)
@@ -134,6 +188,28 @@ def test_notify_rejects_unknown_output_format() -> None:
     next_step = _build_next_step({"message": "ok", "format": "html"})
 
     with pytest.raises(ValueError, match="unsupported format 'html'"):
+        use_case.execute(next_step)
+
+    assert next_step.context.step_executions == {}
+    assert store.updated_runs == []
+
+
+def test_notify_rejects_invalid_action_auto_open() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step(
+        {
+            "message": "Authorize the app",
+            "action": {
+                "type": "open_url",
+                "label": "Open authorization",
+                "url": "https://example.com/oauth/start",
+                "auto_open": "false",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="action auto_open must be boolean"):
         use_case.execute(next_step)
 
     assert next_step.context.step_executions == {}

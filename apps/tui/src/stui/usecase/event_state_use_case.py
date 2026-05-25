@@ -13,6 +13,7 @@ from stui.port.event_models import (
     StepErrorPayload,
     WaitInputOutputValue,
 )
+from stui.port.event_port import EventsPort, LogEventsListener
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -24,6 +25,8 @@ from stui.viewmodel.console_screen_state import (
     ViewStatusKind,
 )
 
+WEBHOOK_POLL_INTERVAL_SECONDS = 1.0
+
 
 @dataclass(frozen=True)
 class EventStateResult:
@@ -34,10 +37,12 @@ class EventStateResult:
 class EventStateUseCase:
     context: RunEventContext
     agent_port: AgentPort
+    events_port: EventsPort
     transcript_mapper: EventTranscriptMapper = field(default_factory=EventTranscriptMapper)
 
     def execute(
         self,
+        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         events: list[LogEvent],
@@ -48,7 +53,11 @@ class EventStateUseCase:
         transcript_items = self.transcript_mapper.to_transcript(events)
         state.transcript.items = transcript_items
         state.set_agent_usage(self._agent_usage_state(items=transcript_items))
-        self._project_event(state=state, event=_most_recent_event(events))
+        self._project_event(
+            observer,
+            state=state,
+            event=_most_recent_event(events),
+        )
         return EventStateResult(state=state)
 
     def _agent_usage_state(
@@ -73,6 +82,7 @@ class EventStateUseCase:
 
     def _project_event(
         self,
+        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         event: LogEvent,
@@ -116,18 +126,48 @@ class EventStateUseCase:
             state.set_status(kind=ViewStatusKind.ERROR, message="Observer error")
             return
 
-        if event.event_type == LogEventType.RUN_WAITING:
-            payload: RunWaitingPayload = event.payload
-            waiting_status = _resolve_waiting_status(event)
-            self.context.status = waiting_status
+        if (
+            event.event_type == LogEventType.RUN_WAITING
+            and event.step_type == "wait_webhook"
+        ):
+            self.context.status = RunStatus.WAITING_WEBHOOK
             state.set_status(kind=ViewStatusKind.WAITING)
-            waiting_prompt = ""
-            if waiting_status == RunStatus.WAITING_INPUT:
-                waiting_prompt = _waiting_prompt(payload.output)
             state.set_prompt(
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
-                waiting_prompt=waiting_prompt,
+                waiting_prompt="",
+                mode=PromptMode.DEFAULT,
+            )
+            self.events_port.subscribe(
+                run_id=self.context.run_id,
+                listener=observer,
+                interval_seconds=WEBHOOK_POLL_INTERVAL_SECONDS,
+            )
+            return
+
+        if (
+            event.event_type == LogEventType.RUN_WAITING
+            and event.step_type == "wait_input"
+        ):
+            payload: RunWaitingPayload = event.payload
+            self.context.status = RunStatus.WAITING_INPUT
+            state.set_status(kind=ViewStatusKind.WAITING)
+            state.set_prompt(
+                text=state.prompt.text,
+                cursor_position=state.prompt.cursor_position,
+                waiting_prompt=_waiting_prompt(payload.output),
+                mode=PromptMode.DEFAULT,
+            )
+            return
+
+        if event.event_type == LogEventType.RUN_WAITING:
+            waiting_status = _resolve_waiting_status(event)
+            self.context.status = waiting_status
+            state.set_status(kind=ViewStatusKind.WAITING)
+            state.set_prompt(
+                text=state.prompt.text,
+                cursor_position=state.prompt.cursor_position,
+                waiting_prompt="",
                 mode=PromptMode.DEFAULT,
             )
             return

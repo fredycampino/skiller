@@ -6,10 +6,11 @@ from enum import Enum
 from typing import Any
 
 from skiller.domain.step.runner_port import RunnerPort
-from skiller.domain.step.step_execution_model import NotifyOutputFormat
+from skiller.domain.step.step_execution_model import NotifyActionType, NotifyOutputFormat
 from skiller.domain.step.step_type import StepType
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
+_FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")
 _OUTPUT_VALUE_CALL_RE = re.compile(r'^output_value\((.*)\)((?:\.[A-Za-z_][A-Za-z0-9_]*)*)$')
 _STRING_LITERAL_RE = re.compile(r'^(["\'])([^"\']+)\1$')
 _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
@@ -317,6 +318,7 @@ class SkillCheckerUseCase:
                         "simple, structured or markdown "
                         f"(step={step.step_id}, format={format_value})",
                     )
+            self._check_notify_action(step, errors)
 
         if step.step_type == StepType.AGENT.value and not str(step.body.get("task", "")).strip():
             self._add(
@@ -524,3 +526,68 @@ class SkillCheckerUseCase:
 
     def _add(self, errors: list[SkillCheckError], code: str, message: str) -> None:
         errors.append(SkillCheckError(code=code, message=message))
+
+    def _check_notify_action(
+        self,
+        step: _ParsedStep,
+        errors: list[SkillCheckError],
+    ) -> None:
+        raw_action = step.body.get("action")
+        if raw_action is None:
+            return
+
+        if not isinstance(raw_action, dict):
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_INVALID",
+                f"SKILL_NOTIFY_ACTION_INVALID: notify action must be an object "
+                f"(step={step.step_id})",
+            )
+            return
+
+        action_type = str(raw_action.get("type", "")).strip()
+        if action_type != NotifyActionType.OPEN_URL.value:
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_TYPE_UNSUPPORTED",
+                "SKILL_NOTIFY_ACTION_TYPE_UNSUPPORTED: notify action type must be "
+                f"{NotifyActionType.OPEN_URL.value} (step={step.step_id})",
+            )
+
+        if not str(raw_action.get("label", "")).strip():
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_LABEL_MISSING",
+                "SKILL_NOTIFY_ACTION_LABEL_MISSING: notify action requires non-empty "
+                f"label (step={step.step_id})",
+            )
+
+        raw_url = str(raw_action.get("url", "")).strip()
+        if not raw_url:
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_URL_MISSING",
+                "SKILL_NOTIFY_ACTION_URL_MISSING: notify action requires non-empty "
+                f"url (step={step.step_id})",
+            )
+            return
+
+        if (
+            not raw_url.startswith(("http://", "https://"))
+            and _FULL_TEMPLATE_RE.match(raw_url) is None
+        ):
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_URL_UNSUPPORTED",
+                "SKILL_NOTIFY_ACTION_URL_UNSUPPORTED: notify action url must use "
+                f"http(s) (step={step.step_id})",
+            )
+
+        raw_auto_open = raw_action.get("auto_open")
+        if raw_auto_open is not None and not isinstance(raw_auto_open, bool):
+            self._add(
+                errors,
+                "SKILL_NOTIFY_ACTION_AUTO_OPEN_INVALID",
+                "SKILL_NOTIFY_ACTION_AUTO_OPEN_INVALID: notify action auto_open "
+                f"must be boolean (step={step.step_id})",
+            )

@@ -9,6 +9,8 @@ import pytest
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.log_event_mapper import LogEventMapper
 from stui.port.event_models import (
+    ActionDonePayload,
+    ActionOpenUrlValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -19,6 +21,9 @@ from stui.port.event_models import (
     AssignOutputValue,
     LogEventType,
     McpOutputValue,
+    NotifyActionStatus,
+    NotifyActionType,
+    NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
     OutputValue,
@@ -87,6 +92,35 @@ def test_cli_log_event_adapter_parses_run_create_payload() -> None:
     assert isinstance(event.payload, RunCreatePayload)
     assert event.payload.ref == "ant"
     assert event.payload.source == "internal"
+
+
+def test_cli_log_event_adapter_parses_action_done_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 11,
+                "id": "event-11",
+                "run_id": "run-1",
+                "type": "ACTION_DONE",
+                "step_id": "auth_link",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:16Z",
+                "payload": {
+                    "action_type": "open_url",
+                    "status": "done",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.ACTION_DONE
+    assert event.step_id == "auth_link"
+    assert event.step_type == "notify"
+    assert event.payload == ActionDonePayload(
+        action_type=NotifyActionType.OPEN_URL,
+        status=NotifyActionStatus.DONE,
+    )
 
 
 def test_cli_log_event_adapter_parses_step_success_payload() -> None:
@@ -185,6 +219,88 @@ def test_cli_log_event_adapter_defaults_notify_output_format() -> None:
     assert event.payload.output.value == NotifyOutputValue(
         message="hello",
         format=NotifyOutputFormat.SIMPLE,
+    )
+
+
+def test_cli_log_event_adapter_maps_notify_action_value() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "auth_link",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "Authorize the app",
+                        "value": {
+                            "message": "Authorize the app",
+                            "format": "markdown",
+                            "action_type": "open_url",
+                            "action": {
+                                "label": "Open authorization",
+                                "url": "https://example.com/oauth/start",
+                                "status": "pending",
+                                "auto_open": True,
+                            },
+                        },
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == NotifyActionValue(
+        message="Authorize the app",
+        format=NotifyOutputFormat.MARKDOWN,
+        action_type=NotifyActionType.OPEN_URL,
+        action=ActionOpenUrlValue(
+            label="Open authorization",
+            url="https://example.com/oauth/start",
+            status=NotifyActionStatus.PENDING,
+            auto_open=True,
+        ),
+    )
+
+
+def test_cli_log_event_adapter_maps_null_notify_action_as_notify_output() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "show_reply",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "hello",
+                        "value": {
+                            "message": "hello",
+                            "format": "markdown",
+                            "action_type": "open_url",
+                            "action": None,
+                        },
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == NotifyOutputValue(
+        message="hello",
+        format=NotifyOutputFormat.MARKDOWN,
     )
 
 

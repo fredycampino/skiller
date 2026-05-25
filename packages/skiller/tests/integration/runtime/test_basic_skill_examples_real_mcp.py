@@ -17,8 +17,8 @@ from helpers.agent_runner import build_agent_runner
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.tools.tool_manager import ToolManager
-from skiller.application.run_worker_service import RunWorkerService
-from skiller.application.runtime_application_service import RuntimeApplicationService
+from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -27,36 +27,41 @@ from skiller.application.use_cases.execute.execute_agent_step import (
 from skiller.application.use_cases.execute.execute_assign_step import ExecuteAssignStepUseCase
 from skiller.application.use_cases.execute.execute_mcp_step import ExecuteMcpStepUseCase
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.application.use_cases.execute.execute_send_step import ExecuteSendStepUseCase
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.application.use_cases.execute.execute_switch_step import ExecuteSwitchStepUseCase
+from skiller.application.use_cases.execute.execute_wait_channel_step import (
+    ExecuteWaitChannelStepUseCase,
+)
+from skiller.application.use_cases.execute.execute_wait_input_step import (
+    ExecuteWaitInputStepUseCase,
+)
 from skiller.application.use_cases.execute.execute_wait_webhook_step import (
     ExecuteWaitWebhookStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
-from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
-from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.render.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.run.create_run import CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
+from skiller.application.use_cases.run.mark_notify_action_done import (
+    MarkNotifyActionDoneUseCase,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
-from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
-from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
@@ -78,6 +83,14 @@ class _FakeChannelSender:
         _ = channel
         return True
 
+    def send_text(self, *, channel: str, key: str, message: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            channel=channel,
+            key=key,
+            message=message,
+            message_id="message-1",
+        )
+
 
 def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
     return SqliteRuntimeEventStore(store.db_path)
@@ -95,7 +108,7 @@ def require_real_mcp_runtime() -> None:
         pytest.skip("Set RUN_REAL_MCP_TESTS=1 to run real MCP integration tests")
 
 
-def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
+def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
     agent_context_store = SqliteAgentContextStore(store.db_path)
@@ -103,11 +116,11 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
     )
-    webhook_registry = SqliteWebhookRegistry(store.db_path)
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
     tool_process_runner = DefaultToolProcessRunner()
+    channel_sender = _FakeChannelSender()
     fail_run_use_case = FailRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
@@ -135,6 +148,10 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         mcp=mcp,
     )
     execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_send_step_use_case = ExecuteSendStepUseCase(
+        store=store,
+        channel_sender=channel_sender,
+    )
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
@@ -150,12 +167,22 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
+    execute_wait_channel_step_use_case = ExecuteWaitChannelStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=external_event_store,
+    )
+    execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
+        run_store=store,
+        wait_store=store,
+        external_event_store=external_event_store,
+    )
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
         wait_store=store,
         external_event_store=external_event_store,
     )
-    run_worker_service = RunWorkerService(
+    run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
@@ -165,13 +192,16 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         execute_assign_step_use_case=execute_assign_step_use_case,
         execute_mcp_step_use_case=execute_mcp_step_use_case,
         execute_notify_step_use_case=execute_notify_step_use_case,
+        execute_send_step_use_case=execute_send_step_use_case,
         execute_shell_step_use_case=execute_shell_step_use_case,
         execute_switch_step_use_case=execute_switch_step_use_case,
         execute_when_step_use_case=execute_when_step_use_case,
+        execute_wait_channel_step_use_case=execute_wait_channel_step_use_case,
+        execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
 
-    runtime = RuntimeApplicationService(
+    runtime = RunApplicationService(
         bootstrap_runtime_use_case=BootstrapRuntimeUseCase(
             store=SqliteRuntimeBootstrap(store.db_path),
         ),
@@ -184,19 +214,15 @@ def _build_runtime(store: SqliteStateStore) -> RuntimeApplicationService:
         skill_server_checker_use_case=SkillServerCheckerUseCase(
             skill_runner=skill_runner,
             server_status=_FakeServerStatus(),
-            channel_sender=_FakeChannelSender(),
+            channel_sender=channel_sender,
         ),
-        handle_webhook_use_case=HandleWebhookUseCase(
-            external_event_store=external_event_store,
-            wait_store=store,
-        ),
-        list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
-        register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
-        remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
         resume_run_use_case=ResumeRunUseCase(store=store),
-        interrupt_agent_use_case=SimpleNamespace(execute=lambda run_id: None),
+        mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
+            store=store,
+            events=runtime_event_store,
+        ),
         get_run_status_use_case=GetRunStatusUseCase(store),
-        run_worker_service=run_worker_service,
+        run_executor=run_executor,
     )
     return runtime
 
@@ -256,16 +282,18 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
-            "stdio_mcp_test",
-            {"file_path": str(file_path), "content": "hola-e2e"},
+            CreateRunInput(
+                skill_ref="stdio_mcp_test",
+                inputs={"file_path": str(file_path), "content": "hola-e2e"},
+            )
         )
 
-        run = store.get_run(run_result["run_id"])
-        assert run_result["status"] == "SUCCEEDED"
+        run = store.get_run(run_result.run_id)
+        assert run_result.status.value == "SUCCEEDED"
         assert run is not None
         assert run.status == "SUCCEEDED"
         assert file_path.read_text(encoding="utf-8") == "hola-e2e"
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         mcp_event = next(
             event
             for event in events
@@ -283,15 +311,17 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
-            "http_mcp_test",
-            {"mcp_url": http_mcp_server},
+            CreateRunInput(
+                skill_ref="http_mcp_test",
+                inputs={"mcp_url": http_mcp_server},
+            )
         )
 
-        run = store.get_run(run_result["run_id"])
-        assert run_result["status"] == "SUCCEEDED"
+        run = store.get_run(run_result.run_id)
+        assert run_result.status.value == "SUCCEEDED"
         assert run is not None
         assert run.status == "SUCCEEDED"
-        events = _event_store(store).list_events(run_result["run_id"])
+        events = _event_store(store).list_events(run_result.run_id)
         mcp_event = next(
             event
             for event in events

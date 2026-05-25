@@ -7,8 +7,10 @@ from stui.usecase.project_transcript_use_case import (
 )
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
+    NotifyActionDoneItem,
     RunResumeItem,
     RunStepItem,
+    StepNotifyActionItem,
     StepNotifyOutputItem,
     StepOutputItem,
     TranscriptMode,
@@ -32,6 +34,38 @@ def test_project_transcript_use_case_keeps_all_items_in_flow_mode() -> None:
     visible_items = ProjectTranscriptUseCase().execute(state=state)
 
     assert visible_items == state.transcript.items
+
+
+def test_project_transcript_use_case_hides_notify_action_items() -> None:
+    state = ConsoleScreenState(session_key="main")
+    state.transcript.mode = TranscriptMode.FLOW
+    user_input = UserInputItem(text="hola")
+    state.transcript.items.extend(
+        [
+            user_input,
+            StepNotifyActionItem(
+                run_id="run-1",
+                step_id="auth_link",
+                step_type="notify",
+                message="Authorize the app",
+                action_type="open_url",
+                label="Open authorization",
+                url="https://example.com/oauth/start",
+                status="pending",
+            ),
+            NotifyActionDoneItem(
+                run_id="run-1",
+                step_id="auth_link",
+                step_type="notify",
+                action_type="open_url",
+                status="done",
+            ),
+        ]
+    )
+
+    visible_items = ProjectTranscriptUseCase().execute(state=state)
+
+    assert visible_items == [user_input]
 
 
 def test_project_transcript_use_case_hides_resume_and_conditionals_in_chat_mode(

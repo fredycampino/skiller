@@ -69,6 +69,16 @@ def test_autocomplete_view_exposes_selected_item_from_state() -> None:
     assert view.is_visible() is True
 
 
+def test_autocomplete_view_can_reserve_hidden_layout_space() -> None:
+    view = AutoCompleteView()
+
+    view.set_state(None, reserve_space=True)
+
+    assert view.display is True
+    assert view.styles.visibility == "hidden"
+    assert view.render().plain == ""
+
+
 def test_autocomplete_view_uses_theme_icon_and_accent_for_selection() -> None:
     theme = TuiTheme(
         autocomplete_selector_icon="⇢",

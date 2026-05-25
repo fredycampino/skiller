@@ -29,11 +29,13 @@ class CliRunAdapter:
             )
 
         try:
+            args = shlex.split(normalized_args)
+            command_args = ("run", *args, "--detach")
+            if args and _looks_like_skill_file(args[0]):
+                command_args = ("run", "--file", *args, "--detach")
             payload = _run_json_command(
                 self.invoker,
-                "run",
-                *shlex.split(normalized_args),
-                "--detach",
+                *command_args,
             )
             run_id = _require_text(payload, "run_id")
             status = _parse_runtime_status(payload.get("status"))
@@ -107,6 +109,11 @@ def _run_json_command(invoker: CliInvoker, *args: str) -> dict[str, Any]:
         raise RuntimeError("runtime command returned invalid payload")
 
     return payload
+
+
+def _looks_like_skill_file(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized.endswith(".yaml") or normalized.endswith(".yml")
 
 
 def _coerce_int(value: object) -> int | None:

@@ -1,6 +1,9 @@
 import pytest
 
-from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.ingress.handle_webhook import (
+    HandleWebhookInput,
+    HandleWebhookUseCase,
+)
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 
@@ -80,10 +83,12 @@ def test_handle_webhook_persists_external_event_and_returns_matching_runs() -> N
     use_case = HandleWebhookUseCase(external_event_store=store, wait_store=store)
 
     result = use_case.execute(
-        "signal",
-        "alpha",
-        {"price": 123},
-        dedup_key="dedup-1",
+        HandleWebhookInput(
+            webhook="signal",
+            key="alpha",
+            payload={"price": 123},
+            dedup_key="dedup-1",
+        )
     )
 
     assert result.accepted is True
@@ -110,10 +115,12 @@ def test_handle_webhook_selects_only_first_matching_run() -> None:
     use_case = HandleWebhookUseCase(external_event_store=store, wait_store=store)
 
     result = use_case.execute(
-        "signal",
-        "alpha",
-        {"price": 123},
-        dedup_key="dedup-1",
+        HandleWebhookInput(
+            webhook="signal",
+            key="alpha",
+            payload={"price": 123},
+            dedup_key="dedup-1",
+        )
     )
 
     assert result.run_ids == ["run-1"]
@@ -124,10 +131,12 @@ def test_handle_webhook_skips_external_event_for_duplicate_receipt() -> None:
     use_case = HandleWebhookUseCase(external_event_store=store, wait_store=store)
 
     result = use_case.execute(
-        "signal",
-        "alpha",
-        {"price": 123},
-        dedup_key="dedup-1",
+        HandleWebhookInput(
+            webhook="signal",
+            key="alpha",
+            payload={"price": 123},
+            dedup_key="dedup-1",
+        )
     )
 
     assert result.accepted is True

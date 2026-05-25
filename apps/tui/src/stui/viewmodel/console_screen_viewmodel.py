@@ -44,8 +44,42 @@ class ConsoleScreenViewModel(LogEventsListener):
 
     def notify(self, events: list[LogEvent]) -> None:
         result = self._use_cases.event_state.execute(
+            self,
             state=self.state,
             events=events,
+        )
+        notify_action_result = self._use_cases.project_notify_action.execute(
+            state=result.state,
+        )
+        self.state = notify_action_result.state
+        self._emit_state()
+
+    def open_notify_action_link(
+        self,
+        *,
+        run_id: str,
+        step_id: str,
+        url: str,
+    ) -> None:
+        result = self._use_cases.open_notify_action.execute(
+            state=self.state,
+            run_id=run_id,
+            step_id=step_id,
+            url=url,
+        )
+        self.state = result.state
+        self._emit_state()
+
+    def done_notify_action(
+        self,
+        *,
+        run_id: str,
+        step_id: str,
+    ) -> None:
+        result = self._use_cases.done_notify_action.execute(
+            state=self.state,
+            run_id=run_id,
+            step_id=step_id,
         )
         self.state = result.state
         self._emit_state()
@@ -96,6 +130,13 @@ class ConsoleScreenViewModel(LogEventsListener):
             self._emit_state()
             return
 
+        if (
+            command.kind == CommandKind.FREE_TEXT
+            and self._run_event_context.status == RunStatus.WAITING_WEBHOOK
+        ):
+            self._emit_state()
+            return
+
         result = self._use_cases.unsupported_input.execute(
             state=self.state,
             text=command.raw_text,
@@ -127,6 +168,9 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
         return True
+
+    def screen_resized(self) -> None:
+        self._emit_state()
 
     async def prompt_enter(self) -> None:
         result = self._use_cases.prompt_enter.execute(state=self.state)
@@ -252,6 +296,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         )
         state.set_agent_usage(self.state.agent_usage)
         state.set_autocompletion(self.state.autocompletion)
+        state.set_notify_action(self.state.notify_action)
         return state
 
     def _clear_prompt_state(self) -> None:

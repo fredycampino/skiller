@@ -1,15 +1,15 @@
 from typing import Any
 
-from skiller.application.use_cases.render.render_current_step import CurrentStep
-from skiller.application.use_cases.shared.step_execution_result import (
-    StepAdvance,
-    StepExecutionStatus,
-)
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.mcp.mcp_port import MCPPort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import McpOutput, StepExecution
+from skiller.domain.step.step_execution_result_model import (
+    StepAdvance,
+    StepExecutionStatus,
+)
 
 
 class ExecuteMcpStepUseCase:

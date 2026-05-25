@@ -14,11 +14,12 @@ from stui.screen.transcript.intro_view import IntroView
 from stui.screen.transcript.placeholder_view import PlaceholderView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.screen.transcript.run_ack_view import RunAckView
+from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_output_view import RunOutputView
 from stui.screen.transcript.run_resume_view import RunResumeView
-from stui.screen.transcript.run_status_view import RunStatusView
 from stui.screen.transcript.run_step_view import RunStepView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
+from stui.screen.transcript.step_error_view import StepErrorView
 from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
 from stui.screen.transcript.step_output_view import StepOutputView
 from stui.screen.transcript.step_shell_output_view import StepShellOutputView
@@ -41,9 +42,10 @@ __all__ = [
     "RunAckView",
     "RunOutputView",
     "RunResumeView",
-    "RunStatusView",
+    "RunFinishedView",
     "RunStepView",
     "RunWaitingInputView",
+    "StepErrorView",
     "StepNotifyOutputView",
     "StepOutputView",
     "StepShellOutputView",

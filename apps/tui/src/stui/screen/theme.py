@@ -78,7 +78,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             padding: 0 1;
         }}
 
-        #status {{
+        #status-row {{
             height: auto;
             width: 100%;
             margin:
@@ -86,10 +86,106 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
                 {theme.horizontal_padding}
                 0
                 {theme.horizontal_padding};
+            padding: 0;
+            align: left bottom;
+            background: {theme.color_ansi_default};
+        }}
+
+        #status {{
+            height: 100%;
+            width: 1fr;
+            margin: 0;
             padding: 0 1;
+            content-align: left bottom;
             color: {theme.color_text_primary};
             text-style: dim;
             background: {theme.color_ansi_default};
+        }}
+
+        #notify-action-area {{
+            height: auto;
+            width: 34;
+            min-width: 28;
+            max-width: 70%;
+            margin: 0;
+            padding: 0;
+            align: right top;
+            background: {theme.color_ansi_default};
+        }}
+
+        #notify-action {{
+            layout: vertical;
+            height: auto;
+            width: 100%;
+            margin: 0;
+            padding: 0 1;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_ansi_default};
+            color: {theme.color_text_primary};
+        }}
+
+        #notify-action-message {{
+            height: auto;
+            width: 100%;
+            color: {theme.color_text_primary};
+            background: {theme.color_ansi_default};
+        }}
+
+        #notify-action-open-link-row {{
+            height: auto;
+            width: 100%;
+            margin: 1 0 0 0;
+            background: {theme.color_ansi_default};
+        }}
+
+        #notify-action-button-spacer {{
+            width: 1fr;
+            height: 1;
+            background: {theme.color_ansi_default};
+        }}
+
+        #notify-action-done {{
+            width: auto;
+            min-width: 0;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            color: {theme.color_text_secondary};
+            border: none;
+            background: {theme.color_ansi_default};
+            pointer: pointer;
+        }}
+
+        #notify-action-done:hover {{
+            text-style: bold;
+        }}
+
+        #notify-action-done:focus {{
+            text-style: bold reverse;
+        }}
+
+        #notify-action-open-link {{
+            width: auto;
+            min-width: 0;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            color: {theme.color_text_accent};
+            border: none;
+            background: {theme.color_ansi_default};
+            pointer: pointer;
+        }}
+
+        #notify-action-open-link:hover {{
+            text-style: bold;
+        }}
+
+        #notify-action-open-link.opened {{
+            color: {theme.color_text_secondary};
+        }}
+
+        #notify-action-open-link:focus {{
+            text-style: bold reverse;
         }}
 
         #runs-table-area {{

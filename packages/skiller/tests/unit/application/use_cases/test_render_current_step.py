@@ -1,12 +1,12 @@
 import pytest
 
 from skiller.application.use_cases.render.render_current_step import (
-    CurrentStepStatus,
     RenderCurrentStepUseCase,
-    StepType,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
+from skiller.domain.step.current_step_model import CurrentStepStatus
+from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
 

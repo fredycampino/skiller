@@ -9,34 +9,42 @@ This document describes the current `agent.json` contract as implemented by:
 
 ## File Resolution
 
-The runtime selects one agent config file. It does not merge files.
+The runtime always uses the global config as the base when it exists:
 
-Resolution order:
+```text
+~/.skiller/settings/agent.json
+```
+
+Then it applies one optional override file.
+
+Override resolution order:
 
 1. `AGENT_AGENT_CONFIG_FILE`, when set
 2. `agent.json` next to the current skill `agent.yaml`, when present
-3. `~/.skiller/settings/agent.json`
 
-If the selected file does not exist, config loading fails.
+Overrides are applied by root section. There is no deep merge inside a section.
+For example, an override containing `tools` replaces the full global `tools`
+section. Provider definitions live in the root `providers` section, so an agent
+can override only `llm.default_provider` without repeating credentials.
+
+If neither the global config nor an override file exists, config loading fails.
 
 ## Root Shape
 
-`llm` is required. The other root fields are optional and use mapper/model defaults.
+`llm` and `providers` are required. The other root fields are optional and use
+mapper/model defaults.
 
 ```json
 {
   "llm": {
-    "default_provider": "minimax-main",
-    "providers": {
-      "minimax-main": {
-        "provider": "minimax",
-        "client_type": "openai_chat_completions",
-        "api_key_file": "~/.skiller/secrets/minimax_api_key",
-        "base_url": "https://api.minimax.io/v1",
-        "model": "MiniMax-M2.5",
-        "timeout_seconds": 30,
-        "context_window_tokens": 1000000
-      }
+    "default_provider": "minimax"
+  },
+  "providers": {
+    "minimax": {
+      "api_key_file": "~/.skiller/secrets/minimax_api_key",
+      "model": "MiniMax-M2.5",
+      "timeout_seconds": 30,
+      "context_window_tokens": 1000000
     }
   },
   "loop": {
@@ -65,49 +73,43 @@ The root field `agent` is explicitly rejected.
 
 ## LLM
 
-`llm.default_provider` is a logical key into `llm.providers`.
+`llm.default_provider` is a logical key into the root `providers` section.
 
 Each provider entry requires:
 
-- `provider`
-- `client_type`
 - `model`
-- `base_url`
 - `timeout_seconds`
 - `context_window_tokens`
-- one API key source: `api_key`, `api_key_env`, or `api_key_file`
+- credentials required by that provider
 
-Provider entries are keyed by user-defined ids:
+Provider entries are keyed by the logical provider id:
 
 ```json
 {
   "llm": {
-    "default_provider": "minimax-main",
-    "providers": {
-      "minimax-main": {
-        "provider": "minimax",
-        "client_type": "openai_chat_completions",
-        "api_key_env": "AGENT_MINIMAX_API_KEY",
-        "base_url": "https://api.minimax.io/v1",
-        "model": "MiniMax-M2.5",
-        "timeout_seconds": 30,
-        "context_window_tokens": 1000000
-      }
+    "default_provider": "minimax"
+  },
+  "providers": {
+    "minimax": {
+      "api_key_env": "AGENT_MINIMAX_API_KEY",
+      "model": "MiniMax-M2.5",
+      "timeout_seconds": 30,
+      "context_window_tokens": 1000000
     }
   }
 }
 ```
 
-Supported provider/model/client combinations:
+Supported provider/model combinations:
 
-| Provider | Client type | Models |
+| Provider | Models | Credentials |
 | --- | --- | --- |
-| `null` | `null` | `null` |
-| `fake` | `fake` | `fake`, `fake-llm` |
-| `minimax` | `openai_chat_completions` | `MiniMax-M2.5`, `MiniMax-M2.7` |
-| `openai` | `openai_chat_completions` | `gpt-5.2`, `gpt-5.2-mini` |
+| `null` | `null1` | none |
+| `fake` | `model1` | none |
+| `minimax` | `MiniMax-M2.5`, `MiniMax-M2.7` | `api_key`, `api_key_env`, or `api_key_file` |
+| `codex` | `gpt-5.3-codex`, `gpt-5.4`, `gpt-5.5` | `credentials_file` |
 
-`provider` identifies the product/provider. `client_type` identifies the client protocol used to call it.
+The runtime owns fixed implementation details such as protocol, base URL, and Codex headers.
 
 ## LLM Env Overrides
 
@@ -115,7 +117,6 @@ These env vars are supported:
 
 - `AGENT_LLM_PROVIDER`
 - `AGENT_<PROVIDER>_API_KEY`
-- `AGENT_<PROVIDER>_BASE_URL`
 - `AGENT_<PROVIDER>_MODEL`
 - `AGENT_<PROVIDER>_TIMEOUT_SECONDS`
 
@@ -124,11 +125,64 @@ Provider-specific env vars apply only to the selected provider.
 Examples for `provider = "minimax"`:
 
 - `AGENT_MINIMAX_API_KEY`
-- `AGENT_MINIMAX_BASE_URL`
 - `AGENT_MINIMAX_MODEL`
 - `AGENT_MINIMAX_TIMEOUT_SECONDS`
 
 Environment model overrides are validated against the supported model list.
+
+## Global And Agent Overrides
+
+The global file should own shared provider credentials and defaults:
+
+```json
+{
+  "llm": {
+    "default_provider": "minimax"
+  },
+  "providers": {
+    "minimax": {
+      "api_key_file": "~/.skiller/secrets/minimax_api_key",
+      "model": "MiniMax-M2.7",
+      "timeout_seconds": 60,
+      "context_window_tokens": 80000
+    },
+    "codex": {
+      "credentials_file": "~/.skiller/secrets/openai-codex.json",
+      "model": "gpt-5.5",
+      "timeout_seconds": 120,
+      "context_window_tokens": 100000
+    }
+  }
+}
+```
+
+An agent can switch provider without repeating credentials:
+
+```json
+{
+  "llm": {
+    "default_provider": "codex"
+  }
+}
+```
+
+An agent can also replace a full root section such as `tools`:
+
+```json
+{
+  "tools": {
+    "shell": {
+      "workspace": ".",
+      "allowlist_enabled": true,
+      "allow_env_prefix": true,
+      "allowed_commands": ["pwd", "ls", "rg"]
+    }
+  }
+}
+```
+
+Because overrides are root-section based, defining `providers` in an agent file
+replaces the full global `providers` section.
 
 ## Loop
 

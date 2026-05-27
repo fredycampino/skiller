@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 
 from skiller.domain.agent.llm_model import (
+    LLMAssistantMessage,
     LLMMessage,
     LLMRequest,
     LLMResponse,
@@ -13,14 +14,15 @@ from skiller.domain.agent.llm_model import (
     LLMToolCallFunction,
     LLMToolChoice,
     LLMToolChoiceMode,
+    LLMToolMessage,
     LLMUsage,
 )
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
-def to_openai_kwargs(request: LLMRequest, *, default_model: str) -> dict[str, object]:
+def to_openai_kwargs(request: LLMRequest) -> dict[str, object]:
     payload: dict[str, object] = {
-        "model": _resolve_model(request.model, default_model=default_model),
+        "model": request.model,
         "messages": [_message_to_payload(message) for message in request.messages],
     }
     if request.tools:
@@ -98,25 +100,16 @@ def _response_model(response_model: object, *, fallback_model: str) -> str:
     return fallback_model
 
 
-def _resolve_model(requested_model: str | None, *, default_model: str) -> str:
-    if isinstance(requested_model, str) and requested_model.strip():
-        return requested_model.strip()
-    return default_model
-
-
 def _message_to_payload(message: LLMMessage) -> dict[str, object]:
     payload: dict[str, object] = {"role": message.role.value}
-    if message.content is not None:
-        payload["content"] = message.content
-    else:
-        payload["content"] = None
+    payload["content"] = message.content
     if message.name is not None:
         payload["name"] = message.name
-    if message.tool_calls:
+    if isinstance(message, LLMAssistantMessage) and message.tool_calls:
         payload["tool_calls"] = [
             _tool_call_to_payload(tool_call) for tool_call in message.tool_calls
         ]
-    if message.tool_call_id is not None:
+    if isinstance(message, LLMToolMessage):
         payload["tool_call_id"] = message.tool_call_id
     return payload
 

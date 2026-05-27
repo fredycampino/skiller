@@ -4,9 +4,12 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.llm_model import (
-    LLMMessage,
+    LLMAssistantMessage,
+    LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolMessage,
+    LLMUserMessage,
 )
 
 pytestmark = pytest.mark.unit
@@ -71,13 +74,19 @@ def test_agent_prompt_builder_builds_messages() -> None:
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=())
+    request = builder.build_request(
+        model="model1",
+        system="Be useful.",
+        entries=entries,
+        tools=(),
+    )
 
+    assert request.model == "model1"
     assert request.messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hello"),
-        LLMMessage.assistant("Hi"),
-        LLMMessage.assistant(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hello"),
+        LLMAssistantMessage("Hi"),
+        LLMAssistantMessage(
             tool_calls=(
                 LLMToolCall(
                     id="call-1",
@@ -88,7 +97,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
                 ),
             )
         ),
-        LLMMessage.tool('{"ok": true}', tool_call_id="call-1"),
+        LLMToolMessage('{"ok": true}', tool_call_id="call-1"),
     )
 
 
@@ -136,12 +145,17 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=())
+    request = builder.build_request(
+        model="model1",
+        system="Be useful.",
+        entries=entries,
+        tools=(),
+    )
 
     assert request.messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hello"),
-        LLMMessage.assistant(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hello"),
+        LLMAssistantMessage(
             "I should send a notification.",
             tool_calls=(
                 LLMToolCall(
@@ -153,7 +167,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
                 ),
             ),
         ),
-        LLMMessage.tool("sent", tool_call_id="call-1"),
+        LLMToolMessage("sent", tool_call_id="call-1"),
     )
 
 
@@ -217,12 +231,17 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         ),
     ]
 
-    request = builder.build_request(system="Be useful.", entries=entries, tools=())
+    request = builder.build_request(
+        model="model1",
+        system="Be useful.",
+        entries=entries,
+        tools=(),
+    )
 
     assert request.messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hello"),
-        LLMMessage.assistant(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hello"),
+        LLMAssistantMessage(
             tool_calls=(
                 LLMToolCall(
                     id="call-1",
@@ -240,8 +259,8 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
                 ),
             )
         ),
-        LLMMessage.tool("sent", tool_call_id="call-1"),
-        LLMMessage.tool("ok", tool_call_id="call-2"),
+        LLMToolMessage("sent", tool_call_id="call-1"),
+        LLMToolMessage("ok", tool_call_id="call-2"),
     )
 
 
@@ -249,13 +268,14 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
     builder = AgentPromptBuilder()
 
     request = builder.build_request(
+        model="model1",
         system="Be useful.",
         entries=[],
         tools=(),
     )
 
     assert request.messages == (
-        LLMMessage.system("Be useful."),
+        LLMSystemMessage("Be useful."),
     )
 
 
@@ -264,6 +284,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
     tool = ShellProcessTool()
 
     request = builder.build_request(
+        model="model1",
         system="Be useful.",
         entries=[],
         tools=(tool,),

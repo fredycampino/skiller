@@ -80,6 +80,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #status-row {{
             height: auto;
+            min-height: 1;
             width: 100%;
             margin:
                 {theme.status_margin_top}
@@ -93,6 +94,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #status {{
             height: 100%;
+            min-height: 1;
             width: 1fr;
             margin: 0;
             padding: 0 1;

@@ -10,7 +10,7 @@ from skiller.application.tools.files import FilesTool, FilesToolRuntimeConfig
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
-from skiller.domain.agent.agent_config_model import AgentLLMClientType, AgentLLMProviderType
+from skiller.domain.agent.agent_config_model import AgentLLMProviderType
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
@@ -25,54 +25,27 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     secret_path = tmp_path / "minimax-key"
     secret_path.write_text("secret\n", encoding="utf-8")
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key_file": str(secret_path),
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "loop": {
-                    "max_turns": 12,
-                    "max_tool_calls": 7,
-                },
-                "context": {
-                    "compaction": {
-                        "enabled": True,
-                        "max_total_tokens_ratio": 0.9,
-                    }
-                },
-                "event_output": {
-                    "truncate": {
-                        "enabled": False,
-                        "max_text_chars": 300,
-                        "max_json_chars": 2000,
-                        "max_array_items": 8,
-                    }
-                },
+    _write_config(
+        config_path,
+        llm=_minimax_llm(api_key_file=str(secret_path)),
+        loop={"max_turns": 12, "max_tool_calls": 7},
+        context={"compaction": {"enabled": True, "max_total_tokens_ratio": 0.9}},
+        event_output={
+            "truncate": {
+                "enabled": False,
+                "max_text_chars": 300,
+                "max_json_chars": 2000,
+                "max_array_items": 8,
             }
-        ),
-        encoding="utf-8",
+        },
     )
 
     config = _provider(config_path=config_path, env={}).get_config()
     provider = config.llm.default()
 
-    assert config.llm.default_provider == "minimax-main"
-    assert provider.provider == AgentLLMProviderType.MINIMAX
-    assert provider.client_type == AgentLLMClientType.OPENAI_CHAT_COMPLETIONS
+    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
+    assert provider.provider_type == AgentLLMProviderType.MINIMAX
     assert provider.api_key == "secret"
-    assert provider.base_url == "https://api.minimax.io/v1"
     assert provider.model == "MiniMax-M2.5"
     assert provider.timeout_seconds == 30.0
     assert provider.context_window_tokens == 1_000_000
@@ -86,36 +59,11 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     assert config.event_output.truncate.max_array_items == 8
 
 
-def test_json_agent_config_applies_supported_env_overrides(tmp_path) -> None:
+def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "file-key",
-                            "base_url": "https://file.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "loop": {
-                    "max_turns": 12,
-                    "max_tool_calls": 7,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(config_path, llm=_minimax_llm(api_key="file-key"))
     env = {
         "AGENT_MINIMAX_API_KEY": "env-key",
-        "AGENT_MINIMAX_BASE_URL": "https://env.minimax.io/v1",
         "AGENT_MINIMAX_MODEL": "MiniMax-M2.7",
         "AGENT_MINIMAX_TIMEOUT_SECONDS": "10.5",
         "AGENT_LOOP_MAX_TURNS": "20",
@@ -128,7 +76,6 @@ def test_json_agent_config_applies_supported_env_overrides(tmp_path) -> None:
     provider = config.llm.default()
 
     assert provider.api_key == "env-key"
-    assert provider.base_url == "https://env.minimax.io/v1"
     assert provider.model == "MiniMax-M2.7"
     assert provider.timeout_seconds == 10.5
     assert config.loop.max_turns == 20
@@ -139,27 +86,7 @@ def test_json_agent_config_applies_supported_env_overrides(tmp_path) -> None:
 
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key_env": "TEST_MINIMAX_KEY",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(config_path, llm=_minimax_llm(api_key_env="TEST_MINIMAX_KEY"))
 
     config = _provider(
         config_path=config_path,
@@ -169,55 +96,60 @@ def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
     assert config.llm.default().api_key == "env-ref-key"
 
 
+def test_json_agent_config_reads_codex_provider(tmp_path) -> None:
+    credentials_path = tmp_path / "openai-codex.json"
+    credentials_path.write_text('{"access_token":"token"}', encoding="utf-8")
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_codex_llm(credentials_file=str(credentials_path)))
+
+    config = _provider(config_path=config_path, env={}).get_config()
+    provider = config.llm.default()
+
+    assert config.llm.default_provider == AgentLLMProviderType.CODEX
+    assert provider.provider_type == AgentLLMProviderType.CODEX
+    assert provider.api_key is None
+    assert provider.credentials_file == str(credentials_path)
+
+
+def test_json_agent_config_rejects_codex_without_credentials_file(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_codex_llm(credentials_file=None))
+
+    with pytest.raises(ValueError, match="LLM provider requires credentials_file"):
+        _provider(config_path=config_path, env={}).get_config()
+
+
 def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "tools": {
-                    "files": {
-                        "read": ["."],
-                        "write": ["src"],
-                        "all": ["shared"],
-                    },
-                    "shell": {
-                        "workspace": "tmp/work",
-                        "allowlist_enabled": True,
-                        "allow_env_prefix": False,
-                        "allowed_commands": ["rg", "cat"],
-                    },
-                },
-            }
-        ),
-        encoding="utf-8",
+    _write_config(
+        config_path,
+        llm=_minimax_llm(api_key="secret"),
+        tools={
+            "files": {
+                "read": ["."],
+                "write": ["src"],
+                "all": ["shared"],
+            },
+            "shell": {
+                "workspace": "tmp/work",
+                "allowlist_enabled": True,
+                "allow_env_prefix": False,
+                "allowed_commands": ["rg", "cat"],
+            },
+            "notify": {"ignored": True},
+        },
     )
 
     config = _provider(config_path=config_path, env={}).get_config()
 
-    shell_config = config.tools.get("shell")
-    assert shell_config == ShellToolRuntimeConfig(
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
         workspace="tmp/work",
         allowlist_enabled=True,
         allow_env_prefix=False,
         allowed_commands=("rg", "cat"),
     )
-    files_config = config.tools.get("files")
-    assert files_config == FilesToolRuntimeConfig(
+    assert config.tools.get("files") == FilesToolRuntimeConfig(
         definition=FilesTool,
         read=(Path("."),),
         write=(Path("src"),),
@@ -226,63 +158,9 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
     assert config.tools.get("notify") is None
 
 
-def test_json_agent_config_ignores_non_configurable_tool_config(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "tools": {
-                    "notify": {
-                        "ignored": True,
-                    },
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.tools.get("notify") is None
-
-
 def test_json_agent_config_validates_valid_config(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
 
     validation = _provider(config_path=config_path, env={}).validate_config()
 
@@ -291,28 +169,7 @@ def test_json_agent_config_validates_valid_config(tmp_path) -> None:
 
 def test_json_agent_config_rejects_agent_wrapper(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "agent": {},
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(config_path, llm=_minimax_llm(api_key="secret"), agent={})
 
     validation = _provider(config_path=config_path, env={}).validate_config()
 
@@ -335,26 +192,9 @@ def test_json_agent_config_validates_missing_config_file(tmp_path) -> None:
 
 def test_json_agent_config_validates_unsupported_model(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "not-a-minimax-model",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    _write_config(
+        config_path,
+        llm=_minimax_llm(api_key="secret", model="not-a-minimax-model"),
     )
 
     validation = _provider(config_path=config_path, env={}).validate_config()
@@ -365,322 +205,169 @@ def test_json_agent_config_validates_unsupported_model(tmp_path) -> None:
     )
 
 
-def test_json_agent_config_uses_context_config_path_before_global(tmp_path) -> None:
+def test_json_agent_config_resolves_config_file_precedence(tmp_path) -> None:
     global_config_path = tmp_path / "global-agent.json"
     context_config_path = tmp_path / "context-agent.json"
-    global_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "global",
-                    "providers": {
-                        "global": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "global-key",
-                            "base_url": "https://global.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    env_config_path = tmp_path / "env-agent.json"
+    _write_config(global_config_path, llm=_fake_llm())
+    _write_config(context_config_path, llm=_null_llm())
+    _write_config(env_config_path, llm=_minimax_llm(api_key="secret"))
+
+    context_config = _provider(config_path=global_config_path, env={}).get_config(
+        config_path=context_config_path
     )
-    context_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "context",
-                    "providers": {
-                        "context": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "context-key",
-                            "base_url": "https://context.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    env_config = _provider(
+        config_path=global_config_path,
+        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
+    ).get_config(config_path=context_config_path)
+    fallback_config = _provider(config_path=global_config_path, env={}).get_config(
+        config_path=tmp_path / "missing-agent.json"
+    )
+
+    assert context_config.llm.default_provider == AgentLLMProviderType.NULL
+    assert env_config.llm.default_provider == AgentLLMProviderType.MINIMAX
+    assert fallback_config.llm.default_provider == AgentLLMProviderType.FAKE
+
+
+def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) -> None:
+    global_config_path = tmp_path / "global-agent.json"
+    context_config_path = tmp_path / "context-agent.json"
+    _write_config(
+        global_config_path,
+        llm=_minimax_llm(api_key="secret"),
+        loop={"max_turns": 12, "max_tool_calls": 7},
+        tools={
+            "shell": {
+                "workspace": ".",
+                "allowlist_enabled": True,
+                "allow_env_prefix": True,
+                "allowed_commands": ["pwd"],
+            },
+        },
+    )
+    _write_config(
+        context_config_path,
+        llm=_fake_llm(),
+        loop={"max_turns": 3},
+        tools={
+            "files": {
+                "read": ["."],
+                "write": [],
+                "all": [],
+            },
+        },
     )
 
     config = _provider(config_path=global_config_path, env={}).get_config(
         config_path=context_config_path
     )
 
-    assert config.llm.default_provider == "context"
-    assert config.llm.default().api_key == "context-key"
-
-
-def test_json_agent_config_explicit_env_overrides_context_config_path(
-    tmp_path,
-) -> None:
-    env_config_path = tmp_path / "env-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    env_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "env",
-                    "providers": {
-                        "env": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "env-key",
-                            "base_url": "https://env.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    assert config.llm.default_provider == AgentLLMProviderType.FAKE
+    assert config.loop.max_turns == 3
+    assert config.loop.max_tool_calls == 5
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        workspace="",
+        allowlist_enabled=False,
+        allow_env_prefix=True,
+        allowed_commands=(),
     )
-    context_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "context",
-                    "providers": {
-                        "context": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "context-key",
-                            "base_url": "https://context.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    assert config.tools.get("files") == FilesToolRuntimeConfig(
+        definition=FilesTool,
+        read=(Path("."),),
+        write=(),
+        all=(),
     )
 
-    config = _provider(
-        config_path=tmp_path / "global-agent.json",
-        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
-    ).get_config(config_path=context_config_path)
 
-    assert config.llm.default_provider == "env"
-    assert config.llm.default().api_key == "env-key"
-
-
-def test_json_agent_config_missing_context_config_path_falls_back_to_global(
-    tmp_path,
-) -> None:
+def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) -> None:
     global_config_path = tmp_path / "global-agent.json"
-    global_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "global",
-                    "providers": {
-                        "global": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "global-key",
-                            "base_url": "https://global.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    context_config_path = tmp_path / "context-agent.json"
+    _write_config(
+        global_config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+            "providers": {
+                "minimax": {
+                    "api_key": "secret",
+                    "model": "MiniMax-M2.5",
+                    "timeout_seconds": 30,
+                    "context_window_tokens": 1_000_000,
+                },
+                "fake": {
+                    "model": "model1",
+                    "timeout_seconds": 30,
+                    "context_window_tokens": 100_000,
+                },
+            },
+        },
+    )
+    _write_config(
+        context_config_path,
+        llm={
+            "llm": {"default_provider": "fake"},
+        },
     )
 
     config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=tmp_path / "missing-agent.json"
+        config_path=context_config_path
     )
 
-    assert config.llm.default_provider == "global"
+    provider = config.llm.default()
+
+    assert provider.provider_type == AgentLLMProviderType.FAKE
+    assert provider.model == "model1"
 
 
 def test_json_agent_config_does_not_use_cwd_agent_json(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cwd_config_path = tmp_path / "agent.json"
+    _write_config(tmp_path / "agent.json", llm=_null_llm())
     global_config_path = tmp_path / "global-agent.json"
-    cwd_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "cwd",
-                    "providers": {
-                        "cwd": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "cwd-key",
-                            "base_url": "https://cwd.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    global_config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "global",
-                    "providers": {
-                        "global": {
-                            "provider": "openai",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "global-key",
-                            "base_url": "https://global.example/v1",
-                            "model": "gpt-5.2",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(global_config_path, llm=_fake_llm())
     monkeypatch.chdir(tmp_path)
 
     config = _provider(config_path=global_config_path, env={}).get_config()
 
-    assert config.llm.default_provider == "global"
+    assert config.llm.default_provider == AgentLLMProviderType.FAKE
 
 
-def test_json_agent_config_ignores_config_for_other_ports(tmp_path) -> None:
+def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 1_000_000,
-                        }
-                    },
-                },
-                "shell": {
-                    "policy": {
-                        "allowlist": {
-                            "enabled": True,
-                        }
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.llm.default().api_key == "secret"
-
-
-def test_json_agent_config_rejects_unknown_provider_type(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "bad",
-                    "providers": {
-                        "bad": {
-                            "provider": "bad",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.example.com/v1",
-                            "model": "model",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
+    _write_config(
+        config_path,
+        llm={
+            "llm": {"default_provider": "bad"},
+            "providers": {
+                "bad": {
+                    "api_key": "secret",
+                    "model": "model",
+                    "timeout_seconds": 30,
+                    "context_window_tokens": 100_000,
                 }
-            }
-        ),
-        encoding="utf-8",
+            },
+        },
     )
 
-    with pytest.raises(ValueError, match="Invalid agent config"):
+    with pytest.raises(ValueError, match="Unsupported LLM provider: bad"):
         _provider(config_path=config_path, env={}).get_config()
 
 
 def test_json_agent_config_rejects_legacy_provider_type_field(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "type": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.example.com/v1",
-                            "model": "model",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    _write_config(
+        config_path,
+        llm=_minimax_llm(api_key="secret", extra={"type": "minimax"}),
     )
 
     with pytest.raises(ValueError, match="Invalid agent config"):
         _provider(config_path=config_path, env={}).get_config()
 
 
-def test_json_agent_config_rejects_unsupported_env_model_override(
-    tmp_path,
-) -> None:
+def test_json_agent_config_rejects_unsupported_env_model_override(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "openai_chat_completions",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
 
     with pytest.raises(
         ValueError,
@@ -692,37 +379,88 @@ def test_json_agent_config_rejects_unsupported_env_model_override(
         ).get_config()
 
 
-def test_json_agent_config_rejects_provider_client_type_mismatch(
-    tmp_path,
+def _write_config(
+    path: Path,
+    *,
+    llm: dict[str, object],
+    **sections: object,
 ) -> None:
-    config_path = tmp_path / "agent.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "llm": {
-                    "default_provider": "minimax-main",
-                    "providers": {
-                        "minimax-main": {
-                            "provider": "minimax",
-                            "client_type": "fake",
-                            "api_key": "secret",
-                            "base_url": "https://api.minimax.io/v1",
-                            "model": "MiniMax-M2.5",
-                            "timeout_seconds": 30,
-                            "context_window_tokens": 100_000,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    payload: dict[str, object] = dict(llm)
+    payload.update(sections)
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(
-        ValueError,
-        match="Unsupported client_type='fake' for provider='minimax'",
-    ):
-        _provider(config_path=config_path, env={}).get_config()
+
+def _minimax_llm(
+    *,
+    api_key: str | None = None,
+    api_key_env: str | None = None,
+    api_key_file: str | None = None,
+    model: str = "MiniMax-M2.5",
+    extra: dict[str, object] | None = None,
+) -> dict[str, object]:
+    provider: dict[str, object] = {
+        "model": model,
+        "timeout_seconds": 30,
+        "context_window_tokens": 1_000_000,
+    }
+    if api_key is not None:
+        provider["api_key"] = api_key
+    if api_key_env is not None:
+        provider["api_key_env"] = api_key_env
+    if api_key_file is not None:
+        provider["api_key_file"] = api_key_file
+    if extra is not None:
+        provider.update(extra)
+
+    return {
+        "llm": {"default_provider": "minimax"},
+        "providers": {
+            "minimax": provider,
+        },
+    }
+
+
+def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
+    provider: dict[str, object] = {
+        "model": "gpt-5.5",
+        "timeout_seconds": 120,
+        "context_window_tokens": 100_000,
+    }
+    if credentials_file is not None:
+        provider["credentials_file"] = credentials_file
+
+    return {
+        "llm": {"default_provider": "codex"},
+        "providers": {
+            "codex": provider,
+        },
+    }
+
+
+def _fake_llm() -> dict[str, object]:
+    return {
+        "llm": {"default_provider": "fake"},
+        "providers": {
+            "fake": {
+                "model": "model1",
+                "timeout_seconds": 30,
+                "context_window_tokens": 100_000,
+            }
+        },
+    }
+
+
+def _null_llm() -> dict[str, object]:
+    return {
+        "llm": {"default_provider": "null"},
+        "providers": {
+            "null": {
+                "model": "null1",
+                "timeout_seconds": 30,
+                "context_window_tokens": 100_000,
+            }
+        },
+    }
 
 
 def _provider(

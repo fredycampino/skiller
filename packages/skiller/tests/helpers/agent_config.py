@@ -5,7 +5,6 @@ from skiller.domain.agent.agent_config_model import (
     AgentConfig,
     AgentContextConfig,
     AgentEventOutputConfig,
-    AgentLLMClientType,
     AgentLLMConfig,
     AgentLLMProviderConfig,
     AgentLLMProviderType,
@@ -43,18 +42,16 @@ def agent_config(
 ) -> AgentConfig:
     return AgentConfig(
         llm=AgentLLMConfig(
-            default_provider="openai-main",
-            providers={
-                "openai-main": AgentLLMProviderConfig(
-                    provider=AgentLLMProviderType.OPENAI,
-                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+            default_provider=AgentLLMProviderType.FAKE,
+            providers=(
+                AgentLLMProviderConfig(
+                    provider_type=AgentLLMProviderType.FAKE,
                     model="test-model",
                     api_key="test-key",
-                    base_url="https://api.example.com/v1",
                     timeout_seconds=30,
                     context_window_tokens=100_000,
-                )
-            },
+                ),
+            ),
         ),
         loop=AgentLoopConfig(
             max_turns=max_turns,

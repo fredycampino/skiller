@@ -1,10 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from skiller.domain.agent.agent_config_model import (
-    AgentLLMClientType,
-    AgentLLMProviderType,
-)
-
 DEFAULT_AGENT_LOOP_MAX_TURNS = 10
 DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS = 5
 DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED = False
@@ -18,22 +13,19 @@ DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS = 20
 class LLMProviderConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: AgentLLMProviderType
-    client_type: AgentLLMClientType
     model: str
-    base_url: str
     timeout_seconds: float = Field(gt=0)
     context_window_tokens: int = Field(gt=0)
     api_key: str | None = None
     api_key_env: str | None = None
     api_key_file: str | None = None
+    credentials_file: str | None = None
 
 
 class LLMConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_provider: str
-    providers: dict[str, LLMProviderConfigModel]
 
 
 class LoopConfigModel(BaseModel):
@@ -81,6 +73,7 @@ class AgentConfigModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     llm: LLMConfigModel
+    providers: dict[str, LLMProviderConfigModel]
     loop: LoopConfigModel = Field(default_factory=LoopConfigModel)
     context: ContextConfigModel = Field(default_factory=ContextConfigModel)
     event_output: EventOutputConfigModel = Field(

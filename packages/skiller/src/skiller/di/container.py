@@ -85,7 +85,7 @@ from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.service import WaitApplicationService
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
-from skiller.domain.agent.agent_config_model import AgentLLMProviderConfig
+from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
@@ -100,9 +100,6 @@ from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEv
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
-from skiller.infrastructure.llm.fake_llm import FakeLLM
-from skiller.infrastructure.llm.null_llm import NullLLM
-from skiller.infrastructure.llm.openai_llm import OpenAILLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -367,31 +364,7 @@ def build_runtime_container(
 
 
 def _build_llm_model_manager() -> LLMModelManager:
-    return LLMModelManager(
-        create_null_client=_create_null_llm,
-        create_fake_client=_create_fake_llm,
-        create_openai_client=_create_openai_llm,
-    )
-
-
-def _create_null_llm(provider: AgentLLMProviderConfig) -> NullLLM:
-    _ = provider
-    return NullLLM()
-
-
-def _create_fake_llm(provider: AgentLLMProviderConfig) -> FakeLLM:
-    return FakeLLM(
-        model=provider.model,
-    )
-
-
-def _create_openai_llm(provider: AgentLLMProviderConfig) -> OpenAILLM:
-    return OpenAILLM(
-        api_key=provider.api_key,
-        base_url=provider.base_url,
-        model=provider.model,
-        timeout_seconds=provider.timeout_seconds,
-    )
+    return LLMModelManager(client_provider=LLMClientFactory())
 
 
 def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:

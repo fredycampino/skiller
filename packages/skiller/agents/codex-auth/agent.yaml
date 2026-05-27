@@ -67,7 +67,7 @@ steps:
     next: verify_credentials
 
   - shell: verify_credentials
-    command: python3 packages/skiller/agents/codex-auth/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.2}"
+    command: python3 packages/skiller/agents/codex-auth/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
     cwd: .
     timeout: 120
     check: true

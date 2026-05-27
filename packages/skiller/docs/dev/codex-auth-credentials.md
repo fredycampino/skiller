@@ -176,7 +176,7 @@ Required request shape:
 
 ```json
 {
-  "model": "gpt-5.2",
+  "model": "gpt-5.5",
   "instructions": "You are a credential validation probe. Reply only with the requested marker.",
   "input": [
     {

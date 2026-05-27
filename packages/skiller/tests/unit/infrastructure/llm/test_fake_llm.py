@@ -12,7 +12,7 @@ def test_fake_llm_returns_configured_text_payload() -> None:
         model="fake-test",
     )
 
-    result = llm.generate(LLMRequest(messages=()))
+    result = llm.generate(LLMRequest(messages=(), model="model1"))
 
     assert result == LLMResponse(
         ok=True,

@@ -197,6 +197,34 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     assert context.status == RunStatus.FAILED
 
 
+def test_event_state_step_success_sets_running_status() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    use_case = _use_case(context=context)
+
+    use_case.execute(
+        FakeObserver(),
+        state=state,
+        events=[
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Done",
+                        value=AgentOutputValue(data={"final": {"text": "Done"}}),
+                        body_ref=None,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    assert state.view_status.kind == ViewStatusKind.RUNNING
+    assert context.status == RunStatus.RUNNING
+
+
 def test_event_state_updates_agent_usage_from_agent_step_success() -> None:
     state = ConsoleScreenState()
     context = _context()

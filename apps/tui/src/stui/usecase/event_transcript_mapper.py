@@ -128,7 +128,7 @@ class EventTranscriptMapper:
 
         if event.event_type == LogEventType.AGENT_TOOL_RESULT:
             payload = _payload(event, AgentToolResultPayload)
-            preview = (payload.text or "").strip()
+            preview = _agent_tool_result_preview(payload)
             if not preview:
                 return None
             return AgentToolResultItem(
@@ -428,3 +428,15 @@ def _agent_notice_text(stop_reason: AgentStopReason) -> str:
     if stop_reason == AgentStopReason.MAX_TURNS_EXHAUSTED:
         return "Turn limit reached"
     return "Agent notice"
+
+
+def _agent_tool_result_preview(payload: AgentToolResultPayload) -> str:
+    text = (payload.text or "").strip()
+    if text:
+        return text
+
+    error = (payload.error or "").strip()
+    if error:
+        return error
+
+    return payload.status.value

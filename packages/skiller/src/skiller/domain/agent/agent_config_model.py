@@ -8,44 +8,44 @@ class AgentLLMProviderType(str, Enum):
     NULL = "null"
     FAKE = "fake"
     MINIMAX = "minimax"
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    GEMINI = "gemini"
-
-
-class AgentLLMClientType(str, Enum):
-    NULL = "null"
-    FAKE = "fake"
-    OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
-    ANTHROPIC_MESSAGES = "anthropic_messages"
-    GEMINI_NATIVE = "gemini_native"
+    CODEX = "codex"
 
 
 @dataclass(frozen=True)
 class AgentLLMProviderConfig:
-    provider: AgentLLMProviderType
-    client_type: AgentLLMClientType
+    provider_type: AgentLLMProviderType
     model: str
-    api_key: str
-    base_url: str
+    api_key: str | None
     timeout_seconds: float
     context_window_tokens: int
+    credentials_file: str | None = None
 
 
 @dataclass(frozen=True)
 class AgentLLMConfig:
-    default_provider: str
-    providers: dict[str, AgentLLMProviderConfig]
+    default_provider: AgentLLMProviderType
+    providers: tuple[AgentLLMProviderConfig, ...]
 
     def __post_init__(self) -> None:
         if not self.providers:
             raise RuntimeError("LLM providers must not be empty")
 
-        if self.default_provider not in self.providers:
-            raise RuntimeError(f"Missing default LLM provider config: {self.default_provider}")
+        for provider in self.providers:
+            if provider.provider_type == self.default_provider:
+                return
+
+        raise RuntimeError(
+            f"Missing default LLM provider config: {self.default_provider.value}"
+        )
 
     def default(self) -> AgentLLMProviderConfig:
-        return self.providers[self.default_provider]
+        for provider in self.providers:
+            if provider.provider_type == self.default_provider:
+                return provider
+
+        raise RuntimeError(
+            f"Missing default LLM provider config: {self.default_provider.value}"
+        )
 
 
 @dataclass(frozen=True)

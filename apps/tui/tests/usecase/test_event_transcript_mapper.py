@@ -116,6 +116,35 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
     assert items[2].preview == "Command completed successfully."
 
 
+def test_event_transcript_mapper_shows_interrupted_tool_result_error() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.AGENT_TOOL_RESULT,
+                step_id="support_agent",
+                step_type="agent",
+                payload=AgentToolResultPayload(
+                    type="tool_result",
+                    turn_id="turn-1",
+                    parent_sequence=1,
+                    tool_call_id="call-1",
+                    tool="shell",
+                    status=AgentToolResultStatus.INTERRUPTED,
+                    data={"error": "interrupted"},
+                    text=None,
+                    error="Tool execution interrupted by user",
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], AgentToolResultItem)
+    assert items[0].preview == "Tool execution interrupted by user"
+
+
 def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -> None:
     mapper = EventTranscriptMapper()
 

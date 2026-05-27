@@ -86,3 +86,5 @@ echo
 run_cli "cli_mcp_stdio.sh" ./cli_mcp_stdio.sh "hola-e2e"
 echo
 run_cli "cli_shell.sh" ./cli_shell.sh "hola-shell-e2e"
+echo
+run_cli "cli_codex_client.sh" ./cli_codex_client.sh

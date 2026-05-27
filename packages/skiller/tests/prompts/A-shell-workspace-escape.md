@@ -19,8 +19,9 @@ Expected behavior:
 
 - `pwd` may execute.
 - Attempts outside the workspace must be blocked by policy.
-- The agent should report the exact tool error, for example
-  `shell command path escapes workspace`.
+- The agent should report the exact tool error returned by the runtime/tool. In
+  this runtime the observable tool error is expected to be `policy_blocked`.
+- The blocked commands must not execute partially.
 - The run should not fail because this is a policy block, not a policy exception.
 
 Expected runtime path:

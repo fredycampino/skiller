@@ -59,6 +59,7 @@ def test_agent_context_manager_builds_llm_request_from_current_context() -> None
     ]
     assert result.llm_request.messages[0].content == "Be useful."
     assert result.llm_request.messages[1].content == "Hello"
+    assert result.llm_request.model == "test-model"
     assert result.context_id == "ctx-1"
     assert result.context_window_tokens == 80_000
     assert result.max_ratio == 0.8
@@ -115,9 +116,11 @@ def test_agent_context_manager_builds_window_context_without_changing_default_re
     window_result = manager.build_window_context(context=context, config=config)
 
     assert default_result.llm_request.messages[1].content == "Full context"
+    assert default_result.llm_request.model == "test-model"
     assert window_result.context_id == "ctx-1"
     assert window_result.turn_id == "turn-3"
     assert window_result.llm_request.messages[1].content == "Window context"
+    assert window_result.llm_request.model == "test-model"
     assert window_result.context_window_tokens == 80_000
     assert window_result.max_ratio == 0.8
     assert window_result.estimated_tokens == 0

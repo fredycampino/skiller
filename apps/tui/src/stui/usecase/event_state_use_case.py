@@ -107,6 +107,8 @@ class EventStateUseCase:
             return
 
         if event.event_type == LogEventType.STEP_SUCCESS:
+            state.set_status(kind=ViewStatusKind.RUNNING)
+            self.context.status = RunStatus.RUNNING
             return
 
         if event.event_type == LogEventType.STEP_ERROR:

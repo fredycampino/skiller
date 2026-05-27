@@ -20,12 +20,10 @@ class OpenAILLM(LLMPort):
         *,
         api_key: str,
         base_url: str,
-        model: str,
         timeout_seconds: float,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        self.model = model
         self.timeout_seconds = timeout_seconds
         self.client = self._build_client()
 
@@ -37,7 +35,7 @@ class OpenAILLM(LLMPort):
                 error_code="api_key_missing",
             )
 
-        kwargs = to_openai_kwargs(request, default_model=self.model)
+        kwargs = to_openai_kwargs(request)
         kwargs["extra_body"] = {"reasoning_split": True}
 
         try:
@@ -49,7 +47,7 @@ class OpenAILLM(LLMPort):
                 error_code="request_failed",
             )
 
-        return to_port_llm_response(response, fallback_model=str(kwargs["model"]))
+        return to_port_llm_response(response, fallback_model=request.model)
 
     def _build_client(self) -> object:
         if not self.api_key.strip():

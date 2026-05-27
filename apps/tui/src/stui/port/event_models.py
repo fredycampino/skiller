@@ -218,6 +218,8 @@ class AgentToolCallPayload:
 class AgentToolResultStatus(StrEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    INTERRUPTED = "INTERRUPTED"
 
 
 @dataclass(frozen=True)

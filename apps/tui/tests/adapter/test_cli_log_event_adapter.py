@@ -469,6 +469,39 @@ def test_cli_log_event_adapter_parses_agent_tool_result_payload() -> None:
     assert event.payload.text == "ok"
 
 
+def test_cli_log_event_adapter_parses_interrupted_agent_tool_result_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 11,
+                "id": "event-2",
+                "run_id": "run-1",
+                "type": "AGENT_TOOL_RESULT",
+                "step_id": "support_agent",
+                "step_type": "agent",
+                "agent_sequence": 34,
+                "created_at": "2026-05-12T10:30:17Z",
+                "payload": {
+                    "type": "tool_result",
+                    "turn_id": "turn-1",
+                    "parent_sequence": 32,
+                    "tool_call_id": "call-1",
+                    "tool": "shell",
+                    "status": "INTERRUPTED",
+                    "data": {"error": "interrupted"},
+                    "text": None,
+                    "error": "Tool execution interrupted by user",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.AGENT_TOOL_RESULT
+    assert isinstance(event.payload, AgentToolResultPayload)
+    assert event.payload.status == AgentToolResultStatus.INTERRUPTED
+    assert event.payload.error == "Tool execution interrupted by user"
+
+
 def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> None:
     event = _mapped_event(
         [

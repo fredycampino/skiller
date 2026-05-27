@@ -491,7 +491,7 @@ def run_console_screen(
         theme=theme,
         strings=container.strings,
     )
-    result = app.run(mouse=True)
+    result = app.run(mouse=False)
     return result or session_key
 
 

@@ -5,10 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.domain.agent.llm_model import (
-    LLMMessage,
     LLMRequest,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMUserMessage,
 )
 from skiller.infrastructure.llm import openai_llm
 from skiller.infrastructure.llm.openai_llm import OpenAILLM
@@ -49,13 +49,13 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     llm = OpenAILLM(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
-        model="gpt-5.2",
         timeout_seconds=30.0,
     )
 
     result = llm.generate(
         LLMRequest(
-            messages=(LLMMessage.user("hello"),),
+            messages=(LLMUserMessage("hello"),),
+            model="gpt-5.2",
         )
     )
 
@@ -82,11 +82,15 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
     llm = OpenAILLM(
         api_key="",
         base_url="https://api.openai.com/v1",
-        model="gpt-5.2",
         timeout_seconds=30.0,
     )
 
-    result = llm.generate(LLMRequest(messages=(LLMMessage.user("hello"),)))
+    result = llm.generate(
+        LLMRequest(
+            messages=(LLMUserMessage("hello"),),
+            model="model1",
+        )
+    )
 
     assert result.ok is False
     assert result.error == "API key is not configured for the selected model provider"
@@ -129,11 +133,15 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
     llm = OpenAILLM(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
-        model="gpt-5.2",
         timeout_seconds=30.0,
     )
 
-    result = llm.generate(LLMRequest(messages=(LLMMessage.user("hello"),)))
+    result = llm.generate(
+        LLMRequest(
+            messages=(LLMUserMessage("hello"),),
+            model="gpt-5.2",
+        )
+    )
 
     assert result.ok is True
     assert result.content is None

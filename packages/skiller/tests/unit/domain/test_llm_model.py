@@ -1,8 +1,46 @@
 import pytest
 
-from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm_model import (
+    LLMAssistantMessage,
+    LLMMessageRole,
+    LLMResponse,
+    LLMSystemMessage,
+    LLMToolCall,
+    LLMToolCallFunction,
+    LLMToolMessage,
+    LLMUserMessage,
+)
 
 pytestmark = pytest.mark.unit
+
+
+def test_llm_message_factories_return_role_specific_messages() -> None:
+    tool_call = LLMToolCall(
+        id="call-1",
+        function=LLMToolCallFunction(
+            name="shell",
+            arguments_json='{"command":"pwd"}',
+        ),
+    )
+
+    system = LLMSystemMessage("system")
+    user = LLMUserMessage("user")
+    assistant = LLMAssistantMessage(tool_calls=(tool_call,))
+    tool = LLMToolMessage("result", tool_call_id="call-1")
+
+    assert system.role == LLMMessageRole.SYSTEM
+    assert system.content == "system"
+    assert user.role == LLMMessageRole.USER
+    assert user.content == "user"
+    assert assistant.role == LLMMessageRole.ASSISTANT
+    assert assistant.tool_calls == (tool_call,)
+    assert tool.role == LLMMessageRole.TOOL
+    assert tool.tool_call_id == "call-1"
+
+
+def test_assistant_message_requires_content_or_tool_calls() -> None:
+    with pytest.raises(ValueError, match="Assistant messages require content or tool calls"):
+        LLMAssistantMessage()
 
 
 def test_llm_response_normalizes_metadata_strings() -> None:

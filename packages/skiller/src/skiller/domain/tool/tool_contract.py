@@ -106,6 +106,8 @@ class ToolRuntimeConfigs:
 class ToolResultStatus(str, Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    INTERRUPTED = "INTERRUPTED"
 
 
 @dataclass(frozen=True)

@@ -137,8 +137,8 @@ def test_agent_tool_execution_interrupts_process_tool() -> None:
     assert results == ToolExecutionResults(
         items=[
             ToolExecutionResult(
-                tool_call_id="turn-1",
-                tool="agent",
+                tool_call_id="call-1",
+                tool="shell",
                 status=ToolExecutionStatus.INTERRUPTED,
             )
         ]
@@ -146,11 +146,19 @@ def test_agent_tool_execution_interrupts_process_tool() -> None:
     assert process_runner.terminated == [ToolProcessHandle(id="proc-1", pid=123)]
     assert [item["entry_type"] for item in context_store.appended] == [
         AgentContextEntryType.TOOL_CALL,
-        AgentContextEntryType.USER_MESSAGE,
+        AgentContextEntryType.TOOL_RESULT,
     ]
-    assert context_store.appended[-1]["payload"]["text"] == (
-        "[Skiller] User interrupted the current tool turn."
-    )
+    assert context_store.appended[1]["payload"] == {
+        "type": "tool_result",
+        "turn_id": "turn-1",
+        "parent_sequence": None,
+        "tool_call_id": "call-1",
+        "tool": "shell",
+        "status": "INTERRUPTED",
+        "data": {"error": "interrupted"},
+        "text": None,
+        "error": "Tool execution interrupted by user",
+    }
 
 
 def test_agent_tool_execution_falls_back_to_native_tool() -> None:

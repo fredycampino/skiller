@@ -70,7 +70,7 @@ class AgentRunner:
             )
             turn_id = context_request.turn_id
             response = self.llm_model.generate(
-                config=config.config,
+                provider=config.config.llm.default(),
                 request=context_request.llm_request,
             )
             if response.ok is False:

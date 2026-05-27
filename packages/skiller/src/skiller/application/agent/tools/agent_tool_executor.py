@@ -203,18 +203,6 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 state.add(tool_result)
                 continue
 
-            # Process interruption records user feedback and stops the tool loop.
-            if tool_result is None:
-                self.context_publisher.publish_interrupt_feedback(request=request)
-                state.add(
-                    ToolExecutionResult(
-                        tool_call_id=request.turn_id,
-                        tool="agent",
-                        status=ToolExecutionStatus.INTERRUPTED,
-                    )
-                )
-                return state.finish()
-
             agent_tool_result = AgentToolResult(
                 turn_id=request.turn_id,
                 tool_call_id=agent_tool_call.tool_call_id,
@@ -229,6 +217,17 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 entry=tool_result_entry,
                 config=request.event_config,
             )
+
+            if tool_result.status == ToolResultStatus.INTERRUPTED:
+                state.add(
+                    ToolExecutionResult(
+                        tool_call_id=agent_tool_call.tool_call_id,
+                        tool=agent_tool_call.tool,
+                        status=ToolExecutionStatus.INTERRUPTED,
+                    )
+                )
+                return state.finish()
+
             state.add(
                 ToolExecutionResult(
                     tool_call_id=raw_tool_call.id,
@@ -243,7 +242,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         self,
         run_id: str,
         prepared: PreparedTool,
-    ) -> ToolResult | None:
+    ) -> ToolResult:
         tool = prepared.tool
         if not isinstance(tool, ProcessTool):
             raise ValueError(f"Agent tool '{prepared.name}' is not a ProcessTool")
@@ -264,11 +263,23 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             )
         )
         if wait_result.status == ToolProcessWaitStatus.INTERRUPTED:
-            return None
+            return ToolResult(
+                name=prepared.name,
+                status=ToolResultStatus.INTERRUPTED,
+                data={"error": "interrupted"},
+                text=None,
+                error="Tool execution interrupted by user",
+            )
         if wait_result.status == ToolProcessWaitStatus.TIMEOUT:
-            return self._timeout_result(prepared=prepared, timeout=process_request.timeout)
+            return ToolResult(
+                name=prepared.name,
+                status=ToolResultStatus.TIMEOUT,
+                data={"error": "timeout", "timeout": process_request.timeout},
+                text=None,
+                error=f"Tool '{prepared.name}' timed out after {process_request.timeout}s",
+            )
         if wait_result.output is None:
-            raise ValueError("Tool process completed without output")
+            raise RuntimeError("Process runner returned completed status without output")
 
         return tool.result(wait_result.output)
 
@@ -277,20 +288,6 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         if interrupted:
             self.steering.append(run_id, SteeringAgentMessage(text="Agent interrupted by user"))
         return interrupted
-
-    def _timeout_result(
-        self,
-        *,
-        prepared: PreparedTool,
-        timeout: int,
-    ) -> ToolResult:
-        return ToolResult(
-            name=prepared.name,
-            status=ToolResultStatus.FAILED,
-            data={"error": "timeout", "timeout": timeout},
-            text=None,
-            error=f"Tool '{prepared.name}' timed out after {timeout}s",
-        )
 
     def _parse_tool_arguments(
         self,

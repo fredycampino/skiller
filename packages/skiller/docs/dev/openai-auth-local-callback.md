@@ -175,7 +175,7 @@ Current validation payload:
 
 ```json
 {
-  "model": "gpt-5.2",
+  "model": "gpt-5.5",
   "store": false,
   "stream": true,
   "instructions": "You are a credential validation probe. Reply only with the requested marker.",

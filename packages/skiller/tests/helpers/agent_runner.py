@@ -14,7 +14,10 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
+from skiller.domain.agent.agent_config_model import (
+    AgentEventOutputConfig,
+    AgentLLMProviderConfig,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -51,6 +54,15 @@ class _NullSteering:
     def pop(self, run_id: str, item_type: SteeringItemType) -> list[SteeringItem]:
         _ = run_id, item_type
         return []
+
+
+class _FakeLLMClientProvider:
+    def __init__(self, llm: LLMPort) -> None:
+        self.llm = llm
+
+    def create(self, provider: AgentLLMProviderConfig) -> LLMPort:
+        _ = provider
+        return self.llm
 
 
 class _FakeRunStore:
@@ -278,11 +290,7 @@ def build_agent_runner(
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
     run_store = _FakeRunStore()
-    llm_model = LLMModelManager(
-        create_null_client=lambda provider: llm,
-        create_fake_client=lambda provider: llm,
-        create_openai_client=lambda provider: llm,
-    )
+    llm_model = LLMModelManager(client_provider=_FakeLLMClientProvider(llm))
     return AgentRunner(
         agent_context_store=agent_context_store,
         llm_model=llm_model,

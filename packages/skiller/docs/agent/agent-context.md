@@ -319,7 +319,7 @@ The window is a read limit, not summarization or compaction.
 
 Inputs:
 
-- `llm.providers.<name>.context_window_tokens`: provider context capacity.
+- `providers.<name>.context_window_tokens`: provider context capacity.
 - `context.compaction.max_total_tokens_ratio`: fraction of the provider capacity used
   for context reads.
 

@@ -9,10 +9,14 @@ from skiller.domain.agent.agent_context_model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.llm_model import (
+    LLMAssistantMessage,
     LLMMessage,
     LLMRequest,
+    LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolMessage,
+    LLMUserMessage,
 )
 from skiller.domain.tool.tool_contract import ToolDefinition
 
@@ -21,12 +25,14 @@ class AgentPromptBuilder:
     def build_request(
         self,
         *,
+        model: str,
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],
     ) -> LLMRequest:
         return LLMRequest(
             messages=tuple(self._build_messages(system=system, entries=entries)),
+            model=model,
             tools=tools,
         )
 
@@ -36,7 +42,7 @@ class AgentPromptBuilder:
         system: str,
         entries: list[AgentContextEntry],
     ) -> list[LLMMessage]:
-        messages = [LLMMessage.system(system)]
+        messages = [LLMSystemMessage(system)]
         pending_turn: _PendingAssistantTurn | None = None
         tool_call_ids_by_turn_id: dict[str, list[str]] = {}
 
@@ -45,7 +51,7 @@ class AgentPromptBuilder:
             if pending_turn is None:
                 return
             messages.append(
-                LLMMessage.assistant(
+                LLMAssistantMessage(
                     pending_turn.content,
                     tool_calls=tuple(pending_turn.tool_calls),
                 )
@@ -58,7 +64,7 @@ class AgentPromptBuilder:
             if isinstance(entry.payload, AgentUserMessagePayload):
                 flush_pending_turn()
                 if entry.payload.text:
-                    messages.append(LLMMessage.user(entry.payload.text))
+                    messages.append(LLMUserMessage(entry.payload.text))
                 continue
             if isinstance(entry.payload, AgentAssistantMessagePayload):
                 if pending_turn is None or pending_turn.turn_id != turn_id:
@@ -85,7 +91,7 @@ class AgentPromptBuilder:
                     tool_call_ids_by_turn_id=tool_call_ids_by_turn_id,
                 )
                 pending_turn.tool_results.append(
-                    LLMMessage.tool(
+                    LLMToolMessage(
                         self._tool_result_content(entry.payload),
                         tool_call_id=tool_call_id,
                     )

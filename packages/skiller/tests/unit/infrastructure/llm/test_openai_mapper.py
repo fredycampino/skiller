@@ -5,13 +5,14 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.domain.agent.llm_model import (
-    LLMMessage,
     LLMRequest,
     LLMResponseFormat,
     LLMResponseFormatType,
+    LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolChoice,
+    LLMUserMessage,
 )
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
@@ -48,8 +49,8 @@ class _ShellTool(ToolDefinition[ToolRequest]):
 def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
     request = LLMRequest(
         messages=(
-            LLMMessage.system("system"),
-            LLMMessage.user("hello", name="tester"),
+            LLMSystemMessage("system"),
+            LLMUserMessage("hello", name="tester"),
         ),
         model="gpt-5.2",
         tools=(
@@ -68,7 +69,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
         parallel_tool_calls=True,
     )
 
-    kwargs = to_openai_kwargs(request, default_model="default-model")
+    kwargs = to_openai_kwargs(request)
 
     assert kwargs == {
         "model": "gpt-5.2",

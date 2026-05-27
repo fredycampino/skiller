@@ -9,7 +9,6 @@ from skiller.domain.agent.agent_config_model import (
     AgentContextConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
-    AgentLLMClientType,
     AgentLLMConfig,
     AgentLLMProviderConfig,
     AgentLLMProviderType,
@@ -27,19 +26,6 @@ from skiller.infrastructure.config.agent_config_schema import (
     LLMProviderConfigModel,
     LoopConfigModel,
 )
-
-SUPPORTED_LLM_PROVIDER_MODELS = {
-    AgentLLMProviderType.NULL: ("null",),
-    AgentLLMProviderType.FAKE: ("fake", "fake-llm"),
-    AgentLLMProviderType.MINIMAX: ("MiniMax-M2.5", "MiniMax-M2.7"),
-    AgentLLMProviderType.OPENAI: ("gpt-5.2", "gpt-5.2-mini"),
-}
-SUPPORTED_LLM_PROVIDER_CLIENT_TYPES = {
-    AgentLLMProviderType.NULL: (AgentLLMClientType.NULL,),
-    AgentLLMProviderType.FAKE: (AgentLLMClientType.FAKE,),
-    AgentLLMProviderType.MINIMAX: (AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,),
-    AgentLLMProviderType.OPENAI: (AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,),
-}
 
 
 class AgentConfigMapper:
@@ -61,16 +47,20 @@ class AgentConfigMapper:
         except ValidationError as exc:
             raise ValueError(f"Invalid agent config: {exc}") from exc
 
-        default_provider = self.env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
-        providers: dict[str, AgentLLMProviderConfig] = {}
-        for provider_id, provider in config.llm.providers.items():
-            selected = provider_id == default_provider
+        default_provider = _provider_type(
+            self.env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
+        )
+        providers: list[AgentLLMProviderConfig] = []
+        for provider_id, provider in config.providers.items():
+            provider_type = _provider_type(provider_id)
+            selected = provider_type == default_provider
             provider_config = _build_provider_config(
+                provider_type=provider_type,
                 provider=provider,
                 selected=selected,
                 env=self.env,
             )
-            providers[provider_id] = provider_config
+            providers.append(provider_config)
 
         compaction = AgentContextCompactionConfig(
             enabled=config.context.compaction.enabled,
@@ -81,7 +71,7 @@ class AgentConfigMapper:
         )
         llm = AgentLLMConfig(
             default_provider=default_provider,
-            providers=providers,
+            providers=tuple(providers),
         )
         loop = _build_loop_config(config.loop, env=self.env)
         event_output = _build_event_output_config(config.event_output, env=self.env)
@@ -101,22 +91,38 @@ class AgentConfigMapper:
 
 def _build_provider_config(
     *,
+    provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> AgentLLMProviderConfig:
-    model = _provider_env(provider.provider, selected, "MODEL", env) or provider.model
-    _validate_provider_client_type(provider=provider)
-    _validate_provider_model(provider=provider.provider, model=model)
+    model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
+    _validate_provider_model(provider_type=provider_type, model=model)
+    api_key = _api_key_for_provider(
+        provider_type=provider_type,
+        provider=provider,
+        selected=selected,
+        env=env,
+    )
+    credentials_file = provider.credentials_file
+    _validate_provider_credentials(
+        provider_type=provider_type,
+        api_key=api_key,
+        credentials_file=credentials_file,
+    )
 
     return AgentLLMProviderConfig(
-        provider=provider.provider,
-        client_type=provider.client_type,
+        provider_type=provider_type,
         model=model,
-        api_key=_resolve_api_key(provider=provider, selected=selected, env=env),
-        base_url=_provider_env(provider.provider, selected, "BASE_URL", env) or provider.base_url,
-        timeout_seconds=_provider_timeout_seconds(provider=provider, selected=selected, env=env),
+        api_key=api_key,
+        timeout_seconds=_provider_timeout_seconds(
+            provider_type=provider_type,
+            provider=provider,
+            selected=selected,
+            env=env,
+        ),
         context_window_tokens=provider.context_window_tokens,
+        credentials_file=credentials_file,
     )
 
 
@@ -140,36 +146,73 @@ def _build_tool_runtime_configs(
     return ToolRuntimeConfigs(items=tuple(runtime_config_items))
 
 
-def _validate_provider_client_type(
-    *,
-    provider: LLMProviderConfigModel,
-) -> None:
-    supported_client_types = SUPPORTED_LLM_PROVIDER_CLIENT_TYPES.get(provider.provider, ())
-    if provider.client_type in supported_client_types:
-        return
-
-    supported_values = ", ".join(client_type.value for client_type in supported_client_types)
-    raise ValueError(
-        f"Unsupported client_type='{provider.client_type.value}' "
-        f"for provider='{provider.provider.value}'. "
-        f"Supported client types: {supported_values or 'none'}."
-    )
-
-
 def _validate_provider_model(
     *,
-    provider: AgentLLMProviderType,
+    provider_type: AgentLLMProviderType,
     model: str,
 ) -> None:
-    supported_models = SUPPORTED_LLM_PROVIDER_MODELS.get(provider, ())
+    supported_models = _supported_provider_models(provider_type)
     if model in supported_models:
         return
 
     supported_values = ", ".join(supported_models)
     raise ValueError(
-        f"Unsupported model='{model}' for provider='{provider.value}'. "
+        f"Unsupported model='{model}' for provider='{provider_type.value}'. "
         f"Supported models: {supported_values or 'none'}."
     )
+
+
+def _supported_provider_models(provider_type: AgentLLMProviderType) -> tuple[str, ...]:
+    if provider_type == AgentLLMProviderType.NULL:
+        return ("null1",)
+    if provider_type == AgentLLMProviderType.FAKE:
+        return ("model1",)
+    if provider_type == AgentLLMProviderType.MINIMAX:
+        return ("MiniMax-M2.5", "MiniMax-M2.7")
+    if provider_type == AgentLLMProviderType.CODEX:
+        return ("gpt-5.3-codex", "gpt-5.4", "gpt-5.5")
+    raise ValueError(f"Unsupported LLM provider: {provider_type.value}")
+
+
+def _api_key_for_provider(
+    *,
+    provider_type: AgentLLMProviderType,
+    provider: LLMProviderConfigModel,
+    selected: bool,
+    env: Mapping[str, str],
+) -> str | None:
+    if provider_type == AgentLLMProviderType.CODEX:
+        return None
+    if provider_type == AgentLLMProviderType.FAKE:
+        return None
+    if provider_type == AgentLLMProviderType.NULL:
+        return None
+    return _resolve_api_key(
+        provider_type=provider_type,
+        provider=provider,
+        selected=selected,
+        env=env,
+    )
+
+
+def _validate_provider_credentials(
+    *,
+    provider_type: AgentLLMProviderType,
+    api_key: str | None,
+    credentials_file: str | None,
+) -> None:
+    if provider_type == AgentLLMProviderType.CODEX:
+        if credentials_file is None or not credentials_file.strip():
+            raise ValueError("LLM provider requires credentials_file")
+        return
+
+    if provider_type == AgentLLMProviderType.FAKE:
+        return
+    if provider_type == AgentLLMProviderType.NULL:
+        return
+
+    if api_key is None:
+        raise ValueError("LLM provider requires api_key")
 
 
 def _build_loop_config(
@@ -217,11 +260,12 @@ def _build_event_output_config(
 
 def _resolve_api_key(
     *,
+    provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> str:
-    value = _provider_env(provider.provider, selected, "API_KEY", env)
+    value = _provider_env(provider_type, selected, "API_KEY", env)
     if value is not None:
         return value
 
@@ -247,16 +291,17 @@ def _resolve_api_key(
 
 def _provider_timeout_seconds(
     *,
+    provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
 ) -> float:
-    value = _provider_env(provider.provider, selected, "TIMEOUT_SECONDS", env)
+    value = _provider_env(provider_type, selected, "TIMEOUT_SECONDS", env)
     if value is None:
         return provider.timeout_seconds
     return _positive_float_from_env(
         value,
-        f"AGENT_{provider.provider.value.upper()}_TIMEOUT_SECONDS",
+        f"AGENT_{provider_type.value.upper()}_TIMEOUT_SECONDS",
     )
 
 
@@ -270,6 +315,13 @@ def _provider_env(
         return None
     env_name = f"AGENT_{provider_type.value.upper()}_{name}"
     return env.get(env_name)
+
+
+def _provider_type(provider_id: str) -> AgentLLMProviderType:
+    try:
+        return AgentLLMProviderType(provider_id)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported LLM provider: {provider_id}") from exc
 
 
 def _env_bool(env_name: str, default: bool, env: Mapping[str, str]) -> bool:

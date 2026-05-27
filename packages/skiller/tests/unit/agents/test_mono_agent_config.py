@@ -23,4 +23,8 @@ def test_mono_shell_config_is_restricted() -> None:
         "git",
         "pytest",
         "ruff",
+        "python",
+        "python3",
+        "echo",
+        "sleep",
     ]

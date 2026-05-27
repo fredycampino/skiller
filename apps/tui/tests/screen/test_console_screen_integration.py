@@ -16,14 +16,23 @@ from apps.tui.tests.support import (
     patched_to_thread,
 )
 from stui.di.strings import TuiStrings
+from stui.port.run_port import (
+    RunDispatch,
+    RunDispatchError,
+    RunDispatchErrorKind,
+    RunRuntimeStatus,
+    RunRuntimeStatusKind,
+)
 from stui.screen import console_screen as console_screen_module
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
 from stui.screen.notify_action_view import NotifyActionView
+from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.transcript_log import TranscriptLog
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
 )
+from stui.usecase import run_command_use_case as run_command_use_case_module
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     AgentStepFinalOutputItem,
@@ -323,6 +332,31 @@ def test_console_screen_shows_icon_when_session_is_main() -> None:
     asyncio.run(run())
 
 
+def test_console_screen_shows_running_status_after_run_command() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=CreatedRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "r", "u", "n", " ", "c", "h", "a", "t", "enter")
+            await pilot.pause()
+
+            status = app.query_one("#status", ScreenStatusView)
+            prompt_row = app.query_one("#prompt-row")
+            assert app.state.view_status.kind == ViewStatusKind.RUNNING
+            assert "Running" in str(status.render())
+            assert status.display is True
+            assert status.size.height >= 1
+            assert status.region.bottom == prompt_row.region.y
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
 def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
@@ -516,7 +550,25 @@ def _notify_action_state() -> NotifyActionState:
     )
 
 
-def test_run_console_screen_enables_textual_mouse(monkeypatch: pytest.MonkeyPatch) -> None:
+class CreatedRunPort:
+    def __init__(self) -> None:
+        self.called_with: list[str] = []
+
+    def run(self, raw_args: str) -> RunDispatch:
+        self.called_with.append(raw_args)
+        return RunDispatch(
+            run_id="run-1234",
+            status=RunRuntimeStatusKind.CREATED,
+            worker_pid=1,
+            error=RunDispatchError(kind=RunDispatchErrorKind.NONE, message=""),
+        )
+
+    def status(self, run_id: str) -> RunRuntimeStatus | None:
+        _ = run_id
+        return None
+
+
+def test_run_console_screen_disables_textual_mouse(monkeypatch: pytest.MonkeyPatch) -> None:
     viewmodel = build_viewmodel(
         session_key="main",
         run_port=NeverCalledRunPort(),
@@ -555,7 +607,7 @@ def test_run_console_screen_enables_textual_mouse(monkeypatch: pytest.MonkeyPatc
     result = console_screen_module.run_console_screen(session_key="main")
 
     assert result == "main"
-    assert run_calls == [{"mouse": True}]
+    assert run_calls == [{"mouse": False}]
 
 
 def test_console_screen_escape_interrupts_running_chat_agent() -> None:

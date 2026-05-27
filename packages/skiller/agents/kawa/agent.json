@@ -4,7 +4,7 @@
   },
   "loop": {
     "max_turns": 10,
-    "max_tool_calls": 8
+    "max_tool_calls": 5
   },
   "tools": {
     "shell": {
@@ -17,18 +17,21 @@
         "find",
         "rg",
         "grep",
+        "sed",
         "head",
         "tail",
+        "sort",
         "wc",
         "nl",
         "cat",
         "git",
-        "ruff",
         "pytest",
-        "uv",
+        "ruff",
         "python",
         "python3",
         "skiller",
+        "sleep",
+        "echo",
         "date"
       ]
     },

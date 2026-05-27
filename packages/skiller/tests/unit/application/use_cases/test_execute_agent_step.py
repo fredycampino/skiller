@@ -30,12 +30,15 @@ from skiller.domain.agent.agent_stats_model import (
     AgentContextUsageStats,
 )
 from skiller.domain.agent.llm_model import (
+    LLMAssistantMessage,
     LLMMessage,
     LLMRequest,
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolMessage,
     LLMUsage,
+    LLMUserMessage,
 )
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
@@ -567,7 +570,7 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
     }
     assert len(llm.calls) == 1
     _assert_system_message_contains(llm.calls[0].messages[0], step_system="Be useful.")
-    assert llm.calls[0].messages[1:] == (LLMMessage.user("Hi"),)
+    assert llm.calls[0].messages[1:] == (LLMUserMessage("Hi"),)
     assert llm.calls[0].tools == ()
     assert store.updated == [
         {
@@ -655,12 +658,12 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             "tool_call_count": 1,
             "stop_reason": "final",
             "usage": {
-                "prompt_tokens": 100,
-                "completion_tokens": 25,
-                "total_tokens": 125,
-                "provider": "openai",
-                "model": "fake",
-            },
+                    "prompt_tokens": 100,
+                    "completion_tokens": 25,
+                    "total_tokens": 125,
+                    "provider": "fake",
+                    "model": "fake",
+                },
         },
     )
     assert tool_manager.get_tool_definitions_calls == [["notify"]]
@@ -682,12 +685,12 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
     ]
     assert len(llm.calls) == 2
     _assert_system_message_contains(llm.calls[0].messages[0], step_system="Be useful.")
-    assert llm.calls[0].messages[1:] == (LLMMessage.user("Hi"),)
+    assert llm.calls[0].messages[1:] == (LLMUserMessage("Hi"),)
     assert [tool.name for tool in llm.calls[0].tools] == ["notify"]
     _assert_system_message_contains(llm.calls[1].messages[0], step_system="Be useful.")
     assert llm.calls[1].messages[1:] == (
-        LLMMessage.user("Hi"),
-        LLMMessage.assistant(
+        LLMUserMessage("Hi"),
+        LLMAssistantMessage(
             tool_calls=(
                 LLMToolCall(
                     id="openai-call-1",
@@ -698,7 +701,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 ),
             )
         ),
-        LLMMessage.tool("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage("sent", tool_call_id="openai-call-1"),
     )
     assert [tool.name for tool in llm.calls[1].tools] == ["notify"]
 

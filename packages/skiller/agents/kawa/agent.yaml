@@ -1,0 +1,32 @@
+name: kawa
+description: "QA agent for Skiller agent runtime prompts"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "What QA prompt or runtime behavior should I validate? Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: qa_agent
+
+  - agent: qa_agent
+    system:
+      file: "./system.md"
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - shell
+      - files
+    max_turns: 10
+    next: ask_user
+
+  - notify: done
+    message: "Kawa QA closed."

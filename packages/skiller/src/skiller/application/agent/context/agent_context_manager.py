@@ -37,13 +37,15 @@ class AgentContextManager:
         context: AgentContext,
         config: AgentRunnerConfig,
     ) -> AgentContextLLMRequest:
+        provider = config.config.llm.default()
         max_ratio = config.config.context.compaction.max_total_tokens_ratio
         context_window_tokens = int(
-            config.config.llm.default().context_window_tokens * max_ratio,
+            provider.context_window_tokens * max_ratio,
         )
         entries = self.agent_context_store.list_entries(context_id=context.context_id)
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
         llm_request = self.prompt_builder.build_request(
+            model=provider.model,
             system=config.system,
             entries=entries,
             tools=config.tools,
@@ -63,9 +65,10 @@ class AgentContextManager:
         context: AgentContext,
         config: AgentRunnerConfig,
     ) -> AgentContextLLMRequest:
+        provider = config.config.llm.default()
         max_ratio = config.config.context.compaction.max_total_tokens_ratio
         context_window_tokens = int(
-            config.config.llm.default().context_window_tokens * max_ratio,
+            provider.context_window_tokens * max_ratio,
         )
         entries = self.agent_context_store.list_context_window(
             context_id=context.context_id,
@@ -73,6 +76,7 @@ class AgentContextManager:
         )
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
         llm_request = self.prompt_builder.build_request(
+            model=provider.model,
             system=config.system,
             entries=entries,
             tools=config.tools,

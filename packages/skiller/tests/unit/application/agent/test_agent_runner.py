@@ -23,12 +23,15 @@ from skiller.domain.agent.agent_stats_model import (
     AgentContextUsageStats,
 )
 from skiller.domain.agent.llm_model import (
-    LLMMessage,
+    LLMAssistantMessage,
     LLMRequest,
     LLMResponse,
+    LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolMessage,
     LLMUsage,
+    LLMUserMessage,
 )
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
@@ -439,8 +442,8 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
     assert tool_manager.execute_prepared_calls == []
     assert len(llm.calls) == 1
     assert llm.calls[0].messages == (
-        LLMMessage.system("You are a support agent."),
-        LLMMessage.user("Inspect the issue."),
+        LLMSystemMessage("You are a support agent."),
+        LLMUserMessage("Inspect the issue."),
     )
     assert [tool.name for tool in llm.calls[0].tools] == ["notify"]
     assert [item["entry_type"] for item in context_store.appended] == [
@@ -521,24 +524,24 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
     assert result.finish == AgentRunnerFinish.FINAL
     assert result.usage == LLMUsage(
         prompt_tokens=100,
-        completion_tokens=25,
-        total_tokens=125,
-        provider="openai",
-        model="fake",
-    )
+            completion_tokens=25,
+            total_tokens=125,
+            provider="fake",
+            model="fake",
+        )
     executed_request = tool_manager.execute_prepared_calls[0].request
     assert isinstance(executed_request, AgentToolRequest)
     assert executed_request.tool == "notify"
     assert executed_request.tool_call_id == "openai-call-1"
     assert llm.calls[0].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
     )
     assert [tool.name for tool in llm.calls[0].tools] == ["notify"]
     assert llm.calls[1].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
-        LLMMessage.assistant(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
+        LLMAssistantMessage(
             tool_calls=(
                 LLMToolCall(
                     id="openai-call-1",
@@ -549,7 +552,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
                 ),
             )
         ),
-        LLMMessage.tool("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage("sent", tool_call_id="openai-call-1"),
     )
     assert [call["event_type"] for call in append_event.calls] == [
         RuntimeEventType.AGENT_TOOL_CALL,
@@ -629,9 +632,9 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
     ]
     assert context_store.appended[1]["payload"]["text"] == "I should send a notification."
     assert llm.calls[1].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
-        LLMMessage.assistant(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
+        LLMAssistantMessage(
             "I should send a notification.",
             tool_calls=(
                 LLMToolCall(
@@ -643,7 +646,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
                 ),
             ),
         ),
-        LLMMessage.tool("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage("sent", tool_call_id="openai-call-1"),
     )
 
 def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() -> None:
@@ -697,8 +700,8 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
     assert tool_manager.execute_prepared_calls == []
     assert len(llm.calls) == 2
     assert llm.calls[1].messages[:2] == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
     )
     assert llm.calls[1].messages[2].content.startswith(
         "[Skiller] Invalid tool call arguments in step 'support_agent' for tool 'notify':"
@@ -758,9 +761,9 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
         "text": "[Skiller] max_turns exhausted before a final answer.",
     }
     assert llm.calls[0].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
-        LLMMessage.user(
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
+        LLMUserMessage(
             "[Skiller] Last allowed turn. "
             "If you can finish, return the final answer now. "
             "Otherwise stop and wait for the user to continue."
@@ -821,8 +824,8 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
     assert len(tool_manager.execute_prepared_calls) == 0
     assert len(llm.calls) == 1
     assert llm.calls[0].messages == (
-        LLMMessage.system("Be useful."),
-        LLMMessage.user("Hi"),
+        LLMSystemMessage("Be useful."),
+        LLMUserMessage("Hi"),
     )
 
 

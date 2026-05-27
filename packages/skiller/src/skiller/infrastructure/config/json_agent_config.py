@@ -52,17 +52,19 @@ class JsonAgentConfig(AgentConfigPort):
         return AgentConfigValidation.valid()
 
     def _load_config(self, *, config_path: Path | None = None) -> dict[str, object]:
-        resolved_config_path = self._resolve_config_path(config_path=config_path)
-        if not resolved_config_path.exists():
+        global_config_path = self.config_path_global.expanduser()
+        override_config_path = self._resolve_override_config_path(config_path=config_path)
+        if not global_config_path.exists() and override_config_path is None:
             raise FileNotFoundError(
-                f"Missing agent config file: {_display_path(resolved_config_path)}"
+                f"Missing agent config file: {_display_path(global_config_path)}"
             )
-        try:
-            payload = json.loads(resolved_config_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            raise
-        if not isinstance(payload, dict):
-            raise ValueError(f"Config file must contain a JSON object: {resolved_config_path}")
+
+        payload: dict[str, object] = {}
+        if global_config_path.exists():
+            payload = _load_json_object(global_config_path)
+        if override_config_path is not None:
+            override = _load_json_object(override_config_path)
+            return _override_config(payload, override)
         return payload
 
     def _resolve_config_path(self, *, config_path: Path | None = None) -> Path:
@@ -77,14 +79,25 @@ class JsonAgentConfig(AgentConfigPort):
 
         return self.config_path_global.expanduser()
 
+    def _resolve_override_config_path(self, *, config_path: Path | None = None) -> Path | None:
+        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
+        if explicit_path:
+            return Path(explicit_path).expanduser()
+
+        if config_path is None:
+            return None
+
+        expanded_config_path = config_path.expanduser()
+        if expanded_config_path.exists():
+            return expanded_config_path
+        return None
+
 
 def _validation_error_code(message: str) -> AgentConfigValidationErrorCode:
     if message.startswith("Invalid agent config:"):
         return AgentConfigValidationErrorCode.INVALID_SCHEMA
     if message.startswith("Missing default LLM provider config:"):
         return AgentConfigValidationErrorCode.DEFAULT_PROVIDER_NOT_FOUND
-    if message.startswith("Unsupported client_type="):
-        return AgentConfigValidationErrorCode.PROVIDER_CLIENT_TYPE_UNSUPPORTED
     if message.startswith("Unsupported model="):
         return AgentConfigValidationErrorCode.PROVIDER_MODEL_UNSUPPORTED
     if message.startswith("Missing environment variable for api_key_env:"):
@@ -108,3 +121,19 @@ def _display_path(path: Path) -> str:
         return f"~/{relative}"
     except ValueError:
         return str(expanded)
+
+
+def _load_json_object(path: Path) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Config file must contain a JSON object: {path}")
+    return payload
+
+
+def _override_config(
+    base: dict[str, object],
+    override: dict[str, object],
+) -> dict[str, object]:
+    merged = dict(base)
+    merged.update(override)
+    return merged

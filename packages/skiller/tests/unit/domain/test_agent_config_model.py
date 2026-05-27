@@ -6,7 +6,6 @@ from skiller.domain.agent.agent_config_model import (
     AgentContextConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
-    AgentLLMClientType,
     AgentLLMConfig,
     AgentLLMProviderConfig,
     AgentLLMProviderType,
@@ -19,22 +18,20 @@ pytestmark = pytest.mark.unit
 def test_agent_config_uses_runtime_defaults_for_agent_sections() -> None:
     config = AgentConfig(
         llm=AgentLLMConfig(
-            default_provider="minimax-main",
-            providers={
-                "minimax-main": AgentLLMProviderConfig(
-                    provider=AgentLLMProviderType.MINIMAX,
-                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+            default_provider=AgentLLMProviderType.MINIMAX,
+            providers=(
+                AgentLLMProviderConfig(
+                    provider_type=AgentLLMProviderType.MINIMAX,
                     api_key="secret",
-                    base_url="https://api.minimax.io/v1",
                     model="MiniMax-M2.5",
                     timeout_seconds=30.0,
                     context_window_tokens=1_000_000,
                 ),
-            },
+            ),
         ),
     )
 
-    assert config.llm.default_provider == "minimax-main"
+    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
     assert config.llm.default().api_key == "secret"
     assert config.loop.max_turns == 10
     assert config.loop.max_tool_calls == 5
@@ -49,18 +46,16 @@ def test_agent_config_uses_runtime_defaults_for_agent_sections() -> None:
 def test_agent_config_accepts_explicit_sections() -> None:
     config = AgentConfig(
         llm=AgentLLMConfig(
-            default_provider="minimax-main",
-            providers={
-                "minimax-main": AgentLLMProviderConfig(
-                    provider=AgentLLMProviderType.MINIMAX,
-                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+            default_provider=AgentLLMProviderType.MINIMAX,
+            providers=(
+                AgentLLMProviderConfig(
+                    provider_type=AgentLLMProviderType.MINIMAX,
                     api_key="secret",
-                    base_url="https://api.minimax.io/v1",
                     model="MiniMax-M2.5",
                     timeout_seconds=30.0,
                     context_window_tokens=1_000_000,
                 ),
-            },
+            ),
         ),
         loop=AgentLoopConfig(max_turns=20, max_tool_calls=7),
         context=AgentContextConfig(
@@ -81,11 +76,8 @@ def test_agent_config_accepts_explicit_sections() -> None:
 
     provider = config.llm.default()
 
-    assert config.llm.default_provider == "minimax-main"
-    assert provider.provider == AgentLLMProviderType.MINIMAX
-    assert provider.client_type == AgentLLMClientType.OPENAI_CHAT_COMPLETIONS
+    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
     assert provider.api_key == "secret"
-    assert provider.base_url == "https://api.minimax.io/v1"
     assert provider.model == "MiniMax-M2.5"
     assert provider.timeout_seconds == 30.0
     assert provider.context_window_tokens == 1_000_000
@@ -100,18 +92,16 @@ def test_agent_config_accepts_explicit_sections() -> None:
 
 
 def test_agent_llm_config_requires_default_provider_config() -> None:
-    with pytest.raises(RuntimeError, match="Missing default LLM provider config: missing"):
+    with pytest.raises(RuntimeError, match="Missing default LLM provider config: codex"):
         AgentLLMConfig(
-            default_provider="missing",
-            providers={
-                "minimax-main": AgentLLMProviderConfig(
-                    provider=AgentLLMProviderType.MINIMAX,
-                    client_type=AgentLLMClientType.OPENAI_CHAT_COMPLETIONS,
+            default_provider=AgentLLMProviderType.CODEX,
+            providers=(
+                AgentLLMProviderConfig(
+                    provider_type=AgentLLMProviderType.MINIMAX,
                     api_key="secret",
-                    base_url="https://api.minimax.io/v1",
                     model="MiniMax-M2.5",
                     timeout_seconds=30.0,
                     context_window_tokens=1_000_000,
                 ),
-            },
+            ),
         )

@@ -19,6 +19,22 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-beta.8 - 2026-05-28
+
+### Added
+- Add typed LLM provider/model domain objects and provider selection wiring.
+- Add flow-oriented documentation pages and move legacy skill docs under flows.
+
+### Changed
+- Refine LLM model mapping and provider configuration validation.
+- Update CLI, runtime, config, event, and agent documentation for current flow terminology.
+
+### Fixed
+- Improve OpenAI mapper coverage and Kawa shell command configuration tests.
+
+### Notes
+- Includes PR #43 and PR #44.
+
 ## 1.0.0-beta.7 - 2026-05-27
 
 ### Added

@@ -107,7 +107,6 @@ def test_json_agent_config_reads_codex_provider(tmp_path) -> None:
 
     assert config.llm.default_provider == AgentLLMProviderType.CODEX
     assert provider.type == AgentLLMProviderType.CODEX
-    assert provider.api_key is None
     assert provider.credentials_file == str(credentials_path)
 
 

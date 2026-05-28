@@ -4,7 +4,9 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMModel,
+)
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -71,7 +73,7 @@ def to_port_llm_response(
     *,
     fallback_model: AgentLLMModel,
 ) -> LLMResponse:
-    raw_output_items = _value(stream_result.response, "output")
+    raw_output_items = _read_response_field(stream_result.response, "output")
     output_items = raw_output_items if isinstance(raw_output_items, list) else []
     if not output_items:
         output_items = list(stream_result.output_items)
@@ -80,42 +82,39 @@ def to_port_llm_response(
     content = streamed_text or None
 
     if content is None:
-        output_text = _value(stream_result.response, "output_text")
+        output_text = _read_response_field(stream_result.response, "output_text")
         if isinstance(output_text, str) and output_text:
             content = output_text
 
     if content is None:
         text_parts: list[str] = []
         for output_item in output_items:
-            if _value(output_item, "type") != "message":
+            if _read_response_field(output_item, "type") != "message":
                 continue
 
-            message_content = _value(output_item, "content")
+            message_content = _read_response_field(output_item, "content")
             if not isinstance(message_content, list):
                 continue
 
             for content_part in message_content:
-                if _value(content_part, "type") not in {"output_text", "text"}:
+                if _read_response_field(content_part, "type") not in {"output_text", "text"}:
                     continue
 
-                text = _value(content_part, "text")
+                text = _read_response_field(content_part, "text")
                 if isinstance(text, str):
                     text_parts.append(text)
 
         message_text = "".join(text_parts)
         content = message_text or None
 
-    response_model = _value(stream_result.response, "model")
+    response_model = _read_response_field(stream_result.response, "model")
     model = fallback_model
-    if isinstance(response_model, str) and response_model.strip():
-        try:
-            model = AgentLLMModel(response_model)
-        except ValueError:
-            model = fallback_model
+    if response_model == fallback_model.value:
+        model = fallback_model
 
-    status = _value(stream_result.response, "status")
+    status = _read_response_field(stream_result.response, "status")
     finish_reason = status if isinstance(status, str) and status else None
-    usage = _to_port_usage(_value(stream_result.response, "usage"))
+    usage = _to_port_usage(_read_response_field(stream_result.response, "usage"))
 
     return LLMResponse(
         ok=True,
@@ -202,12 +201,12 @@ def _response_format_value(response_format: LLMResponseFormat) -> dict[str, obje
 def _to_port_tool_calls(output_items: list[object]) -> tuple[LLMToolCall, ...]:
     tool_calls: list[LLMToolCall] = []
     for output_item in output_items:
-        if _value(output_item, "type") != "function_call":
+        if _read_response_field(output_item, "type") != "function_call":
             continue
 
-        call_id = _value(output_item, "call_id")
-        name = _value(output_item, "name")
-        arguments = _value(output_item, "arguments")
+        call_id = _read_response_field(output_item, "call_id")
+        name = _read_response_field(output_item, "name")
+        arguments = _read_response_field(output_item, "arguments")
         if not isinstance(call_id, str) or not isinstance(name, str):
             continue
 
@@ -234,16 +233,18 @@ def _to_port_usage(raw_usage: object) -> LLMUsage | None:
     if raw_usage is None:
         return None
     return LLMUsage(
-        prompt_tokens=_optional_int(_value(raw_usage, "input_tokens")),
-        completion_tokens=_optional_int(_value(raw_usage, "output_tokens")),
-        total_tokens=_optional_int(_value(raw_usage, "total_tokens")),
+        prompt_tokens=_optional_int(_read_response_field(raw_usage, "input_tokens")),
+        completion_tokens=_optional_int(_read_response_field(raw_usage, "output_tokens")),
+        total_tokens=_optional_int(_read_response_field(raw_usage, "total_tokens")),
     )
 
 
-def _value(source: object, key: str) -> object:
+def _read_response_field(source: object, key: str) -> object:
     try:
         value = getattr(source, key, None)
     except TypeError:
+        # Codex can finish with output=None while SDK properties still try to
+        # iterate output, for example response.output_text.
         value = None
     if value is None and isinstance(source, Mapping):
         return source.get(key)

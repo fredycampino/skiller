@@ -12,6 +12,8 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
 )
 
 pytestmark = pytest.mark.unit
@@ -86,10 +88,9 @@ def test_agent_llm_provider_list_requires_default_provider() -> None:
 
 
 def _minimax_provider() -> AgentLLMProvider:
-    return AgentLLMProvider(
-        type=AgentLLMProviderType.MINIMAX,
+    return AgentMiniMaxProvider(
         api_key="secret",
-        model="MiniMax-M2.5",
+        model=AgentMiniMaxLLMModel.M2_5,
         timeout_seconds=30.0,
         context_window_tokens=1_000_000,
     )

@@ -1,4 +1,6 @@
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentFakeLLMModel,
+)
 from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
 
 FAKE_LLM_RESPONSE_TEXT = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
@@ -9,10 +11,10 @@ class FakeLLM:
         self,
         *,
         response_text: str = FAKE_LLM_RESPONSE_TEXT,
-        model: AgentLLMModel = AgentLLMModel.MODEL1,
+        model: AgentFakeLLMModel = AgentFakeLLMModel.MODEL1,
     ) -> None:
         self.response_text = response_text
-        self.model = AgentLLMModel(model)
+        self.model = model
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         _ = request

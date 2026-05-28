@@ -15,7 +15,7 @@ Reads the current persisted state of a run and writes JSON to `stdout`.
 
 - `id`: run id.
 - `skill_source`: source used to create the run, for example `internal` or `file`.
-- `skill_ref`: runnable reference used to create the run.
+- `skill_ref`: flow reference used to create the run.
 - `status`: current persisted run status.
 - `current`: current step id, or `null` when no current step is active.
 - `context`: persisted runtime context for the run, present only with `--context`.

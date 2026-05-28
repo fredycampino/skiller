@@ -19,7 +19,7 @@ Common fields:
 
 - `id`: run id.
 - `status`: current run status.
-- `skill_ref`: runnable reference used to create the run.
+- `skill_ref`: flow reference used to create the run.
 - `current`: current step, usually present when the run is waiting.
 - `updated_at`: last update timestamp.
 

@@ -1,16 +1,16 @@
 # `skiller run`
 
-Runs a runnable and writes JSON to `stdout`.
+Runs a flow and writes JSON to `stdout`.
 
 ## Combinations
 
 | Command | Behavior | Returns |
 | --- | --- | --- |
-| `skiller run <runnable>` | Runs an internal catalog runnable. | When the run finishes or reaches a stable state. |
-| `skiller run --file ./runnable.yaml` | Runs a runnable from a file. | When the run finishes or reaches a stable state. |
-| `skiller run <runnable> --arg key=value` | Runs with explicit inputs. | When the run finishes or reaches a stable state. |
-| `skiller run <runnable> --detach` | Starts the worker without watching the run. | After the worker is started. |
-| `skiller run <runnable> --logs` | Runs and includes raw events in the output. | When the run finishes or reaches a stable state. |
+| `skiller run <flow>` | Runs an internal catalog flow. | When the run finishes or reaches a stable state. |
+| `skiller run --file ./flow.yaml` | Runs a flow from a file. | When the run finishes or reaches a stable state. |
+| `skiller run <flow> --arg key=value` | Runs with explicit inputs. | When the run finishes or reaches a stable state. |
+| `skiller run <flow> --detach` | Starts the worker without watching the run. | After the worker is started. |
+| `skiller run <flow> --logs` | Runs and includes raw events in the output. | When the run finishes or reaches a stable state. |
 
 Stable states observed by `run` without `--detach`:
 
@@ -31,15 +31,15 @@ Stable states observed by `run` without `--detach`:
 - `prompt`: text to show the user when waiting for input.
 - `logs`: raw runtime event list, present only with `--logs`.
 
-## Internal Catalog Runnable
+## Internal Catalog Flow
 
 Command:
 
 ```bash
-skiller run <runnable>
+skiller run <flow>
 ```
 
-Internal runnable ids resolve from `packages/skiller/agents/<id>/agent.yaml`.
+Internal flow ids resolve from `packages/skiller/agents/<id>/agent.yaml`.
 
 Output when the run succeeds:
 
@@ -74,12 +74,12 @@ Output when the run fails:
 }
 ```
 
-## File Runnable
+## File Flow
 
 Command:
 
 ```bash
-skiller run --file ./runnable.yaml
+skiller run --file ./flow.yaml
 ```
 
 Output:
@@ -97,7 +97,7 @@ Output:
 Command:
 
 ```bash
-skiller run <runnable> --arg owner=my-org --arg repo=my-repo
+skiller run <flow> --arg owner=my-org --arg repo=my-repo
 ```
 
 Output:
@@ -115,7 +115,7 @@ Output:
 Command:
 
 ```bash
-skiller run <runnable> --detach
+skiller run <flow> --detach
 ```
 
 Output:
@@ -136,7 +136,7 @@ finish or wait for input.
 Command:
 
 ```bash
-skiller run <runnable> --logs
+skiller run <flow> --logs
 ```
 
 Output:
@@ -154,8 +154,8 @@ Output:
       "type": "RUN_CREATE",
       "created_at": "2026-05-12T10:30:10Z",
       "payload": {
-        "skill": "runnable-id",
-        "skill_source": "internal"
+        "ref": "flow-id",
+        "source": "internal"
       }
     }
   ]

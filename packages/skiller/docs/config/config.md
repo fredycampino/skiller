@@ -3,7 +3,7 @@
 ## Precedence
 
 ```text
-env -> explicit file -> skill-local file -> global file -> default feature config.json
+env -> explicit file -> flow-local file -> global file -> default feature config.json
 ```
 
 ## env variables
@@ -21,8 +21,8 @@ User configuration files:
 - `AGENT_AGENT_CONFIG_FILE`
   - explicit agent config path
   - highest priority file source for agent-owned config
-- `agent.json` next to the current skill `agent.yaml`
-  - skill-local agent config
+- `agent.json` next to the current flow `agent.yaml`
+  - flow-local agent config
   - selected instead of the global agent config when present
 - `~/.skiller/settings/config.json`
   - general
@@ -31,7 +31,7 @@ User configuration files:
 - `~/.skiller/settings/agent.json`
   - agent only
   - agent-specific user config
-  - used only when no explicit or skill-local agent config is selected
+  - used only when no explicit or flow-local agent config is selected
 - `~/.skiller/settings/local.json`
   - server, tunnel, and local process config
   - machine-local runtime config

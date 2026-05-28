@@ -47,7 +47,7 @@ Main flow:
 - run reaches `WAITING`, `SUCCEEDED`, `FAILED`, or continues to the next step
 
 Related docs:
-- [`../skills/skill-schema.md`](../skills/skill-schema.md) for the YAML schema used by internal catalog entries and `--file` inputs
+- [`../flows/flow-schema.md`](../flows/flow-schema.md) for the YAML flow schema used by internal catalog entries and `--file` inputs
 - [`../events/context-model.md`](../events/context-model.md)
 - [`../events/event.md`](../events/event.md)
 - [`../db/schema.md`](../db/schema.md)

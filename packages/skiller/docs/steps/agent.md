@@ -48,14 +48,14 @@ System prompt from a file:
 
 - `system` (required): step-specific instruction merged with a short runtime base system supplied by Skiller on every turn.
   - string block: inline step-specific system prompt
-  - `{file: "./system.md"}`: load the prompt from a UTF-8 file next to the skill file
+  - `{file: "./system.md"}`: load the prompt from a UTF-8 file next to the flow file
 - `task` (required): user request for this run; templates are allowed.
 - `tools` (optional): allowlist of tool names for this step.
 - `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `loop.max_turns` from `agent.json`.
 - `next` (optional): next step after the agent step completes normally.
 
-`system.file` must be a relative path inside the skill directory. Absolute paths
-and paths escaping the skill directory are rejected.
+`system.file` must be a relative path inside the flow directory. Absolute paths
+and paths escaping the flow directory are rejected.
 
 Runtime-only limits:
 

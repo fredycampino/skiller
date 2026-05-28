@@ -1,10 +1,10 @@
-# Agent File Schema
+# Flow File Schema
 
 ## Status
 
 Pending design.
 
-This document describes the YAML shape used by:
+This document describes the YAML flow shape used by:
 - internal catalog entries shipped with Skiller under `packages/skiller/agents/<id>/agent.yaml`
 - external files passed through `skiller run --file ...`
 
@@ -171,7 +171,7 @@ paths and paths escaping that directory are rejected.
 
 ## Validation Rules
 
-### Skill
+### Flow
 
 - `start` must exist.
 - `steps` must not be empty.

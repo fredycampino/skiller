@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMRequest,
@@ -83,7 +84,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
             ),
             LLMToolMessage("pwd output", tool_call_id="call_1"),
         ),
-        model="gpt-5.4",
+        model=AgentCodexLLMModel.GPT_5_4,
         tools=(_ShellTool(),),
         tool_choice=LLMToolChoice.tool("shell"),
         response_format=LLMResponseFormat(
@@ -165,11 +166,14 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
         )
     )
 
-    result = to_port_llm_response(stream_result, fallback_model="default-model")
+    result = to_port_llm_response(
+        stream_result,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == "gpt-5.4"
+    assert result.model == AgentCodexLLMModel.GPT_5_4
     assert result.finish_reason == "completed"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 10
@@ -197,7 +201,10 @@ def test_to_port_llm_response_prefers_streamed_text() -> None:
         text_deltas=("streamed", " text"),
     )
 
-    result = to_port_llm_response(stream_result, fallback_model="default-model")
+    result = to_port_llm_response(
+        stream_result,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.content == "streamed text"
 
@@ -219,7 +226,10 @@ def test_to_port_llm_response_reads_text_from_message_output() -> None:
         }
     )
 
-    result = to_port_llm_response(stream_result, fallback_model="default-model")
+    result = to_port_llm_response(
+        stream_result,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.content == "hello world"
 
@@ -237,7 +247,10 @@ def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_em
         ),
     )
 
-    result = to_port_llm_response(stream_result, fallback_model="default-model")
+    result = to_port_llm_response(
+        stream_result,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.tool_calls == (
         LLMToolCall(
@@ -263,7 +276,10 @@ def test_to_port_llm_response_tolerates_codex_output_text_with_null_output() -> 
         ),
     )
 
-    result = to_port_llm_response(stream_result, fallback_model="default-model")
+    result = to_port_llm_response(
+        stream_result,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.ok is True
     assert result.content is None

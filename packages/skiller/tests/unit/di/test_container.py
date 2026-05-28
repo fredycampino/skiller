@@ -3,8 +3,15 @@ import pytest
 from skiller.di.container import build_runtime_container
 from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentCodexProvider,
+    AgentFakeLLMModel,
+    AgentFakeProvider,
     AgentLLMProvider,
-    AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
+    AgentNullLLMModel,
+    AgentNullProvider,
 )
 from skiller.infrastructure.config.settings_model import Settings
 from skiller.infrastructure.llm import openai_llm
@@ -29,18 +36,47 @@ class _FakeCodexCredentialsLoader:
 
 
 @pytest.mark.parametrize(
-    ("type", "model", "expected_type"),
+    ("provider", "expected_type"),
     [
-        (AgentLLMProviderType.NULL, "null1", NullLLM),
-        (AgentLLMProviderType.FAKE, "model1", FakeLLM),
-        (AgentLLMProviderType.MINIMAX, "MiniMax-M2.7", OpenAILLM),
-        (AgentLLMProviderType.CODEX, "gpt-5.5", OpenAICodexResponsesLLM),
+        (
+            AgentNullProvider(
+                model=AgentNullLLMModel.NULL1,
+                timeout_seconds=30,
+                context_window_tokens=100_000,
+            ),
+            NullLLM,
+        ),
+        (
+            AgentFakeProvider(
+                model=AgentFakeLLMModel.MODEL1,
+                timeout_seconds=30,
+                context_window_tokens=100_000,
+            ),
+            FakeLLM,
+        ),
+        (
+            AgentMiniMaxProvider(
+                model=AgentMiniMaxLLMModel.M2_7,
+                api_key="secret-key",
+                timeout_seconds=30,
+                context_window_tokens=100_000,
+            ),
+            OpenAILLM,
+        ),
+        (
+            AgentCodexProvider(
+                model=AgentCodexLLMModel.GPT_5_5,
+                credentials_file="/tmp/openai-codex.json",
+                timeout_seconds=30,
+                context_window_tokens=100_000,
+            ),
+            OpenAICodexResponsesLLM,
+        ),
     ],
 )
 def test_llm_client_factory_creates_expected_client(
     monkeypatch: pytest.MonkeyPatch,
-    type: AgentLLMProviderType,
-    model: str,
+    provider: AgentLLMProvider,
     expected_type: type[object],
 ) -> None:
     monkeypatch.setattr(openai_llm, "_load_openai_client_class", lambda: _FakeOpenAIClient)
@@ -49,7 +85,6 @@ def test_llm_client_factory_creates_expected_client(
         lambda: _FakeCodexCredentialsLoader(),
     )
     factory = LLMClientFactory()
-    provider = _provider(type=type, model=model)
 
     client = factory.resolve(provider)
 
@@ -62,18 +97,3 @@ def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) ->
     )
 
     build_runtime_container(settings=settings, skills_dir=str(tmp_path))
-
-
-def _provider(
-    *,
-    type: AgentLLMProviderType,
-    model: str,
-) -> AgentLLMProvider:
-    return AgentLLMProvider(
-        type=type,
-        api_key="secret-key",
-        model=model,
-        timeout_seconds=30,
-        context_window_tokens=100_000,
-        credentials_file="/tmp/openai-codex.json",
-    )

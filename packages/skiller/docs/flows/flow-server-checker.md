@@ -1,8 +1,9 @@
-# Agent Server Checker
+# Flow Server Checker
 
 ## Goal
 
-`SkillServerCheckerUseCase` loads an agent definition and verifies whether required local runtime services must already be available before run creation.
+`SkillServerCheckerUseCase` loads a YAML flow definition and verifies whether required
+local runtime services must already be available before run creation.
 
 Current scope:
 - `wait_channel`
@@ -56,6 +57,8 @@ The current implementation reports only the first matching step for each require
 
 ## Result Contract
 
+The `SKILL_*` code prefix is historical. These errors validate YAML flow files.
+
 ### Status
 
 - `VALID`
@@ -94,7 +97,7 @@ For WhatsApp channel availability:
 - check whether a required channel bridge is available
 
 `SkillServerCheckerUseCase` does not:
-- validate general skill structure
+- validate general flow structure
 - start the server
 - start the channel bridge
 - create a run

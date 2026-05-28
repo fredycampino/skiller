@@ -1,8 +1,8 @@
-# Agent File Checker
+# Flow File Checker
 
 ## Goal
 
-`SkillCheckerUseCase` loads and validates an agent definition before run creation.
+`SkillCheckerUseCase` loads and validates a YAML flow definition before run creation.
 
 Scope:
 - raw file structure
@@ -13,6 +13,8 @@ Scope:
 It does not depend on runtime state.
 
 ## Global Rules
+
+The `SKILL_*` code prefix is historical. These errors validate YAML flow files.
 
 | Code | Condition | Message Template |
 |---|---|---|
@@ -101,4 +103,4 @@ output_value(dynamic_var)
 Those checks belong to execution-time rendering.
 
 Server availability before run creation is handled separately by
-[`skill-server-checker.md`](skill-server-checker.md).
+[`flow-server-checker.md`](flow-server-checker.md).

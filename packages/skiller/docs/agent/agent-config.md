@@ -20,7 +20,7 @@ Then it applies one optional override file.
 Override resolution order:
 
 1. `AGENT_AGENT_CONFIG_FILE`, when set
-2. `agent.json` next to the current skill `agent.yaml`, when present
+2. `agent.json` next to the current flow `agent.yaml`, when present
 
 Overrides are applied by root section. There is no deep merge inside a section.
 For example, an override containing `tools` replaces the full global `tools`

@@ -134,8 +134,8 @@ Runtime events describe run and step lifecycle transitions.
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:10Z",
   "payload": {
-    "skill": "chat",
-    "skill_source": "internal"
+    "ref": "chat",
+    "source": "internal"
   }
 }
 ```

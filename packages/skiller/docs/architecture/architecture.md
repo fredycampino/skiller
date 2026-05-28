@@ -20,10 +20,10 @@ interfaces -> application -> domain <- infrastructure
 
 - `domain`: pure models, business rules, and ports grouped by feature
 - `application`: services and use cases
-- `infrastructure`: DB, bus, MCP, config, skill loader
+- `infrastructure`: DB, bus, MCP, config, flow loader
 - `interfaces`: CLI / HTTP
 - `di`: wiring
-- `skills`: YAML/JSON outside `src`
+- `flows`: YAML/JSON outside `src`
 
 ## Allowed Dependencies
 

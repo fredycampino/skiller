@@ -2,8 +2,9 @@ import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentFakeLLMModel,
+    AgentFakeProvider,
     AgentLLMProvider,
-    AgentLLMProviderType,
 )
 from skiller.domain.agent.llm_model import (
     LLMRequest,
@@ -93,10 +94,8 @@ def _provider(
     *,
     model: str = "model1",
 ) -> AgentLLMProvider:
-    return AgentLLMProvider(
-        type=AgentLLMProviderType.FAKE,
-        model=model,
-        api_key="test-key",
+    return AgentFakeProvider(
+        model=AgentFakeLLMModel(model),
         timeout_seconds=30,
         context_window_tokens=100_000,
     )

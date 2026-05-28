@@ -1,6 +1,6 @@
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessageRole,
@@ -48,7 +48,7 @@ def test_assistant_message_requires_content_or_tool_calls() -> None:
 def test_llm_request_requires_supported_model() -> None:
     request = LLMRequest(messages=(LLMUserMessage("hello"),), model="model1")
 
-    assert request.model == AgentLLMModel.MODEL1
+    assert request.model == AgentFakeLLMModel.MODEL1
 
     with pytest.raises(ValueError, match="not-a-model"):
         LLMRequest(messages=(LLMUserMessage("hello"),), model="not-a-model")
@@ -65,7 +65,7 @@ def test_llm_response_normalizes_metadata_strings() -> None:
     )
 
     assert response.content == "done"
-    assert response.model == AgentLLMModel.MODEL1
+    assert response.model == AgentFakeLLMModel.MODEL1
     assert response.finish_reason == "stop"
     assert response.error == "invalid params"
     assert response.error_code == "2013"
@@ -82,7 +82,7 @@ def test_llm_response_converts_empty_metadata_to_none() -> None:
     )
 
     assert response.content is None
-    assert response.model == AgentLLMModel.MODEL1
+    assert response.model == AgentFakeLLMModel.MODEL1
     assert response.finish_reason is None
     assert response.error is None
     assert response.error_code is None

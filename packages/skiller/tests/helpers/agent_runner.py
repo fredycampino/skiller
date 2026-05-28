@@ -14,10 +14,7 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.domain.agent.agent_config_model import (
-    AgentEventOutputConfig,
-    AgentLLMProviderConfig,
-)
+from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -26,6 +23,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.event.event_model import (
     AgentBodyToolMessage,
@@ -56,11 +54,11 @@ class _NullSteering:
         return []
 
 
-class _FakeLLMClientProvider:
+class _FakeLLMClientResolver:
     def __init__(self, llm: LLMPort) -> None:
         self.llm = llm
 
-    def create(self, provider: AgentLLMProviderConfig) -> LLMPort:
+    def resolve(self, provider: AgentLLMProvider) -> LLMPort:
         _ = provider
         return self.llm
 
@@ -290,7 +288,7 @@ def build_agent_runner(
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
     run_store = _FakeRunStore()
-    llm_model = LLMModelManager(client_provider=_FakeLLMClientProvider(llm))
+    llm_model = LLMModelManager(client_resolver=_FakeLLMClientResolver(llm))
     return AgentRunner(
         agent_context_store=agent_context_store,
         llm_model=llm_model,

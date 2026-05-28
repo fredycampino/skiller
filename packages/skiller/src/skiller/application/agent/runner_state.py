@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.agent_run_identity import AgentRun
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
 from skiller.domain.agent.llm_model import LLMResponse, LLMUsage
@@ -11,7 +12,7 @@ from skiller.domain.tool.tool_execution_model import ToolExecutionResults
 class AgentRunnerState:
     final_text: str | None = None
     finish: AgentRunnerFinish | None = None
-    response_model: str | None = None
+    response_model: AgentLLMModel | None = None
     usage: LLMUsage | None = None
     error: str | None = None
     tool_call_count: int = 0
@@ -67,6 +68,6 @@ class AgentRunnerResult:
     turn_count: int
     tool_call_count: int
     finish: AgentRunnerFinish
-    response_model: str | None
+    response_model: AgentLLMModel | None
     usage: LLMUsage | None
     error: str | None = None

@@ -9,10 +9,13 @@ from skiller.domain.agent.agent_config_model import (
     AgentContextConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
-    AgentLLMConfig,
-    AgentLLMProviderConfig,
-    AgentLLMProviderType,
     AgentLoopConfig,
+)
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMModel,
+    AgentLLMProvider,
+    AgentLLMProviderList,
+    AgentLLMProviderType,
 )
 from skiller.domain.tool.tool_contract import (
     ConfiguredTool,
@@ -50,17 +53,17 @@ class AgentConfigMapper:
         default_provider = _provider_type(
             self.env.get("AGENT_LLM_PROVIDER", config.llm.default_provider)
         )
-        providers: list[AgentLLMProviderConfig] = []
+        providers: list[AgentLLMProvider] = []
         for provider_id, provider in config.providers.items():
             provider_type = _provider_type(provider_id)
             selected = provider_type == default_provider
-            provider_config = _build_provider_config(
+            llm_provider = _build_provider(
                 provider_type=provider_type,
                 provider=provider,
                 selected=selected,
                 env=self.env,
             )
-            providers.append(provider_config)
+            providers.append(llm_provider)
 
         compaction = AgentContextCompactionConfig(
             enabled=config.context.compaction.enabled,
@@ -69,7 +72,7 @@ class AgentConfigMapper:
         context = AgentContextConfig(
             compaction=compaction,
         )
-        llm = AgentLLMConfig(
+        llm = AgentLLMProviderList(
             default_provider=default_provider,
             providers=tuple(providers),
         )
@@ -89,15 +92,15 @@ class AgentConfigMapper:
         )
 
 
-def _build_provider_config(
+def _build_provider(
     *,
     provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
     env: Mapping[str, str],
-) -> AgentLLMProviderConfig:
-    model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
-    _validate_provider_model(provider_type=provider_type, model=model)
+) -> AgentLLMProvider:
+    raw_model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
+    model = _provider_model(provider_type=provider_type, value=raw_model)
     api_key = _api_key_for_provider(
         provider_type=provider_type,
         provider=provider,
@@ -111,8 +114,8 @@ def _build_provider_config(
         credentials_file=credentials_file,
     )
 
-    return AgentLLMProviderConfig(
-        provider_type=provider_type,
+    return AgentLLMProvider(
+        type=provider_type,
         model=model,
         api_key=api_key,
         timeout_seconds=_provider_timeout_seconds(
@@ -146,31 +149,57 @@ def _build_tool_runtime_configs(
     return ToolRuntimeConfigs(items=tuple(runtime_config_items))
 
 
-def _validate_provider_model(
+def _provider_model(
+    *,
+    provider_type: AgentLLMProviderType,
+    value: str,
+) -> AgentLLMModel:
+    try:
+        model = AgentLLMModel(value)
+    except ValueError as exc:
+        raise _unsupported_provider_model_error(
+            provider_type=provider_type,
+            model=value,
+        ) from exc
+
+    supported_models = _supported_provider_models(provider_type)
+    if model in supported_models:
+        return model
+
+    raise _unsupported_provider_model_error(
+        provider_type=provider_type,
+        model=value,
+    )
+
+
+def _unsupported_provider_model_error(
     *,
     provider_type: AgentLLMProviderType,
     model: str,
-) -> None:
+) -> ValueError:
     supported_models = _supported_provider_models(provider_type)
-    if model in supported_models:
-        return
-
-    supported_values = ", ".join(supported_models)
-    raise ValueError(
+    supported_values = ", ".join(model.value for model in supported_models)
+    return ValueError(
         f"Unsupported model='{model}' for provider='{provider_type.value}'. "
         f"Supported models: {supported_values or 'none'}."
     )
 
 
-def _supported_provider_models(provider_type: AgentLLMProviderType) -> tuple[str, ...]:
+def _supported_provider_models(
+    provider_type: AgentLLMProviderType,
+) -> tuple[AgentLLMModel, ...]:
     if provider_type == AgentLLMProviderType.NULL:
-        return ("null1",)
+        return (AgentLLMModel.NULL1,)
     if provider_type == AgentLLMProviderType.FAKE:
-        return ("model1",)
+        return (AgentLLMModel.MODEL1,)
     if provider_type == AgentLLMProviderType.MINIMAX:
-        return ("MiniMax-M2.5", "MiniMax-M2.7")
+        return (AgentLLMModel.MINIMAX_M2_5, AgentLLMModel.MINIMAX_M2_7)
     if provider_type == AgentLLMProviderType.CODEX:
-        return ("gpt-5.3-codex", "gpt-5.4", "gpt-5.5")
+        return (
+            AgentLLMModel.GPT_5_3_CODEX,
+            AgentLLMModel.GPT_5_4,
+            AgentLLMModel.GPT_5_5,
+        )
     raise ValueError(f"Unsupported LLM provider: {provider_type.value}")
 
 

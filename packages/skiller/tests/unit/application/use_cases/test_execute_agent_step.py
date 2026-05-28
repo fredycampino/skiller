@@ -300,7 +300,7 @@ class _FakeLLM:
         response: object | None = None,
         responses: list[object] | None = None,
     ) -> None:
-        self.response = response or {"ok": True, "content": "Hello back.", "model": "fake"}
+        self.response = response or {"ok": True, "content": "Hello back.", "model": "model1"}
         self.responses = list(responses or [])
         self.calls: list[LLMRequest] = []
 
@@ -319,10 +319,10 @@ class _FakeLLM:
                 content=value.get("content") if isinstance(value.get("content"), str) else (
                     None if value.get("content") is None else str(value.get("content"))
                 ),
-                model=value.get("model") if isinstance(value.get("model"), str) else None,
+                model=value.get("model") if isinstance(value.get("model"), str) else "model1",
                 error=value.get("error") if isinstance(value.get("error"), str) else None,
             )
-        return LLMResponse(ok=True, content=str(value), model="fake")
+        return LLMResponse(ok=True, content=str(value), model="model1")
 
 
 class _FakeTool(ToolDefinition[ToolRequest]):
@@ -587,7 +587,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
         responses=[
             LLMResponse(
                 ok=True,
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -602,7 +602,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="fake",
+                model="model1",
                 usage=LLMUsage(
                     prompt_tokens=100,
                     completion_tokens=25,
@@ -662,7 +662,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                     "completion_tokens": 25,
                     "total_tokens": 125,
                     "provider": "fake",
-                    "model": "fake",
+                    "model": "model1",
                 },
         },
     )
@@ -712,7 +712,7 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
     llm = _FakeLLM(
         response=LLMResponse(
             ok=True,
-            model="fake",
+            model="model1",
             tool_calls=(
                 LLMToolCall(
                     id="openai-call-1",
@@ -785,7 +785,7 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
         responses=[
             LLMResponse(
                 ok=True,
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -859,7 +859,7 @@ def test_execute_agent_step_fails_when_agent_returns_invalid_final_message() -> 
             LLMResponse(
                 ok=True,
                 content="   ",
-                model="fake",
+                model="model1",
             )
         ]
     )
@@ -895,7 +895,7 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
         responses=[
             LLMResponse(
                 ok=True,
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -907,7 +907,7 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
                 ),
                 finish_reason="tool_calls",
             ),
-            LLMResponse(ok=True, content="Done.", model="fake"),
+            LLMResponse(ok=True, content="Done.", model="model1"),
         ]
     )
     tool_manager = _FakeToolManager(
@@ -970,6 +970,7 @@ def test_execute_agent_step_fails_when_llm_fails() -> None:
         llm=_FakeLLM(
             response=LLMResponse(
                 ok=False,
+                model="model1",
                 error="invalid params",
                 error_code="2013",
             )

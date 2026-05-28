@@ -9,7 +9,7 @@ pytestmark = pytest.mark.unit
 def test_fake_llm_returns_configured_text_payload() -> None:
     llm = FakeLLM(
         response_text='{"summary":"ok","severity":"low","next_action":"retry"}',
-        model="fake-test",
+        model="model1",
     )
 
     result = llm.generate(LLMRequest(messages=(), model="model1"))
@@ -17,5 +17,5 @@ def test_fake_llm_returns_configured_text_payload() -> None:
     assert result == LLMResponse(
         ok=True,
         content='{"summary":"ok","severity":"low","next_action":"retry"}',
-        model="fake-test",
+        model="model1",
     )

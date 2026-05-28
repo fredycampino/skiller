@@ -1,8 +1,10 @@
 import pytest
 
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessageRole,
+    LLMRequest,
     LLMResponse,
     LLMSystemMessage,
     LLMToolCall,
@@ -43,18 +45,27 @@ def test_assistant_message_requires_content_or_tool_calls() -> None:
         LLMAssistantMessage()
 
 
+def test_llm_request_requires_supported_model() -> None:
+    request = LLMRequest(messages=(LLMUserMessage("hello"),), model="model1")
+
+    assert request.model == AgentLLMModel.MODEL1
+
+    with pytest.raises(ValueError, match="not-a-model"):
+        LLMRequest(messages=(LLMUserMessage("hello"),), model="not-a-model")
+
+
 def test_llm_response_normalizes_metadata_strings() -> None:
     response = LLMResponse(
         ok=False,
         content=" done ",
-        model=" fake-model ",
+        model="model1",
         finish_reason=" stop ",
         error=" invalid params ",
         error_code=" 2013 ",
     )
 
     assert response.content == "done"
-    assert response.model == "fake-model"
+    assert response.model == AgentLLMModel.MODEL1
     assert response.finish_reason == "stop"
     assert response.error == "invalid params"
     assert response.error_code == "2013"
@@ -64,21 +75,21 @@ def test_llm_response_converts_empty_metadata_to_none() -> None:
     response = LLMResponse(
         ok=False,
         content=" \n ",
-        model=" ",
+        model="model1",
         finish_reason="",
         error="\n",
         error_code="\t",
     )
 
     assert response.content is None
-    assert response.model is None
+    assert response.model == AgentLLMModel.MODEL1
     assert response.finish_reason is None
     assert response.error is None
     assert response.error_code is None
 
 
 def test_llm_response_exposes_semantic_properties() -> None:
-    response = LLMResponse(ok=False, content="done")
+    response = LLMResponse(ok=False, model="model1", content="done")
 
     assert response.has_text_content is True
     assert response.has_tool_calls is False

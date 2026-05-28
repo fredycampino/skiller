@@ -188,6 +188,7 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
     )
     response = LLMResponse(
         ok=True,
+        model="model1",
         tool_calls=(
             LLMToolCall(
                 id="call-1",
@@ -359,6 +360,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         turn_id="turn-1",
         response=LLMResponse(
             ok=True,
+            model="model1",
             tool_calls=(
                 LLMToolCall(
                     id="call-1",

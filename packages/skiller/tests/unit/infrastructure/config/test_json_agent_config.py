@@ -10,11 +10,11 @@ from skiller.application.tools.files import FilesTool, FilesToolRuntimeConfig
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
-from skiller.domain.agent.agent_config_model import AgentLLMProviderType
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMProviderType
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 
@@ -44,7 +44,7 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     provider = config.llm.default()
 
     assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
-    assert provider.provider_type == AgentLLMProviderType.MINIMAX
+    assert provider.type == AgentLLMProviderType.MINIMAX
     assert provider.api_key == "secret"
     assert provider.model == "MiniMax-M2.5"
     assert provider.timeout_seconds == 30.0
@@ -106,7 +106,7 @@ def test_json_agent_config_reads_codex_provider(tmp_path) -> None:
     provider = config.llm.default()
 
     assert config.llm.default_provider == AgentLLMProviderType.CODEX
-    assert provider.provider_type == AgentLLMProviderType.CODEX
+    assert provider.type == AgentLLMProviderType.CODEX
     assert provider.api_key is None
     assert provider.credentials_file == str(credentials_path)
 
@@ -315,7 +315,7 @@ def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) ->
 
     provider = config.llm.default()
 
-    assert provider.provider_type == AgentLLMProviderType.FAKE
+    assert provider.type == AgentLLMProviderType.FAKE
     assert provider.model == "model1"
 
 
@@ -351,17 +351,6 @@ def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
     )
 
     with pytest.raises(ValueError, match="Unsupported LLM provider: bad"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_rejects_legacy_provider_type_field(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_minimax_llm(api_key="secret", extra={"type": "minimax"}),
-    )
-
-    with pytest.raises(ValueError, match="Invalid agent config"):
         _provider(config_path=config_path, env={}).get_config()
 
 

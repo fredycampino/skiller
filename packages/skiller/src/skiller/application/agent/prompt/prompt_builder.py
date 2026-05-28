@@ -8,6 +8,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -25,7 +26,7 @@ class AgentPromptBuilder:
     def build_request(
         self,
         *,
-        model: str,
+        model: AgentLLMModel,
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],

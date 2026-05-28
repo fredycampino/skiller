@@ -31,7 +31,7 @@ class _FakeClient:
         self.kwargs = kwargs
         self.completions = _FakeCompletions(
             SimpleNamespace(
-                model="gpt-5.2",
+                model="gpt-5.4",
                 choices=[
                     SimpleNamespace(
                         finish_reason="stop",
@@ -55,7 +55,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     result = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
@@ -66,14 +66,14 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     }
     assert llm.client.completions.calls == [
         {
-            "model": "gpt-5.2",
+            "model": "gpt-5.4",
             "messages": [{"role": "user", "content": "hello"}],
             "extra_body": {"reasoning_split": True},
         }
     ]
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == "gpt-5.2"
+    assert result.model == "gpt-5.4"
     assert result.finish_reason == "stop"
     assert result.tool_calls == ()
 
@@ -105,7 +105,7 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
             self.kwargs = kwargs
             self.completions = _FakeCompletions(
                 SimpleNamespace(
-                    model="gpt-5.2",
+                    model="gpt-5.4",
                     choices=[
                         SimpleNamespace(
                             finish_reason="tool_calls",
@@ -139,13 +139,13 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
     result = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
     assert result.ok is True
     assert result.content is None
-    assert result.model == "gpt-5.2"
+    assert result.model == "gpt-5.4"
     assert result.finish_reason == "tool_calls"
     assert result.tool_calls == (
         LLMToolCall(

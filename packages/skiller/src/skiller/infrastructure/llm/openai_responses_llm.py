@@ -36,6 +36,7 @@ class OpenAIResponsesLLM(LLMPort):
         if not self.api_key.strip():
             return LLMResponse(
                 ok=False,
+                model=request.model,
                 error="API key is not configured for the selected model provider",
                 error_code="api_key_missing",
             )
@@ -57,6 +58,7 @@ class OpenAIResponsesLLM(LLMPort):
                     if event_type == "error":
                         return LLMResponse(
                             ok=False,
+                            model=request.model,
                             error="OpenAI Responses stream emitted an error event",
                             error_code="stream_error",
                         )
@@ -65,6 +67,7 @@ class OpenAIResponsesLLM(LLMPort):
         except Exception as exc:  # noqa: BLE001
             return LLMResponse(
                 ok=False,
+                model=request.model,
                 error=f"OpenAI Responses request failed: {exc}",
                 error_code="request_failed",
             )

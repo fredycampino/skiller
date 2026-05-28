@@ -2,8 +2,8 @@ import pytest
 
 from skiller.di.container import build_runtime_container
 from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.agent_config_model import (
-    AgentLLMProviderConfig,
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMProvider,
     AgentLLMProviderType,
 )
 from skiller.infrastructure.config.settings_model import Settings
@@ -29,7 +29,7 @@ class _FakeCodexCredentialsLoader:
 
 
 @pytest.mark.parametrize(
-    ("provider_type", "model", "expected_type"),
+    ("type", "model", "expected_type"),
     [
         (AgentLLMProviderType.NULL, "null1", NullLLM),
         (AgentLLMProviderType.FAKE, "model1", FakeLLM),
@@ -39,7 +39,7 @@ class _FakeCodexCredentialsLoader:
 )
 def test_llm_client_factory_creates_expected_client(
     monkeypatch: pytest.MonkeyPatch,
-    provider_type: AgentLLMProviderType,
+    type: AgentLLMProviderType,
     model: str,
     expected_type: type[object],
 ) -> None:
@@ -49,9 +49,9 @@ def test_llm_client_factory_creates_expected_client(
         lambda: _FakeCodexCredentialsLoader(),
     )
     factory = LLMClientFactory()
-    provider = _provider(provider_type=provider_type, model=model)
+    provider = _provider(type=type, model=model)
 
-    client = factory.create(provider)
+    client = factory.resolve(provider)
 
     assert isinstance(client, expected_type)
 
@@ -66,11 +66,11 @@ def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) ->
 
 def _provider(
     *,
-    provider_type: AgentLLMProviderType,
+    type: AgentLLMProviderType,
     model: str,
-) -> AgentLLMProviderConfig:
-    return AgentLLMProviderConfig(
-        provider_type=provider_type,
+) -> AgentLLMProvider:
+    return AgentLLMProvider(
+        type=type,
         api_key="secret-key",
         model=model,
         timeout_seconds=30,

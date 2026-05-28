@@ -52,7 +52,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
             LLMSystemMessage("system"),
             LLMUserMessage("hello", name="tester"),
         ),
-        model="gpt-5.2",
+        model="gpt-5.4",
         tools=(
             _ShellTool(),
         ),
@@ -72,7 +72,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
     kwargs = to_openai_kwargs(request)
 
     assert kwargs == {
-        "model": "gpt-5.2",
+        "model": "gpt-5.4",
         "messages": [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "hello", "name": "tester"},
@@ -105,7 +105,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
 
 def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
     response = SimpleNamespace(
-        model="gpt-5.2",
+        model="gpt-5.4",
         usage=SimpleNamespace(
             prompt_tokens=100,
             completion_tokens=25,
@@ -133,7 +133,7 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
     result = to_port_llm_response(response, fallback_model="default-model")
 
     assert result.ok is True
-    assert result.model == "gpt-5.2"
+    assert result.model == "gpt-5.4"
     assert result.finish_reason == "tool_calls"
     assert result.content is None
     assert result.usage is not None

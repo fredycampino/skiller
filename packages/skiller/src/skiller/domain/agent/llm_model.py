@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Mapping, TypeAlias
 
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -125,7 +126,7 @@ class LLMResponseFormat:
 @dataclass(frozen=True)
 class LLMRequest:
     messages: tuple[LLMMessage, ...]
-    model: str
+    model: AgentLLMModel
     tools: tuple[ToolDefinition, ...] = ()
     tool_choice: LLMToolChoice | None = None
     response_format: LLMResponseFormat | None = None
@@ -133,6 +134,9 @@ class LLMRequest:
     max_tokens: int | None = None
     top_p: float | None = None
     parallel_tool_calls: bool | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "model", AgentLLMModel(self.model))
 
 
 @dataclass(frozen=True)
@@ -147,8 +151,8 @@ class LLMUsage:
 @dataclass(frozen=True)
 class LLMResponse:
     ok: bool
+    model: AgentLLMModel
     content: str | None = None
-    model: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
     finish_reason: str | None = None
     usage: LLMUsage | None = None
@@ -156,8 +160,8 @@ class LLMResponse:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "model", AgentLLMModel(self.model))
         object.__setattr__(self, "content", _clean_optional_string(self.content))
-        object.__setattr__(self, "model", _clean_optional_string(self.model))
         object.__setattr__(
             self,
             "finish_reason",

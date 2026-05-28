@@ -1,6 +1,9 @@
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexProvider,
+    AgentFakeProvider,
     AgentLLMProvider,
-    AgentLLMProviderType,
+    AgentMiniMaxProvider,
+    AgentNullProvider,
 )
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.infrastructure.llm.fake_llm import FakeLLM
@@ -13,29 +16,25 @@ MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
 class LLMClientFactory:
     def resolve(self, provider: AgentLLMProvider) -> LLMPort:
-        if provider.type == AgentLLMProviderType.NULL:
+        if isinstance(provider, AgentNullProvider):
             return NullLLM()
-        if provider.type == AgentLLMProviderType.FAKE:
+        if isinstance(provider, AgentFakeProvider):
             return FakeLLM(model=provider.model)
-        if provider.type == AgentLLMProviderType.MINIMAX:
+        if isinstance(provider, AgentMiniMaxProvider):
             return self._minimax_client(provider)
-        if provider.type == AgentLLMProviderType.CODEX:
+        if isinstance(provider, AgentCodexProvider):
             return self._codex_client(provider)
 
-        raise RuntimeError(f"Unsupported LLM provider: {provider.type.value}")
+        raise RuntimeError(f"Unsupported LLM provider: {provider!r}")
 
-    def _minimax_client(self, provider: AgentLLMProvider) -> OpenAILLM:
-        if provider.api_key is None:
-            raise RuntimeError("MiniMax provider requires api_key")
+    def _minimax_client(self, provider: AgentMiniMaxProvider) -> OpenAILLM:
         return OpenAILLM(
             api_key=provider.api_key,
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
         )
 
-    def _codex_client(self, provider: AgentLLMProvider) -> OpenAICodexResponsesLLM:
-        if provider.credentials_file is None:
-            raise RuntimeError("Codex provider requires credentials_file")
+    def _codex_client(self, provider: AgentCodexProvider) -> OpenAICodexResponsesLLM:
         return OpenAICodexResponsesLLM(
             credentials_file=provider.credentials_file,
             timeout_seconds=provider.timeout_seconds,

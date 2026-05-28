@@ -4,6 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentMiniMaxLLMModel,
+)
 from skiller.domain.agent.llm_model import (
     LLMRequest,
     LLMResponseFormat,
@@ -52,7 +56,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
             LLMSystemMessage("system"),
             LLMUserMessage("hello", name="tester"),
         ),
-        model="gpt-5.4",
+        model=AgentCodexLLMModel.GPT_5_4,
         tools=(
             _ShellTool(),
         ),
@@ -130,10 +134,13 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
         ],
     )
 
-    result = to_port_llm_response(response, fallback_model="default-model")
+    result = to_port_llm_response(
+        response,
+        fallback_model=AgentCodexLLMModel.GPT_5_4,
+    )
 
     assert result.ok is True
-    assert result.model == "gpt-5.4"
+    assert result.model == AgentCodexLLMModel.GPT_5_4
     assert result.finish_reason == "tool_calls"
     assert result.content is None
     assert result.usage is not None
@@ -169,11 +176,11 @@ def test_to_port_llm_response_maps_dict_usage_to_port_response() -> None:
                 }
             ],
         },
-        fallback_model="default-model",
+        fallback_model=AgentMiniMaxLLMModel.M2_7,
     )
 
     assert result.ok is True
-    assert result.model == "MiniMax-M2.7"
+    assert result.model == AgentMiniMaxLLMModel.M2_7
     assert result.content == "Hello"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 42

@@ -9,7 +9,8 @@ from skiller.domain.agent.agent_config_model import (
 )
 from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
 from skiller.domain.agent.agent_llm_provider_model import (
-    AgentLLMProvider,
+    AgentFakeLLMModel,
+    AgentFakeProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
 )
@@ -46,10 +47,8 @@ def agent_config(
         llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.FAKE,
             providers=(
-                AgentLLMProvider(
-                    type=AgentLLMProviderType.FAKE,
-                    model="model1",
-                    api_key="test-key",
+                AgentFakeProvider(
+                    model=AgentFakeLLMModel.MODEL1,
                     timeout_seconds=30,
                     context_window_tokens=100_000,
                 ),

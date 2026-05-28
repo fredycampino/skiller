@@ -1,17 +1,16 @@
 # Skiller.run
 
-Run and resume agents and flows.
+**A lightweight runtime for agentic workflows.**
 
-Skiller runs declarative YAML workflows with deterministic steps, persisted waiting
-states, resumable execution, and full log-event observability.
+Define YAML flows with agents, tools, waits, channels, webhooks, and control steps.
+
+Skiller runs them as durable executions with persistent state, safe resume, and full observability logs.
 
 ## What It Does
 
-- run YAML-defined agents and workflows
-- resume flows from persisted waiting states
-- execute deterministic workflow steps
-- keep full observability with log events
-- inspect and manage persisted runs
+- Run long-lived agents and flows described in YAML
+- Resume runs from persisted waiting states
+- Observe and manage persisted runs
 
 ## Install
 
@@ -23,7 +22,7 @@ pip install -e .[dev]
 
 ## Usage
 
-### CLI to run agents and workflows
+### CLI to run agents and flows
 
 Use `skiller` when you want the direct command-line runtime.
 
@@ -33,7 +32,7 @@ Run the bundled terminal agent:
 skiller run mono
 ```
 
-Run a YAML workflow definition:
+Run a YAML flow definition:
 
 ```bash
 skiller run --file <path>
@@ -88,7 +87,7 @@ See:
 - [`packages/skiller/docs/agent/agent-config.md`](packages/skiller/docs/agent/agent-config.md)
 - [`packages/skiller/docs/config/config.md`](packages/skiller/docs/config/config.md)
 
-## Workflow Steps
+## Flow Steps
 
 Deterministic:
 
@@ -124,7 +123,7 @@ resume later from stored state.
 ## How Mono Is Built
 
 `mono` is a regular YAML-defined agent with local runtime configuration beside it.
-The workflow is intentionally small:
+The flow is intentionally small:
 
 - wait for terminal input with `wait_input`
 - stop on `exit`, `quit`, or `bye` with `switch`
@@ -170,7 +169,7 @@ The provider, loop limits, shell allowlist, and file roots live in
 Core guides:
 
 - [`packages/skiller/docs/cli/command-guide.md`](packages/skiller/docs/cli/command-guide.md)
-- [`packages/skiller/docs/skills/skill-schema.md`](packages/skiller/docs/skills/skill-schema.md)
+- [`packages/skiller/docs/flows/flow-schema.md`](packages/skiller/docs/flows/flow-schema.md)
 - [`packages/skiller/docs/db/schema.md`](packages/skiller/docs/db/schema.md)
 - [`packages/skiller/docs/runtime/execution-model.md`](packages/skiller/docs/runtime/execution-model.md)
 - [`packages/skiller/docs/steps/agent.md`](packages/skiller/docs/steps/agent.md)

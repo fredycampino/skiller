@@ -4,7 +4,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Mapping, TypeAlias
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentFakeLLMModel,
+    AgentLLMModel,
+    AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+    AgentNullLLMModel,
+)
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -136,7 +143,7 @@ class LLMRequest:
     parallel_tool_calls: bool | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "model", AgentLLMModel(self.model))
+        object.__setattr__(self, "model", _llm_model_from_value(self.model))
 
 
 @dataclass(frozen=True)
@@ -144,8 +151,14 @@ class LLMUsage:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
-    provider: str | None = None
-    model: str | None = None
+    provider: AgentLLMProviderType | None = None
+    model: AgentLLMModel | None = None
+
+    def __post_init__(self) -> None:
+        if self.provider is not None:
+            object.__setattr__(self, "provider", AgentLLMProviderType(self.provider))
+        if self.model is not None:
+            object.__setattr__(self, "model", _llm_model_from_value(self.model))
 
 
 @dataclass(frozen=True)
@@ -160,7 +173,7 @@ class LLMResponse:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "model", AgentLLMModel(self.model))
+        object.__setattr__(self, "model", _llm_model_from_value(self.model))
         object.__setattr__(self, "content", _clean_optional_string(self.content))
         object.__setattr__(
             self,
@@ -181,6 +194,22 @@ class LLMResponse:
     @property
     def is_error(self) -> bool:
         return self.ok is False
+
+
+def _llm_model_from_value(value: str) -> AgentLLMModel:
+    model_types = (
+        AgentNullLLMModel,
+        AgentFakeLLMModel,
+        AgentMiniMaxLLMModel,
+        AgentCodexLLMModel,
+    )
+    for model_type in model_types:
+        try:
+            return model_type(value)
+        except ValueError:
+            continue
+
+    raise ValueError(f"Unsupported LLM model: {value}")
 
 
 def _clean_optional_string(value: str | None) -> str | None:

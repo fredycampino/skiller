@@ -20,8 +20,8 @@ skiller --version
 ### Run lifecycle
 
 ```bash
-skiller run <runnable>
-skiller run --file <runnable.yaml>
+skiller run <flow>
+skiller run --file <flow.yaml>
 skiller resume <run_id>
 ```
 
@@ -260,12 +260,12 @@ In normal usage, `skiller run` already starts the worker, so most users should n
 Options:
 
 ```bash
-skiller run <runnable> [--arg key=value] [--logs] [--start-server]
+skiller run <flow> [--arg key=value] [--logs] [--start-server]
 skiller run --file <path> [--arg key=value] [--logs] [--start-server]
 ```
 
 Notes:
-- use `<runnable>` for internal catalog ids
+- use `<flow>` for internal catalog ids
 - internal agents resolve from `packages/skiller/agents/<id>/agent.yaml`
 - use `--file` for external YAML files
 - `--logs` includes current logs in the JSON response

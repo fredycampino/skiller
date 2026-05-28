@@ -52,8 +52,8 @@ Output:
     "agent_sequence": null,
     "created_at": "2026-05-12T10:30:10Z",
     "payload": {
-      "skill": "runnable-id",
-      "skill_source": "internal"
+      "ref": "flow-id",
+      "source": "internal"
     }
   },
   {

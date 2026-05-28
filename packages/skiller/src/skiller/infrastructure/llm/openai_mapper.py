@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMModel,
+)
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -106,11 +108,8 @@ def _response_model(
     *,
     fallback_model: AgentLLMModel,
 ) -> AgentLLMModel:
-    if isinstance(response_model, str) and response_model.strip():
-        try:
-            return AgentLLMModel(response_model)
-        except ValueError:
-            return fallback_model
+    if response_model == fallback_model.value:
+        return fallback_model
     return fallback_model
 
 

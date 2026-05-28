@@ -12,10 +12,17 @@ from skiller.domain.agent.agent_config_model import (
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
-    AgentLLMModel,
+    AgentCodexLLMModel,
+    AgentCodexProvider,
+    AgentFakeLLMModel,
+    AgentFakeProvider,
     AgentLLMProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
+    AgentNullLLMModel,
+    AgentNullProvider,
 )
 from skiller.domain.tool.tool_contract import (
     ConfiguredTool,
@@ -100,33 +107,47 @@ def _build_provider(
     env: Mapping[str, str],
 ) -> AgentLLMProvider:
     raw_model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
-    model = _provider_model(provider_type=provider_type, value=raw_model)
-    api_key = _api_key_for_provider(
+    timeout_seconds = _provider_timeout_seconds(
         provider_type=provider_type,
         provider=provider,
         selected=selected,
         env=env,
     )
-    credentials_file = provider.credentials_file
-    _validate_provider_credentials(
-        provider_type=provider_type,
-        api_key=api_key,
-        credentials_file=credentials_file,
-    )
 
-    return AgentLLMProvider(
-        type=provider_type,
-        model=model,
-        api_key=api_key,
-        timeout_seconds=_provider_timeout_seconds(
+    if provider_type == AgentLLMProviderType.NULL:
+        return AgentNullProvider(
+            model=_null_model(raw_model),
+            timeout_seconds=timeout_seconds,
+            context_window_tokens=provider.context_window_tokens,
+        )
+    if provider_type == AgentLLMProviderType.FAKE:
+        return AgentFakeProvider(
+            model=_fake_model(raw_model),
+            timeout_seconds=timeout_seconds,
+            context_window_tokens=provider.context_window_tokens,
+        )
+    if provider_type == AgentLLMProviderType.MINIMAX:
+        api_key = _resolve_api_key(
             provider_type=provider_type,
             provider=provider,
             selected=selected,
             env=env,
-        ),
-        context_window_tokens=provider.context_window_tokens,
-        credentials_file=credentials_file,
-    )
+        )
+        return AgentMiniMaxProvider(
+            model=_minimax_model(raw_model),
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            context_window_tokens=provider.context_window_tokens,
+        )
+    if provider_type == AgentLLMProviderType.CODEX:
+        return AgentCodexProvider(
+            model=_codex_model(raw_model),
+            credentials_file=_required_credentials_file(provider.credentials_file),
+            timeout_seconds=timeout_seconds,
+            context_window_tokens=provider.context_window_tokens,
+        )
+
+    raise ValueError(f"Unsupported LLM provider: {provider_type.value}")
 
 
 def _build_tool_runtime_configs(
@@ -149,99 +170,38 @@ def _build_tool_runtime_configs(
     return ToolRuntimeConfigs(items=tuple(runtime_config_items))
 
 
-def _provider_model(
-    *,
-    provider_type: AgentLLMProviderType,
-    value: str,
-) -> AgentLLMModel:
+def _null_model(value: str) -> AgentNullLLMModel:
     try:
-        model = AgentLLMModel(value)
+        return AgentNullLLMModel(value)
     except ValueError as exc:
-        raise _unsupported_provider_model_error(
-            provider_type=provider_type,
-            model=value,
-        ) from exc
-
-    supported_models = _supported_provider_models(provider_type)
-    if model in supported_models:
-        return model
-
-    raise _unsupported_provider_model_error(
-        provider_type=provider_type,
-        model=value,
-    )
+        raise ValueError(f"Unsupported model='{value}' for provider='null'") from exc
 
 
-def _unsupported_provider_model_error(
-    *,
-    provider_type: AgentLLMProviderType,
-    model: str,
-) -> ValueError:
-    supported_models = _supported_provider_models(provider_type)
-    supported_values = ", ".join(model.value for model in supported_models)
-    return ValueError(
-        f"Unsupported model='{model}' for provider='{provider_type.value}'. "
-        f"Supported models: {supported_values or 'none'}."
-    )
+def _fake_model(value: str) -> AgentFakeLLMModel:
+    try:
+        return AgentFakeLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='fake'") from exc
 
 
-def _supported_provider_models(
-    provider_type: AgentLLMProviderType,
-) -> tuple[AgentLLMModel, ...]:
-    if provider_type == AgentLLMProviderType.NULL:
-        return (AgentLLMModel.NULL1,)
-    if provider_type == AgentLLMProviderType.FAKE:
-        return (AgentLLMModel.MODEL1,)
-    if provider_type == AgentLLMProviderType.MINIMAX:
-        return (AgentLLMModel.MINIMAX_M2_5, AgentLLMModel.MINIMAX_M2_7)
-    if provider_type == AgentLLMProviderType.CODEX:
-        return (
-            AgentLLMModel.GPT_5_3_CODEX,
-            AgentLLMModel.GPT_5_4,
-            AgentLLMModel.GPT_5_5,
-        )
-    raise ValueError(f"Unsupported LLM provider: {provider_type.value}")
+def _minimax_model(value: str) -> AgentMiniMaxLLMModel:
+    try:
+        return AgentMiniMaxLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='minimax'") from exc
 
 
-def _api_key_for_provider(
-    *,
-    provider_type: AgentLLMProviderType,
-    provider: LLMProviderConfigModel,
-    selected: bool,
-    env: Mapping[str, str],
-) -> str | None:
-    if provider_type == AgentLLMProviderType.CODEX:
-        return None
-    if provider_type == AgentLLMProviderType.FAKE:
-        return None
-    if provider_type == AgentLLMProviderType.NULL:
-        return None
-    return _resolve_api_key(
-        provider_type=provider_type,
-        provider=provider,
-        selected=selected,
-        env=env,
-    )
+def _codex_model(value: str) -> AgentCodexLLMModel:
+    try:
+        return AgentCodexLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='codex'") from exc
 
 
-def _validate_provider_credentials(
-    *,
-    provider_type: AgentLLMProviderType,
-    api_key: str | None,
-    credentials_file: str | None,
-) -> None:
-    if provider_type == AgentLLMProviderType.CODEX:
-        if credentials_file is None or not credentials_file.strip():
-            raise ValueError("LLM provider requires credentials_file")
-        return
-
-    if provider_type == AgentLLMProviderType.FAKE:
-        return
-    if provider_type == AgentLLMProviderType.NULL:
-        return
-
-    if api_key is None:
-        raise ValueError("LLM provider requires api_key")
+def _required_credentials_file(credentials_file: str | None) -> str:
+    if credentials_file is None or not credentials_file.strip():
+        raise ValueError("LLM provider requires credentials_file")
+    return credentials_file
 
 
 def _build_loop_config(

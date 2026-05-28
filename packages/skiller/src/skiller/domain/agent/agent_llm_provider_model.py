@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import ClassVar, TypeAlias
 
 
 class AgentLLMProviderType(str, Enum):
@@ -9,25 +10,74 @@ class AgentLLMProviderType(str, Enum):
     CODEX = "codex"
 
 
-class AgentLLMModel(str, Enum):
+class AgentNullLLMModel(str, Enum):
     NULL1 = "null1"
+
+
+class AgentFakeLLMModel(str, Enum):
     MODEL1 = "model1"
-    MINIMAX_M2_5 = "MiniMax-M2.5"
-    MINIMAX_M2_7 = "MiniMax-M2.7"
+
+
+class AgentMiniMaxLLMModel(str, Enum):
+    M2_5 = "MiniMax-M2.5"
+    M2_7 = "MiniMax-M2.7"
+
+
+class AgentCodexLLMModel(str, Enum):
     GPT_5_3_CODEX = "gpt-5.3-codex"
     GPT_5_4 = "gpt-5.4"
     GPT_5_5 = "gpt-5.5"
 
 
+AgentLLMModel: TypeAlias = (
+    AgentNullLLMModel
+    | AgentFakeLLMModel
+    | AgentMiniMaxLLMModel
+    | AgentCodexLLMModel
+)
+
+
 @dataclass(frozen=True)
-class AgentLLMProvider:
-    type: AgentLLMProviderType
-    model: AgentLLMModel
-    api_key: str | None
+class AgentNullProvider:
+    model: AgentNullLLMModel
     timeout_seconds: float
     context_window_tokens: int
-    credentials_file: str | None = None
 
+    type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.NULL
+
+
+@dataclass(frozen=True)
+class AgentFakeProvider:
+    model: AgentFakeLLMModel
+    timeout_seconds: float
+    context_window_tokens: int
+
+    type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.FAKE
+
+
+@dataclass(frozen=True)
+class AgentMiniMaxProvider:
+    model: AgentMiniMaxLLMModel
+    api_key: str
+    timeout_seconds: float
+    context_window_tokens: int
+
+    type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.MINIMAX
+
+
+@dataclass(frozen=True)
+class AgentCodexProvider:
+    model: AgentCodexLLMModel
+    credentials_file: str
+    timeout_seconds: float
+    context_window_tokens: int
+
+    type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.CODEX
+
+
+AgentLLMProvider: TypeAlias = (
+    AgentNullProvider | AgentFakeProvider | AgentMiniMaxProvider | AgentCodexProvider
+)
 
 @dataclass(frozen=True)
 class AgentLLMProviderList:

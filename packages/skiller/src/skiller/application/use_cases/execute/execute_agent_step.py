@@ -4,6 +4,7 @@ from skiller.application.agent.config.step_config_reader import AgentStepConfigR
 from skiller.application.agent.runner_state import AgentRunnerRequest
 from skiller.domain.agent.agent_run_identity import AgentRun
 from skiller.domain.agent.agent_run_model import AgentRunnerFinish
+from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep
@@ -68,13 +69,13 @@ class ExecuteAgentStepUseCase:
             "stop_reason": runner_result.finish.value,
         }
         if runner_result.usage is not None:
-            output_data["usage"] = {
-                "prompt_tokens": runner_result.usage.prompt_tokens,
-                "completion_tokens": runner_result.usage.completion_tokens,
-                "total_tokens": runner_result.usage.total_tokens,
-                "provider": runner_result.usage.provider,
-                "model": runner_result.usage.model,
-            }
+            output_data["usage"] = _usage_output(runner_result.usage)
+
+        response_model = (
+            runner_result.response_model.value
+            if runner_result.response_model is not None
+            else None
+        )
         execution = StepExecution(
             step_type=current_step.step_type,
             input={
@@ -85,13 +86,7 @@ class ExecuteAgentStepUseCase:
                 "max_tool_calls": config.config.loop.max_tool_calls,
                 "tools": [tool.name for tool in config.tools],
             },
-            evaluation={
-                "model": (
-                    runner_result.response_model.value
-                    if runner_result.response_model is not None
-                    else None
-                )
-            },
+            evaluation={"model": response_model},
             output=AgentOutput(
                 text=runner_result.final_text or "",
                 text_ref="data.final.text" if runner_result.final_text is not None else None,
@@ -131,3 +126,15 @@ class ExecuteAgentStepUseCase:
             next_step_id=next_step_id,
             execution=execution,
         )
+
+
+def _usage_output(usage: LLMUsage) -> dict[str, int | str | None]:
+    provider = usage.provider.value if usage.provider is not None else None
+    model = usage.model.value if usage.model is not None else None
+    return {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+        "provider": provider,
+        "model": model,
+    }

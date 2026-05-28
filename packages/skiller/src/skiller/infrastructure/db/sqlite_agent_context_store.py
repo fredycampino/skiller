@@ -434,9 +434,9 @@ def _usage_to_dict(usage: LLMUsage) -> dict[str, int | str | None]:
         "total_tokens": usage.total_tokens,
     }
     if usage.provider is not None:
-        result["provider"] = usage.provider
+        result["provider"] = usage.provider.value
     if usage.model is not None:
-        result["model"] = usage.model
+        result["model"] = usage.model.value
     return result
 
 

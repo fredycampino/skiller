@@ -45,8 +45,8 @@ def _response_with_usage_metadata(
 
     usage = replace(
         usage,
-        provider=provider.type.value,
-        model=response.model.value,
+        provider=provider.type,
+        model=response.model,
     )
     return replace(
         response,

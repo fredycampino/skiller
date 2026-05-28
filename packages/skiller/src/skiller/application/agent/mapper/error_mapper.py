@@ -22,7 +22,4 @@ class AgentErrorMapper:
         if response.finish_reason:
             return f"finish_reason={response.finish_reason}"
 
-        if response.model:
-            return f"model={response.model} returned ok=false without error"
-
-        return "ok=false without error"
+        return f"model={response.model.value} returned ok=false without error"

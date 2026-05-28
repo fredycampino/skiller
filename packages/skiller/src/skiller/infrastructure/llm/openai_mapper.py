@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -22,7 +23,7 @@ from skiller.domain.tool.tool_contract import ToolDefinition
 
 def to_openai_kwargs(request: LLMRequest) -> dict[str, object]:
     payload: dict[str, object] = {
-        "model": request.model,
+        "model": request.model.value,
         "messages": [_message_to_payload(message) for message in request.messages],
     }
     if request.tools:
@@ -42,13 +43,18 @@ def to_openai_kwargs(request: LLMRequest) -> dict[str, object]:
     return payload
 
 
-def to_port_llm_response(response: object, *, fallback_model: str) -> LLMResponse:
+def to_port_llm_response(
+    response: object,
+    *,
+    fallback_model: AgentLLMModel,
+) -> LLMResponse:
     choices = getattr(response, "choices", None)
     if choices is None and isinstance(response, Mapping):
         choices = response.get("choices")
     if not isinstance(choices, list) or not choices:
         return LLMResponse(
             ok=False,
+            model=fallback_model,
             error="OpenAI response missing choices",
             error_code="missing_choices",
         )
@@ -60,6 +66,7 @@ def to_port_llm_response(response: object, *, fallback_model: str) -> LLMRespons
     if message is None:
         return LLMResponse(
             ok=False,
+            model=fallback_model,
             error="OpenAI response missing message payload",
             error_code="missing_message",
         )
@@ -94,9 +101,16 @@ def to_port_llm_response(response: object, *, fallback_model: str) -> LLMRespons
     )
 
 
-def _response_model(response_model: object, *, fallback_model: str) -> str:
+def _response_model(
+    response_model: object,
+    *,
+    fallback_model: AgentLLMModel,
+) -> AgentLLMModel:
     if isinstance(response_model, str) and response_model.strip():
-        return response_model
+        try:
+            return AgentLLMModel(response_model)
+        except ValueError:
+            return fallback_model
     return fallback_model
 
 

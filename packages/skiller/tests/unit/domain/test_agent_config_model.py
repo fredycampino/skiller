@@ -6,10 +6,12 @@ from skiller.domain.agent.agent_config_model import (
     AgentContextConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
-    AgentLLMConfig,
-    AgentLLMProviderConfig,
-    AgentLLMProviderType,
     AgentLoopConfig,
+)
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMProvider,
+    AgentLLMProviderList,
+    AgentLLMProviderType,
 )
 
 pytestmark = pytest.mark.unit
@@ -17,17 +19,9 @@ pytestmark = pytest.mark.unit
 
 def test_agent_config_uses_runtime_defaults_for_agent_sections() -> None:
     config = AgentConfig(
-        llm=AgentLLMConfig(
+        llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.MINIMAX,
-            providers=(
-                AgentLLMProviderConfig(
-                    provider_type=AgentLLMProviderType.MINIMAX,
-                    api_key="secret",
-                    model="MiniMax-M2.5",
-                    timeout_seconds=30.0,
-                    context_window_tokens=1_000_000,
-                ),
-            ),
+            providers=(_minimax_provider(),),
         ),
     )
 
@@ -45,17 +39,9 @@ def test_agent_config_uses_runtime_defaults_for_agent_sections() -> None:
 
 def test_agent_config_accepts_explicit_sections() -> None:
     config = AgentConfig(
-        llm=AgentLLMConfig(
+        llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.MINIMAX,
-            providers=(
-                AgentLLMProviderConfig(
-                    provider_type=AgentLLMProviderType.MINIMAX,
-                    api_key="secret",
-                    model="MiniMax-M2.5",
-                    timeout_seconds=30.0,
-                    context_window_tokens=1_000_000,
-                ),
-            ),
+            providers=(_minimax_provider(),),
         ),
         loop=AgentLoopConfig(max_turns=20, max_tool_calls=7),
         context=AgentContextConfig(
@@ -91,17 +77,19 @@ def test_agent_config_accepts_explicit_sections() -> None:
     assert config.event_output.truncate.max_array_items == 8
 
 
-def test_agent_llm_config_requires_default_provider_config() -> None:
+def test_agent_llm_provider_list_requires_default_provider() -> None:
     with pytest.raises(RuntimeError, match="Missing default LLM provider config: codex"):
-        AgentLLMConfig(
+        AgentLLMProviderList(
             default_provider=AgentLLMProviderType.CODEX,
-            providers=(
-                AgentLLMProviderConfig(
-                    provider_type=AgentLLMProviderType.MINIMAX,
-                    api_key="secret",
-                    model="MiniMax-M2.5",
-                    timeout_seconds=30.0,
-                    context_window_tokens=1_000_000,
-                ),
-            ),
+            providers=(_minimax_provider(),),
         )
+
+
+def _minimax_provider() -> AgentLLMProvider:
+    return AgentLLMProvider(
+        type=AgentLLMProviderType.MINIMAX,
+        api_key="secret",
+        model="MiniMax-M2.5",
+        timeout_seconds=30.0,
+        context_window_tokens=1_000_000,
+    )

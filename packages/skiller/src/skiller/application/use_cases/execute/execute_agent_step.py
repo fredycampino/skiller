@@ -85,7 +85,13 @@ class ExecuteAgentStepUseCase:
                 "max_tool_calls": config.config.loop.max_tool_calls,
                 "tools": [tool.name for tool in config.tools],
             },
-            evaluation={"model": runner_result.response_model},
+            evaluation={
+                "model": (
+                    runner_result.response_model.value
+                    if runner_result.response_model is not None
+                    else None
+                )
+            },
             output=AgentOutput(
                 text=runner_result.final_text or "",
                 text_ref="data.final.text" if runner_result.final_text is not None else None,

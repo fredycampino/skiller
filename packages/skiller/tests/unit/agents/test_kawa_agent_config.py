@@ -65,4 +65,5 @@ def test_kawa_shell_config_supports_prompt_commands() -> None:
         "sleep",
         "echo",
         "date",
+        "curl",
     ]

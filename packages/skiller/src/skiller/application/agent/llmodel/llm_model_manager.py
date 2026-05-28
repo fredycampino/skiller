@@ -1,20 +1,20 @@
 from dataclasses import replace
 
-from skiller.domain.agent.agent_config_model import AgentLLMProviderConfig
-from skiller.domain.agent.llm_client_provider import LLMClientProvider
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
+from skiller.domain.agent.llm_client_resolver import LLMClientResolver
 from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
 from skiller.domain.agent.llm_port import LLMPort
 
 
 class LLMModelManager:
-    def __init__(self, *, client_provider: LLMClientProvider) -> None:
-        self.client_provider = client_provider
-        self.clients: dict[AgentLLMProviderConfig, LLMPort] = {}
+    def __init__(self, *, client_resolver: LLMClientResolver) -> None:
+        self.client_resolver = client_resolver
+        self.clients: dict[AgentLLMProvider, LLMPort] = {}
 
     def generate(
         self,
         *,
-        provider: AgentLLMProviderConfig,
+        provider: AgentLLMProvider,
         request: LLMRequest,
     ) -> LLMResponse:
         client = self.client(provider)
@@ -24,12 +24,12 @@ class LLMModelManager:
             provider=provider,
         )
 
-    def client(self, provider: AgentLLMProviderConfig) -> LLMPort:
+    def client(self, provider: AgentLLMProvider) -> LLMPort:
         client = self.clients.get(provider)
         if client is not None:
             return client
 
-        client = self.client_provider.create(provider)
+        client = self.client_resolver.resolve(provider)
         self.clients[provider] = client
         return client
 
@@ -37,17 +37,16 @@ class LLMModelManager:
 def _response_with_usage_metadata(
     *,
     response: LLMResponse,
-    provider: AgentLLMProviderConfig,
+    provider: AgentLLMProvider,
 ) -> LLMResponse:
     usage = response.usage
     if usage is None:
         return response
 
-    model = response.model or provider.model
     usage = replace(
         usage,
-        provider=provider.provider_type.value,
-        model=model,
+        provider=provider.type.value,
+        model=response.model.value,
     )
     return replace(
         response,

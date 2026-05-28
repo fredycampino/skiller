@@ -37,32 +37,30 @@ class OpenAICodexResponsesLLM(LLMPort):
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         kwargs = to_openai_responses_kwargs(request)
+        kwargs["stream"] = True
         response: object | None = None
         text_deltas: list[object] = []
         output_items: list[object] = []
 
         try:
-            with self.client.responses.stream(**kwargs) as stream:
-                for event in stream:
-                    event_type = getattr(event, "type", "")
-                    if event_type == "response.output_text.delta":
-                        text_deltas.append(getattr(event, "delta", None))
-                        continue
-                    if event_type == "response.completed":
-                        response = getattr(event, "response", None)
-                        continue
-                    if event_type == "response.output_item.done":
-                        output_items.append(getattr(event, "item", None))
-                        continue
-                    if event_type == "error":
-                        return LLMResponse(
-                            ok=False,
-                            error="OpenAI Codex stream emitted an error event",
-                            error_code="stream_error",
-                        )
-
-                if response is None:
-                    response = stream.get_final_response()
+            for event in self.client.responses.create(**kwargs):
+                event_type = getattr(event, "type", "")
+                if event_type == "response.output_text.delta":
+                    text_deltas.append(getattr(event, "delta", None))
+                    continue
+                if event_type == "response.completed":
+                    response = getattr(event, "response", None)
+                    continue
+                if event_type == "response.output_item.done":
+                    output_items.append(getattr(event, "item", None))
+                    continue
+                if event_type == "error":
+                    return LLMResponse(
+                        ok=False,
+                        model=request.model,
+                        error="OpenAI Codex stream emitted an error event",
+                        error_code="stream_error",
+                    )
         except Exception as exc:  # noqa: BLE001
             if text_deltas or output_items:
                 stream_result = OpenAIResponsesStreamResult(
@@ -70,9 +68,13 @@ class OpenAICodexResponsesLLM(LLMPort):
                     text_deltas=tuple(text_deltas),
                     output_items=tuple(output_items),
                 )
-                return to_port_llm_response(stream_result, fallback_model=request.model)
+                return to_port_llm_response(
+                    stream_result,
+                    fallback_model=request.model,
+                )
             return LLMResponse(
                 ok=False,
+                model=request.model,
                 error=f"OpenAI Codex request failed: {exc}",
                 error_code="request_failed",
             )

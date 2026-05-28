@@ -32,7 +32,8 @@
         "skiller",
         "sleep",
         "echo",
-        "date"
+        "date",
+        "curl"
       ]
     },
     "files": {

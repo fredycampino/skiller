@@ -366,7 +366,7 @@ def _build_runner(
 def test_agent_runner_returns_final_text_without_tools() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
-        responses=[LLMResponse(ok=True, content="Hello back.", model="fake-model")]
+        responses=[LLMResponse(ok=True, content="Hello back.", model="model1")]
     )
     runner = _build_runner(context_store=context_store, llm=llm)
 
@@ -386,7 +386,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
     assert result.turn_count == 1
     assert result.tool_call_count == 0
     assert result.finish == AgentRunnerFinish.FINAL
-    assert result.response_model == "fake-model"
+    assert result.response_model == "model1"
     assert context_store.window_calls == [
         {"context_id": result.context_id, "window_tokens": 80_000}
     ]
@@ -399,7 +399,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
             LLMResponse(
                 ok=True,
                 content=None,
-                model="fake-model",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="call-1",
@@ -468,7 +468,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         responses=[
             LLMResponse(
                 ok=True,
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -483,7 +483,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="fake",
+                model="model1",
                 usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
             ),
         ]
@@ -527,7 +527,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             completion_tokens=25,
             total_tokens=125,
             provider="fake",
-            model="fake",
+            model="model1",
         )
     executed_request = tool_manager.execute_prepared_calls[0].request
     assert isinstance(executed_request, AgentToolRequest)
@@ -571,7 +571,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
             LLMResponse(
                 ok=True,
                 content="I should send a notification.",
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -587,7 +587,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="fake",
+                model="model1",
                 usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
             ),
         ]
@@ -655,7 +655,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         responses=[
             LLMResponse(
                 ok=True,
-                model="fake",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -670,7 +670,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="fake",
+                model="model1",
             ),
         ]
     )
@@ -728,7 +728,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
                         ),
                     ),
                 ),
-                model="fake",
+                model="model1",
             )
         ]
     )
@@ -795,7 +795,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="fake",
+                model="model1",
             )
         ]
     )
@@ -835,6 +835,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
         responses=[
             LLMResponse(
                 ok=False,
+                model="model1",
                 error="invalid params",
                 error_code="2013",
             )
@@ -872,7 +873,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
             LLMResponse(
                 ok=True,
                 content=None,
-                model="fake-model",
+                model="model1",
                 tool_calls=(
                     LLMToolCall(
                         id="call-1",
@@ -919,7 +920,7 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
             LLMResponse(
                 ok=True,
                 content="   ",
-                model="fake-model",
+                model="model1",
             )
         ]
     )

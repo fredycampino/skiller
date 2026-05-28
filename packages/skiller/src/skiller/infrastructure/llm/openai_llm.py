@@ -31,6 +31,7 @@ class OpenAILLM(LLMPort):
         if not self.api_key.strip():
             return LLMResponse(
                 ok=False,
+                model=request.model,
                 error="API key is not configured for the selected model provider",
                 error_code="api_key_missing",
             )
@@ -43,6 +44,7 @@ class OpenAILLM(LLMPort):
         except Exception as exc:  # noqa: BLE001
             return LLMResponse(
                 ok=False,
+                model=request.model,
                 error=f"OpenAI request failed: {exc}",
                 error_code="request_failed",
             )

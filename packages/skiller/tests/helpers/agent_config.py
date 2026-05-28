@@ -5,12 +5,14 @@ from skiller.domain.agent.agent_config_model import (
     AgentConfig,
     AgentContextConfig,
     AgentEventOutputConfig,
-    AgentLLMConfig,
-    AgentLLMProviderConfig,
-    AgentLLMProviderType,
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMProvider,
+    AgentLLMProviderList,
+    AgentLLMProviderType,
+)
 from skiller.domain.tool.tool_contract import ToolDefinition, ToolRuntimeConfigs
 
 
@@ -41,12 +43,12 @@ def agent_config(
     tools: ToolRuntimeConfigs | None = None,
 ) -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMConfig(
+        llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.FAKE,
             providers=(
-                AgentLLMProviderConfig(
-                    provider_type=AgentLLMProviderType.FAKE,
-                    model="test-model",
+                AgentLLMProvider(
+                    type=AgentLLMProviderType.FAKE,
+                    model="model1",
                     api_key="test-key",
                     timeout_seconds=30,
                     context_window_tokens=100_000,

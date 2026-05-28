@@ -1,5 +1,5 @@
-from skiller.domain.agent.agent_config_model import (
-    AgentLLMProviderConfig,
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMProvider,
     AgentLLMProviderType,
 )
 from skiller.domain.agent.llm_port import LLMPort
@@ -12,19 +12,19 @@ MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
 
 class LLMClientFactory:
-    def create(self, provider: AgentLLMProviderConfig) -> LLMPort:
-        if provider.provider_type == AgentLLMProviderType.NULL:
+    def resolve(self, provider: AgentLLMProvider) -> LLMPort:
+        if provider.type == AgentLLMProviderType.NULL:
             return NullLLM()
-        if provider.provider_type == AgentLLMProviderType.FAKE:
+        if provider.type == AgentLLMProviderType.FAKE:
             return FakeLLM(model=provider.model)
-        if provider.provider_type == AgentLLMProviderType.MINIMAX:
-            return self.create_minimax(provider)
-        if provider.provider_type == AgentLLMProviderType.CODEX:
-            return self.create_codex(provider)
+        if provider.type == AgentLLMProviderType.MINIMAX:
+            return self._minimax_client(provider)
+        if provider.type == AgentLLMProviderType.CODEX:
+            return self._codex_client(provider)
 
-        raise RuntimeError(f"Unsupported LLM provider: {provider.provider_type.value}")
+        raise RuntimeError(f"Unsupported LLM provider: {provider.type.value}")
 
-    def create_minimax(self, provider: AgentLLMProviderConfig) -> OpenAILLM:
+    def _minimax_client(self, provider: AgentLLMProvider) -> OpenAILLM:
         if provider.api_key is None:
             raise RuntimeError("MiniMax provider requires api_key")
         return OpenAILLM(
@@ -33,7 +33,7 @@ class LLMClientFactory:
             timeout_seconds=provider.timeout_seconds,
         )
 
-    def create_codex(self, provider: AgentLLMProviderConfig) -> OpenAICodexResponsesLLM:
+    def _codex_client(self, provider: AgentLLMProvider) -> OpenAICodexResponsesLLM:
         if provider.credentials_file is None:
             raise RuntimeError("Codex provider requires credentials_file")
         return OpenAICodexResponsesLLM(

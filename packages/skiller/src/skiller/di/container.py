@@ -364,7 +364,7 @@ def build_runtime_container(
 
 
 def _build_llm_model_manager() -> LLMModelManager:
-    return LLMModelManager(client_provider=LLMClientFactory())
+    return LLMModelManager(client_resolver=LLMClientFactory())
 
 
 def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:

@@ -31,18 +31,10 @@ class _FakeStream:
     def __init__(
         self,
         events: list[object],
-        response: object,
         error_after_events: Exception | None = None,
     ) -> None:
         self.events = events
-        self.response = response
         self.error_after_events = error_after_events
-
-    def __enter__(self) -> "_FakeStream":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        _ = args
 
     def __iter__(self) -> Any:
         if self.error_after_events is None:
@@ -54,42 +46,31 @@ class _FakeStream:
 
         return iterator()
 
-    def get_final_response(self) -> object:
-        return self.response
-
 
 class _FakeResponses:
     def __init__(
         self,
         events: list[object],
-        response: object,
         error_after_events: Exception | None = None,
     ) -> None:
         self.events = events
-        self.response = response
         self.error_after_events = error_after_events
         self.calls: list[dict[str, object]] = []
 
-    def stream(self, **kwargs: object) -> _FakeStream:
+    def create(self, **kwargs: object) -> _FakeStream:
         self.calls.append(kwargs)
-        return _FakeStream(self.events, self.response, self.error_after_events)
+        return _FakeStream(self.events, self.error_after_events)
 
 
 class _FakeOpenAI:
     instances: list["_FakeOpenAI"] = []
     events: list[object] = []
     error_after_events: Exception | None = None
-    response: object = SimpleNamespace(
-        model="gpt-5.2",
-        status="completed",
-        output=[],
-    )
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
         self.responses = _FakeResponses(
             self.events,
-            self.response,
             self.error_after_events,
         )
         self.instances.append(self)
@@ -135,7 +116,6 @@ def test_openai_codex_responses_llm_streams_response(
         SimpleNamespace(type="response.output_text.delta", delta="hello"),
         SimpleNamespace(type="response.output_text.delta", delta=" codex"),
     ]
-    _FakeOpenAI.response = SimpleNamespace(model="gpt-5.2", status="completed", output=[])
     monkeypatch.setattr(
         openai_codex_responses_llm,
         "_load_openai_client_class",
@@ -150,7 +130,7 @@ def test_openai_codex_responses_llm_streams_response(
     response = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
@@ -158,10 +138,11 @@ def test_openai_codex_responses_llm_streams_response(
     assert response.content == "hello codex"
     assert _FakeOpenAI.instances[0].responses.calls == [
         {
-            "model": "gpt-5.2",
+            "model": "gpt-5.4",
             "instructions": "",
             "input": [{"role": "user", "content": "hello"}],
             "store": False,
+            "stream": True,
         }
     ]
 
@@ -176,9 +157,9 @@ def test_openai_codex_responses_llm_reads_completed_event_usage(
         SimpleNamespace(
             type="response.completed",
             response=SimpleNamespace(
-                model="gpt-5.2",
+                model="gpt-5.4",
                 status="completed",
-                output=[],
+                output=None,
                 usage=SimpleNamespace(
                     input_tokens=10,
                     output_tokens=5,
@@ -187,7 +168,6 @@ def test_openai_codex_responses_llm_reads_completed_event_usage(
             ),
         ),
     ]
-    _FakeOpenAI.response = SimpleNamespace(model="fallback", status="completed", output=[])
     monkeypatch.setattr(
         openai_codex_responses_llm,
         "_load_openai_client_class",
@@ -202,7 +182,7 @@ def test_openai_codex_responses_llm_reads_completed_event_usage(
     response = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
@@ -213,7 +193,7 @@ def test_openai_codex_responses_llm_reads_completed_event_usage(
     assert response.usage.total_tokens == 15
 
 
-def test_openai_codex_responses_llm_keeps_stream_items_when_final_parser_fails(
+def test_openai_codex_responses_llm_keeps_stream_items_when_raw_stream_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool_call = SimpleNamespace(
@@ -227,7 +207,6 @@ def test_openai_codex_responses_llm_keeps_stream_items_when_final_parser_fails(
         SimpleNamespace(type="response.output_item.done", item=tool_call),
     ]
     _FakeOpenAI.error_after_events = TypeError("'NoneType' object is not iterable")
-    _FakeOpenAI.response = SimpleNamespace(model="gpt-5.2", status="completed", output=[])
     monkeypatch.setattr(
         openai_codex_responses_llm,
         "_load_openai_client_class",
@@ -242,12 +221,12 @@ def test_openai_codex_responses_llm_keeps_stream_items_when_final_parser_fails(
     response = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
     assert response.ok is True
-    assert response.model == "gpt-5.2"
+    assert response.model == "gpt-5.4"
     assert len(response.tool_calls) == 1
     assert response.tool_calls[0].id == "call-1"
     assert response.tool_calls[0].function.name == "shell"

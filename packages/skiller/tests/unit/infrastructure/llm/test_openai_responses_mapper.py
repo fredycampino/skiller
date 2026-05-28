@@ -49,6 +49,21 @@ class _ShellTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
+class _ResponseWithBrokenOutputText:
+    model = "gpt-5.4"
+    status = "completed"
+    output = None
+    usage = SimpleNamespace(
+        input_tokens=10,
+        output_tokens=5,
+        total_tokens=15,
+    )
+
+    @property
+    def output_text(self) -> str:
+        raise TypeError("'NoneType' object is not iterable")
+
+
 def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
     request = LLMRequest(
         messages=(
@@ -68,7 +83,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
             ),
             LLMToolMessage("pwd output", tool_call_id="call_1"),
         ),
-        model="gpt-5.2",
+        model="gpt-5.4",
         tools=(_ShellTool(),),
         tool_choice=LLMToolChoice.tool("shell"),
         response_format=LLMResponseFormat(
@@ -86,7 +101,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
     kwargs = to_openai_responses_kwargs(request)
 
     assert kwargs == {
-        "model": "gpt-5.2",
+        "model": "gpt-5.4",
         "instructions": "system",
         "input": [
             {"role": "user", "content": "hello"},
@@ -131,7 +146,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
 def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
     stream_result = OpenAIResponsesStreamResult(
         response=SimpleNamespace(
-            model="gpt-5.2",
+            model="gpt-5.4",
             status="completed",
             output_text="hello",
             usage=SimpleNamespace(
@@ -154,7 +169,7 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
 
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == "gpt-5.2"
+    assert result.model == "gpt-5.4"
     assert result.finish_reason == "completed"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 10
@@ -174,7 +189,7 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
 def test_to_port_llm_response_prefers_streamed_text() -> None:
     stream_result = OpenAIResponsesStreamResult(
         response=SimpleNamespace(
-            model="gpt-5.2",
+            model="gpt-5.4",
             status="completed",
             output_text="final text",
             output=[],
@@ -190,7 +205,7 @@ def test_to_port_llm_response_prefers_streamed_text() -> None:
 def test_to_port_llm_response_reads_text_from_message_output() -> None:
     stream_result = OpenAIResponsesStreamResult(
         response={
-            "model": "gpt-5.2",
+            "model": "gpt-5.4",
             "status": "completed",
             "output": [
                 {
@@ -211,7 +226,7 @@ def test_to_port_llm_response_reads_text_from_message_output() -> None:
 
 def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_empty() -> None:
     stream_result = OpenAIResponsesStreamResult(
-        response=SimpleNamespace(model="gpt-5.2", status="completed", output=[]),
+        response=SimpleNamespace(model="gpt-5.4", status="completed", output=[]),
         output_items=(
             {
                 "type": "function_call",
@@ -224,6 +239,36 @@ def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_em
 
     result = to_port_llm_response(stream_result, fallback_model="default-model")
 
+    assert result.tool_calls == (
+        LLMToolCall(
+            id="call_1",
+            function=LLMToolCallFunction(
+                name="shell",
+                arguments_json='{"command": "pwd"}',
+            ),
+        ),
+    )
+
+
+def test_to_port_llm_response_tolerates_codex_output_text_with_null_output() -> None:
+    stream_result = OpenAIResponsesStreamResult(
+        response=_ResponseWithBrokenOutputText(),
+        output_items=(
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "shell",
+                "arguments": {"command": "pwd"},
+            },
+        ),
+    )
+
+    result = to_port_llm_response(stream_result, fallback_model="default-model")
+
+    assert result.ok is True
+    assert result.content is None
+    assert result.usage is not None
+    assert result.usage.total_tokens == 15
     assert result.tool_calls == (
         LLMToolCall(
             id="call_1",

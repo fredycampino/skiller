@@ -45,7 +45,7 @@ class _FakeOpenAI:
     instances: list["_FakeOpenAI"] = []
     events: list[object] = []
     response: object = SimpleNamespace(
-        model="gpt-5.2",
+        model="gpt-5.4",
         status="completed",
         output=[],
     )
@@ -96,7 +96,7 @@ def test_generate_streams_response_and_maps_text(monkeypatch: pytest.MonkeyPatch
         SimpleNamespace(type="response.output_text.delta", delta=" world"),
     ]
     _FakeOpenAI.response = SimpleNamespace(
-        model="gpt-5.2",
+        model="gpt-5.4",
         status="completed",
         output=[],
     )
@@ -110,7 +110,7 @@ def test_generate_streams_response_and_maps_text(monkeypatch: pytest.MonkeyPatch
     result = llm.generate(
         LLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.2",
+            model="gpt-5.4",
         )
     )
 
@@ -118,7 +118,7 @@ def test_generate_streams_response_and_maps_text(monkeypatch: pytest.MonkeyPatch
     assert result.content == "hello world"
     assert _FakeOpenAI.instances[0].responses.calls == [
         {
-            "model": "gpt-5.2",
+            "model": "gpt-5.4",
             "instructions": "",
             "input": [{"role": "user", "content": "hello"}],
             "store": False,
@@ -147,7 +147,7 @@ def test_generate_returns_api_key_error_without_building_client() -> None:
 def test_generate_returns_stream_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeOpenAI.instances = []
     _FakeOpenAI.events = [SimpleNamespace(type="error")]
-    _FakeOpenAI.response = SimpleNamespace(model="gpt-5.2", status="completed", output=[])
+    _FakeOpenAI.response = SimpleNamespace(model="gpt-5.4", status="completed", output=[])
     monkeypatch.setattr(openai_responses_llm, "_load_openai_client_class", lambda: _FakeOpenAI)
     llm = OpenAIResponsesLLM(
         api_key="token",

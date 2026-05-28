@@ -167,7 +167,7 @@ def _tool_request() -> ToolExecutionRequest:
             context_id="ctx-1",
         ),
         turn_id="turn-1",
-        response=LLMResponse(ok=True),
+        response=LLMResponse(ok=True, model="model1"),
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
         event_config=AgentEventOutputConfig(),

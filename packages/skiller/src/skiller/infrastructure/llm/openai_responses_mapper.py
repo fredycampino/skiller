@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -43,7 +44,7 @@ def to_openai_responses_kwargs(
         input_items.extend(_message_to_input_items(message))
 
     payload: dict[str, object] = {
-        "model": request.model,
+        "model": request.model.value,
         "instructions": "\n\n".join(instructions),
         "input": input_items,
         "store": False,
@@ -68,7 +69,7 @@ def to_openai_responses_kwargs(
 def to_port_llm_response(
     stream_result: OpenAIResponsesStreamResult,
     *,
-    fallback_model: str,
+    fallback_model: AgentLLMModel,
 ) -> LLMResponse:
     raw_output_items = _value(stream_result.response, "output")
     output_items = raw_output_items if isinstance(raw_output_items, list) else []
@@ -107,7 +108,10 @@ def to_port_llm_response(
     response_model = _value(stream_result.response, "model")
     model = fallback_model
     if isinstance(response_model, str) and response_model.strip():
-        model = response_model
+        try:
+            model = AgentLLMModel(response_model)
+        except ValueError:
+            model = fallback_model
 
     status = _value(stream_result.response, "status")
     finish_reason = status if isinstance(status, str) and status else None
@@ -237,7 +241,10 @@ def _to_port_usage(raw_usage: object) -> LLMUsage | None:
 
 
 def _value(source: object, key: str) -> object:
-    value = getattr(source, key, None)
+    try:
+        value = getattr(source, key, None)
+    except TypeError:
+        value = None
     if value is None and isinstance(source, Mapping):
         return source.get(key)
     return value

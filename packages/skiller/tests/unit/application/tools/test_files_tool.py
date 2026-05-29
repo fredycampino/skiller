@@ -216,6 +216,7 @@ def test_files_tool_writes_and_reads_text(tmp_path) -> None:
         "content": "hello",
         "bytes": 5,
     }
+    assert read_result.text == "Read nested/notes.txt"
 
 
 def test_files_tool_edits_exactly_one_match(tmp_path) -> None:

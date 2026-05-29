@@ -139,16 +139,14 @@ class AgentPromptBuilder:
         return entry.id
 
     def _tool_result_content(self, payload: AgentToolResultPayload) -> str:
-        if payload.text:
-            return payload.text
-
-        if payload.data:
-            return json.dumps(payload.data, ensure_ascii=False, sort_keys=True)
-
+        message: dict[str, object] = {
+            "tool": payload.tool,
+            "status": payload.status,
+            "data": payload.data,
+        }
         if payload.error is not None:
-            return payload.error
-
-        return ""
+            message["error"] = payload.error
+        return json.dumps(message, ensure_ascii=False, sort_keys=True)
 
     def _entry_turn_id(self, entry: AgentContextEntry) -> str:
         if isinstance(entry.payload, AgentUserMessagePayload):

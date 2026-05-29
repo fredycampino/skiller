@@ -97,7 +97,10 @@ def test_agent_prompt_builder_builds_messages() -> None:
                 ),
             )
         ),
-        LLMToolMessage('{"ok": true}', tool_call_id="call-1"),
+        LLMToolMessage(
+            '{"data": {"ok": true}, "status": "COMPLETED", "tool": "shell"}',
+            tool_call_id="call-1",
+        ),
     )
 
 
@@ -167,7 +170,10 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
                 ),
             ),
         ),
-        LLMToolMessage("sent", tool_call_id="call-1"),
+        LLMToolMessage(
+            '{"data": {"ok": true}, "status": "COMPLETED", "tool": "notify"}',
+            tool_call_id="call-1",
+        ),
     )
 
 
@@ -259,8 +265,14 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
                 ),
             )
         ),
-        LLMToolMessage("sent", tool_call_id="call-1"),
-        LLMToolMessage("ok", tool_call_id="call-2"),
+        LLMToolMessage(
+            '{"data": {"message": "sent"}, "status": "COMPLETED", "tool": "notify"}',
+            tool_call_id="call-1",
+        ),
+        LLMToolMessage(
+            '{"data": {"ok": true}, "status": "COMPLETED", "tool": "shell"}',
+            tool_call_id="call-2",
+        ),
     )
 
 

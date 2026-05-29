@@ -552,7 +552,10 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
                 ),
             )
         ),
-        LLMToolMessage("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage(
+            '{"data": {"message": "sent"}, "status": "COMPLETED", "tool": "notify"}',
+            tool_call_id="openai-call-1",
+        ),
     )
     assert [call["event_type"] for call in append_event.calls] == [
         RuntimeEventType.AGENT_TOOL_CALL,
@@ -646,7 +649,10 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
                 ),
             ),
         ),
-        LLMToolMessage("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage(
+            '{"data": {"message": "sent"}, "status": "COMPLETED", "tool": "notify"}',
+            tool_call_id="openai-call-1",
+        ),
     )
 
 def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() -> None:

@@ -701,7 +701,10 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 ),
             )
         ),
-        LLMToolMessage("sent", tool_call_id="openai-call-1"),
+        LLMToolMessage(
+            '{"data": {"message": "sent"}, "status": "COMPLETED", "tool": "notify"}',
+            tool_call_id="openai-call-1",
+        ),
     )
     assert [tool.name for tool in llm.calls[1].tools] == ["notify"]
 

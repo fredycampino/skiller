@@ -172,7 +172,7 @@ An agent can also replace a full root section such as `tools`:
 {
   "tools": {
     "shell": {
-      "workspace": ".",
+      "allowed_paths": ["."],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
       "allowed_commands": ["pwd", "ls", "rg"]
@@ -299,7 +299,7 @@ Valid shell config:
 {
   "tools": {
     "shell": {
-      "workspace": "",
+      "allowed_paths": ["."],
       "allowlist_enabled": false,
       "allow_env_prefix": true,
       "allowed_commands": []
@@ -310,14 +310,17 @@ Valid shell config:
 
 Shell config fields:
 
-- `tools.shell.workspace`
+- `tools.shell.allowed_paths`
 - `tools.shell.allowlist_enabled`
 - `tools.shell.allow_env_prefix`
 - `tools.shell.allowed_commands`
 
+`allowed_paths` defines the roots where shell `cwd` and explicit command path
+arguments may point.
+
 Shell config defaults:
 
-- `workspace = ""`
+- `allowed_paths = ["."]`
 - `allowlist_enabled = false`
 - `allow_env_prefix = true`
 - `allowed_commands = ()`

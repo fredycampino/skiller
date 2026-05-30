@@ -655,7 +655,7 @@ def test_event_transcript_mapper_uses_step_error_item_for_step_error() -> None:
                 LogEventType.STEP_ERROR,
                 step_id="register_auth_webhook",
                 step_type="shell",
-                payload=StepErrorPayload(error="shell command path escapes workspace"),
+                payload=StepErrorPayload(error="shell command path escapes allowed_paths"),
             )
         ],
     )
@@ -664,7 +664,7 @@ def test_event_transcript_mapper_uses_step_error_item_for_step_error() -> None:
     assert isinstance(items[0], StepErrorItem)
     assert items[0].step_id == "register_auth_webhook"
     assert items[0].step_type == "shell"
-    assert items[0].message == "shell command path escapes workspace"
+    assert items[0].message == "shell command path escapes allowed_paths"
 
 
 def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished(
@@ -677,7 +677,7 @@ def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished(
                 LogEventType.RUN_FINISHED,
                 payload=RunFinishedPayload(
                     status="FAILED",
-                    error="shell command path escapes workspace",
+                    error="shell command path escapes allowed_paths",
                 ),
             )
         ],

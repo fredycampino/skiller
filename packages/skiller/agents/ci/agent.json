@@ -8,7 +8,9 @@
   },
   "tools": {
     "shell": {
-      "workspace": ".",
+      "allowed_paths": [
+        "."
+      ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
       "allowed_commands": [

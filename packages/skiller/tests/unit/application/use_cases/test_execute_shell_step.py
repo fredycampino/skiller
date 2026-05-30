@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.tools.shell import ShellProcessTool
@@ -115,7 +117,7 @@ def _build_use_case(
         shell_tool=ShellProcessTool(shell="/bin/bash"),
         shell_config=ShellToolRuntimeConfig(
             definition=ShellProcessTool,
-            workspace="/workspace",
+            allowed_paths=(Path("/workspace"),),
         ),
         process_runner=process_runner or _FakeProcessRunner(),
         agent_steering_store=agent_steering_store or _FakeAgentSteeringStore(),
@@ -318,7 +320,7 @@ def test_execute_shell_step_raises_policy_error_before_process_starts() -> None:
     process_runner = _FakeProcessRunner()
     use_case = _build_use_case(process_runner=process_runner)
 
-    with pytest.raises(ValueError, match="shell command path escapes workspace"):
+    with pytest.raises(ValueError, match="shell command path escapes allowed_paths"):
         use_case.execute(
             CurrentStep(
                 run_id="run-1",

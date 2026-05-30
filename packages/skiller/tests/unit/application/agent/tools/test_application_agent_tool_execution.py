@@ -280,7 +280,7 @@ def test_agent_tool_execution_persists_prepare_failure_as_tool_result() -> None:
     assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
     assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
     assert context_store.appended[-1]["payload"]["error"] == (
-        "shell command path escapes workspace"
+        "shell command path escapes allowed_paths"
     )
 
 

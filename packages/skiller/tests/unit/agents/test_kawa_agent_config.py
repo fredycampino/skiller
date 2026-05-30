@@ -21,7 +21,7 @@ def test_kawa_agent_owns_runtime_prompt_catalog() -> None:
     system = system_path.read_text(encoding="utf-8")
 
     assert "packages/skiller/tests/prompts" in system
-    assert "A-shell-workspace-escape.md" in system
+    assert "A-shell-allowed-paths.md" in system
     assert "E-max-turns.md" in system
 
 
@@ -41,7 +41,7 @@ def test_kawa_shell_config_supports_prompt_commands() -> None:
 
     shell_config = config["tools"]["shell"]
 
-    assert shell_config["workspace"] == "."
+    assert shell_config["allowed_paths"] == ["."]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allowed_commands"] == [
         "pwd",

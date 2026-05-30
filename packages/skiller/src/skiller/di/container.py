@@ -376,7 +376,7 @@ def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:
 def _build_shell_runtime_config() -> ShellToolRuntimeConfig:
     return ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="",
+        allowed_paths=(),
         allowlist_enabled=False,
         allow_env_prefix=True,
         allowed_commands=(),

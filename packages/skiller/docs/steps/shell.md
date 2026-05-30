@@ -62,12 +62,14 @@ The `shell` step does not load configuration from `.json`.
 
 Its `ShellToolRuntimeConfig` is injected by the runtime container with the default policy:
 
-- `workspace = ""`
+- `allowed_paths = ["."]`
 - `allowlist_enabled = false`
 - `allow_env_prefix = true`
 - `allowed_commands = ()`
 
 The step YAML only controls the execution request fields documented above: `command`, `cwd`, `env`, `timeout`, `check`, and `next`.
+`cwd` and explicit command path arguments must stay inside the configured
+`allowed_paths`.
 
 Template access:
 

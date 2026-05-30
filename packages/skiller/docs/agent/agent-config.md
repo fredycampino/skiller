@@ -75,6 +75,10 @@ The root field `agent` is explicitly rejected.
 
 `llm.default_provider` is a logical key into the root `providers` section.
 
+`llm.max_context_tokens` is optional. When present, it is the effective context
+limit for the selected provider. When absent, the selected provider uses its
+own `context_window_tokens`.
+
 Each provider entry requires:
 
 - `model`
@@ -87,7 +91,8 @@ Provider entries are keyed by the logical provider id:
 ```json
 {
   "llm": {
-    "default_provider": "minimax"
+    "default_provider": "minimax",
+    "max_context_tokens": 80000
   },
   "providers": {
     "minimax": {
@@ -99,6 +104,10 @@ Provider entries are keyed by the logical provider id:
   }
 }
 ```
+
+In this example the provider declares `1000000` tokens, but this agent uses
+`80000` as its effective context limit before applying
+`context.compaction.max_total_tokens_ratio`.
 
 Supported provider/model combinations:
 
@@ -228,7 +237,8 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 Fields:
 
 - `context.compaction.enabled`: reserved compaction flag
-- `context.compaction.max_total_tokens_ratio`: ratio applied to the provider `context_window_tokens`
+- `context.compaction.max_total_tokens_ratio`: ratio applied to `llm.max_context_tokens`
+  when present, otherwise to the selected provider `context_window_tokens`
 
 Defaults:
 

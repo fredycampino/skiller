@@ -27,6 +27,7 @@ from skiller.domain.agent.agent_config_model import (
 )
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
+    AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentToolCallPayload,
@@ -404,14 +405,12 @@ class _FakeAgentContextStore:
             payload={"type": "user_message", "text": text},
         )
 
-    def append_assistant_message(
+    def append_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append(
             run_id=context.run_id,
@@ -421,11 +420,37 @@ class _FakeAgentContextStore:
             payload={
                 "type": "assistant_message",
                 "turn_id": turn_id,
-                "message_type": message_type,
+                "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
                 "text": text,
-                "total_tokens": usage.total_tokens if usage is not None else 0,
+            },
+            message_type=AgentAssistantMessageType.TOOL_CALLS,
+        )
+
+    def append_final_assistant_message(
+        self,
+        *,
+        context: AgentContext,
+        turn_id: str,
+        text: str,
+        usage: LLMUsage | None,
+        window_tokens: int | None,
+        window_start_sequence: int,
+    ) -> AgentContextEntry:
+        return self._append(
+            run_id=context.run_id,
+            context_id=context.context_id,
+            source_step_id=context.agent_id,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            payload={
+                "type": "assistant_message",
+                "turn_id": turn_id,
+                "message_type": AgentAssistantMessageType.FINAL.value,
+                "text": text,
             },
             usage=usage,
+            message_type=AgentAssistantMessageType.FINAL,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
         )
 
     def append_tool_call(
@@ -483,8 +508,19 @@ class _FakeAgentContextStore:
         entry_type: AgentContextEntryType,
         payload: dict[str, object],
         usage: LLMUsage | None = None,
+        message_type: AgentAssistantMessageType | None = None,
+        window_tokens: int | None = None,
+        window_start_sequence: int | None = None,
     ) -> AgentContextEntry:
-        self.appended.append({"entry_type": entry_type, "payload": payload})
+        self.appended.append(
+            {
+                "entry_type": entry_type,
+                "payload": payload,
+                "message_type": message_type.value if message_type else None,
+                "window_tokens": window_tokens,
+                "window_start_sequence": window_start_sequence,
+            }
+        )
         entry = AgentContextEntry(
             id=f"entry-{len(self.entries) + 1}",
             run_id=run_id,
@@ -493,6 +529,9 @@ class _FakeAgentContextStore:
             entry_type=entry_type,
             payload=payload,
             usage=usage,
+            message_type=message_type,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             source_step_id=source_step_id,
             created_at="2026-05-09T00:00:00Z",
         )

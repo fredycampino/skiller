@@ -246,8 +246,8 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
                 turn_id="turn-4",
                 message_type="tool_calls",
                 text="I will inspect.",
-                total_tokens=1000,
             ),
+            window_tokens=1000,
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
         )

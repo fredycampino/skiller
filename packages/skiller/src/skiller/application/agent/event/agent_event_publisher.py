@@ -6,6 +6,7 @@ from skiller.application.agent.event.agent_event_truncator import (
 from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
+    AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentToolCallPayload,
@@ -40,7 +41,7 @@ class AgentEventPublisher:
             raise ValueError("Assistant event requires assistant_message entry")
         if not isinstance(entry.payload, AgentAssistantMessagePayload):
             raise ValueError("Assistant event requires AgentAssistantMessagePayload")
-        if entry.payload.message_type != "tool_calls":
+        if entry.payload.message_type != AgentAssistantMessageType.TOOL_CALLS:
             raise ValueError("Assistant event requires tool_calls message")
 
         truncator = self._truncator(config=config)
@@ -54,7 +55,7 @@ class AgentEventPublisher:
                     turn_id=payload.turn_id,
                     agent_sequence=entry.sequence,
                     body=AgentBodyToolMessage(
-                        total_tokens=payload.total_tokens or 0,
+                        total_tokens=entry.window_tokens or 0,
                         text=payload.text,
                     ),
                 ),
@@ -71,7 +72,7 @@ class AgentEventPublisher:
             raise ValueError("Final assistant event requires assistant_message entry")
         if not isinstance(entry.payload, AgentAssistantMessagePayload):
             raise ValueError("Final assistant event requires AgentAssistantMessagePayload")
-        if entry.payload.message_type != "final":
+        if entry.payload.message_type != AgentAssistantMessageType.FINAL:
             raise ValueError("Final assistant event requires final message")
 
         truncator = self._truncator(config=config)
@@ -85,7 +86,7 @@ class AgentEventPublisher:
                     turn_id=payload.turn_id,
                     agent_sequence=entry.sequence,
                     body=AgentBodyToolMessage(
-                        total_tokens=payload.total_tokens or 0,
+                        total_tokens=entry.window_tokens or 0,
                         text=payload.text,
                     ),
                 ),

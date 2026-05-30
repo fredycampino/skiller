@@ -79,12 +79,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         )
 
         if request.response.has_text_content:
-            assistant_message_entry = self.context_publisher.publish_assistant_message(
+            assistant_message_entry = self.context_publisher.publish_tool_calls_assistant_message(
                 context=request.context,
                 turn_id=request.turn_id,
-                message_type="tool_calls",
                 text=request.response.content,
-                usage=request.response.usage,
             )
             self.event_publisher.emit_assistant_message(
                 entry=assistant_message_entry,

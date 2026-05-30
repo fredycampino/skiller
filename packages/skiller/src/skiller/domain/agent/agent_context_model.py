@@ -12,6 +12,11 @@ class AgentContextEntryType(str, Enum):
     TOOL_RESULT = "tool_result"
 
 
+class AgentAssistantMessageType(str, Enum):
+    TOOL_CALLS = "tool_calls"
+    FINAL = "final"
+
+
 @dataclass(frozen=True)
 class AgentUserMessagePayload:
     text: str
@@ -21,10 +26,16 @@ class AgentUserMessagePayload:
 @dataclass(frozen=True)
 class AgentAssistantMessagePayload:
     turn_id: str
-    message_type: str
+    message_type: AgentAssistantMessageType
     text: str
-    total_tokens: int | None = None
     type: Literal["assistant_message"] = "assistant_message"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "message_type",
+            AgentAssistantMessageType(self.message_type),
+        )
 
 
 @dataclass(frozen=True)
@@ -69,6 +80,9 @@ class AgentContextEntry:
     usage: LLMUsage | None
     source_step_id: str
     created_at: str
+    message_type: AgentAssistantMessageType | None = None
+    window_tokens: int | None = None
+    window_start_sequence: int | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.payload, dict):
@@ -82,19 +96,23 @@ class AgentContextEntry:
             )
 
 
+@dataclass(frozen=True)
+class AgentContextWindow:
+    entries: list[AgentContextEntry]
+    start_sequence: int
+    end_sequence: int
+
+
 def agent_context_payload_to_dict(payload: AgentContextPayload) -> dict[str, object]:
     if isinstance(payload, AgentUserMessagePayload):
         return {"type": payload.type, "text": payload.text}
     if isinstance(payload, AgentAssistantMessagePayload):
-        result: dict[str, object] = {
+        return {
             "type": payload.type,
             "turn_id": payload.turn_id,
-            "message_type": payload.message_type,
+            "message_type": payload.message_type.value,
             "text": payload.text,
         }
-        if payload.total_tokens is not None:
-            result["total_tokens"] = payload.total_tokens
-        return result
     if isinstance(payload, AgentToolCallPayload):
         return {
             "type": payload.type,
@@ -128,9 +146,8 @@ def agent_context_payload_from_dict(
     if entry_type == AgentContextEntryType.ASSISTANT_MESSAGE:
         return AgentAssistantMessagePayload(
             turn_id=str(value.get("turn_id", "")),
-            message_type=str(value.get("message_type", "")),
+            message_type=AgentAssistantMessageType(str(value.get("message_type", ""))),
             text=str(value.get("text", "")),
-            total_tokens=_optional_int(value.get("total_tokens")),
         )
 
     if entry_type == AgentContextEntryType.TOOL_CALL:

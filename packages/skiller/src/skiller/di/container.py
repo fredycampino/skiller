@@ -88,10 +88,13 @@ from skiller.application.waits.webhook_mapper import WebhookWaitMapper
 from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
+from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 from skiller.infrastructure.config.settings import Settings, get_settings
-from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
+from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+    SqliteAgentContextDatasource,
+)
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
@@ -132,7 +135,8 @@ def build_runtime_container(
     wait_store = SqliteWaitStore(cfg.db_path)
     external_event_store = SqliteExternalEventStore(cfg.db_path)
     runtime_event_store = SqliteRuntimeEventStore(cfg.db_path)
-    agent_context_store = SqliteAgentContextStore(cfg.db_path)
+    agent_context_datasource = SqliteAgentContextDatasource(cfg.db_path)
+    agent_context_store = AgentContextStore(agent_context_datasource)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)

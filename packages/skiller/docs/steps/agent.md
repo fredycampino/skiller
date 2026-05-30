@@ -108,13 +108,11 @@ The output follows the standard output envelope:
 {
   "output": {
     "text": "Done.",
-    "text_ref": "data.final.text",
+    "text_ref": "data.final",
     "value": {
       "data": {
         "context_id": "ctx-123",
-        "final": {
-          "text": "Done."
-        },
+        "final": "Done.",
         "turn_count": 3,
         "tool_call_count": 2,
         "stop_reason": "final",
@@ -132,15 +130,16 @@ The output follows the standard output envelope:
 }
 ```
 
-`output.value` always has this shape:
+`output.value` always contains a `data` object. The `data` object has one
+of two typed shapes.
+
+Final output:
 
 ```json
 {
   "data": {
     "context_id": "ctx-123",
-    "final": {
-      "text": "Done."
-    },
+    "final": "Done.",
     "turn_count": 3,
     "tool_call_count": 2,
     "stop_reason": "final",
@@ -155,12 +154,28 @@ The output follows the standard output envelope:
 }
 ```
 
+Stop output:
+
+```json
+{
+  "data": {
+    "context_id": "ctx-123",
+    "message": "Agent stopped after reaching max turns.",
+    "turn_count": 8,
+    "tool_call_count": 2,
+    "stop_reason": "max_turns_exhausted"
+  }
+}
+```
+
 ### Output Fields
 
 - `data.context_id`
   - generated agent context id attached to the current `run_id + agent_id`
 - `data.final`
-  - final assistant answer; `null` when the agent loop finishes without a final answer
+  - final assistant answer; only present when `stop_reason = "final"`
+- `data.message`
+  - stop explanation; present when `stop_reason` is not `"final"`
 - `data.turn_count`
   - number of LLM turns consumed by this step execution
 - `data.tool_call_count`
@@ -185,6 +200,9 @@ Current values:
 - `max_turns_exhausted`
   - the step consumed its turn budget without a final answer, then finalized and
     the flow continued through `next`
+- `config_invalid`
+  - the agent config could not be loaded or validated, then finalized and the
+    flow continued through `next`
 
 These `stop_reason` values are non-fatal. The step completes normally and the
 runtime follows `next` when it is present.
@@ -195,13 +213,11 @@ Successful final response:
 {
   "output": {
     "text": "Done.",
-    "text_ref": "data.final.text",
+    "text_ref": "data.final",
     "value": {
       "data": {
         "context_id": "ctx-123",
-        "final": {
-          "text": "Done."
-        },
+        "final": "Done.",
         "turn_count": 3,
         "tool_call_count": 2,
         "stop_reason": "final",
@@ -225,9 +241,7 @@ Successful final response:
 {
   "data": {
     "context_id": "ctx-123",
-    "final": {
-      "text": "Done."
-    },
+    "final": "Done.",
     "turn_count": 3,
     "tool_call_count": 2,
     "stop_reason": "final",
@@ -245,7 +259,7 @@ Successful final response:
 Template examples:
 
 ```text
-{{output_value("support_agent").data.final.text}}
+{{output_value("support_agent").data.final}}
 {{output_value("support_agent").data.stop_reason}}
 {{output_value("support_agent").data.turn_count}}
 {{output_value("support_agent").data.usage.total_tokens}}
@@ -261,7 +275,7 @@ Interrupted tool turn:
     "value": {
       "data": {
         "context_id": "ctx-123",
-        "final": null,
+        "message": "Agent execution interrupted.",
         "turn_count": 1,
         "tool_call_count": 0,
         "stop_reason": "interrupted"
@@ -281,7 +295,7 @@ Reached turn limit:
     "value": {
       "data": {
         "context_id": "ctx-123",
-        "final": null,
+        "message": "Agent stopped after reaching max turns.",
         "turn_count": 8,
         "tool_call_count": 2,
         "stop_reason": "max_turns_exhausted"
@@ -292,7 +306,28 @@ Reached turn limit:
 }
 ```
 
-In both cases, the `agent` step still completes normally. The runtime then follows
+Invalid config:
+
+```json
+{
+  "output": {
+    "text": "Provider 'minimax' does not support model='bad-model'.",
+    "text_ref": "data.message",
+    "value": {
+      "data": {
+        "context_id": "",
+        "message": "Provider 'minimax' does not support model='bad-model'. (PROVIDER_MODEL_UNSUPPORTED)",
+        "turn_count": 0,
+        "tool_call_count": 0,
+        "stop_reason": "config_invalid"
+      }
+    },
+    "body_ref": null
+  }
+}
+```
+
+In these cases, the `agent` step still completes normally. The runtime then follows
 the step's `next` transition. A later `wait_input` or `wait_channel` step is what
 creates `WAITING`, not the `agent` step itself.
 
@@ -310,11 +345,6 @@ of advancing through `next`.
 
 Current fatal cases:
 
-- `agent_config_invalid`
-  - `agent.json` is missing, invalid, or defines an unsupported provider/model/client
-  - this is checked before the agent runner starts
-  - no agent context entry is created
-  - no LLM request is sent
 - `llm_request_failed`
   - the configured LLM client returns `ok = false`
   - no final assistant message is persisted

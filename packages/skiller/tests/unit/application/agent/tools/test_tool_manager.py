@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.agent.tools.tool_manager import ToolManager, ToolPrepareFailure
@@ -153,7 +155,7 @@ def test_router_prepares_process_tool_without_run_method() -> None:
         _request(
             runtime_config=ShellToolRuntimeConfig(
                 definition=ShellProcessTool,
-                workspace="/workspace",
+                allowed_paths=(Path("/workspace"),),
             ),
         )
     )
@@ -211,14 +213,14 @@ def test_router_prepare_rejects_policy_blocked_tool() -> None:
             args={"command": "cat /etc/passwd"},
             runtime_config=ShellToolRuntimeConfig(
                 definition=ShellProcessTool,
-                workspace="/workspace",
+                allowed_paths=(Path("/workspace"),),
             ),
         )
     )
 
     assert result.ok is False
     assert result.error == ToolPrepareFailure.POLICY_BLOCKED
-    assert result.error_message == "shell command path escapes workspace"
+    assert result.error_message == "shell command path escapes allowed_paths"
 
 
 def test_router_prepare_rejects_policy_exception() -> None:

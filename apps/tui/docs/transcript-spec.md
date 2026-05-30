@@ -326,7 +326,7 @@ Rules:
 Step errors render as `StepErrorItem`.
 
 ```text
-× shell command path escapes workspace
+× shell command path escapes allowed_paths
 ```
 
 Rules:

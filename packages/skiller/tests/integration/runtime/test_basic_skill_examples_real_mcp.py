@@ -157,7 +157,7 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         shell_tool=shell_tool,
         shell_config=ShellToolRuntimeConfig(
             definition=ShellProcessTool,
-            workspace="",
+            allowed_paths=(),
             allowlist_enabled=False,
             allow_env_prefix=True,
             allowed_commands=(),

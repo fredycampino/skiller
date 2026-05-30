@@ -14,7 +14,7 @@ Responsibilities:
 
 Current prompt catalog:
 
-- `A-shell-workspace-escape.md`: shell workspace boundary policy.
+- `A-shell-allowed-paths.md`: shell allowed paths boundary policy.
 - `B-multiple-shell-calls.md`: several valid shell tool calls.
 - `C-tool-call-limit.md`: `loop.max_tool_calls` rejection for one oversized assistant response.
 - `D-shell-interrupt.md`: shell process interruption.

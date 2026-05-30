@@ -348,7 +348,7 @@ def test_run_finished_view_renders_failed_as_muted_text() -> None:
         item=RunFinishedItem(
             run_id="run-1",
             status="error",
-            message="shell command path escapes workspace",
+            message="shell command path escapes allowed_paths",
         )
     )
 
@@ -365,14 +365,14 @@ def test_step_error_view_renders_error_detail() -> None:
             run_id="run-1",
             step_id="register_auth_webhook",
             step_type="shell",
-            message="shell command path escapes workspace",
+            message="shell command path escapes allowed_paths",
         )
     )
     console = Console(width=80, record=True)
 
     console.print(view.render(theme=DEFAULT_TUI_THEME))
 
-    assert console.export_text().rstrip() == "× shell command path escapes workspace"
+    assert console.export_text().rstrip() == "× shell command path escapes allowed_paths"
 
 
 def test_run_waiting_webhook_view_renders_icon_and_message() -> None:

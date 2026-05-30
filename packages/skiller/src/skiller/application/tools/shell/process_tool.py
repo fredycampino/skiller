@@ -32,7 +32,7 @@ class ShellProcessTool(
     ConfiguredTool[ShellToolRuntimeConfig],
 ):
     name: ClassVar[str] = "shell"
-    description: ClassVar[str] = "Execute a shell command in the workspace"
+    description: ClassVar[str] = "Execute a shell command in allowed paths"
 
     def __init__(
         self,

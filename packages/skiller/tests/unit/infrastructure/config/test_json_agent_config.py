@@ -130,7 +130,7 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
                 "all": ["shared"],
             },
             "shell": {
-                "workspace": "tmp/work",
+                "allowed_paths": ["tmp/work", "~/agent"],
                 "allowlist_enabled": True,
                 "allow_env_prefix": False,
                 "allowed_commands": ["rg", "cat"],
@@ -143,7 +143,10 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
 
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="tmp/work",
+        allowed_paths=(
+            Path("tmp/work").resolve(strict=False),
+            Path("~/agent").expanduser().resolve(strict=False),
+        ),
         allowlist_enabled=True,
         allow_env_prefix=False,
         allowed_commands=("rg", "cat"),
@@ -237,7 +240,7 @@ def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) 
         loop={"max_turns": 12, "max_tool_calls": 7},
         tools={
             "shell": {
-                "workspace": ".",
+                "allowed_paths": ["."],
                 "allowlist_enabled": True,
                 "allow_env_prefix": True,
                 "allowed_commands": ["pwd"],
@@ -266,7 +269,7 @@ def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) 
     assert config.loop.max_tool_calls == 5
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="",
+        allowed_paths=(),
         allowlist_enabled=False,
         allow_env_prefix=True,
         allowed_commands=(),

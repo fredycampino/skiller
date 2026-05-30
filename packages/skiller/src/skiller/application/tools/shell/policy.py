@@ -26,7 +26,7 @@ class ShellCommandPolicy:
         *,
         config: ShellToolRuntimeConfig,
     ) -> None:
-        self.workspace_root = self._resolve_workspace_root(config.workspace)
+        self.allowed_roots = self._resolve_allowed_roots(config.allowed_paths)
         self.allowlist_enabled = config.allowlist_enabled
         self.allowed_commands = {
             command.strip()
@@ -37,17 +37,17 @@ class ShellCommandPolicy:
 
     def resolve_cwd(self, cwd: str | None) -> str:
         if cwd is None:
-            return str(self.workspace_root)
+            return str(self.allowed_roots[0])
 
         raw = cwd.strip()
         if not raw:
-            return str(self.workspace_root)
+            return str(self.allowed_roots[0])
 
         requested = Path(raw).expanduser()
         if not requested.is_absolute():
-            requested = self.workspace_root / requested
+            requested = self.allowed_roots[0] / requested
         resolved = requested.resolve(strict=False)
-        self._ensure_path_in_workspace(resolved, label="cwd")
+        self._ensure_path_allowed(resolved, label="cwd")
         return str(resolved)
 
     def validate_command(self, *, command: str, effective_cwd: str) -> None:
@@ -66,12 +66,12 @@ class ShellCommandPolicy:
             resolved = self._resolve_candidate_path(candidate, cwd=working_directory)
             if resolved is None:
                 continue
-            self._ensure_path_in_workspace(resolved, label="command path")
+            self._ensure_path_allowed(resolved, label="command path")
 
-    def _resolve_workspace_root(self, workspace_root: str | None) -> Path:
-        if workspace_root and workspace_root.strip():
-            return Path(workspace_root.strip()).expanduser().resolve(strict=False)
-        return Path.cwd().resolve(strict=False)
+    def _resolve_allowed_roots(self, allowed_paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        if allowed_paths:
+            return allowed_paths
+        return (Path.cwd().resolve(strict=False),)
 
     def _validate_allowlist(self, *, command: str) -> None:
         if not self.allowlist_enabled:
@@ -135,14 +135,24 @@ class ShellCommandPolicy:
 
     def _extract_path_candidates(self, command: str) -> list[str]:
         try:
-            tokens = shlex.split(command, posix=True)
+            segments = self._split_command_segments(command)
         except ValueError:
             return self._extract_paths_from_raw_command(command)
 
         candidates: list[str] = []
-        for token in tokens:
-            candidates.extend(self._paths_from_token(token))
+        for segment in segments:
+            for token in self._segment_arguments(segment):
+                candidates.extend(self._paths_from_token(token))
         return candidates
+
+    def _segment_arguments(self, tokens: list[str]) -> list[str]:
+        index = 0
+        if self.allow_env_prefix:
+            while index < len(tokens) and self._ENV_ASSIGNMENT_RE.match(tokens[index]):
+                index += 1
+        if index >= len(tokens):
+            return []
+        return tokens[index + 1 :]
 
     def _extract_paths_from_raw_command(self, command: str) -> list[str]:
         candidates: list[str] = []
@@ -186,10 +196,13 @@ class ShellCommandPolicy:
 
         return None
 
-    def _ensure_path_in_workspace(self, path: Path, *, label: str) -> None:
-        if path == self.workspace_root:
-            return
-        try:
-            path.relative_to(self.workspace_root)
-        except ValueError as exc:
-            raise ValueError(f"shell {label} escapes workspace") from exc
+    def _ensure_path_allowed(self, path: Path, *, label: str) -> None:
+        for root in self.allowed_roots:
+            if path == root:
+                return
+            try:
+                path.relative_to(root)
+                return
+            except ValueError:
+                continue
+        raise ValueError(f"shell {label} escapes allowed_paths")

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.tools.shell import ShellProcessTool, ShellToolRequest
@@ -17,7 +19,7 @@ def test_shell_process_tool_builds_process_request() -> None:
     tool = ShellProcessTool(shell="/bin/zsh")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="/workspace",
+        allowed_paths=(Path("/workspace"),),
     )
 
     raw_request = tool.request(
@@ -55,11 +57,11 @@ def test_shell_process_tool_builds_process_request() -> None:
     )
 
 
-def test_shell_process_tool_rejects_command_outside_workspace() -> None:
+def test_shell_process_tool_rejects_command_outside_allowed_paths() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="/workspace",
+        allowed_paths=(Path("/workspace"),),
     )
 
     result = tool.policy(
@@ -68,14 +70,14 @@ def test_shell_process_tool_rejects_command_outside_workspace() -> None:
     )
 
     assert result.ok is False
-    assert result.error == "shell command path escapes workspace"
+    assert result.error == "shell command path escapes allowed_paths"
 
 
 def test_shell_process_tool_rejects_command_outside_allowlist() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        workspace="/workspace",
+        allowed_paths=(Path("/workspace"),),
         allowlist_enabled=True,
         allowed_commands=("git",),
     )

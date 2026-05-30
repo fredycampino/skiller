@@ -19,6 +19,26 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-beta.9 - 2026-05-30
+
+### Added
+- Add shell `allowed_paths` runtime configuration for multiple permitted roots.
+
+### Changed
+- Replace shell `workspace` configuration with `allowed_paths` across agents, docs, tests, and runtime policy.
+- Normalize shell allowed paths to `Path` values before runtime policy validation.
+- Update Kawa prompt catalog language from shell workspace boundaries to allowed paths.
+
+### Fixed
+- Preserve tool result data in agent prompts while keeping text as a human preview.
+- Allow path-based executables such as `./.venv/bin/python` to pass shell allowlist validation by executable name.
+
+### Removed
+- Remove public shell `workspace` configuration.
+
+### Notes
+- Includes PR #46 and PR #47.
+
 ## 1.0.0-beta.8 - 2026-05-28
 
 ### Added

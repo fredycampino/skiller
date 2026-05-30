@@ -84,6 +84,22 @@ def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> 
     assert config.event_output.truncate.max_text_chars == 100
 
 
+def test_json_agent_config_applies_llm_max_context_tokens_to_selected_provider(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {
+        "default_provider": "minimax",
+        "max_context_tokens": 80_000,
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.llm.default().context_window_tokens == 80_000
+
+
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     _write_config(config_path, llm=_minimax_llm(api_key_env="TEST_MINIMAX_KEY"))

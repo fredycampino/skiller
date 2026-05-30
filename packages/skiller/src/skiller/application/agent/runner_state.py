@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
 from skiller.domain.agent.agent_run_identity import AgentRun
-from skiller.domain.agent.agent_run_model import AgentRunnerFinish
+from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.agent.llm_model import LLMResponse, LLMUsage
 from skiller.domain.tool.tool_execution_model import ToolExecutionResults
 
@@ -11,7 +11,7 @@ from skiller.domain.tool.tool_execution_model import ToolExecutionResults
 @dataclass
 class AgentRunnerState:
     final_text: str | None = None
-    finish: AgentRunnerFinish | None = None
+    finish: AgentStopReason | None = None
     response_model: AgentLLMModel | None = None
     usage: LLMUsage | None = None
     error: str | None = None
@@ -26,33 +26,33 @@ class AgentRunnerState:
             self.fail_tool_execution(results.exception_message())
             return
         if not results.items:
-            self.finish = AgentRunnerFinish.FINAL
+            self.finish = AgentStopReason.FINAL
 
     def record_llm_response(self, response: LLMResponse) -> None:
         self.response_model = response.model
         self.usage = response.usage
 
     def fail_llm_request(self, error: str) -> None:
-        self.finish = AgentRunnerFinish.LLM_REQUEST_FAILED
+        self.finish = AgentStopReason.LLM_REQUEST_FAILED
         self.error = error
 
     def fail_tool_execution(self, error: str) -> None:
-        self.finish = AgentRunnerFinish.TOOL_EXECUTION_FAILED
+        self.finish = AgentStopReason.TOOL_EXECUTION_FAILED
         self.error = error
 
     def fail_invalid_final_message(self, error: str) -> None:
-        self.finish = AgentRunnerFinish.INVALID_FINAL_MESSAGE
+        self.finish = AgentStopReason.INVALID_FINAL_MESSAGE
         self.error = error
 
     def finish_final(self, final_text: str) -> None:
         self.final_text = final_text
-        self.finish = AgentRunnerFinish.FINAL
+        self.finish = AgentStopReason.FINAL
 
     def finish_interrupted(self) -> None:
-        self.finish = AgentRunnerFinish.INTERRUPTED
+        self.finish = AgentStopReason.INTERRUPTED
 
     def finish_max_turns_exhausted(self) -> None:
-        self.finish = AgentRunnerFinish.MAX_TURNS_EXHAUSTED
+        self.finish = AgentStopReason.MAX_TURNS_EXHAUSTED
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class AgentRunnerResult:
     final_text: str | None
     turn_count: int
     tool_call_count: int
-    finish: AgentRunnerFinish
+    finish: AgentStopReason
     response_model: AgentLLMModel | None
     usage: LLMUsage | None
     error: str | None = None

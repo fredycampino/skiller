@@ -9,6 +9,7 @@ from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
+    AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentToolCallPayload,
@@ -118,6 +119,8 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         turn_id="turn-1",
         text="Done.",
         usage=usage,
+        window_tokens=13,
+        window_start_sequence=1,
     )
 
     assert entry.usage == usage
@@ -127,6 +130,7 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         "message_type": "final",
         "text": "Done.",
         "usage": usage,
+        "window_start_sequence": 1,
     }
 
 
@@ -202,22 +206,58 @@ class _FakeAgentContextStore(AgentContextStorePort):
             created_at="2026-05-15T00:00:00Z",
         )
 
-    def append_assistant_message(
+    def append_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         self.calls.append(
             {
                 "kind": "assistant",
                 "turn_id": turn_id,
-                "message_type": message_type,
+                "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
+                "text": text,
+            }
+        )
+        return AgentContextEntry(
+            id=f"entry-{len(self.calls)}",
+            run_id=context.run_id,
+            context_id=context.context_id,
+            sequence=2,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            usage=None,
+            message_type=AgentAssistantMessageType.TOOL_CALLS,
+            window_tokens=None,
+            window_start_sequence=None,
+            payload=AgentAssistantMessagePayload(
+                turn_id=turn_id,
+                message_type=AgentAssistantMessageType.TOOL_CALLS,
+                text=text,
+            ),
+            source_step_id=context.agent_id,
+            created_at="2026-05-15T00:00:00Z",
+        )
+
+    def append_final_assistant_message(
+        self,
+        *,
+        context: AgentContext,
+        turn_id: str,
+        text: str,
+        usage: LLMUsage | None,
+        window_tokens: int | None,
+        window_start_sequence: int,
+    ) -> AgentContextEntry:
+        self.calls.append(
+            {
+                "kind": "assistant",
+                "turn_id": turn_id,
+                "message_type": AgentAssistantMessageType.FINAL.value,
                 "text": text,
                 "usage": usage,
+                "window_start_sequence": window_start_sequence,
             }
         )
         return AgentContextEntry(
@@ -227,11 +267,13 @@ class _FakeAgentContextStore(AgentContextStorePort):
             sequence=2,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
+            message_type=AgentAssistantMessageType.FINAL,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
-                message_type=message_type,
+                message_type=AgentAssistantMessageType.FINAL,
                 text=text,
-                total_tokens=usage.total_tokens if usage is not None else None,
             ),
             source_step_id=context.agent_id,
             created_at="2026-05-15T00:00:00Z",

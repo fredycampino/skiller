@@ -14,7 +14,10 @@ from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
-from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
+from skiller.infrastructure.agent.agent_context_store import AgentContextStore
+from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+    SqliteAgentContextDatasource,
+)
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
@@ -31,7 +34,11 @@ AGENT_CONTEXT = AgentContext(
 )
 
 
-def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
+def _store(db_path) -> AgentContextStore:
+    return AgentContextStore(SqliteAgentContextDatasource(str(db_path)))
+
+
+def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     db_path = tmp_path / "agent-context.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -42,16 +49,15 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     first = store.append_user_message(
         context=AGENT_CONTEXT,
         text="Hi",
     )
-    second = store.append_assistant_message(
+    second = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="final",
         text="Hello",
         usage=LLMUsage(
             prompt_tokens=123,
@@ -60,13 +66,15 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             provider="minimax",
             model="MiniMax-M2.5",
         ),
+        window_tokens=168,
+        window_start_sequence=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
     with sqlite3.connect(db_path) as conn:
         raw_row = conn.execute(
             """
-            SELECT message_type, total_tokens, usage_json
+            SELECT message_type, window_tokens, window_start_sequence, usage_json
             FROM agent_context_entries
             WHERE id = ?
             """,
@@ -81,7 +89,6 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         turn_id="turn-1",
         message_type="final",
         text="Hello",
-        total_tokens=168,
     )
     assert entries[0].usage is None
     assert entries[1].usage == LLMUsage(
@@ -93,7 +100,8 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     )
     assert raw_row[0] == "final"
     assert raw_row[1] == 168
-    assert json.loads(raw_row[2]) == {
+    assert raw_row[2] == 1
+    assert json.loads(raw_row[3]) == {
         "prompt_tokens": 123,
         "completion_tokens": 45,
         "total_tokens": 168,
@@ -109,7 +117,7 @@ def test_sqlite_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     )
 
 
-def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
+def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
     db_path = tmp_path / "agent-context-tools.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -120,7 +128,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     first = store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -198,7 +206,7 @@ def test_sqlite_agent_context_store_supports_multiple_tool_calls_in_same_turn(tm
     assert entries[2].payload.tool_call_id == "call-2"
 
 
-def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
+def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
     db_path = tmp_path / "agent-context-next-turn.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -209,7 +217,7 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-1"
 
@@ -219,10 +227,9 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
     )
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-1"
 
-    store.append_assistant_message(
+    store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="tool_calls",
         text="I will inspect this.",
     )
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-2"
@@ -240,7 +247,7 @@ def test_sqlite_agent_context_store_returns_next_turn_id(tmp_path) -> None:
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-3"
 
 
-def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
+def test_agent_context_store_returns_context_stats(tmp_path) -> None:
     db_path = tmp_path / "agent-context-stats.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -251,25 +258,24 @@ def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     store.append_user_message(
         context=AGENT_CONTEXT,
         text="Hi",
     )
-    store.append_assistant_message(
+    store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="tool_calls",
         text="I will call a tool.",
-        usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
     )
-    store.append_assistant_message(
+    store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
-        message_type="final",
         text="Done",
         usage=LLMUsage(prompt_tokens=None, completion_tokens=12, total_tokens=None),
+        window_tokens=None,
+        window_start_sequence=1,
     )
     store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -310,7 +316,7 @@ def test_sqlite_agent_context_store_returns_context_stats(tmp_path) -> None:
     assert stats.usage.total_tokens == 0
 
 
-def test_sqlite_agent_context_store_returns_last_final_usage(tmp_path) -> None:
+def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
     db_path = tmp_path / "agent-context-last-final-usage.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -321,35 +327,36 @@ def test_sqlite_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
-    store.append_assistant_message(
+    store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="final",
         text="First final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        window_tokens=15,
+        window_start_sequence=1,
     )
-    store.append_assistant_message(
+    store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
-        message_type="tool_calls",
         text="Not final",
-        usage=LLMUsage(prompt_tokens=20, completion_tokens=8, total_tokens=28),
     )
-    latest = store.append_assistant_message(
+    latest = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
-        message_type="final",
         text="Latest final",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=9, total_tokens=39),
+        window_tokens=39,
+        window_start_sequence=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
     stats = store.get_stats(context_id=CONTEXT_ID)
 
     assert isinstance(latest.payload, AgentAssistantMessagePayload)
-    assert latest.payload.total_tokens == 39
+    assert latest.window_tokens == 39
+    assert latest.window_start_sequence == 1
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
         prompt_tokens=30,
         completion_tokens=9,
@@ -361,12 +368,11 @@ def test_sqlite_agent_context_store_returns_last_final_usage(tmp_path) -> None:
     assert stats.usage.total_tokens == 39
     assert [entry.usage.total_tokens for entry in entries if entry.usage is not None] == [
         15,
-        28,
         39,
     ]
 
 
-def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_path) -> None:
+def test_agent_context_store_lists_context_window_from_final_marker(tmp_path) -> None:
     db_path = tmp_path / "agent-context-window.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -377,25 +383,24 @@ def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_p
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     store.append_user_message(
         context=AGENT_CONTEXT,
         text="Task",
     )
-    old = store.append_assistant_message(
+    old = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="final",
         text="Old",
         usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
+        window_tokens=10,
+        window_start_sequence=1,
     )
-    tool_calls = store.append_assistant_message(
+    tool_calls = store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
-        message_type="tool_calls",
         text="",
-        usage=LLMUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5),
     )
     store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -422,29 +427,31 @@ def test_sqlite_agent_context_store_lists_context_window_from_final_marker(tmp_p
             ),
         ),
     )
-    marker = store.append_assistant_message(
+    marker = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
-        message_type="final",
         text="Marker",
         usage=LLMUsage(prompt_tokens=13, completion_tokens=2, total_tokens=15),
+        window_tokens=15,
+        window_start_sequence=1,
     )
-    latest = store.append_assistant_message(
+    latest = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-4",
-        message_type="final",
         text="Latest",
         usage=LLMUsage(prompt_tokens=14, completion_tokens=6, total_tokens=20),
+        window_tokens=20,
+        window_start_sequence=1,
     )
 
-    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
+    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
     assert isinstance(old.payload, AgentAssistantMessagePayload)
-    assert old.payload.total_tokens == 10
-    assert [entry.id for entry in entries] == [marker.id, latest.id]
+    assert old.window_tokens == 10
+    assert [entry.id for entry in window.entries] == [marker.id, latest.id]
 
 
-def test_sqlite_agent_context_store_returns_full_context_when_window_is_not_exceeded(
+def test_agent_context_store_returns_full_context_when_window_is_not_exceeded(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-full.db"
@@ -457,26 +464,74 @@ def test_sqlite_agent_context_store_returns_full_context_when_window_is_not_exce
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     first = store.append_user_message(
         context=AGENT_CONTEXT,
         text="Task",
     )
-    final = store.append_assistant_message(
+    final = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="final",
         text="Done",
         usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
+        window_tokens=10,
+        window_start_sequence=1,
     )
 
-    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
+    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
-    assert [entry.id for entry in entries] == [first.id, final.id]
+    assert [entry.id for entry in window.entries] == [first.id, final.id]
 
 
-def test_sqlite_agent_context_store_returns_full_context_without_final_marker(tmp_path) -> None:
+def test_agent_context_store_keeps_persisted_window_start_when_under_limit(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-persisted.db"
+    run_store = SqliteStateStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Old task",
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Old final",
+        usage=LLMUsage(prompt_tokens=60, completion_tokens=20, total_tokens=80),
+        window_tokens=80,
+        window_start_sequence=1,
+    )
+    marker = store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Window task",
+    )
+    latest = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-2",
+        text="Latest final",
+        usage=LLMUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60),
+        window_tokens=60,
+        window_start_sequence=marker.sequence,
+    )
+
+    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=100)
+
+    assert latest.window_tokens == 60
+    assert latest.window_start_sequence == marker.sequence
+    assert [entry.id for entry in window.entries] == [marker.id, latest.id]
+
+
+def test_agent_context_store_returns_full_context_without_final_marker(tmp_path) -> None:
     db_path = tmp_path / "agent-context-window-no-marker.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -487,20 +542,18 @@ def test_sqlite_agent_context_store_returns_full_context_without_final_marker(tm
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = SqliteAgentContextStore(str(db_path))
+    store = _store(db_path)
 
     first = store.append_user_message(
         context=AGENT_CONTEXT,
         text="Task",
     )
-    tool_calls = store.append_assistant_message(
+    tool_calls = store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        message_type="tool_calls",
         text="",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=10, total_tokens=20),
     )
 
-    entries = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
+    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
 
-    assert [entry.id for entry in entries] == [first.id, tool_calls.id]
+    assert [entry.id for entry in window.entries] == [first.id, tool_calls.id]

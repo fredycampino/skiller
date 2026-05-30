@@ -47,7 +47,7 @@ class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
                     turn_id=entry.payload.turn_id,
                     agent_sequence=entry.sequence,
                     body=AgentBodyToolMessage(
-                        total_tokens=entry.payload.total_tokens or 0,
+                        total_tokens=entry.window_tokens or 0,
                         text=entry.payload.text,
                     ),
                 ),

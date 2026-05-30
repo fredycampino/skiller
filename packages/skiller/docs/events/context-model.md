@@ -105,6 +105,7 @@ In memory, the runtime uses typed outputs:
 - `WhenOutput`
 - `WaitInputOutput`
 - `WaitWebhookOutput`
+- `WaitChannelOutput`
 - `McpOutput`
 
 Publicly, every output is normalized to:
@@ -169,19 +170,56 @@ Rules:
 
 ### `agent`
 
+Final output:
+
 ```json
 {
   "text": "Final answer.",
-  "text_ref": "data.final.text",
+  "text_ref": "data.final",
   "value": {
     "data": {
       "context_id": "default",
-      "final": {
-        "text": "Final answer."
-      },
+      "final": "Final answer.",
       "turn_count": 2,
       "tool_call_count": 1,
       "stop_reason": "final"
+    }
+  },
+  "body_ref": null
+}
+```
+
+Stop output:
+
+```json
+{
+  "text": "",
+  "value": {
+    "data": {
+      "context_id": "default",
+      "message": "Agent stopped after reaching max turns.",
+      "turn_count": 8,
+      "tool_call_count": 2,
+      "stop_reason": "max_turns_exhausted"
+    }
+  },
+  "body_ref": null
+}
+```
+
+Config-invalid output:
+
+```json
+{
+  "text": "Provider 'minimax' does not support model='bad-model'.",
+  "text_ref": "data.message",
+  "value": {
+    "data": {
+      "context_id": "",
+      "message": "Provider 'minimax' does not support model='bad-model'. (PROVIDER_MODEL_UNSUPPORTED)",
+      "turn_count": 0,
+      "tool_call_count": 0,
+      "stop_reason": "config_invalid"
     }
   },
   "body_ref": null

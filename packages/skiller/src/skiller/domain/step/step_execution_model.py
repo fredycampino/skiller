@@ -1,7 +1,16 @@
 from dataclasses import asdict, dataclass, field
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Any, Type
 
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentFakeLLMModel,
+    AgentLLMModel,
+    AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+    AgentNullLLMModel,
+)
+from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.step.step_type import StepType
 
 
@@ -18,7 +27,7 @@ class OutputBase:
         body_ref = raw.pop("body_ref", None)
         payload = {
             "text": text,
-            "value": raw or None,
+            "value": _to_public_value(raw) or None,
             "body_ref": body_ref if isinstance(body_ref, str) else None,
         }
         if isinstance(text_ref, str) and text_ref.strip():
@@ -32,8 +41,39 @@ class AssignOutput(OutputBase):
 
 
 @dataclass(frozen=True)
+class AgentUsageOutput:
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    provider: AgentLLMProviderType | None
+    model: AgentLLMModel | None
+
+
+@dataclass(frozen=True)
+class AgentFinalOutputData:
+    stop_reason: AgentStopReason
+    context_id: str
+    final: str
+    turn_count: int
+    tool_call_count: int
+    usage: AgentUsageOutput | None = None
+
+
+@dataclass(frozen=True)
+class AgentStopOutputData:
+    stop_reason: AgentStopReason
+    context_id: str
+    message: str
+    turn_count: int
+    tool_call_count: int
+
+
+AgentOutputData = AgentFinalOutputData | AgentStopOutputData
+
+
+@dataclass(frozen=True, kw_only=True)
 class AgentOutput(OutputBase):
-    data: dict[str, Any] | None = None
+    data: AgentOutputData
 
 
 @dataclass(frozen=True)
@@ -152,6 +192,8 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
     body_ref = raw.get("body_ref")
     value = raw.get("value")
     output_fields = value if isinstance(value, dict) else {}
+    if step_type == StepType.AGENT:
+        output_fields = _build_agent_output_fields(output_fields)
     if step_type == StepType.NOTIFY:
         output_fields = _build_notify_output_fields(output_fields)
     return output_type(
@@ -168,6 +210,89 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
         ),
         **output_fields,
     )
+
+
+def _to_public_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {key: _to_public_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_public_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_to_public_value(item) for item in value]
+    return value
+
+
+def _build_agent_output_fields(output_fields: dict[str, Any]) -> dict[str, Any]:
+    raw_data = output_fields.get("data")
+    if not isinstance(raw_data, dict):
+        raise ValueError("agent output data must be an object")
+    return {"data": _build_agent_output_data(raw_data)}
+
+
+def _build_agent_output_data(raw_data: dict[str, Any]) -> AgentOutputData:
+    stop_reason = AgentStopReason(str(raw_data.get("stop_reason", "")))
+    if stop_reason == AgentStopReason.FINAL:
+        raw_usage = raw_data.get("usage")
+        usage = _build_agent_usage_output(raw_usage) if raw_usage is not None else None
+        return AgentFinalOutputData(
+            stop_reason=stop_reason,
+            context_id=str(raw_data.get("context_id", "")),
+            final=str(raw_data.get("final", "")),
+            turn_count=int(raw_data.get("turn_count", 0)),
+            tool_call_count=int(raw_data.get("tool_call_count", 0)),
+            usage=usage,
+        )
+
+    return AgentStopOutputData(
+        stop_reason=stop_reason,
+        context_id=str(raw_data.get("context_id", "")),
+        message=str(raw_data.get("message", "")),
+        turn_count=int(raw_data.get("turn_count", 0)),
+        tool_call_count=int(raw_data.get("tool_call_count", 0)),
+    )
+
+
+def _build_agent_usage_output(raw_usage: object) -> AgentUsageOutput:
+    if not isinstance(raw_usage, dict):
+        raise ValueError("agent usage output must be an object")
+    return AgentUsageOutput(
+        prompt_tokens=_optional_int(raw_usage.get("prompt_tokens")),
+        completion_tokens=_optional_int(raw_usage.get("completion_tokens")),
+        total_tokens=_optional_int(raw_usage.get("total_tokens")),
+        provider=_optional_provider(raw_usage.get("provider")),
+        model=_optional_model(raw_usage.get("model")),
+    )
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_provider(value: object) -> AgentLLMProviderType | None:
+    if value is None:
+        return None
+    return AgentLLMProviderType(str(value))
+
+
+def _optional_model(value: object) -> AgentLLMModel | None:
+    if value is None:
+        return None
+    model_types = (
+        AgentNullLLMModel,
+        AgentFakeLLMModel,
+        AgentMiniMaxLLMModel,
+        AgentCodexLLMModel,
+    )
+    for model_type in model_types:
+        try:
+            return model_type(str(value))
+        except ValueError:
+            continue
+    raise ValueError(f"Unsupported agent usage model: {value}")
 
 
 def _build_notify_output_fields(output_fields: dict[str, Any]) -> dict[str, Any]:

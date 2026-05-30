@@ -12,11 +12,13 @@ from skiller.application.agent.tools.tool_manager import (
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.tools.notify import NotifyTool
 from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextWindow,
 )
 from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
-from skiller.domain.agent.agent_run_model import AgentRunnerFinish
+from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
     AgentContextStats,
@@ -72,14 +74,12 @@ class _FakeAgentContextStore:
             source_step_id=context.agent_id,
         )
 
-    def append_assistant_message(
+    def append_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -88,11 +88,37 @@ class _FakeAgentContextStore:
             payload={
                 "type": "assistant_message",
                 "turn_id": turn_id,
-                "message_type": message_type,
+                "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
                 "text": text,
-                "total_tokens": usage.total_tokens if usage is not None else 0,
+            },
+            message_type=AgentAssistantMessageType.TOOL_CALLS,
+            source_step_id=context.agent_id,
+        )
+
+    def append_final_assistant_message(
+        self,
+        *,
+        context: AgentContext,
+        turn_id: str,
+        text: str,
+        usage: LLMUsage | None,
+        window_tokens: int | None,
+        window_start_sequence: int,
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=context.run_id,
+            context_id=context.context_id,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            payload={
+                "type": "assistant_message",
+                "turn_id": turn_id,
+                "message_type": AgentAssistantMessageType.FINAL.value,
+                "text": text,
             },
             usage=usage,
+            message_type=AgentAssistantMessageType.FINAL,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             source_step_id=context.agent_id,
         )
 
@@ -150,6 +176,9 @@ class _FakeAgentContextStore:
         entry_type: AgentContextEntryType,
         payload: dict[str, object],
         usage: LLMUsage | None = None,
+        message_type: AgentAssistantMessageType | None = None,
+        window_tokens: int | None = None,
+        window_start_sequence: int | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
         self.appended.append(
@@ -158,6 +187,9 @@ class _FakeAgentContextStore:
                 "context_id": context_id,
                 "entry_type": entry_type,
                 "payload": payload,
+                "message_type": message_type.value if message_type else None,
+                "window_tokens": window_tokens,
+                "window_start_sequence": window_start_sequence,
                 "source_step_id": source_step_id,
             }
         )
@@ -169,6 +201,9 @@ class _FakeAgentContextStore:
             entry_type=entry_type,
             payload=payload,
             usage=usage,
+            message_type=message_type,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
         )
@@ -187,14 +222,19 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
         window_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindow:
         self.window_calls.append(
             {
                 "context_id": context_id,
                 "window_tokens": window_tokens,
             }
         )
-        return self.list_entries(context_id=context_id)
+        entries = self.list_entries(context_id=context_id)
+        return AgentContextWindow(
+            entries=entries,
+            start_sequence=entries[0].sequence if entries else 0,
+            end_sequence=entries[-1].sequence if entries else 0,
+        )
 
     def get_stats(self, *, context_id: str) -> AgentContextStats:
         _ = context_id
@@ -385,7 +425,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
     assert result.final_text == "Hello back."
     assert result.turn_count == 1
     assert result.tool_call_count == 0
-    assert result.finish == AgentRunnerFinish.FINAL
+    assert result.finish == AgentStopReason.FINAL
     assert result.response_model == "model1"
     assert context_store.window_calls == [
         {"context_id": result.context_id, "window_tokens": 80_000}
@@ -437,7 +477,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
     )
 
     assert result.final_text is None
-    assert result.finish == AgentRunnerFinish.INTERRUPTED
+    assert result.finish == AgentStopReason.INTERRUPTED
     assert result.tool_call_count == 0
     assert tool_manager.execute_prepared_calls == []
     assert len(llm.calls) == 1
@@ -521,7 +561,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
     assert result.final_text == "Done."
     assert result.turn_count == 2
     assert result.tool_call_count == 1
-    assert result.finish == AgentRunnerFinish.FINAL
+    assert result.finish == AgentStopReason.FINAL
     assert result.usage == LLMUsage(
         prompt_tokens=100,
             completion_tokens=25,
@@ -759,7 +799,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
     )
 
     assert result.final_text is None
-    assert result.finish == AgentRunnerFinish.MAX_TURNS_EXHAUSTED
+    assert result.finish == AgentStopReason.MAX_TURNS_EXHAUSTED
     assert result.turn_count == 1
     assert context_store.appended[-1]["entry_type"] == AgentContextEntryType.USER_MESSAGE
     assert context_store.appended[-1]["payload"] == {
@@ -866,7 +906,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
     )
 
     assert result.final_text is None
-    assert result.finish == AgentRunnerFinish.LLM_REQUEST_FAILED
+    assert result.finish == AgentStopReason.LLM_REQUEST_FAILED
     assert result.error == (
         "Agent 'support_agent' LLM request failed: invalid params (error_code=2013)"
     )
@@ -911,7 +951,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
     )
 
     assert result.final_text is None
-    assert result.finish == AgentRunnerFinish.TOOL_EXECUTION_FAILED
+    assert result.finish == AgentStopReason.TOOL_EXECUTION_FAILED
     assert result.error == "request boom"
     assert [item["entry_type"] for item in context_store.appended] == [
         AgentContextEntryType.USER_MESSAGE,
@@ -949,5 +989,5 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
     )
 
     assert result.final_text is None
-    assert result.finish == AgentRunnerFinish.INVALID_FINAL_MESSAGE
+    assert result.finish == AgentStopReason.INVALID_FINAL_MESSAGE
     assert result.error == "Agent step 'support_agent' returned no final answer"

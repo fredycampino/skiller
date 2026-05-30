@@ -20,10 +20,14 @@ from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidationErrorCode,
 )
 from skiller.domain.agent.agent_context_model import (
+    AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextWindow,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel, AgentLLMProviderType
 from skiller.domain.agent.agent_run_identity import AgentContext
+from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.agent.agent_stats_model import (
     AgentContextEntryStats,
     AgentContextStats,
@@ -54,7 +58,12 @@ from skiller.domain.run.steering_model import (
     SteeringItemType,
 )
 from skiller.domain.step.current_step_model import CurrentStep
-from skiller.domain.step.step_execution_model import AgentOutput
+from skiller.domain.step.step_execution_model import (
+    AgentFinalOutputData,
+    AgentOutput,
+    AgentStopOutputData,
+    AgentUsageOutput,
+)
 from skiller.domain.step.step_execution_result_model import StepExecutionStatus
 from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_contract import (
@@ -143,14 +152,12 @@ class _FakeAgentContextStore:
             source_step_id=context.agent_id,
         )
 
-    def append_assistant_message(
+    def append_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -159,11 +166,37 @@ class _FakeAgentContextStore:
             payload={
                 "type": "assistant_message",
                 "turn_id": turn_id,
-                "message_type": message_type,
+                "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
                 "text": text,
-                "total_tokens": usage.total_tokens if usage is not None else 0,
+            },
+            message_type=AgentAssistantMessageType.TOOL_CALLS,
+            source_step_id=context.agent_id,
+        )
+
+    def append_final_assistant_message(
+        self,
+        *,
+        context: AgentContext,
+        turn_id: str,
+        text: str,
+        usage: LLMUsage | None,
+        window_tokens: int | None,
+        window_start_sequence: int,
+    ) -> AgentContextEntry:
+        return self._append_entry(
+            run_id=context.run_id,
+            context_id=context.context_id,
+            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+            payload={
+                "type": "assistant_message",
+                "turn_id": turn_id,
+                "message_type": AgentAssistantMessageType.FINAL.value,
+                "text": text,
             },
             usage=usage,
+            message_type=AgentAssistantMessageType.FINAL,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             source_step_id=context.agent_id,
         )
 
@@ -221,6 +254,9 @@ class _FakeAgentContextStore:
         entry_type: AgentContextEntryType,
         payload: dict[str, object],
         usage: LLMUsage | None = None,
+        message_type: AgentAssistantMessageType | None = None,
+        window_tokens: int | None = None,
+        window_start_sequence: int | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
         self.appended.append(
@@ -229,6 +265,9 @@ class _FakeAgentContextStore:
                 "context_id": context_id,
                 "entry_type": entry_type,
                 "payload": payload,
+                "message_type": message_type.value if message_type else None,
+                "window_tokens": window_tokens,
+                "window_start_sequence": window_start_sequence,
                 "source_step_id": source_step_id,
             }
         )
@@ -240,6 +279,9 @@ class _FakeAgentContextStore:
             entry_type=entry_type,
             payload=payload,
             usage=usage,
+            message_type=message_type,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
         )
@@ -258,9 +300,14 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
         window_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindow:
         _ = window_tokens
-        return self.list_entries(context_id=context_id)
+        entries = self.list_entries(context_id=context_id)
+        return AgentContextWindow(
+            entries=entries,
+            start_sequence=entries[0].sequence if entries else 0,
+            end_sequence=entries[-1].sequence if entries else 0,
+        )
 
     def get_stats(self, *, context_id: str) -> AgentContextStats:
         _ = context_id
@@ -471,7 +518,7 @@ def _build_use_case(
     )
 
 
-def test_execute_agent_step_fails_when_agent_config_is_invalid() -> None:
+def test_execute_agent_step_advances_with_config_error_when_agent_config_is_invalid() -> None:
     store = _FakeStore()
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM()
@@ -488,29 +535,50 @@ def test_execute_agent_step_fails_when_agent_config_is_invalid() -> None:
         agent_config=agent_config,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Provider 'minimax' does not support model='bad-model'.",
-    ):
-        use_case.execute(
-            CurrentStep(
-                run_id="run-1",
-                step_index=0,
-                step_id="support_agent",
-                step_type=StepType.AGENT,
-                step={
-                    "system": "Be useful.",
-                    "task": "Hi",
-                    "tools": ["notify"],
-                },
-                context=context,
-            )
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="support_agent",
+            step_type=StepType.AGENT,
+            step={
+                "system": "Be useful.",
+                "task": "Hi",
+                "tools": ["notify"],
+                "next": "ask_user",
+            },
+            context=context,
         )
+    )
 
-    assert context.step_executions == {}
+    assert result.status == StepExecutionStatus.NEXT
+    assert result.next_step_id == "ask_user"
+    assert result.execution is not None
+    assert result.execution.output == AgentOutput(
+        text="Provider 'minimax' does not support model='bad-model'.",
+        text_ref="data.message",
+        data=AgentStopOutputData(
+            stop_reason=AgentStopReason.CONFIG_INVALID,
+            context_id="",
+            message=(
+                "Provider 'minimax' does not support model='bad-model'. "
+                "(PROVIDER_MODEL_UNSUPPORTED)"
+            ),
+            turn_count=0,
+            tool_call_count=0,
+        ),
+    )
+    assert context.step_executions["support_agent"] == result.execution
     assert llm.calls == []
     assert context_store.appended == []
-    assert store.updated == []
+    assert store.updated == [
+        {
+            "run_id": "run-1",
+            "status": RunStatus.RUNNING,
+            "current": "ask_user",
+            "context": context,
+        }
+    ]
 
 
 def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
@@ -543,19 +611,20 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
-    context_id = result.execution.output.data["context_id"]
+    assert isinstance(result.execution.output.data, AgentFinalOutputData)
+    context_id = result.execution.output.data.context_id
     assert isinstance(context_id, str)
     assert context_id
     assert result.execution.output == AgentOutput(
         text="Hello back.",
-        text_ref="data.final.text",
-        data={
-            "context_id": context_id,
-            "final": {"text": "Hello back."},
-            "turn_count": 1,
-            "tool_call_count": 0,
-            "stop_reason": "final",
-        },
+        text_ref="data.final",
+        data=AgentFinalOutputData(
+            stop_reason=AgentStopReason.FINAL,
+            context_id=context_id,
+            final="Hello back.",
+            turn_count=1,
+            tool_call_count=0,
+        ),
     )
     assert context.step_executions["support_agent"] == result.execution
     assert context_store.appended[0]["entry_type"] == AgentContextEntryType.USER_MESSAGE
@@ -566,7 +635,6 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
         "turn_id": "turn-1",
         "message_type": "final",
         "text": "Hello back.",
-        "total_tokens": 0,
     }
     assert len(llm.calls) == 1
     _assert_system_message_contains(llm.calls[0].messages[0], step_system="Be useful.")
@@ -645,26 +713,27 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
 
     assert result.status == StepExecutionStatus.COMPLETED
     assert result.execution is not None
-    context_id = result.execution.output.data["context_id"]
+    assert isinstance(result.execution.output.data, AgentFinalOutputData)
+    context_id = result.execution.output.data.context_id
     assert isinstance(context_id, str)
     assert context_id
     assert result.execution.output == AgentOutput(
         text="Done.",
-        text_ref="data.final.text",
-        data={
-            "context_id": context_id,
-            "final": {"text": "Done."},
-            "turn_count": 2,
-            "tool_call_count": 1,
-            "stop_reason": "final",
-            "usage": {
-                    "prompt_tokens": 100,
-                    "completion_tokens": 25,
-                    "total_tokens": 125,
-                    "provider": "fake",
-                    "model": "model1",
-                },
-        },
+        text_ref="data.final",
+        data=AgentFinalOutputData(
+            stop_reason=AgentStopReason.FINAL,
+            context_id=context_id,
+            final="Done.",
+            turn_count=2,
+            tool_call_count=1,
+            usage=AgentUsageOutput(
+                prompt_tokens=100,
+                completion_tokens=25,
+                total_tokens=125,
+                provider=AgentLLMProviderType.FAKE,
+                model=AgentFakeLLMModel.MODEL1,
+            ),
+        ),
     )
     assert tool_manager.get_tool_definitions_calls == [["notify"]]
     executed_requests = [
@@ -757,19 +826,20 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
-    context_id = result.execution.output.data["context_id"]
+    assert isinstance(result.execution.output.data, AgentStopOutputData)
+    context_id = result.execution.output.data.context_id
     assert isinstance(context_id, str)
     assert context_id
     assert result.execution.output == AgentOutput(
         text="",
         text_ref=None,
-        data={
-            "context_id": context_id,
-            "final": None,
-            "turn_count": 1,
-            "tool_call_count": 0,
-            "stop_reason": "interrupted",
-        },
+        data=AgentStopOutputData(
+            stop_reason=AgentStopReason.INTERRUPTED,
+            context_id=context_id,
+            message="Agent execution interrupted.",
+            turn_count=1,
+            tool_call_count=0,
+        ),
     )
     assert store.updated == [
         {
@@ -830,19 +900,20 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     assert result.status == StepExecutionStatus.NEXT
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
-    context_id = result.execution.output.data["context_id"]
+    assert isinstance(result.execution.output.data, AgentStopOutputData)
+    context_id = result.execution.output.data.context_id
     assert isinstance(context_id, str)
     assert context_id
     assert result.execution.output == AgentOutput(
         text="",
         text_ref=None,
-        data={
-            "context_id": context_id,
-            "final": None,
-            "turn_count": 1,
-            "tool_call_count": 1,
-            "stop_reason": "max_turns_exhausted",
-        },
+        data=AgentStopOutputData(
+            stop_reason=AgentStopReason.MAX_TURNS_EXHAUSTED,
+            context_id=context_id,
+            message="Agent stopped after reaching max turns.",
+            turn_count=1,
+            tool_call_count=1,
+        ),
     )
     assert store.updated == [
         {

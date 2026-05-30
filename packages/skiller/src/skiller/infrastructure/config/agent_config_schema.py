@@ -26,6 +26,7 @@ class LLMConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_provider: str
+    max_context_tokens: int | None = Field(default=None, gt=0)
 
 
 class LoopConfigModel(BaseModel):

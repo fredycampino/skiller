@@ -8,6 +8,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextWindow,
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.agent_run_identity import AgentContext
@@ -17,9 +18,9 @@ pytestmark = pytest.mark.unit
 NOTIFY_TOOL_DEFINITION = NotifyTool()
 
 
-def test_agent_context_manager_builds_llm_request_from_current_context() -> None:
+def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
     store = _FakeAgentContextStore(
-        entries=[
+        window_entries=[
             AgentContextEntry(
                 id="entry-1",
                 run_id="run-1",
@@ -50,7 +51,7 @@ def test_agent_context_manager_builds_llm_request_from_current_context() -> None
         tools=(NOTIFY_TOOL_DEFINITION,),
     )
 
-    result = manager.build_llm_request(context=context, config=config)
+    result = manager.build_window_context(context=context, config=config)
 
     assert result.turn_id == "turn-2"
     assert [message.role.value for message in result.llm_request.messages] == [
@@ -62,26 +63,14 @@ def test_agent_context_manager_builds_llm_request_from_current_context() -> None
     assert result.llm_request.model == "model1"
     assert result.context_id == "ctx-1"
     assert result.context_window_tokens == 80_000
+    assert result.window_start_sequence == 1
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 0
     assert [tool.name for tool in result.llm_request.tools] == ["notify"]
 
 
-def test_agent_context_manager_builds_window_context_without_changing_default_request() -> None:
+def test_agent_context_manager_builds_window_context_from_window_entries() -> None:
     store = _FakeAgentContextStore(
-        entries=[
-            AgentContextEntry(
-                id="entry-1",
-                run_id="run-1",
-                context_id="ctx-1",
-                sequence=1,
-                entry_type=AgentContextEntryType.USER_MESSAGE,
-                payload=AgentUserMessagePayload(text="Full context"),
-                usage=None,
-                source_step_id="agent-1",
-                created_at="2026-05-16T00:00:00Z",
-            )
-        ],
         window_entries=[
             AgentContextEntry(
                 id="entry-2",
@@ -112,16 +101,14 @@ def test_agent_context_manager_builds_window_context_without_changing_default_re
         max_turns=1,
     )
 
-    default_result = manager.build_llm_request(context=context, config=config)
     window_result = manager.build_window_context(context=context, config=config)
 
-    assert default_result.llm_request.messages[1].content == "Full context"
-    assert default_result.llm_request.model == "model1"
     assert window_result.context_id == "ctx-1"
     assert window_result.turn_id == "turn-3"
     assert window_result.llm_request.messages[1].content == "Window context"
     assert window_result.llm_request.model == "model1"
     assert window_result.context_window_tokens == 80_000
+    assert window_result.window_start_sequence == 2
     assert window_result.max_ratio == 0.8
     assert window_result.estimated_tokens == 0
     assert store.window_calls == [{"context_id": "ctx-1", "window_tokens": 80_000}]
@@ -129,7 +116,6 @@ def test_agent_context_manager_builds_window_context_without_changing_default_re
 
 def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> None:
     store = _FakeAgentContextStore(
-        entries=[],
         window_entries=[
             AgentContextEntry(
                 id="entry-1",
@@ -141,9 +127,11 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
                     turn_id="turn-1",
                     message_type="final",
                     text="First",
-                    total_tokens=2,
                 ),
                 usage=None,
+                message_type="final",
+                window_tokens=2,
+                window_start_sequence=1,
                 source_step_id="agent-1",
                 created_at="2026-05-16T00:00:00Z",
             ),
@@ -157,9 +145,11 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
                     turn_id="turn-2",
                     message_type="final",
                     text="Second",
-                    total_tokens=6,
                 ),
                 usage=None,
+                message_type="final",
+                window_tokens=6,
+                window_start_sequence=1,
                 source_step_id="agent-1",
                 created_at="2026-05-16T00:00:00Z",
             ),
@@ -184,6 +174,7 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
     result = manager.build_window_context(context=context, config=config)
 
     assert result.context_window_tokens == 80_000
+    assert result.window_start_sequence == 1
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 4
 
@@ -192,19 +183,20 @@ class _FakeAgentContextStore:
     def __init__(
         self,
         *,
-        entries: list[AgentContextEntry],
+        window_entries: list[AgentContextEntry],
         next_turn_id: str,
-        window_entries: list[AgentContextEntry] | None = None,
     ) -> None:
-        self.entries = entries
-        self.window_entries = window_entries or entries
+        self.window_entries = window_entries
         self.next = next_turn_id
         self.window_calls: list[dict[str, object]] = []
 
     def append_user_message(self, **kwargs):  # noqa: ANN003, ANN201
         raise NotImplementedError
 
-    def append_assistant_message(self, **kwargs):  # noqa: ANN003, ANN201
+    def append_tool_calls_assistant_message(self, **kwargs):  # noqa: ANN003, ANN201
+        raise NotImplementedError
+
+    def append_final_assistant_message(self, **kwargs):  # noqa: ANN003, ANN201
         raise NotImplementedError
 
     def append_tool_call(self, **kwargs):  # noqa: ANN003, ANN201
@@ -215,21 +207,25 @@ class _FakeAgentContextStore:
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         _ = context_id
-        return self.entries
+        raise NotImplementedError
 
     def list_context_window(
         self,
         *,
         context_id: str,
         window_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindow:
         self.window_calls.append(
             {
                 "context_id": context_id,
                 "window_tokens": window_tokens,
             }
         )
-        return self.window_entries
+        return AgentContextWindow(
+            entries=self.window_entries,
+            start_sequence=self.window_entries[0].sequence if self.window_entries else 0,
+            end_sequence=self.window_entries[-1].sequence if self.window_entries else 0,
+        )
 
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id

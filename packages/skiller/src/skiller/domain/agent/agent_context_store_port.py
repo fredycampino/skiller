@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from skiller.domain.agent.agent_context_model import AgentContextEntry
+from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextWindow
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
@@ -14,14 +14,23 @@ class AgentContextStorePort(Protocol):
         text: str,
     ) -> AgentContextEntry: ...
 
-    def append_assistant_message(
+    def append_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
+    ) -> AgentContextEntry: ...
+
+    def append_final_assistant_message(
+        self,
+        *,
+        context: AgentContext,
+        turn_id: str,
+        text: str,
+        usage: LLMUsage | None,
+        window_tokens: int | None,
+        window_start_sequence: int,
     ) -> AgentContextEntry: ...
 
     def append_tool_call(
@@ -45,6 +54,6 @@ class AgentContextStorePort(Protocol):
         *,
         context_id: str,
         window_tokens: int,
-    ) -> list[AgentContextEntry]: ...
+    ) -> AgentContextWindow: ...
 
     def next_turn_id(self, *, context_id: str) -> str: ...

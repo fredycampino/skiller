@@ -91,30 +91,29 @@ class AgentContextPublisher:
         turn_id: str,
         text: str,
         usage: LLMUsage | None = None,
+        window_tokens: int | None = None,
+        window_start_sequence: int,
     ) -> AgentContextEntry:
-        return self._publish_assistant_message(
+        return self.agent_context_store.append_final_assistant_message(
             context=context,
             turn_id=turn_id,
-            message_type="final",
             text=text,
             usage=usage,
+            window_tokens=window_tokens,
+            window_start_sequence=window_start_sequence,
         )
 
-    def publish_assistant_message(
+    def publish_tool_calls_assistant_message(
         self,
         *,
         context: AgentContext,
         turn_id: str,
-        message_type: str,
         text: str,
-        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
-        return self._publish_assistant_message(
+        return self.agent_context_store.append_tool_calls_assistant_message(
             context=context,
             turn_id=turn_id,
-            message_type=message_type,
             text=text,
-            usage=usage,
         )
 
     def publish_tool_call(
@@ -178,21 +177,4 @@ class AgentContextPublisher:
                 tool_call=tool_call,
                 error=error,
             ),
-        )
-
-    def _publish_assistant_message(
-        self,
-        *,
-        context: AgentContext,
-        turn_id: str,
-        message_type: str,
-        text: str,
-        usage: LLMUsage | None = None,
-    ) -> AgentContextEntry:
-        return self.agent_context_store.append_assistant_message(
-            context=context,
-            turn_id=turn_id,
-            message_type=message_type,
-            text=text,
-            usage=usage,
         )

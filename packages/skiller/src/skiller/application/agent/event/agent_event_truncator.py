@@ -47,7 +47,6 @@ class AgentEventTruncator:
             turn_id=payload.turn_id,
             message_type=payload.message_type,
             text=self._truncate_text(payload.text),
-            total_tokens=payload.total_tokens,
         )
 
     def truncate_tool_call(

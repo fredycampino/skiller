@@ -45,7 +45,12 @@ def test_agent_prompt_builder_builds_messages() -> None:
         _entry(
             sequence=2,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            payload={"type": "assistant_message", "turn_id": "turn-1", "text": "Hi"},
+            payload={
+                "type": "assistant_message",
+                "turn_id": "turn-1",
+                "message_type": "final",
+                "text": "Hi",
+            },
         ),
         _entry(
             sequence=3,
@@ -118,6 +123,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
             payload={
                 "type": "assistant_message",
                 "turn_id": "turn-1",
+                "message_type": "tool_calls",
                 "text": "I should send a notification.",
             },
         ),

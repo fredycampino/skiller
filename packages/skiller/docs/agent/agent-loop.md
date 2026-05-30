@@ -66,9 +66,10 @@ The agent loop has three non-error terminal shapes:
 
 | finish | runtime event | assistant message | step output |
 | --- | --- | --- | --- |
-| `final` | `AGENT_FINAL_ASSISTANT_MESSAGE` | yes | `data.stop_reason = "final"` and `data.final.text` contains the final text |
-| `interrupted` | `AGENT_INTERRUPTED` | no | `data.stop_reason = "interrupted"` and `data.final = null` |
-| `max_turns_exhausted` | `AGENT_MAX_TURNS_EXHAUSTED` | no | `data.stop_reason = "max_turns_exhausted"` and `data.final = null` |
+| `final` | `AGENT_FINAL_ASSISTANT_MESSAGE` | yes | `data.stop_reason = "final"` and `data.final` contains the final text |
+| `interrupted` | `AGENT_INTERRUPTED` | no | `data.stop_reason = "interrupted"` and `data.message` contains the stop explanation |
+| `max_turns_exhausted` | `AGENT_MAX_TURNS_EXHAUSTED` | no | `data.stop_reason = "max_turns_exhausted"` and `data.message` contains the stop explanation |
+| `config_invalid` | none | no | `data.stop_reason = "config_invalid"` and `data.message` contains the validation error |
 
 Technical failures are not successful terminal outcomes:
 

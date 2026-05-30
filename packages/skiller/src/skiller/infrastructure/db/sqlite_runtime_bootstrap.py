@@ -2,10 +2,12 @@ import sqlite3
 from pathlib import Path
 
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
-from skiller.infrastructure.db.sqlite_agent_context_store import ensure_agent_context_schema
+from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+    ensure_agent_context_schema,
+)
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
-SQLITE_RUNTIME_DB_VERSION = 2
+SQLITE_RUNTIME_DB_VERSION = 3
 
 
 class SqliteRuntimeBootstrap(SqliteRepository, RuntimeBootstrapPort):

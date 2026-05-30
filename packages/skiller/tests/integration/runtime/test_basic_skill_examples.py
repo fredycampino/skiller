@@ -49,7 +49,10 @@ from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
 from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
 from skiller.domain.event.event_model import StepSuccessPayload
-from skiller.infrastructure.db.sqlite_agent_context_store import SqliteAgentContextStore
+from skiller.infrastructure.agent.agent_context_store import AgentContextStore
+from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+    SqliteAgentContextDatasource,
+)
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
@@ -89,7 +92,9 @@ def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
 def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
-    agent_context_store = SqliteAgentContextStore(store.db_path)
+    agent_context_store = AgentContextStore(
+        SqliteAgentContextDatasource(store.db_path),
+    )
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",

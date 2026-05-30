@@ -61,11 +61,11 @@ actual_data = output["value"]["data"]
 if actual_text != expected_date:
     raise SystemExit(f"Unexpected agent output text: {actual_text}")
 
-if actual_ref != "data.final.text":
+if actual_ref != "data.final":
     raise SystemExit(f"Unexpected agent output text_ref: {actual_ref}")
 
-if actual_data["final"]["text"] != expected_date:
-    raise SystemExit(f"Unexpected agent final text: {actual_data['final']['text']}")
+if actual_data["final"] != expected_date:
+    raise SystemExit(f"Unexpected agent final text: {actual_data['final']}")
 
 print(json.dumps({"run_id": run_id, "status": status}, indent=2))
 PY

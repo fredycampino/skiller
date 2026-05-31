@@ -55,7 +55,7 @@ class AgentRunner:
             context=context,
             text=config.task,
         )
-        
+
         state = AgentRunnerState()
         turn_loop = AgentLoop(max_turns=config.config.loop.max_turns)
 
@@ -193,7 +193,7 @@ class AgentRunner:
         )
 
 
-def _response_total_tokens(usage: LLMUsage | None) -> int | None:
+def _response_total_tokens(usage: LLMUsage | None) -> int:
     if usage is None:
-        return None
-    return usage.total_tokens
+        return 0
+    return usage.total_tokens or 0

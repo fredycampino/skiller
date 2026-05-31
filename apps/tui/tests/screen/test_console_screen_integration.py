@@ -24,6 +24,7 @@ from stui.port.run_port import (
     RunRuntimeStatusKind,
 )
 from stui.screen import console_screen as console_screen_module
+from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
 from stui.screen.notify_action_view import NotifyActionView
@@ -35,7 +36,9 @@ from stui.usecase import (
 from stui.usecase import run_command_use_case as run_command_use_case_module
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentContextStatsState,
     AgentStepFinalOutputItem,
+    AgentStepStopReason,
     InfoItem,
     NotifyActionState,
     OutputFormat,
@@ -101,6 +104,57 @@ def test_console_screen_exits_on_quit_command() -> None:
             await pilot.pause()
 
         assert exited == ["session-123"]
+
+    asyncio.run(run())
+
+
+def test_console_screen_exits_on_exit_command() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="session-123",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        exited: list[str | None] = []
+
+        def fake_exit(result: str | None = None) -> None:
+            exited.append(result)
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "e", "x", "i", "t", "enter")
+            await pilot.pause()
+
+        assert exited == ["session-123"]
+
+    asyncio.run(run())
+
+
+def test_console_screen_does_not_exit_on_bare_exit_text() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="session-123",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        exited: list[str | None] = []
+
+        def fake_exit(result: str | None = None) -> None:
+            exited.append(result)
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("e", "x", "i", "t", "enter")
+            await pilot.pause()
+
+        assert exited == []
+        assert app.state.transcript.items
 
     asyncio.run(run())
 
@@ -346,9 +400,12 @@ def test_console_screen_shows_running_status_after_run_command() -> None:
             await pilot.pause()
 
             status = app.query_one("#status", ScreenStatusView)
+            footer_right = app.query_one("#footer-right", Static)
             prompt_row = app.query_one("#prompt-row")
             assert app.state.view_status.kind == ViewStatusKind.RUNNING
             assert "Running" in str(status.render())
+            assert footer_right.content == "run-1234\nchat"
+            assert footer_right.size.height == 2
             assert status.display is True
             assert status.size.height >= 1
             assert status.region.bottom == prompt_row.region.y
@@ -662,6 +719,36 @@ def test_console_screen_escape_closes_runs_table_before_interrupting() -> None:
         asyncio.run(run())
 
 
+def test_console_screen_shows_runs_empty_message_from_strings() -> None:
+    async def run() -> None:
+        strings = TuiStrings(
+            runs_table_empty_message="No runs yet. Use /run to execute your flows.",
+            runs_table_navigation_hint="↑↓ · Enter · Esc",
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(runs=[]),
+            strings=strings,
+        )
+        app = ConsoleScreen(viewmodel=viewmodel, strings=strings)
+        async with app.run_test(size=(100, 24)) as pilot:
+            viewmodel.show_runs_table()
+            await pilot.pause()
+
+            empty_message = app.query_one("#runs-table-empty", Static)
+            navigation_hint = app.query_one("#runs-table-navigation", Static)
+
+            assert app.state.runs_table.visible is True
+            assert empty_message.content.plain == (
+                "No runs yet. Use /run to execute your flows."
+            )
+            assert navigation_hint.content.plain == "↑↓ · Enter · Esc"
+
+    asyncio.run(run())
+
+
 def test_console_screen_routes_arrow_keys_to_visible_autocomplete() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
@@ -688,6 +775,49 @@ def test_console_screen_routes_arrow_keys_to_visible_autocomplete() -> None:
             await pilot.press("up")
             assert autocomplete.selected_item is not None
             assert autocomplete.selected_item.label == "run"
+
+    asyncio.run(run())
+
+
+def test_console_screen_clears_agent_context_stats_when_autocomplete_appears() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(80, 24)) as pilot:
+            viewmodel.state.set_agent_context_stats(
+                AgentContextStatsState(
+                    entries=24,
+                    estimated_tokens=2618,
+                    start_sequence=1,
+                    end_sequence=24,
+                    current_tokens=2618,
+                    limit_tokens=80000,
+                    capacity_tokens=100000,
+                )
+            )
+            viewmodel.screen_resized()
+            await pilot.pause()
+
+            context_stats = app.query_one("#agent-context-stats", AgentContextStatsView)
+            assert context_stats.display is True
+
+            viewmodel.prompt_change(text="/", cursor_position=1)
+            await pilot.pause()
+
+            autocomplete = app.query_one("#autocomplete", AutoCompleteView)
+            assert autocomplete.is_visible() is True
+            assert app.state.agent_context_stats is None
+            assert context_stats.display is False
+
+            viewmodel.prompt_change(text="", cursor_position=0)
+            await pilot.pause()
+
+            assert context_stats.display is False
 
     asyncio.run(run())
 
@@ -754,7 +884,8 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
                 AgentStepFinalOutputItem(
                     run_id="run-1",
                     step_id="support_agent",
-                    text='{"text":"Hola **mundo**\\n\\n- **uno**\\n- dos"}',
+                    stop_reason=AgentStepStopReason.FINAL,
+                    final='{"text":"Hola **mundo**\\n\\n- **uno**\\n- dos"}',
                     format=OutputFormat.MARKDOWN,
                 ),
             ]
@@ -793,7 +924,8 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
                 AgentStepFinalOutputItem(
                     run_id="run-1",
                     step_id="support_agent",
-                    text=(
+                    stop_reason=AgentStepStopReason.FINAL,
+                    final=(
                         '{"text":"```diff\\n@@ -1 +1 @@\\n-old\\n+new\\n```\\n\\n'
                         'Cambios:\\n\\n1. Uno"}'
                     ),
@@ -906,7 +1038,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
         viewmodel.state.view_status.kind = ViewStatusKind.WAITING
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
-            skill_name="ant",
+            run_name="ant",
             status=RunStatus.WAITING_INPUT,
         )
 
@@ -940,7 +1072,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
             assert "› /dev" in rendered_lines
             assert "[inspect] RunContext" in rendered_lines
             assert any('"run_id": "run-1234"' in line for line in rendered_lines)
-            assert any('"skill_name": "ant"' in line for line in rendered_lines)
+            assert any('"run_name": "ant"' in line for line in rendered_lines)
             assert any('"status": "waiting_input"' in line for line in rendered_lines)
             assert any('"max_page": 100' in line for line in rendered_lines)
             assert "[inspect] ScreenStatus" in rendered_lines

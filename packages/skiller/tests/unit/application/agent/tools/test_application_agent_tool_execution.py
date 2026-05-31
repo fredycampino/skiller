@@ -36,9 +36,8 @@ from skiller.domain.agent.agent_context_model import (
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
-    AgentContextEntryStats,
-    AgentContextStats,
-    AgentContextUsageStats,
+    AgentContextObservedStats,
+    AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm_model import (
     LLMResponse,
@@ -433,7 +432,7 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int | None,
+        window_tokens: int,
         window_start_sequence: int,
     ) -> AgentContextEntry:
         return self._append(
@@ -512,6 +511,9 @@ class _FakeAgentContextStore:
         window_tokens: int | None = None,
         window_start_sequence: int | None = None,
     ) -> AgentContextEntry:
+        position_tokens = (
+            window_tokens if message_type == AgentAssistantMessageType.FINAL else None
+        )
         self.appended.append(
             {
                 "entry_type": entry_type,
@@ -530,6 +532,7 @@ class _FakeAgentContextStore:
             payload=payload,
             usage=usage,
             message_type=message_type,
+            position_tokens=position_tokens,
             window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
             source_step_id=source_step_id,
@@ -538,21 +541,15 @@ class _FakeAgentContextStore:
         self.entries.append(entry)
         return entry
 
-    def get_stats(self, *, context_id: str) -> AgentContextStats:
+    def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         _ = context_id
-        return AgentContextStats(
-            entries=AgentContextEntryStats(
-                total=0,
-                user_messages=0,
-                assistant_messages=0,
-                tool_calls=0,
-                tool_results=0,
-            ),
-            usage=AgentContextUsageStats(
-                entries=0,
-                total_prompt_tokens=0,
-                total_response_tokens=0,
-                total_tokens=0,
+        return AgentContextObservedStats(
+            entries=0,
+            estimated_tokens=0,
+            window=AgentContextObservedWindowStats(
+                start_sequence=0,
+                end_sequence=0,
+                current_tokens=0,
             ),
         )
 

@@ -8,7 +8,7 @@ def test_mono_shell_config_is_restricted() -> None:
 
     shell_config = config["tools"]["shell"]
 
-    assert shell_config["allowed_paths"] == ["."]
+    assert shell_config["allowed_paths"] == [".", "./.venv/bin/skiller"]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allowed_commands"] == [
         "pwd",
@@ -27,4 +27,5 @@ def test_mono_shell_config_is_restricted() -> None:
         "python3",
         "echo",
         "sleep",
+        "skiller",
     ]

@@ -65,10 +65,10 @@ class StartConsoleUseCase:
 
         self.context.activate_run(
             ack.run_id,
-            skill_name=LLM_CONFIG_RUN_ARGS,
+            run_name=LLM_CONFIG_RUN_ARGS,
             status=RunStatus.RUNNING,
         )
-        state.load_session(run_id=ack.run_id)
+        state.load_session(run_id=ack.run_id, run_name=LLM_CONFIG_RUN_ARGS)
         state.set_transcript(
             mode=state.transcript.mode,
             items=[RunAckItem(skill=LLM_CONFIG_RUN_ARGS, run_id=ack.run_id)],

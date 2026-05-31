@@ -1,6 +1,7 @@
 {
   "llm": {
-    "default_provider": "codex"
+    "default_provider": "codex",
+    "max_context_tokens": 100000
   },
   "loop": {
     "max_turns": 10,

@@ -80,7 +80,9 @@ General runtime configuration lives in:
 ~/.skiller/settings/config.json
 ```
 
-Skiller does not load `.env` files.
+When present in the current working directory, `.env.development` is loaded
+after real environment variables and before JSON config files. This repo uses it
+to point local development runs at `dev-runtime.db`.
 
 See:
 

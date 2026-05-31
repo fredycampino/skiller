@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from stui.di.strings import TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
     ActionOpenUrlValue,
@@ -41,6 +42,7 @@ from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
+    AgentStepStopReason,
     AgentSystemNoticeItem,
     AgentToolCallItem,
     AgentToolResultItem,
@@ -211,7 +213,8 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
                         text="Hecho completo.",
                         value=AgentOutputValue(
                             data={
-                                "final": {"text": "Hecho completo."},
+                                "final": "Hecho completo.",
+                                "stop_reason": "final",
                                 "usage": {
                                     "prompt_tokens": 100,
                                     "completion_tokens": 25,
@@ -230,7 +233,8 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
 
     assert len(items) == 1
     assert isinstance(items[0], AgentStepFinalOutputItem)
-    assert items[0].text == "Hecho completo."
+    assert items[0].stop_reason == AgentStepStopReason.FINAL
+    assert items[0].final == "Hecho completo."
     assert items[0].usage is not None
     assert items[0].usage.prompt_tokens == 100
     assert items[0].usage.completion_tokens == 25
@@ -519,8 +523,10 @@ def test_event_transcript_mapper_orders_events_by_created_at_and_sequence() -> N
     ]
 
 
-def test_event_transcript_mapper_renders_agent_interrupted_notice_and_final_output() -> None:
-    mapper = EventTranscriptMapper()
+def test_event_transcript_mapper_uses_agent_step_stop_and_ignores_lifecycle_stop() -> None:
+    mapper = EventTranscriptMapper(
+        strings=TuiStrings(agent_interrupted_notice="Stopped by user")
+    )
 
     items = mapper.to_transcript(
         [
@@ -541,7 +547,12 @@ def test_event_transcript_mapper_renders_agent_interrupted_notice_and_final_outp
                 payload=StepSuccessPayload(
                     output=OutputPayload(
                         text="",
-                        value=AgentOutputValue(data={"stop_reason": "interrupted"}),
+                        value=AgentOutputValue(
+                            data={
+                                "message": "Agent execution interrupted.",
+                                "stop_reason": "interrupted",
+                            }
+                        ),
                         body_ref=None,
                     )
                 ),
@@ -549,11 +560,47 @@ def test_event_transcript_mapper_renders_agent_interrupted_notice_and_final_outp
         ],
     )
 
-    assert len(items) == 2
+    assert len(items) == 1
     assert isinstance(items[0], AgentSystemNoticeItem)
-    assert items[0].text == "Interrupted by user"
-    assert isinstance(items[1], AgentStepFinalOutputItem)
-    assert items[1].text == "Interrupted by user"
+    assert items[0].text == "Stopped by user"
+    assert items[0].format == OutputFormat.SIMPLE
+
+
+def test_event_transcript_mapper_uses_config_invalid_notice_template() -> None:
+    mapper = EventTranscriptMapper(
+        strings=TuiStrings(
+            agent_config_invalid_notice_title="Bad agent config",
+            agent_config_invalid_notice_template="## {title}\n\n{message}",
+        )
+    )
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="support_agent",
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="Invalid agent config",
+                        value=AgentOutputValue(
+                            data={
+                                "message": "Missing provider.",
+                                "stop_reason": "config_invalid",
+                            }
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], AgentSystemNoticeItem)
+    assert items[0].text == "## Bad agent config\n\nMissing provider."
+    assert items[0].format == OutputFormat.MARKDOWN
 
 
 def test_event_transcript_mapper_renders_waiting_output() -> None:

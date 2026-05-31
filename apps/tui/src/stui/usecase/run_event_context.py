@@ -21,18 +21,20 @@ class RunMode(StrEnum):
 @dataclass
 class RunEventContext:
     run_id: str
-    skill_name: str
+    run_name: str
     mode: RunMode
     status: RunStatus
     max_page: int = 100
+    agent_id: str = ""
 
     def activate_run(
         self,
         run_id: str,
         *,
-        skill_name: str,
+        run_name: str,
         status: RunStatus,
     ) -> None:
         self.run_id = run_id
-        self.skill_name = skill_name
+        self.run_name = run_name
         self.status = status
+        self.agent_id = ""

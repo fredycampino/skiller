@@ -19,7 +19,7 @@ Status values:
 | `skiller action` | Update persisted runtime action state. | stable |
 | `skiller input` | Human input operations. | stable |
 | `skiller webhook` | Webhook ingress and registration operations. | stable |
-| `skiller agent` | Agent control operations. | experimental |
+| `skiller agent` | Agent control and context diagnostics. | stable |
 | `skiller server` | Local webhook server process operations. | stable |
 | `skiller channel` | Channel ingress operations. | experimental |
 | `skiller delete` | Delete a run and associated rows. | dev |

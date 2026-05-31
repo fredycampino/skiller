@@ -18,8 +18,9 @@ from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 @dataclass(frozen=True)
-class AgentContextWindowMarker:
+class AgentContextWindowBoundary:
     sequence: int
+    position_tokens: int
     window_tokens: int
     window_start_sequence: int
 
@@ -33,6 +34,7 @@ class SqliteAgentContextDatasource(SqliteRepository):
         entry_type: AgentContextEntryType,
         payload: AgentContextPayload,
         usage: LLMUsage | None = None,
+        position_tokens: int | None = None,
         window_tokens: int | None = None,
         window_start_sequence: int | None = None,
         source_step_id: str,
@@ -50,13 +52,14 @@ class SqliteAgentContextDatasource(SqliteRepository):
                   sequence,
                   entry_type,
                   message_type,
+                  position_tokens,
                   window_tokens,
                   window_start_sequence,
                   payload_json,
                   usage_json,
                   source_step_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry_id,
@@ -65,6 +68,7 @@ class SqliteAgentContextDatasource(SqliteRepository):
                     sequence,
                     entry_type.value,
                     _message_type(payload),
+                    position_tokens,
                     window_tokens,
                     window_start_sequence,
                     json.dumps(agent_context_payload_to_dict(payload)),
@@ -118,20 +122,21 @@ class SqliteAgentContextDatasource(SqliteRepository):
             ).fetchall()
         return [_build_entry(row) for row in rows]
 
-    def current_marker(
+    def window_end_boundary(
         self,
         *,
         context_id: str,
-    ) -> AgentContextWindowMarker | None:
+    ) -> AgentContextWindowBoundary | None:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
             row = conn.execute(
                 """
-                SELECT sequence, window_tokens, window_start_sequence
+                SELECT sequence, position_tokens, window_tokens, window_start_sequence
                 FROM agent_context_entries
                 WHERE context_id = ?
                   AND entry_type = ?
                   AND message_type = ?
+                  AND position_tokens IS NOT NULL
                   AND window_tokens IS NOT NULL
                   AND window_start_sequence IS NOT NULL
                 ORDER BY sequence DESC
@@ -143,28 +148,27 @@ class SqliteAgentContextDatasource(SqliteRepository):
                     AgentAssistantMessageType.FINAL.value,
                 ),
             ).fetchone()
-        return _window_marker_from_row(row)
+        return _window_boundary_from_row(row)
 
-    def cutoff_marker(
+    def window_start_boundary(
         self,
         *,
         context_id: str,
-        start_sequence: int,
-        cutoff_tokens: int,
-    ) -> AgentContextWindowMarker | None:
+        window_start_position_tokens: int,
+    ) -> AgentContextWindowBoundary | None:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
             row = conn.execute(
                 """
-                SELECT sequence, window_tokens, window_start_sequence
+                SELECT sequence, position_tokens, window_tokens, window_start_sequence
                 FROM agent_context_entries
                 WHERE context_id = ?
                   AND entry_type = ?
                   AND message_type = ?
-                  AND sequence >= ?
+                  AND position_tokens IS NOT NULL
                   AND window_tokens IS NOT NULL
                   AND window_start_sequence IS NOT NULL
-                  AND window_tokens > ?
+                  AND position_tokens > ?
                 ORDER BY sequence ASC
                 LIMIT 1
                 """,
@@ -172,11 +176,76 @@ class SqliteAgentContextDatasource(SqliteRepository):
                     context_id,
                     AgentContextEntryType.ASSISTANT_MESSAGE.value,
                     AgentAssistantMessageType.FINAL.value,
-                    start_sequence,
-                    cutoff_tokens,
+                    window_start_position_tokens,
                 ),
             ).fetchone()
-        return _window_marker_from_row(row)
+        return _window_boundary_from_row(row)
+
+    def window_start_boundary_for_start_sequence(
+        self,
+        *,
+        context_id: str,
+        window_start_sequence: int,
+        window_start_position_tokens: int,
+    ) -> AgentContextWindowBoundary | None:
+        with self._connect() as conn:
+            ensure_agent_context_schema(conn)
+            row = conn.execute(
+                """
+                SELECT sequence, position_tokens, window_tokens, window_start_sequence
+                FROM agent_context_entries
+                WHERE context_id = ?
+                  AND entry_type = ?
+                  AND message_type = ?
+                  AND position_tokens IS NOT NULL
+                  AND window_tokens IS NOT NULL
+                  AND window_start_sequence = ?
+                  AND sequence >= ?
+                  AND position_tokens > ?
+                ORDER BY sequence ASC
+                LIMIT 1
+                """,
+                (
+                    context_id,
+                    AgentContextEntryType.ASSISTANT_MESSAGE.value,
+                    AgentAssistantMessageType.FINAL.value,
+                    window_start_sequence,
+                    window_start_sequence,
+                    window_start_position_tokens,
+                ),
+            ).fetchone()
+        return _window_boundary_from_row(row)
+
+    def position_before_sequence(
+        self,
+        *,
+        context_id: str,
+        sequence: int,
+    ) -> int:
+        with self._connect() as conn:
+            ensure_agent_context_schema(conn)
+            row = conn.execute(
+                """
+                SELECT position_tokens
+                FROM agent_context_entries
+                WHERE context_id = ?
+                  AND entry_type = ?
+                  AND message_type = ?
+                  AND position_tokens IS NOT NULL
+                  AND sequence < ?
+                ORDER BY sequence DESC
+                LIMIT 1
+                """,
+                (
+                    context_id,
+                    AgentContextEntryType.ASSISTANT_MESSAGE.value,
+                    AgentAssistantMessageType.FINAL.value,
+                    sequence,
+                ),
+            ).fetchone()
+        if row is None:
+            return 0
+        return int(row["position_tokens"])
 
     def next_turn_id(self, *, context_id: str) -> str:
         with self._connect() as conn:
@@ -217,13 +286,14 @@ class SqliteAgentContextDatasource(SqliteRepository):
         return int(row["max_sequence"]) + 1
 
 
-def _window_marker_from_row(
+def _window_boundary_from_row(
     row: sqlite3.Row | None,
-) -> AgentContextWindowMarker | None:
+) -> AgentContextWindowBoundary | None:
     if row is None:
         return None
-    return AgentContextWindowMarker(
+    return AgentContextWindowBoundary(
         sequence=int(row["sequence"]),
+        position_tokens=int(row["position_tokens"]),
         window_tokens=int(row["window_tokens"]),
         window_start_sequence=int(row["window_start_sequence"]),
     )
@@ -239,6 +309,7 @@ def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
           sequence INTEGER NOT NULL,
           entry_type TEXT NOT NULL,
           message_type TEXT NULL,
+          position_tokens INTEGER NULL,
           window_tokens INTEGER NULL,
           window_start_sequence INTEGER NULL,
           payload_json TEXT NOT NULL,
@@ -256,7 +327,7 @@ def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
             context_id,
             entry_type,
             message_type,
-            window_tokens,
+            position_tokens,
             sequence
           );
 
@@ -277,6 +348,7 @@ def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
         sequence=int(row["sequence"]),
         entry_type=entry_type,
         message_type=_optional_assistant_message_type(row["message_type"]),
+        position_tokens=_optional_int(row["position_tokens"]),
         window_tokens=_optional_int(row["window_tokens"]),
         window_start_sequence=_optional_int(row["window_start_sequence"]),
         payload=agent_context_payload_from_dict(

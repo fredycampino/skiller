@@ -81,6 +81,7 @@ class AgentContextEntry:
     source_step_id: str
     created_at: str
     message_type: AgentAssistantMessageType | None = None
+    position_tokens: int | None = None
     window_tokens: int | None = None
     window_start_sequence: int | None = None
 

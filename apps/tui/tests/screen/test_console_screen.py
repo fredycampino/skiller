@@ -5,26 +5,18 @@ import pytest
 from stui.port.runs_port import RunsPortItem
 from stui.screen.console_screen import (
     _build_footer_left_text,
+    _build_footer_right_text,
     _format_agent_tokens,
     _format_run_updated_at,
-    _resolve_run_row_mode,
     _resolve_run_row_status,
 )
-from stui.screen.runs_table_view import RunRowMode, RunRowStatus
-from stui.viewmodel.console_screen_state import AgentUsageState, ConsoleScreenState
+from stui.screen.runs_table_view import RunRowStatus
+from stui.viewmodel.console_screen_state import (
+    AgentUsageState,
+    ConsoleScreenState,
+)
 
 pytestmark = pytest.mark.unit
-
-
-def test_resolve_run_row_mode_maps_input_waits_to_chat() -> None:
-    assert (
-        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="input"))
-        == RunRowMode.CHAT
-    )
-    assert (
-        _resolve_run_row_mode(_run_item(status="WAITING", wait_type="webhook"))
-        == RunRowMode.FLOW
-    )
 
 
 def test_resolve_run_row_status_maps_wait_variants() -> None:
@@ -82,6 +74,22 @@ def test_build_footer_left_text_shows_usage_when_available() -> None:
 
 def test_build_footer_left_text_falls_back_to_commands_hint() -> None:
     assert _build_footer_left_text(state=ConsoleScreenState()) == "/ for commands"
+
+
+def test_build_footer_right_text_shows_run_id_and_compact_run_name() -> None:
+    state = ConsoleScreenState(
+        session_key="run-1234",
+        run_name="apps/tui/tests/flows/notify/notify.yaml",
+    )
+
+    assert (
+        _build_footer_right_text(state=state, empty_icon="-")
+        == "run-1234\n/notify.yaml"
+    )
+
+
+def test_build_footer_right_text_shows_empty_icon_without_run() -> None:
+    assert _build_footer_right_text(state=ConsoleScreenState(), empty_icon="-") == "-"
 
 
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:

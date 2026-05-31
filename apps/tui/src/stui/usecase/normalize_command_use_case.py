@@ -34,7 +34,7 @@ class NormalizeCommandUseCase:
             )
 
         lowered = normalized.lower()
-        if lowered in {"/quit", "quit", "exit"}:
+        if lowered in {"/quit", "/exit"}:
             return Command(
                 kind=CommandKind.QUIT,
                 name="quit",

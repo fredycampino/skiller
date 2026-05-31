@@ -10,9 +10,8 @@ from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentStatus,
 )
 from skiller.domain.agent.agent_stats_model import (
-    AgentContextEntryStats,
     AgentContextStats,
-    AgentContextUsageStats,
+    AgentContextWindowStats,
     AgentStats,
 )
 from skiller.domain.run.steering_model import SteeringAgentInterrupt
@@ -44,18 +43,14 @@ def test_mapper_serializes_agent_stats_result() -> None:
         agent_id="support",
         context_id="ctx-1",
         context=AgentContextStats(
-            entries=AgentContextEntryStats(
-                total=3,
-                user_messages=1,
-                assistant_messages=1,
-                tool_calls=1,
-                tool_results=0,
-            ),
-            usage=AgentContextUsageStats(
-                entries=1,
-                total_prompt_tokens=100,
-                total_response_tokens=25,
-                total_tokens=125,
+            entries=3,
+            estimated_tokens=125,
+            window=AgentContextWindowStats(
+                start_sequence=2,
+                end_sequence=3,
+                current_tokens=100,
+                limit_tokens=80000,
+                capacity_tokens=100000,
             ),
         ),
     )
@@ -73,21 +68,15 @@ def test_mapper_serializes_agent_stats_result() -> None:
         "status": "OK",
         "ok": True,
         "context_id": "ctx-1",
-        "stats": {
-            "context": {
-                "entries": {
-                    "total": 3,
-                    "user_messages": 1,
-                    "assistant_messages": 1,
-                    "tool_calls": 1,
-                    "tool_results": 0,
-                },
-                "usage": {
-                    "entries": 1,
-                    "total_prompt_tokens": 100,
-                    "total_response_tokens": 25,
-                    "total_tokens": 125,
-                },
-            }
+        "context": {
+            "entries": 3,
+            "estimated_tokens": 125,
+            "window": {
+                "start_sequence": 2,
+                "end_sequence": 3,
+                "current_tokens": 100,
+                "limit_tokens": 80000,
+                "capacity_tokens": 100000,
+            },
         },
     }

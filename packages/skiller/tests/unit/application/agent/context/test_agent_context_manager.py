@@ -114,7 +114,7 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
     assert store.window_calls == [{"context_id": "ctx-1", "window_tokens": 80_000}]
 
 
-def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> None:
+def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> None:
     store = _FakeAgentContextStore(
         window_entries=[
             AgentContextEntry(
@@ -130,6 +130,7 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
                 ),
                 usage=None,
                 message_type="final",
+                position_tokens=2,
                 window_tokens=2,
                 window_start_sequence=1,
                 source_step_id="agent-1",
@@ -148,6 +149,7 @@ def test_agent_context_manager_estimates_window_tokens_from_final_totals() -> No
                 ),
                 usage=None,
                 message_type="final",
+                position_tokens=6,
                 window_tokens=6,
                 window_start_sequence=1,
                 source_step_id="agent-1",

@@ -182,12 +182,21 @@ Final output:
       "final": "Final answer.",
       "turn_count": 2,
       "tool_call_count": 1,
-      "stop_reason": "final"
+      "stop_reason": "final",
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "provider": "minimax",
+        "model": "MiniMax-M2.5"
+      }
     }
   },
   "body_ref": null
 }
 ```
+
+`usage` is present when the selected LLM provider returns token usage.
 
 Stop output:
 

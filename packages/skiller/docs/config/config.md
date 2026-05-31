@@ -3,7 +3,7 @@
 ## Precedence
 
 ```text
-env -> explicit file -> flow-local file -> global file -> default feature config.json
+env -> .env.development -> explicit file -> flow-local file -> global file -> default feature config.json
 ```
 
 ## env variables
@@ -13,6 +13,19 @@ Environment variables.
 - runtime overrides
 - highest priority
 - useful for CI, local debugging, and one-off runs
+
+## `.env.development`
+
+When present in the current working directory, `.env.development` provides local
+development defaults after real environment variables and before JSON config files.
+
+The repo development default is:
+
+```bash
+AGENT_DB_PATH=dev-runtime.db
+```
+
+This keeps local development runs away from the installed/global runtime DB.
 
 ## User file.json
 

@@ -1,9 +1,16 @@
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
+from skiller.domain.agent.agent_config_port import AgentConfigPort
 from skiller.domain.agent.agent_context_stats_port import AgentContextStatsPort
-from skiller.domain.agent.agent_stats_model import AgentStats
+from skiller.domain.agent.agent_stats_model import (
+    AgentContextStats,
+    AgentContextWindowStats,
+    AgentStats,
+)
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.step.runner_port import RunnerPort
 
 
 class GetAgentStatsStatus(str, Enum):
@@ -28,9 +35,13 @@ class GetAgentStatsUseCase:
         *,
         store: RunStorePort,
         context_stats: AgentContextStatsPort,
+        agent_config: AgentConfigPort,
+        skill_runner: RunnerPort,
     ) -> None:
         self.store = store
         self.context_stats = context_stats
+        self.agent_config = agent_config
+        self.skill_runner = skill_runner
 
     def execute(self, run_id: str, agent_id: str) -> GetAgentStatsResult:
         if not run_id or not agent_id:
@@ -62,6 +73,12 @@ class GetAgentStatsUseCase:
             )
 
         context_stats = self.context_stats.get_stats(context_id=agent.context_id)
+        config_path = self._resolve_agent_config_path(run.source, run.ref)
+        config = self.agent_config.get_config(config_path=config_path)
+        capacity_tokens = config.llm.default().context_window_tokens
+        limit_tokens = int(
+            capacity_tokens * config.context.compaction.max_total_tokens_ratio,
+        )
         return GetAgentStatsResult(
             status=GetAgentStatsStatus.OK,
             run_id=run_id,
@@ -70,6 +87,30 @@ class GetAgentStatsUseCase:
                 run_id=run_id,
                 agent_id=agent_id,
                 context_id=agent.context_id,
-                context=context_stats,
+                context=AgentContextStats(
+                    entries=context_stats.entries,
+                    estimated_tokens=context_stats.estimated_tokens,
+                    window=AgentContextWindowStats(
+                        start_sequence=context_stats.window.start_sequence,
+                        end_sequence=context_stats.window.end_sequence,
+                        current_tokens=context_stats.window.current_tokens,
+                        limit_tokens=limit_tokens,
+                        capacity_tokens=capacity_tokens,
+                    ),
+                ),
             ),
         )
+
+    def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
+        try:
+            config_path = self.skill_runner.resolve_file_path(
+                source,
+                ref,
+                "agent.json",
+            )
+        except (FileNotFoundError, ValueError):
+            return None
+
+        if config_path.exists():
+            return config_path
+        return None

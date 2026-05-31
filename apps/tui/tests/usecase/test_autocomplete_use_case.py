@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from stui.di.strings import TuiStrings
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 
 pytestmark = pytest.mark.unit
@@ -16,6 +17,7 @@ def test_autocomplete_use_case_builds_completion_state_for_slash_prefix() -> Non
     assert state.visible is True
     assert state.query == "/ru"
     assert [item.label for item in state.items] == ["run", "runs"]
+    assert state.items[0].description == "Run an agentic flow"
     assert state.selected_index == 0
     assert state.replace_from == 0
     assert state.replace_to == 3
@@ -60,5 +62,26 @@ def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
         "run",
         "runs",
         "quit",
+        "exit",
         "dev",
     ]
+
+
+def test_autocomplete_use_case_suggests_exit_command() -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text="/e", cursor_position=2)
+
+    assert state is not None
+    assert [item.label for item in state.items] == ["exit"]
+
+
+def test_autocomplete_use_case_uses_strings_for_run_description() -> None:
+    use_case = AutocompleteUseCase(
+        strings=TuiStrings(autocomplete_run_description="Run a custom flow")
+    )
+
+    state = use_case.execute(text="/ru", cursor_position=3)
+
+    assert state is not None
+    assert state.items[0].description == "Run a custom flow"

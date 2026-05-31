@@ -20,7 +20,7 @@ _SETTINGS_ENV_NAMES = (
 )
 
 
-def test_get_settings_uses_defaults_when_config_is_missing(
+def test_get_settings_uses_runtime_db_default_when_no_env_file_exists(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -32,6 +32,23 @@ def test_get_settings_uses_defaults_when_config_is_missing(
 
     assert settings.db_path == "./runtime.db"
     assert settings.whatsapp_bridge_send_timeout_seconds == 10.0
+
+
+def test_get_settings_loads_development_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    _clear_settings_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / ".env.development").write_text(
+        "AGENT_DB_PATH=dev-runtime.db\n",
+        encoding="utf-8",
+    )
+
+    settings = settings_module.get_settings()
+
+    assert settings.db_path == "dev-runtime.db"
 
 
 def test_get_settings_loads_explicit_structured_config(
@@ -98,6 +115,24 @@ def test_get_settings_environment_overrides_structured_config(
     settings = settings_module.get_settings()
 
     assert settings.webhooks_port == 9010
+
+
+def test_get_settings_environment_overrides_development_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    _clear_settings_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("AGENT_DB_PATH", "real-env.db")
+    (tmp_path / ".env.development").write_text(
+        "AGENT_DB_PATH=dev-runtime.db\n",
+        encoding="utf-8",
+    )
+
+    settings = settings_module.get_settings()
+
+    assert settings.db_path == "real-env.db"
 
 
 def test_get_settings_raises_when_explicit_config_is_missing(

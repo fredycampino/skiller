@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import cast
 
 from stui.port.agent_port import AgentPort
@@ -17,11 +17,8 @@ from stui.port.event_port import EventsPort, LogEventsListener
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
-    AgentStepFinalOutputItem,
-    AgentUsageState,
     ConsoleScreenState,
     PromptMode,
-    TranscriptItem,
     ViewStatusKind,
 )
 
@@ -38,7 +35,7 @@ class EventStateUseCase:
     context: RunEventContext
     agent_port: AgentPort
     events_port: EventsPort
-    transcript_mapper: EventTranscriptMapper = field(default_factory=EventTranscriptMapper)
+    transcript_mapper: EventTranscriptMapper
 
     def execute(
         self,
@@ -52,33 +49,12 @@ class EventStateUseCase:
 
         transcript_items = self.transcript_mapper.to_transcript(events)
         state.transcript.items = transcript_items
-        state.set_agent_usage(self._agent_usage_state(items=transcript_items))
         self._project_event(
             observer,
             state=state,
             event=_most_recent_event(events),
         )
         return EventStateResult(state=state)
-
-    def _agent_usage_state(
-        self,
-        *,
-        items: list[TranscriptItem],
-    ) -> AgentUsageState | None:
-        for item in reversed(items):
-            if not isinstance(item, AgentStepFinalOutputItem):
-                continue
-            if item.usage is None:
-                continue
-            if item.usage.model is None:
-                continue
-            if item.usage.total_tokens is None:
-                continue
-            return AgentUsageState(
-                model=item.usage.model,
-                total_tokens=item.usage.total_tokens,
-            )
-        return None
 
     def _project_event(
         self,

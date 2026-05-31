@@ -12,9 +12,8 @@ from skiller.domain.agent.agent_context_stats_port import AgentContextStatsPort
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
-    AgentContextEntryStats,
-    AgentContextStats,
-    AgentContextUsageStats,
+    AgentContextObservedStats,
+    AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
@@ -70,9 +69,15 @@ class AgentContextStore(
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int | None,
+        window_tokens: int,
         window_start_sequence: int,
     ) -> AgentContextEntry:
+        base_position_tokens = self.datasource.position_before_sequence(
+            context_id=context.context_id,
+            sequence=window_start_sequence,
+        )
+        position_tokens = base_position_tokens + window_tokens
+
         return self.datasource.append_entry(
             run_id=context.run_id,
             context_id=context.context_id,
@@ -83,6 +88,7 @@ class AgentContextStore(
                 text=text,
             ),
             usage=usage,
+            position_tokens=position_tokens,
             window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
             source_step_id=context.agent_id,
@@ -141,8 +147,8 @@ class AgentContextStore(
         context_id: str,
         window_tokens: int,
     ) -> AgentContextWindow:
-        current_marker = self.datasource.current_marker(context_id=context_id)
-        if current_marker is None:
+        window_end = self.datasource.window_end_boundary(context_id=context_id)
+        if window_end is None:
             entries = self.datasource.list_entries(context_id=context_id)
             return AgentContextWindow(
                 entries=entries,
@@ -150,10 +156,31 @@ class AgentContextStore(
                 end_sequence=_end_sequence(entries),
             )
 
-        if current_marker.window_tokens <= window_tokens:
+        window_start_position_tokens = window_end.position_tokens - window_tokens
+        if window_start_position_tokens <= 0:
+            entries = self.datasource.list_entries(context_id=context_id)
+            return AgentContextWindow(
+                entries=entries,
+                start_sequence=_start_sequence(entries),
+                end_sequence=_end_sequence(entries),
+            )
+
+        base_position_tokens = self.datasource.position_before_sequence(
+            context_id=context_id,
+            sequence=window_end.window_start_sequence,
+        )
+        if window_start_position_tokens > base_position_tokens:
+            window_start = self.datasource.window_start_boundary_for_start_sequence(
+                context_id=context_id,
+                window_start_sequence=window_end.window_start_sequence,
+                window_start_position_tokens=window_start_position_tokens,
+            )
+            sequence = window_end.window_start_sequence
+            if window_start is not None:
+                sequence = window_start.sequence
             entries = self.datasource.list_entries_from_sequence(
                 context_id=context_id,
-                sequence=current_marker.window_start_sequence,
+                sequence=sequence,
             )
             return AgentContextWindow(
                 entries=entries,
@@ -161,17 +188,12 @@ class AgentContextStore(
                 end_sequence=_end_sequence(entries),
             )
 
-        cutoff_tokens = current_marker.window_tokens - window_tokens
-        cutoff_marker = self.datasource.cutoff_marker(
+        window_start = self.datasource.window_start_boundary(
             context_id=context_id,
-            start_sequence=current_marker.window_start_sequence,
-            cutoff_tokens=cutoff_tokens,
+            window_start_position_tokens=window_start_position_tokens,
         )
-        if cutoff_marker is None:
-            entries = self.datasource.list_entries_from_sequence(
-                context_id=context_id,
-                sequence=current_marker.window_start_sequence,
-            )
+        if window_start is None:
+            entries = self.datasource.list_entries(context_id=context_id)
             return AgentContextWindow(
                 entries=entries,
                 start_sequence=_start_sequence(entries),
@@ -180,7 +202,7 @@ class AgentContextStore(
 
         entries = self.datasource.list_entries_from_sequence(
             context_id=context_id,
-            sequence=max(current_marker.window_start_sequence, cutoff_marker.sequence),
+            sequence=window_start.sequence,
         )
         return AgentContextWindow(
             entries=entries,
@@ -188,11 +210,31 @@ class AgentContextStore(
             end_sequence=_end_sequence(entries),
         )
 
-    def get_stats(self, *, context_id: str) -> AgentContextStats:
+    def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         entries = self.datasource.list_entries(context_id=context_id)
-        return AgentContextStats(
-            entries=_calculate_entry_stats(entries),
-            usage=_calculate_usage_stats(entries),
+        final_entry = _last_final_entry(entries)
+        if final_entry is None:
+            start_sequence = _start_sequence(entries)
+            return AgentContextObservedStats(
+                entries=len(entries),
+                estimated_tokens=0,
+                window=AgentContextObservedWindowStats(
+                    start_sequence=start_sequence,
+                    end_sequence=_end_sequence(entries),
+                    current_tokens=0,
+                ),
+            )
+
+        window_start_sequence = final_entry.window_start_sequence or 0
+
+        return AgentContextObservedStats(
+            entries=len(entries),
+            estimated_tokens=final_entry.position_tokens or 0,
+            window=AgentContextObservedWindowStats(
+                start_sequence=window_start_sequence,
+                end_sequence=_end_sequence(entries),
+                current_tokens=final_entry.window_tokens or 0,
+            ),
         )
 
     def get_usage(self, *, context_id: str) -> LLMUsage:
@@ -224,53 +266,14 @@ def _end_sequence(entries: list[AgentContextEntry]) -> int:
     return entries[-1].sequence
 
 
-def _calculate_entry_stats(entries: list[AgentContextEntry]) -> AgentContextEntryStats:
-    user_messages = 0
-    assistant_messages = 0
-    tool_calls = 0
-    tool_results = 0
-
-    for entry in entries:
-        if entry.entry_type == AgentContextEntryType.USER_MESSAGE:
-            user_messages += 1
-            continue
-        if entry.entry_type == AgentContextEntryType.ASSISTANT_MESSAGE:
-            assistant_messages += 1
-            continue
-        if entry.entry_type == AgentContextEntryType.TOOL_CALL:
-            tool_calls += 1
-            continue
-        if entry.entry_type == AgentContextEntryType.TOOL_RESULT:
-            tool_results += 1
-
-    return AgentContextEntryStats(
-        total=len(entries),
-        user_messages=user_messages,
-        assistant_messages=assistant_messages,
-        tool_calls=tool_calls,
-        tool_results=tool_results,
-    )
-
-
-def _calculate_usage_stats(entries: list[AgentContextEntry]) -> AgentContextUsageStats:
-    usage = _last_final_usage_from_entries(entries)
-    if usage is None:
-        return AgentContextUsageStats(
-            entries=0,
-            total_prompt_tokens=0,
-            total_response_tokens=0,
-            total_tokens=0,
-        )
-
-    return AgentContextUsageStats(
-        entries=1,
-        total_prompt_tokens=usage.prompt_tokens or 0,
-        total_response_tokens=usage.completion_tokens or 0,
-        total_tokens=usage.total_tokens or 0,
-    )
-
-
 def _last_final_usage_from_entries(entries: list[AgentContextEntry]) -> LLMUsage | None:
+    entry = _last_final_entry(entries)
+    if entry is None:
+        return None
+    return entry.usage
+
+
+def _last_final_entry(entries: list[AgentContextEntry]) -> AgentContextEntry | None:
     for entry in reversed(entries):
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             continue
@@ -278,5 +281,5 @@ def _last_final_usage_from_entries(entries: list[AgentContextEntry]) -> LLMUsage
             continue
         if entry.payload.message_type != AgentAssistantMessageType.FINAL:
             continue
-        return entry.usage
+        return entry
     return None

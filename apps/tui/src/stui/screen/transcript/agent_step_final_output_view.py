@@ -19,7 +19,7 @@ class AgentStepFinalOutputView(TranscriptView):
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
         content = render_message_content(
-            output=self.item.text,
+            output=self.item.final,
             format=self.item.format,
             theme=theme,
         )

@@ -41,7 +41,7 @@ class SelectRunsTableRowUseCase:
         state: ConsoleScreenState,
         prompt_text: str,
         run_id: str,
-        skill_name: str,
+        run_name: str,
     ) -> SelectRunsTableRowResult:
         state.runs_table.visible = False
         state.runs_table.command = ""
@@ -68,7 +68,7 @@ class SelectRunsTableRowUseCase:
         if state.session_key == run_id:
             transcript_items = list(state.transcript.items)
 
-        state.load_session(run_id=run_id)
+        state.load_session(run_id=run_id, run_name=run_name)
         state.set_transcript(mode=state.transcript.mode, items=transcript_items)
         state.set_autocompletion()
         state.set_prompt(
@@ -78,7 +78,7 @@ class SelectRunsTableRowUseCase:
         state.set_status(kind=ViewStatusKind.WAITING)
         self.context.activate_run(
             run_id,
-            skill_name=skill_name,
+            run_name=run_name,
             status=run_status,
         )
         self.events_port.subscribe(run_id=run_id, listener=observer)

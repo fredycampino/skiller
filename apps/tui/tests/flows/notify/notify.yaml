@@ -1,0 +1,30 @@
+name: tui_notify_action
+description: "TUI flow for notify action behavior"
+version: "0.1"
+start: wait_any_text
+
+inputs: {}
+
+steps:
+  - wait_input: wait_any_text
+    prompt: "Type text to show a notify action. Type exit to finish."
+    next: decide_input
+
+  - switch: decide_input
+    value: '{{output_value("wait_any_text").payload.text}}'
+    cases:
+      exit: done
+    default: auth_link
+
+  - notify: auth_link
+    format: markdown
+    message: '{{output_value("wait_any_text").payload.text}}'
+    action:
+      type: open_url
+      label: "Open authorization"
+      url: "https://www.google.com/"
+      auto_open: false
+    next: wait_any_text
+
+  - notify: done
+    message: "Done."

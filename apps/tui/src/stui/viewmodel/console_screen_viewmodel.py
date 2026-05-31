@@ -48,8 +48,15 @@ class ConsoleScreenViewModel(LogEventsListener):
             state=self.state,
             events=events,
         )
-        notify_action_result = self._use_cases.project_notify_action.execute(
+        self._use_cases.agent_status.execute(
+            context=self._run_event_context,
+            events=events,
+        )
+        agent_usage_result = self._use_cases.agent_usage.execute(
             state=result.state,
+        )
+        notify_action_result = self._use_cases.notify_action.execute(
+            state=agent_usage_result.state,
         )
         self.state = notify_action_result.state
         self._emit_state()
@@ -147,12 +154,15 @@ class ConsoleScreenViewModel(LogEventsListener):
     def prompt_change(self, *, text: str, cursor_position: int) -> None:
         self.state.prompt.text = text
         self.state.prompt.cursor_position = cursor_position
-        self.state.set_autocompletion(
-            self._use_cases.autocomplete.execute(
-                text=text,
-                cursor_position=cursor_position,
-            )
+        autocompletion = self._use_cases.autocomplete.execute(
+            text=text,
+            cursor_position=cursor_position,
         )
+        self.state.set_autocompletion(autocompletion)
+        if autocompletion is not None and autocompletion.visible:
+            self.state.runs_table.visible = False
+            self.state.runs_table.command = ""
+            self.state.set_agent_context_stats()
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
 
@@ -188,7 +198,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._on_event(
             InspectRunContextEvent(
                 run_id=self._run_event_context.run_id,
-                skill_name=self._run_event_context.skill_name,
+                run_name=self._run_event_context.run_name,
                 mode=self._run_event_context.mode,
                 status=self._run_event_context.status,
                 max_page=self._run_event_context.max_page,
@@ -208,14 +218,14 @@ class ConsoleScreenViewModel(LogEventsListener):
         *,
         prompt_text: str,
         run_id: str,
-        skill_name: str,
+        run_name: str,
     ) -> None:
         result = self._use_cases.select_runs_table_row.execute(
             self,
             state=self.state,
             prompt_text=prompt_text,
             run_id=run_id,
-            skill_name=skill_name,
+            run_name=run_name,
         )
         self.state = result.state
         self._emit_state()
@@ -249,6 +259,13 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._emit_state()
         return result.interrupted
 
+    async def toggle_agent_stats(self) -> None:
+        result = await self._use_cases.toggle_agent_stats.execute(
+            state=self.state,
+        )
+        self.state = result.state
+        self._emit_state()
+
     def _resolve_prompt_mode(self) -> PromptMode:
         if self.state.runs_table.visible:
             return PromptMode.RUNS_TABLE
@@ -274,10 +291,13 @@ class ConsoleScreenViewModel(LogEventsListener):
             self._on_state(self._build_screen_state())
 
     def _build_screen_state(self) -> ConsoleScreenState:
-        state = ConsoleScreenState(session_key=self.state.session_key)
+        state = ConsoleScreenState(
+            session_key=self.state.session_key,
+            run_name=self.state.run_name,
+        )
         state.set_transcript(
             mode=self.state.transcript.mode,
-            items=self._use_cases.project_transcript.execute(state=self.state),
+            items=self._use_cases.transcript.execute(state=self.state),
         )
         state.set_prompt(
             text=self.state.prompt.text,
@@ -295,6 +315,7 @@ class ConsoleScreenViewModel(LogEventsListener):
             rows=self.state.runs_table.rows,
         )
         state.set_agent_usage(self.state.agent_usage)
+        state.set_agent_context_stats(self.state.agent_context_stats)
         state.set_autocompletion(self.state.autocompletion)
         state.set_notify_action(self.state.notify_action)
         return state

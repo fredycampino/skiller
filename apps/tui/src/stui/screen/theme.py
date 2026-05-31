@@ -104,14 +104,23 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             background: {theme.color_ansi_default};
         }}
 
-        #notify-action-area {{
+        #right-status-column {{
             height: auto;
             width: 34;
             min-width: 28;
             max-width: 70%;
             margin: 0;
             padding: 0;
-            align: right top;
+            align: right bottom;
+            background: {theme.color_ansi_default};
+        }}
+
+        #right-status-stack {{
+            layout: vertical;
+            height: auto;
+            width: 100%;
+            margin: 0;
+            padding: 0;
             background: {theme.color_ansi_default};
         }}
 
@@ -124,6 +133,24 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             border: round {theme.color_prompt_border};
             background: {theme.color_ansi_default};
             color: {theme.color_text_primary};
+        }}
+
+        #agent-context-stats {{
+            layout: vertical;
+            height: auto;
+            width: 100%;
+            margin: 1 0 0 0;
+            padding: 0 1;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_ansi_default};
+            color: {theme.color_text_primary};
+        }}
+
+        #agent-context-stats-content {{
+            height: auto;
+            width: 100%;
+            color: {theme.color_text_primary};
+            background: {theme.color_ansi_default};
         }}
 
         #notify-action-message {{
@@ -262,7 +289,9 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
         }}
 
         #runs-table {{
+            layout: vertical;
             height: auto;
+            min-height: 10;
             width: 100%;
             padding: 0 0 0 0;
             border: round {theme.color_prompt_border};
@@ -273,17 +302,56 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             scrollbar-visibility: hidden;
         }}
 
-        #runs-table > .datatable--header {{
-            color: {theme.color_text_primary};
+        #runs-table-data {{
+            height: auto;
+            width: 100%;
+            padding: 0 0 0 0;
+            background: {theme.color_ansi_default};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #runs-table-data > .datatable--header {{
+            color: {theme.color_text_muted};
             background: {theme.color_ansi_default};
             padding-bottom: 1;
             text-style: bold;
         }}
 
-        #runs-table > .datatable--cursor {{
+        #runs-table-data > .datatable--cursor {{
             color: {theme.color_text_accent};
             background: {theme.color_ansi_default} 0%;
             text-style: bold;
+        }}
+
+        #runs-table-empty {{
+            height: 3;
+            min-height: 3;
+            width: 100%;
+            content-align: center middle;
+            color: {theme.color_text_secondary};
+            background: {theme.color_ansi_default};
+        }}
+
+        #runs-table-selected-flow {{
+            height: 1;
+            width: 100%;
+            padding: 0 2;
+            content-align: left middle;
+            color: {theme.color_text_muted};
+            background: {theme.color_ansi_default};
+        }}
+
+        #runs-table-navigation {{
+            dock: bottom;
+            height: 1;
+            width: 100%;
+            padding: 0 2 0 0;
+            content-align: right middle;
+            color: {theme.color_text_muted};
+            background: {theme.color_ansi_default};
         }}
 
         #footer {{
@@ -297,10 +365,12 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #footer-left {{
             width: 1fr;
+            height: 2;
         }}
 
         #footer-right {{
             width: auto;
+            height: 2;
             text-align: right;
         }}
 

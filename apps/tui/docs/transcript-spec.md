@@ -61,7 +61,7 @@ Current item set:
 | `AgentAssistantMessageItem` | non-final assistant message inside an agent step |
 | `AgentFinalAssistantMessageItem` | final assistant event marker; renders blank today |
 | `AgentStepFinalOutputItem` | visible final agent answer from `STEP_SUCCESS + agent` |
-| `AgentSystemNoticeItem` | agent interrupted / max turns exhausted notice |
+| `AgentSystemNoticeItem` | non-final agent step stop notice from `STEP_SUCCESS + agent` |
 | `RunOutputItem` | legacy generic run output view |
 | `StepNotifyOutputItem` | `notify` step output |
 | `StepShellOutputItem` | `shell` step output |
@@ -84,12 +84,13 @@ Current item set:
 | `AGENT_FINAL_ASSISTANT_MESSAGE` | `AgentFinalAssistantMessageItem` |
 | `AGENT_TOOL_CALL` | `AgentToolCallItem` |
 | `AGENT_TOOL_RESULT` | `AgentToolResultItem` |
-| `AGENT_INTERRUPTED` | `AgentSystemNoticeItem` |
-| `AGENT_MAX_TURNS_EXHAUSTED` | `AgentSystemNoticeItem` |
+| `AGENT_INTERRUPTED` | none |
+| `AGENT_MAX_TURNS_EXHAUSTED` | none |
 | `STEP_STARTED + wait_input` | none |
 | `STEP_STARTED + wait_webhook` | none |
 | `STEP_STARTED + other` | `RunStepItem` |
-| `STEP_SUCCESS + agent` | `AgentStepFinalOutputItem` |
+| `STEP_SUCCESS + agent + stop_reason=final` | `AgentStepFinalOutputItem` |
+| `STEP_SUCCESS + agent + non-final stop_reason` | `AgentSystemNoticeItem` |
 | `STEP_SUCCESS + wait_input` | none |
 | `STEP_SUCCESS + notify` | `StepNotifyOutputItem` |
 | `STEP_SUCCESS + shell` | `StepShellOutputItem` |
@@ -278,7 +279,8 @@ Agent system notices:
 ```
 
 Rules:
-- interrupted and max-turns-exhausted notices use `AgentSystemNoticeItem`
+- `AGENT_INTERRUPTED` and `AGENT_MAX_TURNS_EXHAUSTED` lifecycle events are hidden
+- non-final `STEP_SUCCESS + agent` notices use `AgentSystemNoticeItem`
 - notices use warning style
 - notices do not use the `‹` assistant prefix
 - final agent output is still shown if the runtime emits `STEP_SUCCESS + agent`
@@ -294,7 +296,7 @@ Input wait transcript:
 Status view:
 
 ```text
-Waiting [Select your AI provider. Type: minimax or exit]
+... [Select your AI provider. Type: minimax or exit]
 ```
 
 Rules:

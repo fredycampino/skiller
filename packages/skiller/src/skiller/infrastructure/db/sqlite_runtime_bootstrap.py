@@ -7,23 +7,37 @@ from skiller.infrastructure.db.sqlite_agent_context_datasource import (
 )
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
-SQLITE_RUNTIME_DB_VERSION = 3
+SQLITE_RUNTIME_DB_VERSION = 6
 
 
 class SqliteRuntimeBootstrap(SqliteRepository, RuntimeBootstrapPort):
     def init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
-            apply_db_updates(conn)
+            apply_db_updates(conn, db_path=self.db_path)
             _create_runtime_schema(conn)
 
 
-def apply_db_updates(conn: sqlite3.Connection) -> None:
+def apply_db_updates(conn: sqlite3.Connection, *, db_path: str) -> None:
     current_version = _db_version(conn)
     if current_version == SQLITE_RUNTIME_DB_VERSION:
         return
-    _update_db_from(conn, current_version)
-    _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
+    row = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+        """
+    ).fetchone()
+    table_count = int(row[0]) if row is not None else 0
+    if current_version == 0 and table_count == 0:
+        _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
+        return
+    raise RuntimeError(
+        "Runtime DB version mismatch: "
+        f"db={current_version}, expected={SQLITE_RUNTIME_DB_VERSION}, path={db_path}"
+    )
 
 
 def _db_version(conn: sqlite3.Connection) -> int:
@@ -35,23 +49,6 @@ def _db_version(conn: sqlite3.Connection) -> int:
 
 def _set_db_version(conn: sqlite3.Connection, version: int) -> None:
     conn.execute(f"PRAGMA user_version = {version}")
-
-
-def _update_db_from(conn: sqlite3.Connection, version: int) -> None:
-    _ = version
-    conn.executescript(
-        """
-        PRAGMA foreign_keys = OFF;
-        DROP TABLE IF EXISTS agent_context_entries;
-        DROP TABLE IF EXISTS webhook_registrations;
-        DROP TABLE IF EXISTS waits;
-        DROP TABLE IF EXISTS external_events;
-        DROP TABLE IF EXISTS external_receipts;
-        DROP TABLE IF EXISTS log_events;
-        DROP TABLE IF EXISTS runs;
-        PRAGMA foreign_keys = ON;
-        """
-    )
 
 
 def _create_runtime_schema(conn: sqlite3.Connection) -> None:

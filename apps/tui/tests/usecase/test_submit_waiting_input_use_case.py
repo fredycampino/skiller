@@ -81,13 +81,13 @@ class FakeObserver:
 def _run_context(
     *,
     run_id: str = "",
-    skill_name: str = "",
+    run_name: str = "",
     mode: RunMode = RunMode.CHAT,
     status: RunStatus = RunStatus.RUNNING,
 ) -> RunEventContext:
     return RunEventContext(
         run_id=run_id,
-        skill_name=skill_name,
+        run_name=run_name,
         mode=mode,
         status=status,
     )
@@ -116,7 +116,7 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         context = _run_context()
         context.activate_run(
             "run-1234",
-            skill_name="wait_input_test",
+            run_name="wait_input_test",
             status=RunStatus.WAITING_INPUT,
         )
         use_case = SubmitWaitingInputUseCase(
@@ -147,9 +147,10 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         assert events_port.current_run_id == "run-5678"
         assert result.state is state
         assert state.session_key == "run-5678"
+        assert state.run_name == "wait_input_test"
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert context.run_id == "run-5678"
-        assert context.skill_name == "wait_input_test"
+        assert context.run_name == "wait_input_test"
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.prompt.waiting_prompt == ""
@@ -188,7 +189,7 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
             events_port=events_port,
             context=_run_context(
                 run_id="run-1234",
-                skill_name="wait_input_test",
+                run_name="wait_input_test",
                 status=RunStatus.WAITING_INPUT,
             ),
         )
@@ -245,7 +246,7 @@ def test_submit_waiting_input_use_case_normalizes_user_text(
             events_port=FakeEventsPort(),
             context=_run_context(
                 run_id="run-1234",
-                skill_name="wait_input_test",
+                run_name="wait_input_test",
                 status=RunStatus.WAITING_INPUT,
             ),
         )

@@ -1,7 +1,7 @@
 {
   "llm": {
     "default_provider": "codex",
-    "max_context_tokens": 5000
+    "max_context_tokens": 100000
   },
   "loop": {
     "max_turns": 10,
@@ -10,7 +10,8 @@
   "tools": {
     "shell": {
       "allowed_paths": [
-        "."
+        ".",
+        "./.venv/bin/skiller"
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
@@ -30,7 +31,8 @@
         "python",
         "python3",
         "echo",
-        "sleep"
+        "sleep",
+        "skiller"
       ]
     },
     "files": {

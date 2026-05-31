@@ -15,15 +15,16 @@ from textual.widgets import Button, DataTable, Static, TextArea
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.runs_port import RunsPortItem
+from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.markdown import MarkdownView
 from stui.screen.notify_action_view import NotifyActionView
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
-    RunRowMode,
     RunRowStatus,
     RunsTableRow,
     RunsTableView,
+    format_run_name,
 )
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
@@ -41,6 +42,7 @@ class ConsoleScreen(App[str]):
         Binding("enter", "submit", show=False, priority=True),
         Binding("ctrl+j", "submit", show=False, priority=True),
         Binding("ctrl+q", "quit", show=False),
+        Binding("ctrl+t", "toggle_agent_stats", show=False),
         Binding("escape", "handle_escape", show=False, priority=True),
         Binding("up", "transcript_scroll_up", show=False, priority=True),
         Binding("down", "transcript_scroll_down", show=False, priority=True),
@@ -75,18 +77,31 @@ class ConsoleScreen(App[str]):
                 min_width=0,
             ),
             Container(
-                RunsTableView(id="runs-table", visible=False),
+                RunsTableView(
+                    id="runs-table",
+                    visible=False,
+                    empty_message=self.ui_strings.runs_table_empty_message,
+                    navigation_hint=self.ui_strings.runs_table_navigation_hint,
+                ),
                 id="runs-table-area",
             ),
             Horizontal(
                 ScreenStatusView(id="status", theme=self.ui_theme),
                 Container(
-                    NotifyActionView(
-                        id="notify-action",
-                        theme=self.ui_theme,
-                        strings=self.ui_strings,
+                    Vertical(
+                        NotifyActionView(
+                            id="notify-action",
+                            theme=self.ui_theme,
+                            strings=self.ui_strings,
+                        ),
+                        AgentContextStatsView(
+                            id="agent-context-stats",
+                            theme=self.ui_theme,
+                            strings=self.ui_strings,
+                        ),
+                        id="right-status-stack",
                     ),
-                    id="notify-action-area",
+                    id="right-status-column",
                 ),
                 id="status-row",
             ),
@@ -94,7 +109,13 @@ class ConsoleScreen(App[str]):
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             Horizontal(
                 Static(_build_footer_left_text(state=self.state), id="footer-left"),
-                Static(self._build_footer_right_text(), id="footer-right"),
+                Static(
+                    _build_footer_right_text(
+                        state=self.state,
+                        empty_icon=self.ui_theme.session_empty_icon,
+                    ),
+                    id="footer-right",
+                ),
                 id="footer",
             ),
             id="root",
@@ -165,7 +186,7 @@ class ConsoleScreen(App[str]):
             self._runs_table().action_select_cursor()
             return
 
-        if normalized_text.lower() in {"/quit", "quit", "exit"}:
+        if normalized_text.lower() in {"/quit", "/exit"}:
             self.exit(self.state.session_key)
             return
 
@@ -184,6 +205,10 @@ class ConsoleScreen(App[str]):
             return
 
         await self.viewmodel.interrupt_running_agent_turn()
+        self._prompt_view().focus_prompt()
+
+    async def action_toggle_agent_stats(self) -> None:
+        await self.viewmodel.toggle_agent_stats()
         self._prompt_view().focus_prompt()
 
     def action_help_quit(self) -> None:
@@ -223,14 +248,17 @@ class ConsoleScreen(App[str]):
             return
         self._transcript_log().scroll_end(animate=False, force=True, immediate=True)
 
-    @on(DataTable.RowSelected, "#runs-table")
-    def on_runs_table_row_selected(self, _: DataTable.RowSelected) -> None:
+    @on(DataTable.RowSelected, "#runs-table-data")
+    def on_runs_table_row_selected(self, event: DataTable.RowSelected) -> None:
         runs_table = self._runs_table()
+        if not runs_table.select_row(event.cursor_row):
+            self._prompt_view().focus_prompt()
+            return
         selected_run = runs_table.selected_run
         self.viewmodel.select_runs_table_row(
             prompt_text=self.state.runs_table.command,
             run_id=selected_run.run_id if selected_run is not None else "",
-            skill_name=selected_run.skill if selected_run is not None else "",
+            run_name=selected_run.skill if selected_run is not None else "",
         )
         self._prompt_view().focus_prompt()
 
@@ -330,7 +358,12 @@ class ConsoleScreen(App[str]):
         except NoMatches:
             return
         footer_left.update(_build_footer_left_text(state=new_state))
-        footer_right.update(self._build_footer_right_text(state=new_state))
+        footer_right.update(
+            _build_footer_right_text(
+                state=new_state,
+                empty_icon=self.ui_theme.session_empty_icon,
+            )
+        )
 
     def _refresh_notify_action(self, *, new_state: ConsoleScreenState) -> None:
         try:
@@ -339,12 +372,15 @@ class ConsoleScreen(App[str]):
             return
         notify_action.set_state(new_state.notify_action)
 
-    def _build_footer_right_text(self, *, state: ConsoleScreenState | None = None) -> str:
-        screen_state = state or self.state
-        session_key = screen_state.session_key.strip()
-        if not session_key or session_key == "main":
-            return self.ui_theme.session_empty_icon
-        return session_key
+    def _refresh_agent_context_stats(self, *, new_state: ConsoleScreenState) -> None:
+        try:
+            agent_context_stats = self.query_one(
+                "#agent-context-stats",
+                AgentContextStatsView,
+            )
+        except NoMatches:
+            return
+        agent_context_stats.set_state(new_state.agent_context_stats)
 
     def _prompt(self) -> PromptController:
         return self._prompt_view().controller()
@@ -398,6 +434,7 @@ class ConsoleScreen(App[str]):
         self._refresh_prompt(new_state=new_state)
         self._refresh_status(new_state=new_state)
         self._refresh_notify_action(new_state=new_state)
+        self._refresh_agent_context_stats(new_state=new_state)
         self._refresh_autocomplete(new_state=new_state)
         self._refresh_footer(new_state=new_state)
 
@@ -459,7 +496,6 @@ class ConsoleScreen(App[str]):
 
     def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
         return RunsTableRow(
-            mode=_resolve_run_row_mode(run),
             status=_resolve_run_row_status(run),
             skill=run.ref,
             updated_at=_format_run_updated_at(run.updated_at),
@@ -493,13 +529,6 @@ def run_console_screen(
     )
     result = app.run(mouse=False)
     return result or session_key
-
-
-def _resolve_run_row_mode(run: RunsPortItem) -> RunRowMode:
-    normalized_wait_type = str(run.wait_type or "").strip().lower()
-    if normalized_wait_type == "input":
-        return RunRowMode.CHAT
-    return RunRowMode.FLOW
 
 
 def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
@@ -551,6 +580,17 @@ def _build_footer_left_text(*, state: ConsoleScreenState) -> str:
     )
 
 
+def _build_footer_right_text(*, state: ConsoleScreenState, empty_icon: str) -> str:
+    run_id = state.session_key.strip()
+    if not run_id or run_id == "main":
+        return empty_icon
+
+    run_name = state.run_name
+    if not run_name:
+        return run_id
+    return f"{run_id}\n{format_run_name(run_name)}"
+
+
 def _is_local_dev_status_command(text: str) -> bool:
     normalized = text.strip().lower()
     return normalized == "/dev"
@@ -559,7 +599,7 @@ def _is_local_dev_status_command(text: str) -> bool:
 def _build_run_context_payload(event: InspectRunContextEvent) -> dict[str, object]:
     return {
         "run_id": event.run_id,
-        "skill_name": event.skill_name,
+        "run_name": event.run_name,
         "status": event.status.value,
         "max_page": event.max_page,
     }
@@ -568,6 +608,7 @@ def _build_run_context_payload(event: InspectRunContextEvent) -> dict[str, objec
 def _build_screen_state_payload(state: ConsoleScreenState) -> dict[str, object]:
     return {
         "session_key": state.session_key,
+        "run_name": state.run_name,
         "transcript": {
             "mode": state.transcript.mode.value,
             "items_count": len(state.transcript.items),

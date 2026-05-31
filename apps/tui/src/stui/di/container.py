@@ -8,7 +8,6 @@ from stui.adapter.cli_notify_action_adapter import CliNotifyActionAdapter
 from stui.adapter.cli_run_adapter import CliRunAdapter
 from stui.adapter.cli_runs_adapter import CliRunsAdapter
 from stui.adapter.cli_waiting_adapter import CliWaitingAdapter
-from stui.adapter.default_agent_port import DefaultAgentPort
 from stui.adapter.default_events_port import DefaultEventsPort
 from stui.adapter.default_installation_state_port import DefaultInstallationStatePort
 from stui.adapter.default_notify_action_port import DefaultNotifyActionPort
@@ -26,9 +25,11 @@ from stui.port.run_port import RunPort
 from stui.port.runs_port import RunsPort
 from stui.port.waiting_port import WaitingPort
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
+from stui.usecase.agent_status_use_case import AgentStatusUseCase
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
+from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
@@ -40,6 +41,7 @@ from stui.usecase.normalize_command_use_case import (
     NormalizeCommandUseCase,
 )
 from stui.usecase.open_notify_action_use_case import OpenNotifyActionUseCase
+from stui.usecase.project_agent_usage_use_case import ProjectAgentUsageUseCase
 from stui.usecase.project_notify_action_use_case import (
     ProjectNotifyActionUseCase,
 )
@@ -55,6 +57,9 @@ from stui.usecase.select_runs_table_row_use_case import (
 from stui.usecase.start_console_use_case import StartConsoleUseCase
 from stui.usecase.submit_waiting_input_use_case import (
     SubmitWaitingInputUseCase,
+)
+from stui.usecase.toggle_agent_stats_use_case import (
+    ToggleAgentStatsUseCase,
 )
 from stui.usecase.unsupported_input_use_case import UnsupportedInputUseCase
 from stui.viewmodel.console_screen_use_cases import ConsoleScreenUseCases
@@ -102,9 +107,7 @@ def build_tui_container(
     resolved_run_port = run_port or DefaultRunPort(
         command_adapter=CliRunAdapter(invoker=resolved_cli_invoker),
     )
-    resolved_agent_port = agent_port or DefaultAgentPort(
-        command_adapter=CliAgentAdapter(invoker=resolved_cli_invoker),
-    )
+    resolved_agent_port = agent_port or CliAgentAdapter(invoker=resolved_cli_invoker)
     resolved_events_port = events_port or DefaultEventsPort(
         event_observer=LogsEventObserver(
             logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
@@ -125,12 +128,13 @@ def build_tui_container(
     )
     run_event_context = RunEventContext(
         run_id="",
-        skill_name="",
+        run_name="",
         mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )
     use_cases = ConsoleScreenUseCases(
-        autocomplete=AutocompleteUseCase(),
+        agent_status=AgentStatusUseCase(),
+        autocomplete=AutocompleteUseCase(strings=strings),
         interrupt_agent_turn=InterruptAgentTurnUseCase(
             agent_port=resolved_agent_port,
         ),
@@ -141,6 +145,7 @@ def build_tui_container(
             context=run_event_context,
             agent_port=resolved_agent_port,
             events_port=resolved_events_port,
+            transcript_mapper=EventTranscriptMapper(strings=strings),
         ),
         done_notify_action=DoneNotifyActionUseCase(
             notify_action_port=resolved_notify_action_port,
@@ -148,8 +153,9 @@ def build_tui_container(
         open_notify_action=OpenNotifyActionUseCase(
             notify_action_port=resolved_notify_action_port,
         ),
-        project_notify_action=ProjectNotifyActionUseCase(),
-        project_transcript=ProjectTranscriptUseCase(),
+        agent_usage=ProjectAgentUsageUseCase(),
+        notify_action=ProjectNotifyActionUseCase(),
+        transcript=ProjectTranscriptUseCase(),
         prompt_enter=PromptEnterUseCase(),
         run_command=RunCommandUseCase(
             run_port=resolved_run_port,
@@ -171,6 +177,10 @@ def build_tui_container(
             waiting_port=resolved_waiting_port,
             run_port=resolved_run_port,
             events_port=resolved_events_port,
+            context=run_event_context,
+        ),
+        toggle_agent_stats=ToggleAgentStatsUseCase(
+            agent_port=resolved_agent_port,
             context=run_event_context,
         ),
         unsupported_input=UnsupportedInputUseCase(strings=strings),

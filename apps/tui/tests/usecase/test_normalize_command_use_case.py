@@ -47,8 +47,9 @@ def test_normalize_command_use_case_normalizes_quit_variants() -> None:
     use_case = NormalizeCommandUseCase()
 
     assert use_case.execute(text="/quit").kind == CommandKind.QUIT
-    assert use_case.execute(text="quit").kind == CommandKind.QUIT
-    assert use_case.execute(text="exit").kind == CommandKind.QUIT
+    assert use_case.execute(text="/exit").kind == CommandKind.QUIT
+    assert use_case.execute(text="quit").kind == CommandKind.FREE_TEXT
+    assert use_case.execute(text="exit").kind == CommandKind.FREE_TEXT
 
 
 def test_normalize_command_use_case_classifies_free_text() -> None:

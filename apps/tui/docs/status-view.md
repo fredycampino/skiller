@@ -33,7 +33,7 @@ The global status is rendered by `ScreenStatusView`.
 The input state is `ScreenStatus`.
 
 Current modeled states:
-- `READY`
+- `HIDDEN`
 - `RUNNING`
 - `WAITING`
 - `ERROR`
@@ -47,17 +47,17 @@ Current modeled states:
 
 ## State Mapping
 
-### `READY`
+### `HIDDEN`
 
 Target shape:
 
 ```text
-Ready
+
 ```
 
 Rules:
 - no animation
-- neutral/default text color
+- renders no visible text
 
 ### `RUNNING`
 
@@ -80,7 +80,7 @@ Rules:
 Target shape:
 
 ```text
-Waiting [Write a message. Type exit, quit, or bye to stop.]
+... [Write a message. Type exit, quit, or bye to stop.]
 ```
 
 Rules:
@@ -104,8 +104,8 @@ Rules:
 
 ## Semantics
 
-- `READY`
-  - the TUI is stable and not actively running work
+- `HIDDEN`
+  - the TUI has no global status to show
 
 - `RUNNING`
   - a command is being dispatched or a run is actively progressing
@@ -128,8 +128,8 @@ Rules:
 ## Example
 
 ```text
-Ready
+
 ◐ Running
-Waiting
+...
 Error
 ```

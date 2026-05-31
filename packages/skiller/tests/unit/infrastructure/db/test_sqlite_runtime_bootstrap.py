@@ -30,16 +30,18 @@ def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -
     }
 
 
-def test_sqlite_runtime_bootstrap_resets_outdated_database(tmp_path) -> None:
+def test_sqlite_runtime_bootstrap_rejects_version_mismatch_without_deleting_rows(tmp_path) -> None:
     db_path = tmp_path / "runtime.db"
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE runs (id TEXT PRIMARY KEY)")
         conn.execute("INSERT INTO runs (id) VALUES ('run-1')")
+        conn.execute("PRAGMA user_version = 1")
 
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    with pytest.raises(RuntimeError, match="Runtime DB version mismatch"):
+        SqliteRuntimeBootstrap(str(db_path)).init_db()
 
-    assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
-    assert _count_rows(db_path, "runs") == 0
+    assert _db_version(db_path) == 1
+    assert _count_rows(db_path, "runs") == 1
 
 
 def _db_version(db_path) -> int:  # noqa: ANN001

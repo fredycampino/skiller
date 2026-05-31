@@ -62,11 +62,14 @@ skiller worker resume <run_id>
 
 ```bash
 skiller agent interrupt <run_id>
+skiller agent stats <run_id> --agent <agent_id>
 ```
 
 ### Configuration
 
 Skiller reads persistent config from `~/.skiller/settings/config.json`.
+If `.env.development` exists in the current working directory, Skiller also reads
+it after real environment variables and before JSON config files.
 See [`../config/config.md`](../config/config.md).
 
 ### Cloudflared
@@ -162,6 +165,8 @@ Rule of thumb:
 
 ## Interrupt the current agent turn
 
+Command contract: [`commands/agent.md`](./commands/agent.md).
+
 ```bash
 skiller agent interrupt <run_id>
 ```
@@ -170,6 +175,19 @@ What it does:
 - enqueues an `agent` steering item with action `abort_turn`
 - does not cancel the run
 - is consumed later by the agent loop at its steering checkpoints
+
+## Inspect agent context stats
+
+Command contract: [`commands/agent.md`](./commands/agent.md).
+
+```bash
+skiller agent stats <run_id> --agent <agent_id>
+```
+
+What it does:
+- reads persisted context-window stats for the agent
+- reports current window size, movement threshold, and configured capacity
+- does not read or print the full context entries
 
 ## Resume a waiting run with text
 

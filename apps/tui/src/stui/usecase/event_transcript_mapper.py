@@ -3,13 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
+from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
-    AgentLifecyclePayload,
     AgentOutputValue,
-    AgentStopReason,
     AgentToolCallPayload,
     AgentToolResultPayload,
     ErrorPayload,
@@ -32,6 +31,7 @@ from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
+    AgentStepStopReason,
     AgentStepUsage,
     AgentSystemNoticeItem,
     AgentToolCallItem,
@@ -55,6 +55,8 @@ from stui.viewmodel.console_screen_state import (
 
 @dataclass(frozen=True)
 class EventTranscriptMapper:
+    strings: TuiStrings = DEFAULT_TUI_STRINGS
+
     def to_transcript(self, events: list[LogEvent]) -> list[TranscriptItem]:
         items: list[TranscriptItem] = []
         for event in sorted(events, key=lambda event: (event.created_at, event.sequence)):
@@ -142,13 +144,7 @@ class EventTranscriptMapper:
             LogEventType.AGENT_INTERRUPTED,
             LogEventType.AGENT_MAX_TURNS_EXHAUSTED,
         }:
-            payload = _payload(event, AgentLifecyclePayload)
-            return AgentSystemNoticeItem(
-                sequence=event.sequence,
-                run_id=event.run_id,
-                step_id=event.step_id or "",
-                text=_agent_notice_text(payload.stop_reason),
-            )
+            return None
 
         if (
             event.event_type == LogEventType.STEP_STARTED
@@ -167,15 +163,59 @@ class EventTranscriptMapper:
         if (
             event.event_type == LogEventType.STEP_SUCCESS
             and event.step_type == "agent"
+            and get_stop_reason(event) == AgentStepStopReason.FINAL
         ):
             payload = _payload(event, StepSuccessPayload)
+            value = cast(AgentOutputValue, payload.output.value)
+            data = cast(dict[str, object], value.data)
+            step_id = event.step_id or ""
+            stop_reason = get_stop_reason(event)
+            final = cast(str, data["final"])
+            usage_data = cast(dict[str, object], data["usage"]) if "usage" in data else None
+            usage = (
+                AgentStepUsage(
+                    prompt_tokens=cast(int, usage_data["prompt_tokens"]),
+                    completion_tokens=cast(int, usage_data["completion_tokens"]),
+                    total_tokens=cast(int, usage_data["total_tokens"]),
+                    provider=cast(str, usage_data["provider"]),
+                    model=cast(str, usage_data["model"]),
+                )
+                if usage_data is not None
+                else None
+            )
             return AgentStepFinalOutputItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                step_id=event.step_id or "",
-                text=_agent_final_text(payload.output),
-                usage=_agent_step_usage(payload.output),
+                step_id=step_id,
+                stop_reason=stop_reason,
+                final=final,
+                usage=usage,
                 format=OutputFormat.MARKDOWN,
+            )
+
+        if (
+            event.event_type == LogEventType.STEP_SUCCESS
+            and event.step_type == "agent"
+        ):
+            payload = _payload(event, StepSuccessPayload)
+            value = cast(AgentOutputValue, payload.output.value)
+            data = cast(dict[str, object], value.data)
+            step_id = event.step_id or ""
+            stop_reason = get_stop_reason(event)
+            message = _agent_notice_text(
+                stop_reason=stop_reason,
+                data=data,
+                strings=self.strings,
+            )
+            format = OutputFormat.SIMPLE
+            if stop_reason == AgentStepStopReason.CONFIG_INVALID:
+                format = OutputFormat.MARKDOWN
+            return AgentSystemNoticeItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                step_id=step_id,
+                text=message,
+                format=format,
             )
 
         if (
@@ -314,6 +354,13 @@ def _payload(event: LogEvent, expected: type) -> object:
     return event.payload
 
 
+def get_stop_reason(event: LogEvent) -> AgentStepStopReason:
+    payload = _payload(event, StepSuccessPayload)
+    value = cast(AgentOutputValue, payload.output.value)
+    data = cast(dict[str, object], value.data)
+    return AgentStepStopReason(cast(str, data["stop_reason"]))
+
+
 def _json_string(value: object) -> str:
     return value if isinstance(value, str) else ""
 
@@ -352,55 +399,6 @@ def _waiting_prompt(output: OutputPayload) -> str:
     return value.prompt.strip()
 
 
-def _agent_final_text(output: OutputPayload) -> str:
-    normalized = output.text.strip()
-    value = cast(AgentOutputValue, output.value)
-    data = value.data
-    if isinstance(data, dict):
-        final = data.get("final")
-        if isinstance(final, dict):
-            text = final.get("text")
-            if isinstance(text, str) and text.strip():
-                return text.strip()
-        stop_reason = data.get("stop_reason")
-        if stop_reason == AgentStopReason.INTERRUPTED.value:
-            return _agent_notice_text(AgentStopReason.INTERRUPTED)
-        if stop_reason == AgentStopReason.MAX_TURNS_EXHAUSTED.value:
-            return _agent_notice_text(AgentStopReason.MAX_TURNS_EXHAUSTED)
-    return normalized
-
-
-def _agent_step_usage(output: OutputPayload) -> AgentStepUsage | None:
-    value = cast(AgentOutputValue, output.value)
-    data = value.data
-    if not isinstance(data, dict):
-        return None
-    usage = data.get("usage")
-    if not isinstance(usage, dict):
-        return None
-    return AgentStepUsage(
-        prompt_tokens=_optional_int(usage.get("prompt_tokens")),
-        completion_tokens=_optional_int(usage.get("completion_tokens")),
-        total_tokens=_optional_int(usage.get("total_tokens")),
-        provider=_optional_string(usage.get("provider")),
-        model=_optional_string(usage.get("model")),
-    )
-
-
-def _optional_int(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    return None
-
-
-def _optional_string(value: object) -> str | None:
-    if isinstance(value, str) and value:
-        return value
-    return None
-
-
 def _resolve_output_format(step_type: str) -> OutputFormat:
     normalized = step_type.strip().lower()
     if normalized == "agent":
@@ -422,11 +420,22 @@ def _resolve_step_output_icon(step_type: str) -> str:
     return icons.get(normalized, "•")
 
 
-def _agent_notice_text(stop_reason: AgentStopReason) -> str:
-    if stop_reason == AgentStopReason.INTERRUPTED:
-        return "Interrupted by user"
-    if stop_reason == AgentStopReason.MAX_TURNS_EXHAUSTED:
-        return "Turn limit reached"
+def _agent_notice_text(
+    *,
+    stop_reason: AgentStepStopReason,
+    data: dict[str, object],
+    strings: TuiStrings,
+) -> str:
+    if stop_reason == AgentStepStopReason.INTERRUPTED:
+        return strings.agent_interrupted_notice
+    if stop_reason == AgentStepStopReason.MAX_TURNS_EXHAUSTED:
+        return strings.agent_max_turns_exhausted_notice
+    if stop_reason == AgentStepStopReason.CONFIG_INVALID:
+        message = cast(str, data["message"])
+        return strings.agent_config_invalid_notice_template.format(
+            title=strings.agent_config_invalid_notice_title,
+            message=message,
+        )
     return "Agent notice"
 
 

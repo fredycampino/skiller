@@ -73,19 +73,19 @@ def _estimated_tokens(entries: list[AgentContextEntry]) -> int:
     if not entries:
         return 0
 
-    last_total = _final_total_tokens(entries[-1])
+    last_total = _final_position_tokens(entries[-1])
     if last_total is None:
         return 0
 
-    first_total = _final_total_tokens(entries[0])
+    first_total = _final_position_tokens(entries[0])
     if first_total is None:
         return last_total
     return last_total - first_total
 
 
-def _final_total_tokens(entry: AgentContextEntry) -> int | None:
+def _final_position_tokens(entry: AgentContextEntry) -> int | None:
     if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
         return None
     if entry.message_type != AgentAssistantMessageType.FINAL:
         return None
-    return entry.window_tokens
+    return entry.position_tokens

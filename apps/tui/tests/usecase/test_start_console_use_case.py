@@ -140,10 +140,11 @@ def test_start_console_use_case_runs_llmconfig_for_first_install(
         assert events_port.subscribe_calls == ["run-1234"]
         assert events_port.current_listener is observer
         assert context.run_id == "run-1234"
-        assert context.skill_name == "llmconfig"
+        assert context.run_name == "llmconfig"
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.session_key == "run-1234"
+        assert state.run_name == "llmconfig"
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert len(state.transcript.items) == 1
         assert isinstance(state.transcript.items[0], RunAckItem)
@@ -209,7 +210,7 @@ def _patch_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
 def _run_context() -> RunEventContext:
     return RunEventContext(
         run_id="",
-        skill_name="",
+        run_name="",
         mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )

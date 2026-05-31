@@ -2,41 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.viewmodel.console_screen_state import (
     CompletionItem,
     CompletionState,
 )
 
-_COMPLETION_CATALOG: tuple[CompletionItem, ...] = (
-    CompletionItem(
-        label="run",
-        description="Run a skill",
-        insert_text="/run",
-        kind="command",
-    ),
-    CompletionItem(
-        label="runs",
-        description="Show runs",
-        insert_text="/runs",
-        kind="command",
-    ),
-    CompletionItem(
-        label="quit",
-        description="Exit the TUI",
-        insert_text="/quit",
-        kind="command",
-    ),
-    CompletionItem(
-        label="dev",
-        description="Show local debug state",
-        insert_text="/dev",
-        kind="command",
-    ),
-)
-
 
 @dataclass(frozen=True)
 class AutocompleteUseCase:
+    strings: TuiStrings = DEFAULT_TUI_STRINGS
+
     def execute(
         self,
         *,
@@ -50,9 +26,41 @@ class AutocompleteUseCase:
         if any(char.isspace() for char in query):
             return None
 
+        completion_catalog = (
+            CompletionItem(
+                label="run",
+                description=self.strings.autocomplete_run_description,
+                insert_text="/run",
+                kind="command",
+            ),
+            CompletionItem(
+                label="runs",
+                description=self.strings.autocomplete_runs_description,
+                insert_text="/runs",
+                kind="command",
+            ),
+            CompletionItem(
+                label="quit",
+                description=self.strings.autocomplete_quit_description,
+                insert_text="/quit",
+                kind="command",
+            ),
+            CompletionItem(
+                label="exit",
+                description=self.strings.autocomplete_exit_description,
+                insert_text="/exit",
+                kind="command",
+            ),
+            CompletionItem(
+                label="dev",
+                description=self.strings.autocomplete_dev_description,
+                insert_text="/dev",
+                kind="command",
+            ),
+        )
         items = tuple(
             item
-            for item in _COMPLETION_CATALOG
+            for item in completion_catalog
             if item.insert_text.startswith(query) and item.insert_text != query
         )
         if not items:

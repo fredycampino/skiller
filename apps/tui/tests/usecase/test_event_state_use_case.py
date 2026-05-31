@@ -23,9 +23,9 @@ from stui.usecase.event_state_use_case import (
     WEBHOOK_POLL_INTERVAL_SECONDS,
     EventStateUseCase,
 )
+from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
-    AgentUsageState,
     ConsoleScreenState,
     UserInputItem,
     ViewStatusKind,
@@ -213,44 +213,10 @@ def test_event_state_step_success_sets_running_status() -> None:
                 payload=StepSuccessPayload(
                     output=OutputPayload(
                         text="Done",
-                        value=AgentOutputValue(data={"final": {"text": "Done"}}),
-                        body_ref=None,
-                    ),
-                ),
-            )
-        ],
-    )
-
-    assert state.view_status.kind == ViewStatusKind.RUNNING
-    assert context.status == RunStatus.RUNNING
-
-
-def test_event_state_updates_agent_usage_from_agent_step_success() -> None:
-    state = ConsoleScreenState()
-    context = _context()
-    use_case = _use_case(context=context)
-
-    use_case.execute(
-        FakeObserver(),
-        state=state,
-        events=[
-            _event(
-                LogEventType.STEP_SUCCESS,
-                sequence=2,
-                step_type="agent",
-                payload=StepSuccessPayload(
-                    output=OutputPayload(
-                        text="Done",
                         value=AgentOutputValue(
                             data={
-                                "final": {"text": "Done"},
-                                "usage": {
-                                    "prompt_tokens": 3000,
-                                    "completion_tokens": 155,
-                                    "total_tokens": 3155,
-                                    "provider": "minimax",
-                                    "model": "MiniMax-M2.5",
-                                },
+                                "final": "Done",
+                                "stop_reason": "final",
                             }
                         ),
                         body_ref=None,
@@ -260,38 +226,8 @@ def test_event_state_updates_agent_usage_from_agent_step_success() -> None:
         ],
     )
 
-    assert state.agent_usage is not None
-    assert state.agent_usage.model == "MiniMax-M2.5"
-    assert state.agent_usage.total_tokens == 3155
-
-
-def test_event_state_clears_agent_usage_when_agent_step_success_has_no_usage() -> None:
-    state = ConsoleScreenState(
-        agent_usage=AgentUsageState(model="MiniMax-M2.5", total_tokens=3155)
-    )
-    context = _context()
-    use_case = _use_case(context=context)
-
-    use_case.execute(
-        FakeObserver(),
-        state=state,
-        events=[
-            _event(
-                LogEventType.STEP_SUCCESS,
-                sequence=2,
-                step_type="agent",
-                payload=StepSuccessPayload(
-                    output=OutputPayload(
-                        text="Done",
-                        value=AgentOutputValue(data={"final": {"text": "Done"}}),
-                        body_ref=None,
-                    ),
-                ),
-            )
-        ],
-    )
-
-    assert state.agent_usage is None
+    assert state.view_status.kind == ViewStatusKind.RUNNING
+    assert context.status == RunStatus.RUNNING
 
 
 @pytest.mark.parametrize(
@@ -397,13 +333,14 @@ def _use_case(
         context=context,
         agent_port=agent_port or FakeAgentPort(),
         events_port=events_port or FakeEventsPort(),
+        transcript_mapper=EventTranscriptMapper(),
     )
 
 
 def _context() -> RunEventContext:
     return RunEventContext(
         run_id="",
-        skill_name="",
+        run_name="",
         mode=RunMode.FLOW,
         status=RunStatus.RUNNING,
     )

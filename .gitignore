@@ -42,6 +42,7 @@ htmlcov/
 # Environment files
 .env
 .env.*
+!.env.development
 
 # Runtime artifacts
 *.db

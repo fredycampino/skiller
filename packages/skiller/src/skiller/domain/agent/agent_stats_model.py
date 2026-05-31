@@ -2,26 +2,33 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class AgentContextEntryStats:
-    total: int
-    user_messages: int
-    assistant_messages: int
-    tool_calls: int
-    tool_results: int
+class AgentContextObservedWindowStats:
+    start_sequence: int
+    end_sequence: int
+    current_tokens: int
 
 
 @dataclass(frozen=True)
-class AgentContextUsageStats:
+class AgentContextObservedStats:
     entries: int
-    total_prompt_tokens: int
-    total_response_tokens: int
-    total_tokens: int
+    estimated_tokens: int
+    window: AgentContextObservedWindowStats
+
+
+@dataclass(frozen=True)
+class AgentContextWindowStats:
+    start_sequence: int
+    end_sequence: int
+    current_tokens: int
+    limit_tokens: int
+    capacity_tokens: int
 
 
 @dataclass(frozen=True)
 class AgentContextStats:
-    entries: AgentContextEntryStats
-    usage: AgentContextUsageStats
+    entries: int
+    estimated_tokens: int
+    window: AgentContextWindowStats
 
 
 @dataclass(frozen=True)

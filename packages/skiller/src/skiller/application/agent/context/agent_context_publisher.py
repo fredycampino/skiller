@@ -90,8 +90,8 @@ class AgentContextPublisher:
         context: AgentContext,
         turn_id: str,
         text: str,
-        usage: LLMUsage | None = None,
-        window_tokens: int | None = None,
+        usage: LLMUsage | None,
+        window_tokens: int,
         window_start_sequence: int,
     ) -> AgentContextEntry:
         return self.agent_context_store.append_final_assistant_message(

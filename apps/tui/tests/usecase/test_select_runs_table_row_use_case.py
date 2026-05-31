@@ -80,7 +80,7 @@ def test_unknown_command_only_closes_table() -> None:
         state=state,
         prompt_text="/agents",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert result.state.runs_table.visible is False
@@ -103,7 +103,7 @@ def test_empty_run_id_only_closes_table() -> None:
         state=state,
         prompt_text="/runs",
         run_id="",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert result.state.runs_table.visible is False
@@ -125,7 +125,7 @@ def test_missing_runtime_status_only_closes_table() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert result.state.runs_table.visible is False
@@ -150,7 +150,7 @@ def test_non_waiting_runtime_status_only_closes_table() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert result.state.runs_table.visible is False
@@ -173,7 +173,7 @@ def test_existing_observer_is_unsubscribed_before_waiting_run_is_observed() -> N
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert events_port.unsubscribe_calls == 1
@@ -193,15 +193,16 @@ def test_runs_selection_loads_waiting_run_in_chat_mode() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert result.state.session_key == "run-1234"
+    assert result.state.run_name == "ant"
     assert result.state.transcript.mode == TranscriptMode.CHAT
     assert result.state.view_status.kind == ViewStatusKind.WAITING
     assert result.state.prompt.waiting_prompt == "Write a message"
     assert context.run_id == "run-1234"
-    assert context.skill_name == "ant"
+    assert context.run_name == "ant"
     assert context.mode == RunMode.CHAT
     assert context.status == RunStatus.WAITING_INPUT
     assert events_port.subscribe_calls == ["run-1234"]
@@ -225,10 +226,11 @@ def test_same_run_selection_preserves_transcript_items() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="steps",
+        run_name="steps",
     )
 
     assert result.state.session_key == "run-1234"
+    assert result.state.run_name == "steps"
     assert result.state.transcript.mode == TranscriptMode.CHAT
     assert result.state.transcript.items == transcript_items
     assert context.mode == RunMode.CHAT
@@ -247,7 +249,7 @@ def test_waiting_webhook_status_loads_run() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert context.status == RunStatus.WAITING_WEBHOOK
@@ -267,7 +269,7 @@ def test_waiting_channel_status_loads_run() -> None:
         state=state,
         prompt_text="/runs",
         run_id="run-1234",
-        skill_name="ant",
+        run_name="ant",
     )
 
     assert context.status == RunStatus.WAITING_CHANNEL
@@ -298,7 +300,7 @@ def _state_with_open_table() -> ConsoleScreenState:
 def _context() -> RunEventContext:
     return RunEventContext(
         run_id="old-run",
-        skill_name="old-skill",
+        run_name="old-skill",
         mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )

@@ -52,6 +52,7 @@ from stui.usecase.done_notify_action_use_case import DoneNotifyActionResult
 from stui.usecase.open_notify_action_use_case import OpenNotifyActionResult
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    AgentContextStatsState,
     CompletionItem,
     CompletionState,
     ConsoleScreenState,
@@ -129,7 +130,12 @@ def _waiting_webhook_output() -> OutputPayload:
 def _agent_output(text: str) -> OutputPayload:
     return OutputPayload(
         text=text,
-        value=AgentOutputValue(data={"final": {"text": text}}),
+        value=AgentOutputValue(
+            data={
+                "final": text,
+                "stop_reason": "final",
+            }
+        ),
         body_ref=None,
     )
 
@@ -224,6 +230,7 @@ def test_console_screen_state_defaults_to_idle_main_session() -> None:
     state = ConsoleScreenState()
 
     assert state.session_key == "main"
+    assert state.run_name == ""
     assert state.view_status.kind == ViewStatusKind.HIDDEN
     assert state.runs_table.visible is False
     assert state.runs_table.command == ""
@@ -233,6 +240,7 @@ def test_console_screen_state_defaults_to_idle_main_session() -> None:
     assert state.prompt.cursor_position == 0
     assert state.transcript.items == []
     assert state.autocompletion is None
+    assert state.agent_context_stats is None
 
 
 def test_completion_state_exposes_selected_item() -> None:
@@ -261,7 +269,7 @@ def test_inspect_run_context_emits_current_context() -> None:
     )
     viewmodel._run_event_context.activate_run(  # noqa: SLF001
         "run-1234",
-        skill_name="ant",
+        run_name="ant",
         status=RunStatus.WAITING_INPUT,
     )
     events = []
@@ -271,7 +279,7 @@ def test_inspect_run_context_emits_current_context() -> None:
 
     assert len(events) == 1
     assert events[0].run_id == "run-1234"
-    assert events[0].skill_name == "ant"
+    assert events[0].run_name == "ant"
     assert events[0].mode == RunMode.CHAT
     assert events[0].status == RunStatus.WAITING_INPUT
 
@@ -393,6 +401,36 @@ def test_prompt_change_populates_matching_commands() -> None:
     assert viewmodel.state.autocompletion.selected_item.label == "run"
 
 
+def test_prompt_change_hides_runs_table_when_autocomplete_appears() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+    viewmodel.state.runs_table.visible = True
+    viewmodel.state.runs_table.command = "/runs"
+    viewmodel.state.set_agent_context_stats(
+        AgentContextStatsState(
+            entries=24,
+            estimated_tokens=2618,
+            start_sequence=1,
+            end_sequence=24,
+            current_tokens=2618,
+            limit_tokens=80000,
+            capacity_tokens=100000,
+        )
+    )
+
+    viewmodel.prompt_change(text="/", cursor_position=1)
+
+    assert viewmodel.state.autocompletion is not None
+    assert viewmodel.state.autocompletion.visible is True
+    assert viewmodel.state.runs_table.visible is False
+    assert viewmodel.state.runs_table.command == ""
+    assert viewmodel.state.agent_context_stats is None
+    assert viewmodel.state.prompt.mode == PromptMode.AUTOCOMPLETION
+
+
 def test_notify_clears_interrupt_pending_when_run_leaves_running_chat() -> None:
     viewmodel = build_viewmodel(
         session_key="main",
@@ -462,6 +500,27 @@ def test_notify_projects_pending_notify_action_to_screen_state() -> None:
         url="https://example.com/oauth/start",
         status="pending",
     )
+
+
+def test_notify_updates_agent_status_context() -> None:
+    viewmodel = build_viewmodel(
+        session_key="main",
+        run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+        waiting_port=FakeWaitingPort(),
+    )
+
+    viewmodel.notify(
+        [
+            _event(
+                LogEventType.STEP_STARTED,
+                step_id="support_agent",
+                step_type="agent",
+                payload=StepStartedPayload(),
+            )
+        ]
+    )
+
+    assert viewmodel._run_event_context.agent_id == "support_agent"  # noqa: SLF001
 
 
 def test_open_notify_action_link_calls_use_case() -> None:
@@ -593,6 +652,43 @@ def test_console_screen_viewmodel_requests_exit_for_quit() -> None:
     asyncio.run(run())
 
 
+def test_console_screen_viewmodel_requests_exit_for_exit_command() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(
+                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"),
+            ),
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.submit("/exit")
+
+        assert viewmodel.state.transcript.items == []
+
+    asyncio.run(run())
+
+
+def test_console_screen_viewmodel_treats_bare_exit_as_text() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(
+                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"),
+            ),
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.submit("exit")
+
+        assert len(viewmodel.state.transcript.items) == 2
+        assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
+        assert viewmodel.state.transcript.items[0].text == "exit"
+        assert isinstance(viewmodel.state.transcript.items[1], InfoItem)
+
+    asyncio.run(run())
+
+
 def test_console_screen_viewmodel_dispatches_run() -> None:
     run_port = FakeRunPort(
         CommandAck(
@@ -608,6 +704,8 @@ def test_console_screen_viewmodel_dispatches_run() -> None:
             run_port=run_port,
             waiting_port=FakeWaitingPort(),
         )
+        emitted_states: list[ConsoleScreenState] = []
+        viewmodel.bind_on_state(emitted_states.append)
 
         await viewmodel.submit("/run chat")
 
@@ -618,6 +716,8 @@ def test_console_screen_viewmodel_dispatches_run() -> None:
         assert viewmodel.state.transcript.items[0].run_id == "run-1234"
         assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
         assert viewmodel.state.session_key == "run-1234"
+        assert viewmodel.state.run_name == "chat"
+        assert emitted_states[-1].run_name == "chat"
         assert viewmodel.state.prompt.text == ""
         assert viewmodel.state.prompt.cursor_position == 0
 
@@ -850,7 +950,7 @@ def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> N
         attach_run_observer(viewmodel, events_port, "run-1234")
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
-            skill_name="run-1234",
+            run_name="run-1234",
             status=RunStatus.RUNNING,
         )
         viewmodel.notify(
@@ -933,7 +1033,7 @@ def test_console_screen_viewmodel_maps_waiting_input_rejection() -> None:
         attach_run_observer(viewmodel, events_port, "run-1234")
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
-            skill_name="run-1234",
+            run_name="run-1234",
             status=RunStatus.RUNNING,
         )
         viewmodel.notify(
@@ -980,7 +1080,7 @@ def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiti
         attach_run_observer(viewmodel, events_port, "run-1234")
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
-            skill_name="run-1234",
+            run_name="run-1234",
             status=RunStatus.RUNNING,
         )
         viewmodel.notify(
@@ -1025,7 +1125,7 @@ def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiti
         asyncio.run(run())
 
 
-def test_console_screen_viewmodel_uses_skill_name_on_resume_after_wait_input() -> None:
+def test_console_screen_viewmodel_uses_run_name_on_resume_after_wait_input() -> None:
     run_port = FakeRunPort(
         CommandAck(
             status=CommandAckStatus.ACCEPTED,

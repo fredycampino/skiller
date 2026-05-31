@@ -247,7 +247,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int | None,
+        window_tokens: int,
         window_start_sequence: int,
     ) -> AgentContextEntry:
         self.calls.append(
@@ -268,6 +268,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
+            position_tokens=window_tokens,
             window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
             payload=AgentAssistantMessagePayload(

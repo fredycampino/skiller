@@ -223,6 +223,8 @@ def build_runtime_container(
     get_agent_stats_use_case = GetAgentStatsUseCase(
         store=store,
         context_stats=agent_context_store,
+        agent_config=agent_config,
+        skill_runner=skill_runner,
     )
     agent_event_publisher = AgentEventPublisher(
         runtime_event_store,

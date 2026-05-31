@@ -73,10 +73,18 @@ The agent loop has three non-error terminal shapes:
 
 Technical failures are not successful terminal outcomes:
 
-| finish | cause | context effect | runtime effect |
-| --- | --- | --- | --- |
-| `llm_request_failed` | LLM port returned `ok = false` | no final assistant message | agent step raises; runtime records step/run failure |
-| `tool_execution_failed` | tool preparation returned `request_exception` or `policy_exception` | no final assistant message | agent step raises; runtime records step/run failure |
+- `invalid_final_message`
+  - Cause: the LLM returned an empty final answer when a final answer was required.
+  - Context effect: no final assistant message.
+  - Runtime effect: agent step raises; runtime records step/run failure.
+- `llm_request_failed`
+  - Cause: LLM port returned `ok = false`.
+  - Context effect: no final assistant message.
+  - Runtime effect: agent step raises; runtime records step/run failure.
+- `tool_execution_failed`
+  - Cause: tool preparation returned `request_exception` or `policy_exception`.
+  - Context effect: no final assistant message.
+  - Runtime effect: agent step raises; runtime records step/run failure.
 
 Consumers must not infer interrupt or max-turn states from an empty assistant
 message. Those states are explicit runtime events and explicit step output stop

@@ -1,57 +1,43 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from typing import Any
-
+from stui.adapter.agent_interrupt_mapper import AgentInterruptMapper
+from stui.adapter.agent_stats_mapper import AgentStatsMapper
 from stui.adapter.cli_invoker import CliInvoker
-from stui.port.run_port import CommandAck, CommandAckStatus
+from stui.port.agent_port import (
+    AgentPort,
+    AgentStatsResult,
+)
+from stui.port.run_port import CommandAck
 
 
-@dataclass(frozen=True)
-class CliAgentAdapter:
-    invoker: CliInvoker = field(default_factory=CliInvoker)
+class CliAgentAdapter(AgentPort):
+    def __init__(
+        self,
+        *,
+        invoker: CliInvoker | None = None,
+        interrupt_mapper: AgentInterruptMapper | None = None,
+        stats_mapper: AgentStatsMapper | None = None,
+    ) -> None:
+        self.invoker = invoker or CliInvoker()
+        self.interrupt_mapper = interrupt_mapper or AgentInterruptMapper()
+        self.stats_mapper = stats_mapper or AgentStatsMapper()
 
     def interrupt(self, run_id: str) -> CommandAck:
-        normalized_run_id = run_id.strip()
-        if not normalized_run_id:
-            return CommandAck(
-                status=CommandAckStatus.REJECTED,
-                message="error: run_id is required",
-            )
+        if not run_id:
+            raise RuntimeError("agent interrupt command requires run_id")
 
-        completed = self.invoker.run("agent", "interrupt", normalized_run_id)
-        payload = _parse_json_dict(completed.stdout)
-        if payload is None:
-            detail = (
-                completed.stderr.strip()
-                or completed.stdout.strip()
-                or "runtime command returned invalid JSON"
-            )
-            return CommandAck(status=CommandAckStatus.ERROR, message=f"error: {detail}")
+        completed = self.invoker.run("agent", "interrupt", run_id)
+        return self.interrupt_mapper.map(completed.stdout)
 
-        error = str(payload.get("error", "")).strip()
-        if completed.returncode == 0 and not error:
-            status = str(payload.get("status", "")).strip().upper() or "ENQUEUED"
-            return CommandAck(
-                status=CommandAckStatus.ACCEPTED,
-                run_id=normalized_run_id,
-                message=f"[agent-interrupt] {normalized_run_id}\n  ↳ {status.lower()}",
-            )
+    def stats(self, *, run_id: str, agent_id: str) -> AgentStatsResult:
+        if not run_id or not agent_id:
+            raise RuntimeError("agent stats command requires run_id and agent_id")
 
-        message = error or completed.stderr.strip() or "agent interrupt failed"
-        return CommandAck(
-            status=CommandAckStatus.ERROR,
-            run_id=normalized_run_id,
-            message=f"error: {message}",
+        completed = self.invoker.run(
+            "agent",
+            "stats",
+            run_id,
+            "--agent",
+            agent_id,
         )
-
-
-def _parse_json_dict(raw: str) -> dict[str, Any] | None:
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    return payload
+        return self.stats_mapper.map(completed.stdout)

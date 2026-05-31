@@ -4,10 +4,20 @@ from skiller.application.use_cases.agent.get_agent_stats import (
     GetAgentStatsStatus,
     GetAgentStatsUseCase,
 )
+from skiller.domain.agent.agent_config_model import (
+    AgentConfig,
+    AgentContextCompactionConfig,
+    AgentContextConfig,
+)
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMProviderList,
+    AgentLLMProviderType,
+    AgentNullLLMModel,
+    AgentNullProvider,
+)
 from skiller.domain.agent.agent_stats_model import (
-    AgentContextEntryStats,
-    AgentContextStats,
-    AgentContextUsageStats,
+    AgentContextObservedStats,
+    AgentContextObservedWindowStats,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunAgent
@@ -20,6 +30,8 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
     use_case = GetAgentStatsUseCase(
         store=_FakeStore(_build_run(), RunAgent("support_agent", "support-thread")),
         context_stats=context_stats,
+        agent_config=_FakeAgentConfig(),
+        skill_runner=_FakeSkillRunner(),
     )
 
     result = use_case.execute("run-1", "support_agent")
@@ -29,16 +41,24 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
     assert result.stats.run_id == "run-1"
     assert result.stats.agent_id == "support_agent"
     assert result.stats.context_id == "support-thread"
+    assert result.stats.context.window.current_tokens == 100
+    assert result.stats.context.window.limit_tokens == 80000
+    assert result.stats.context.window.capacity_tokens == 100000
     assert context_stats.context_ids == ["support-thread"]
+
 
 def test_get_agent_stats_returns_not_found_statuses() -> None:
     missing_run = GetAgentStatsUseCase(
         store=_FakeStore(None, None),
         context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(),
+        skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = GetAgentStatsUseCase(
         store=_FakeStore(_build_run(), None),
         context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(),
+        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert missing_run.status == GetAgentStatsStatus.RUN_NOT_FOUND
@@ -51,6 +71,8 @@ def test_get_agent_stats_returns_context_not_ready() -> None:
     result = GetAgentStatsUseCase(
         store=_FakeStore(_build_run(), RunAgent("support_agent", None)),
         context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(),
+        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == GetAgentStatsStatus.AGENT_CONTEXT_NOT_READY
@@ -61,6 +83,8 @@ def test_get_agent_stats_rejects_invalid_programmer_input() -> None:
     use_case = GetAgentStatsUseCase(
         store=_FakeStore(_build_run(), None),
         context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(),
+        skill_runner=_FakeSkillRunner(),
     )
 
     with pytest.raises(RuntimeError, match="requires run_id and agent_id"):
@@ -88,23 +112,44 @@ class _FakeContextStats:
     def __init__(self) -> None:
         self.context_ids: list[str] = []
 
-    def get_stats(self, *, context_id: str) -> AgentContextStats:
+    def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         self.context_ids.append(context_id)
-        return AgentContextStats(
-            entries=AgentContextEntryStats(
-                total=3,
-                user_messages=1,
-                assistant_messages=1,
-                tool_calls=1,
-                tool_results=0,
-            ),
-            usage=AgentContextUsageStats(
-                entries=1,
-                total_prompt_tokens=100,
-                total_response_tokens=25,
-                total_tokens=125,
+        return AgentContextObservedStats(
+            entries=3,
+            estimated_tokens=125,
+            window=AgentContextObservedWindowStats(
+                start_sequence=2,
+                end_sequence=3,
+                current_tokens=100,
             ),
         )
+
+
+class _FakeAgentConfig:
+    def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
+        _ = config_path
+        provider = AgentNullProvider(
+            model=AgentNullLLMModel.NULL1,
+            timeout_seconds=30,
+            context_window_tokens=100000,
+        )
+        return AgentConfig(
+            llm=AgentLLMProviderList(
+                default_provider=AgentLLMProviderType.NULL,
+                providers=(provider,),
+            ),
+            context=AgentContextConfig(
+                compaction=AgentContextCompactionConfig(
+                    max_total_tokens_ratio=0.8,
+                ),
+            ),
+        )
+
+
+class _FakeSkillRunner:
+    def resolve_file_path(self, source: str, ref: str, file_ref: str):  # noqa: ANN001
+        _ = source, ref, file_ref
+        raise FileNotFoundError
 
 
 def _build_run() -> Run:

@@ -21,6 +21,7 @@ AgentContextEntry(
     sequence: int,
     entry_type: str,
     message_type: str | None,
+    position_tokens: int | None,
     window_tokens: int | None,
     window_start_sequence: int | None,
     payload: AgentContextPayload,
@@ -38,10 +39,11 @@ Fields:
 - `sequence`: monotonic order within `context_id`.
 - `entry_type`: one of the supported entry types.
 - `message_type`: assistant message subtype, when the entry is an assistant message.
-- `window_tokens`: tokens reported by the LLM for the context window used by that request.
+- `position_tokens`: logical token position used to choose the next context window.
+- `window_tokens`: LLM `total_tokens` reported for the final request window.
 - `window_start_sequence`: first entry sequence of the context window used by that request.
 - `payload`: typed entry content used to rebuild the agent prompt. It is persisted as JSON.
-- `usage`: optional LLM token usage. Currently present on assistant response entries.
+- `usage`: optional LLM token usage. Currently present on final assistant response entries.
 - `source_step_id`: `agent` step that created the entry.
 - `created_at`: entry creation timestamp.
 
@@ -74,10 +76,11 @@ AgentContextPayload =
 | sequence              | INTEGER | NOT NULL                             |
 | entry_type            | TEXT    | NOT NULL                             |
 | message_type          | TEXT    | NULL, assistant message subtype      |
+| position_tokens       | INTEGER | NULL, assistant final context position |
 | window_tokens         | INTEGER | NULL, assistant final window tokens  |
 | window_start_sequence | INTEGER | NULL, window start for token reading |
 | payload_json          | TEXT    | NOT NULL, full payload               |
-| usage_json            | TEXT    | NULL, LLM usage for response entries |
+| usage_json            | TEXT    | NULL, LLM usage for final responses  |
 | source_step_id        | TEXT    | NOT NULL                             |
 | created_at            | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
 +-----------------------+---------+--------------------------------------+
@@ -87,11 +90,12 @@ Indexes:
 
 ```text
 idx_agent_context_entries_context(context_id, sequence)
-idx_agent_context_entries_final_marker(context_id, entry_type, message_type, window_tokens, sequence)
+idx_agent_context_entries_final_marker(context_id, entry_type, message_type, position_tokens, sequence)
 ```
 
-`message_type`, `window_tokens`, and `window_start_sequence` duplicate assistant metadata on
-purpose. They make context-window queries cheap without parsing `payload_json` or `usage_json`.
+`message_type`, `position_tokens`, `window_tokens`, and `window_start_sequence` duplicate
+assistant metadata on purpose. They make context-window queries cheap without parsing
+`payload_json` or `usage_json`.
 
 ## Entry Payloads
 
@@ -189,6 +193,7 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
       "sequence": 2,
       "entry_type": "assistant_message",
       "message_type": "tool_calls",
+      "position_tokens": null,
       "window_tokens": null,
       "window_start_sequence": null,
       "payload": {
@@ -196,13 +201,6 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
         "turn_id": "turn-1",
         "message_type": "tool_calls",
         "text": "I will inspect the test output before answering."
-      },
-      "usage": {
-        "prompt_tokens": 80,
-        "completion_tokens": 16,
-        "total_tokens": 96,
-        "provider": "minimax",
-        "model": "MiniMax-M2.5"
       },
       "source_step_id": "support_agent",
       "created_at": "2026-04-22T21:40:03Z"
@@ -251,6 +249,7 @@ An `agent` loop reconstructs `AgentContext` from ordered entries:
       "sequence": 5,
       "entry_type": "assistant_message",
       "message_type": "final",
+      "position_tokens": 79,
       "window_tokens": 79,
       "window_start_sequence": 1,
       "payload": {
@@ -326,7 +325,8 @@ The window is a read limit, not summarization or compaction.
 Inputs:
 
 - `providers.<name>.context_window_tokens`: provider context capacity.
-- `context.compaction.max_total_tokens_ratio`: fraction of the provider capacity used
+- `llm.max_context_tokens`: optional agent-level override for the selected provider capacity.
+- `context.compaction.max_total_tokens_ratio`: fraction of the effective capacity used
   for context reads.
 
 Resolved request metadata:
@@ -349,7 +349,8 @@ Fields:
 - `context_id`: context being read.
 - `turn_id`: next agent turn id.
 - `llm_request`: provider-ready request built from system prompt, window entries, and tools.
-- `context_window_tokens`: resolved token limit used for the context-window query.
+- `context_window_tokens`: effective token limit used for the context-window query after
+  applying `llm.max_context_tokens` and `context.compaction.max_total_tokens_ratio`.
 - `window_start_sequence`: first selected entry sequence in the context window, or `0`
   when the window is empty.
 - `window_end_sequence`: last selected entry sequence in the context window, or `0`
@@ -365,12 +366,23 @@ context_window_tokens = 80000
 
 latest final:
   sequence = 40
-  window_tokens = 100000
+  position_tokens = 100000
+  window_tokens = 22000
   window_start_sequence = 1
 
-cutoff = 100000 - 80000 = 20000
+window_start_position_tokens = 100000 - 80000 = 20000
+base_position = position before sequence 1
 
-first final inside the current window with window_tokens > 20000:
+If `window_start_position_tokens > base_position`, the new start is inside the latest window.
+Use the first final with:
+  window_start_sequence = 1
+  position_tokens > window_start_position_tokens
+
+If `window_start_position_tokens <= base_position`, the new start is before the latest window.
+Use the first final with:
+  position_tokens > window_start_position_tokens
+
+Example result:
   sequence = 12
 
 next window:
@@ -379,9 +391,8 @@ next window:
   end_sequence = latest selected entry sequence
 ```
 
-If the latest final is already under the limit, the next window starts at the
-latest final's persisted `window_start_sequence`. If there is no final marker yet,
-the next window uses all entries.
+If `window_start_position_tokens <= 0`, the next window uses all entries. If there is no final
+marker yet, the next window also uses all entries.
 
 The selected window is returned as:
 
@@ -394,11 +405,8 @@ AgentContextWindow(
 ```
 
 `start_sequence` is the value propagated to the final assistant entry as
-`window_start_sequence`. No later layer recalculates it.
-
-The window start only moves forward. Once a context has crossed the window limit, later requests
-must not return to sequence `0` just because the latest reported `window_tokens` falls below the
-limit.
+`window_start_sequence`. If the configured limit grows, the selected window can expand toward
+older entries. If the configured limit shrinks, the selected window contracts toward newer entries.
 
 Final assistant entries persist the reference used to produce their token reading:
 
@@ -407,17 +415,31 @@ Final assistant entries persist the reference used to produce their token readin
   "sequence": 412,
   "entry_type": "assistant_message",
   "message_type": "final",
+  "position_tokens": 156802,
   "window_tokens": 73835,
   "window_start_sequence": 274
 }
 ```
 
-This means `73835` tokens were measured from entry `274`, not from the full historical context.
+This means the context position for that final is `156802`, and the LLM reported `73835`
+tokens for the request window that started at entry `274`.
+
+`usage_json` keeps the raw LLM usage. `position_tokens` is calculated from the window
+start, not from the latest final:
+
+```text
+base_position = last final position_tokens where sequence < window_start_sequence
+base_position = 0 when no prior final exists
+position_tokens = base_position + window_tokens
+```
+
+This avoids duplicating old tokens when a new window starts on an entry that was already present
+in a previous window.
 
 Window token estimate:
 
 ```text
-estimated_tokens = last_selected_entry.window_tokens - first_selected_entry.window_tokens
+estimated_tokens = last_selected_entry.position_tokens - first_selected_entry.position_tokens
 ```
 
 The estimate only reads the first and last selected entries. If the first selected entry is not a
@@ -431,8 +453,48 @@ selected entry is not a final assistant message, the estimate is `0`.
 - `agent_context_entries.payload_json` is the source of truth for each memory entry and may be
   large.
 - `agent_context_entries.usage_json` stores token usage plus provider/model metadata
-  for assistant response entries. Context usage stats expose the latest final assistant usage.
-- `agent_context_entries.message_type`, `agent_context_entries.window_tokens`, and
-  `agent_context_entries.window_start_sequence` are indexed assistant metadata for
+  for final assistant response entries.
+- `agent_context_entries.message_type`, `agent_context_entries.position_tokens`,
+  `agent_context_entries.window_tokens`, and `agent_context_entries.window_start_sequence`
+  are indexed assistant metadata for
   context-window reads.
 - `events` remains an observability stream, not the functional source of truth.
+
+## Agent Stats Command
+
+`skiller agent stats <run_id> --agent <agent_id>` exposes the current context-window summary
+for UI and diagnostics. See the full CLI contract in
+[`../cli/commands/agent.md`](../cli/commands/agent.md).
+
+```json
+{
+  "run_id": "run-1",
+  "agent_id": "support_agent",
+  "status": "OK",
+  "ok": true,
+  "context_id": "ctx-1",
+  "context": {
+    "entries": 412,
+    "estimated_tokens": 156802,
+    "window": {
+      "start_sequence": 274,
+      "end_sequence": 412,
+      "current_tokens": 73835,
+      "limit_tokens": 80000,
+      "capacity_tokens": 100000
+    }
+  }
+}
+```
+
+Fields:
+
+- `context.entries`: total persisted context entries.
+- `context.estimated_tokens`: estimated historical context size.
+- `context.window.start_sequence`: first entry currently included in the context window.
+- `context.window.end_sequence`: latest entry currently included in the context window.
+- `context.window.current_tokens`: tokens reported for the latest measured context window.
+- `context.window.limit_tokens`: threshold used to move `start_sequence`.
+- `context.window.capacity_tokens`: configured provider or agent context capacity before the
+  compaction ratio is applied.
+ 

@@ -29,7 +29,7 @@ class AgentContextStorePort(Protocol):
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int | None,
+        window_tokens: int,
         window_start_sequence: int,
     ) -> AgentContextEntry: ...
 

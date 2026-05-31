@@ -57,14 +57,14 @@ class SubmitWaitingInputUseCase:
 
         self.context.activate_run(
             ack.run_id,
-            skill_name=self.context.skill_name,
+            run_name=self.context.run_name,
             status=RunStatus.RUNNING,
         )
-        state.load_session(run_id=ack.run_id)
+        state.load_session(run_id=ack.run_id, run_name=self.context.run_name)
         state.transcript.items.append(
             RunResumeItem(
                 run_id=run_id,
-                skill=self.context.skill_name,
+                skill=self.context.run_name,
             )
         )
         state.set_status(kind=ViewStatusKind.RUNNING)

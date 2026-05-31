@@ -32,6 +32,13 @@ class OutputFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
+class AgentStepStopReason(StrEnum):
+    FINAL = "final"
+    INTERRUPTED = "interrupted"
+    MAX_TURNS_EXHAUSTED = "max_turns_exhausted"
+    CONFIG_INVALID = "config_invalid"
+
+
 @dataclass(frozen=True)
 class TranscriptItem:
     sequence: int | None = field(default=None, kw_only=True)
@@ -118,7 +125,8 @@ class AgentStepUsage:
 class AgentStepFinalOutputItem(TranscriptItem):
     run_id: str
     step_id: str
-    text: str
+    stop_reason: AgentStepStopReason
+    final: str
     usage: AgentStepUsage | None = None
     format: OutputFormat = OutputFormat.MARKDOWN
 
@@ -128,6 +136,7 @@ class AgentSystemNoticeItem(TranscriptItem):
     run_id: str
     step_id: str
     text: str
+    format: OutputFormat = OutputFormat.SIMPLE
 
 
 @dataclass(frozen=True)
@@ -280,6 +289,17 @@ class AgentUsageState:
 
 
 @dataclass
+class AgentContextStatsState:
+    entries: int
+    estimated_tokens: int
+    start_sequence: int
+    end_sequence: int
+    current_tokens: int
+    limit_tokens: int
+    capacity_tokens: int
+
+
+@dataclass
 class ViewStatusState:
     kind: ViewStatusKind = ViewStatusKind.HIDDEN
     message: str = ""
@@ -299,10 +319,12 @@ class NotifyActionState:
 @dataclass
 class ConsoleScreenState:
     session_key: str = "main"
+    run_name: str = ""
     transcript: TranscriptState = field(default_factory=TranscriptState)
     prompt: PromptState = field(default_factory=PromptState)
     runs_table: RunsTableState = field(default_factory=RunsTableState)
     agent_usage: AgentUsageState | None = None
+    agent_context_stats: AgentContextStatsState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
     notify_action: NotifyActionState | None = None
@@ -360,6 +382,12 @@ class ConsoleScreenState:
     def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
         self.agent_usage = agent_usage
 
+    def set_agent_context_stats(
+        self,
+        agent_context_stats: AgentContextStatsState | None = None,
+    ) -> None:
+        self.agent_context_stats = agent_context_stats
+
     def set_notify_action(
         self,
         notify_action: NotifyActionState | None = None,
@@ -370,5 +398,7 @@ class ConsoleScreenState:
         self,
         *,
         run_id: str,
+        run_name: str = "",
     ) -> None:
         self.session_key = run_id
+        self.run_name = run_name

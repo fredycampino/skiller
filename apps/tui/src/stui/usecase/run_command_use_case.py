@@ -74,10 +74,10 @@ class RunCommandUseCase:
 
         self.context.activate_run(
             ack.run_id,
-            skill_name=raw_args,
+            run_name=raw_args,
             status=RunStatus.RUNNING,
         )
-        state.load_session(run_id=ack.run_id)
+        state.load_session(run_id=ack.run_id, run_name=raw_args)
         state.set_transcript(
             mode=state.transcript.mode,
             items=[RunAckItem(skill=raw_args, run_id=ack.run_id)],

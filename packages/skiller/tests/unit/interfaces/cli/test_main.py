@@ -119,7 +119,17 @@ class _FakeController:
             "agent_id": agent_id,
             "status": "OK",
             "ok": True,
-            "stats": {"context": {"usage": {"total_tokens": 125}}},
+            "context": {
+                "entries": 3,
+                "estimated_tokens": 125,
+                "window": {
+                    "start_sequence": 2,
+                    "end_sequence": 3,
+                    "current_tokens": 100,
+                    "limit_tokens": 80000,
+                    "capacity_tokens": 100000,
+                },
+            },
         }
 
     def action_done(self, run_id: str, step_id: str) -> dict[str, object]:

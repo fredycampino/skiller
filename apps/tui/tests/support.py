@@ -6,6 +6,12 @@ from typing import Iterator
 
 from stui.di.container import build_tui_container
 from stui.di.strings import TuiStrings
+from stui.port.agent_port import (
+    AgentContextStats,
+    AgentContextWindowStats,
+    AgentStatsResult,
+    AgentStatsStatus,
+)
 from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.installation_state_port import InstallationState
 from stui.port.run_port import (
@@ -132,13 +138,39 @@ class NeverCalledWaitingPort:
 
 
 class FakeAgentPort:
-    def __init__(self, ack: CommandAck | None = None) -> None:
+    def __init__(
+        self,
+        ack: CommandAck | None = None,
+        stats: AgentStatsResult | None = None,
+    ) -> None:
         self.ack = ack or CommandAck(status=CommandAckStatus.ACCEPTED, message="accepted")
+        self.stats_result = stats or AgentStatsResult(
+            status=AgentStatsStatus.OK,
+            run_id="run-1234",
+            agent_id="support_agent",
+            context_id="ctx-1234",
+            context=AgentContextStats(
+                entries=24,
+                estimated_tokens=2618,
+                window=AgentContextWindowStats(
+                    start_sequence=1,
+                    end_sequence=24,
+                    current_tokens=2618,
+                    limit_tokens=80000,
+                    capacity_tokens=100000,
+                ),
+            ),
+        )
         self.called_with: list[str] = []
+        self.stats_called_with: list[tuple[str, str]] = []
 
     def interrupt(self, run_id: str) -> CommandAck:
         self.called_with.append(run_id)
         return self.ack
+
+    def stats(self, *, run_id: str, agent_id: str) -> AgentStatsResult:
+        self.stats_called_with.append((run_id, agent_id))
+        return self.stats_result
 
 
 class FakeEventsPort:

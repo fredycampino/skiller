@@ -21,7 +21,7 @@ def test_autocomplete_view_renders_mock_items() -> None:
             query="/ru",
             items=(
                 CompletionItem(label="runs", description="Show runs", insert_text="/runs"),
-                CompletionItem(label="run", description="Run a skill", insert_text="/run"),
+                CompletionItem(label="run", description="Run an agentic flow", insert_text="/run"),
                 CompletionItem(
                     label="quit",
                     description="Exit the TUI",
@@ -39,7 +39,7 @@ def test_autocomplete_view_renders_mock_items() -> None:
     assert isinstance(renderable, Text)
     assert (
         renderable.plain
-        == "   runs  Show runs\n-> run   Run a skill\n   quit  Exit the TUI"
+        == "   runs  Show runs\n-> run   Run an agentic flow\n   quit  Exit the TUI"
     )
 
 
@@ -50,7 +50,7 @@ def test_autocomplete_view_exposes_selected_item_from_state() -> None:
         query="/ru",
         items=(
             CompletionItem(label="runs", description="Show runs", insert_text="/runs"),
-            CompletionItem(label="run", description="Run a skill", insert_text="/run"),
+            CompletionItem(label="run", description="Run an agentic flow", insert_text="/run"),
             CompletionItem(
                 label="quit",
                 description="Exit the TUI",
@@ -92,7 +92,7 @@ def test_autocomplete_view_uses_theme_icon_and_accent_for_selection() -> None:
             query="/ru",
             items=(
                 CompletionItem(label="runs", description="Show runs", insert_text="/runs"),
-                CompletionItem(label="run", description="Run a skill", insert_text="/run"),
+                CompletionItem(label="run", description="Run an agentic flow", insert_text="/run"),
             ),
             selected_index=1,
             replace_from=0,

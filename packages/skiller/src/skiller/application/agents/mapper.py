@@ -39,26 +39,20 @@ class AgentServiceMapper:
         }
         if result.stats is not None:
             payload["context_id"] = result.stats.context_id
-            payload["stats"] = self._stats_to_dict(result.stats)
+            payload["context"] = self._context_to_dict(result.stats)
         if result.error is not None:
             payload["error"] = result.error
         return payload
 
-    def _stats_to_dict(self, stats: AgentStats) -> dict[str, Any]:
+    def _context_to_dict(self, stats: AgentStats) -> dict[str, Any]:
         return {
-            "context": {
-                "entries": {
-                    "total": stats.context.entries.total,
-                    "user_messages": stats.context.entries.user_messages,
-                    "assistant_messages": stats.context.entries.assistant_messages,
-                    "tool_calls": stats.context.entries.tool_calls,
-                    "tool_results": stats.context.entries.tool_results,
-                },
-                "usage": {
-                    "entries": stats.context.usage.entries,
-                    "total_prompt_tokens": stats.context.usage.total_prompt_tokens,
-                    "total_response_tokens": stats.context.usage.total_response_tokens,
-                    "total_tokens": stats.context.usage.total_tokens,
-                },
-            }
+            "entries": stats.context.entries,
+            "estimated_tokens": stats.context.estimated_tokens,
+            "window": {
+                "start_sequence": stats.context.window.start_sequence,
+                "end_sequence": stats.context.window.end_sequence,
+                "current_tokens": stats.context.window.current_tokens,
+                "limit_tokens": stats.context.window.limit_tokens,
+                "capacity_tokens": stats.context.window.capacity_tokens,
+            },
         }

@@ -90,7 +90,7 @@ def test_run_command_use_case_missing_agent_records_error(
         assert result.state is state
         assert result.raw_args == "chat"
         assert context.run_id == ""
-        assert context.skill_name == ""
+        assert context.run_name == ""
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.FAILED
         assert state.session_key == "main"
@@ -129,10 +129,11 @@ def test_run_command_use_case_dispatch_success_loads_run(
         assert result.state is state
         assert result.raw_args == "chat"
         assert context.run_id == "run-1234"
-        assert context.skill_name == "chat"
+        assert context.run_name == "chat"
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.session_key == "run-1234"
+        assert state.run_name == "chat"
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert state.prompt.text == ""
         assert state.prompt.cursor_position == 0
@@ -230,7 +231,7 @@ def test_run_command_use_case_keeps_current_mode(
 
         assert context.mode == RunMode.CHAT
         assert context.run_id == "run-1234"
-        assert context.skill_name == "ant"
+        assert context.run_name == "ant"
 
     asyncio.run(run())
 
@@ -245,7 +246,7 @@ def _patch_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
 def _run_context() -> RunEventContext:
     return RunEventContext(
         run_id="",
-        skill_name="",
+        run_name="",
         mode=RunMode.CHAT,
         status=RunStatus.RUNNING,
     )

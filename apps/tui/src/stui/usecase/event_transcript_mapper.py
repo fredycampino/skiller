@@ -6,6 +6,8 @@ from typing import cast
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
+    ActionOpenUrlValue,
+    ActionValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentOutputValue,
@@ -20,6 +22,8 @@ from stui.port.event_models import (
     OutputPayload,
     RouteOutputValue,
     RunFinishedPayload,
+    RunSnapshotFailedPayload,
+    RunSnapshotUpdatedPayload,
     RunWaitingPayload,
     ShellOutputValue,
     StepErrorPayload,
@@ -28,6 +32,8 @@ from stui.port.event_models import (
     WaitWebhookOutputValue,
 )
 from stui.viewmodel.console_screen_state import (
+    ActionItem,
+    ActionOpenUrlItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
@@ -40,7 +46,9 @@ from stui.viewmodel.console_screen_state import (
     NotifyActionDoneItem,
     OutputFormat,
     RunFinishedItem,
+    RunSnapshotStatus,
     RunStepItem,
+    RunSyncSnapshotItem,
     RunWaitingInputItem,
     RunWaitingWebhookItem,
     StepErrorItem,
@@ -73,6 +81,27 @@ class EventTranscriptMapper:
         if event.event_type in {LogEventType.RUN_CREATE, LogEventType.RUN_RESUME}:
             return None
 
+        if event.event_type == LogEventType.RUN_SNAPSHOT_UPDATED:
+            payload = _payload(event, RunSnapshotUpdatedPayload)
+            return RunSyncSnapshotItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                source=payload.source,
+                ref=payload.ref,
+                status=RunSnapshotStatus.UPDATED,
+            )
+
+        if event.event_type == LogEventType.RUN_SNAPSHOT_FAILED:
+            payload = _payload(event, RunSnapshotFailedPayload)
+            return RunSyncSnapshotItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                source=payload.source,
+                ref=payload.ref,
+                status=RunSnapshotStatus.FAILED,
+                error=payload.error,
+            )
+
         if event.event_type == LogEventType.ACTION_DONE:
             payload = _payload(event, ActionDonePayload)
             return NotifyActionDoneItem(
@@ -80,7 +109,7 @@ class EventTranscriptMapper:
                 run_id=event.run_id,
                 step_id=event.step_id or "",
                 step_type=event.step_type or "",
-                action_type=payload.action_type.value,
+                type=payload.type,
                 status=payload.status.value,
             )
 
@@ -237,13 +266,7 @@ class EventTranscriptMapper:
                     step_id=event.step_id,
                     step_type=event.step_type,
                     message=output_value.message,
-                    action_type=output_value.action_type.value,
-                    label=output_value.action.label,
-                    url=output_value.action.url,
-                    status=output_value.action.status.value,
-                    auto_open=output_value.action.auto_open,
-                    icon="•",
-                    muted=False,
+                    action=_notify_action_item(output_value.action),
                 )
             output_value = cast(NotifyOutputValue, payload.output.value)
             return StepNotifyOutputItem(
@@ -352,6 +375,22 @@ def _payload(event: LogEvent, expected: type) -> object:
     if not isinstance(event.payload, expected):
         raise RuntimeError(f"unexpected payload for {event.event_type}")
     return event.payload
+
+
+def _notify_action_item(action: ActionValue) -> ActionItem:
+    if isinstance(action, ActionOpenUrlValue):
+        return ActionOpenUrlItem(
+            type=action.type,
+            label=action.label,
+            message=action.message,
+            url=action.url,
+            auto=action.auto,
+        )
+    return ActionItem(
+        type=action.type,
+        label=action.label,
+        message=action.message,
+    )
 
 
 def get_stop_reason(event: LogEvent) -> AgentStepStopReason:

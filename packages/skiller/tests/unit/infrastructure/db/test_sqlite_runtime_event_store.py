@@ -1,5 +1,6 @@
 import pytest
 
+from skiller.domain.action.action_model import ActionStatus, ActionType
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -162,8 +163,8 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
             step_id="auth_link",
             step_type="notify",
             payload=ActionDonePayload(
-                action_type="open_url",
-                status="done",
+                type=ActionType.OPEN_URL,
+                status=ActionStatus.DONE,
             ),
         )
     )
@@ -176,11 +177,11 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
     assert events[0].step_id == "auth_link"
     assert events[0].step_type == "notify"
     assert events[0].payload == ActionDonePayload(
-        action_type="open_url",
-        status="done",
+        type=ActionType.OPEN_URL,
+        status=ActionStatus.DONE,
     )
     assert events[0].model_dump(mode="json")["payload"] == {
-        "action_type": "open_url",
+        "type": "open_url",
         "status": "done",
     }
 

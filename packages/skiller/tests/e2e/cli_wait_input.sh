@@ -30,4 +30,4 @@ receive_output="$(
 _="${receive_output}"
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller status "${run_id}" \
-| python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"run_id": payload["id"], "status": payload["status"]}, indent=2))'
+| python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"run_id": payload["run_id"], "status": payload["status"]}, indent=2))'

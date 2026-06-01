@@ -3,14 +3,14 @@
 Updates persisted runtime action state and writes JSON to `stdout`.
 
 Runtime actions are emitted by `notify` steps with an `action` object. The
-action state lives in the run context. A successful `pending` to `done`
-transition also appends an `ACTION_DONE` runtime event.
+notify output does not store mutable action status. A successful done
+transition is stored as an `ACTION_DONE` runtime event.
 
 ## Combinations
 
 | Command | Behavior | Returns |
 | --- | --- | --- |
-| `skiller action done <run_id> <step_id>` | Marks a pending notify action as done. | Action update result. |
+| `skiller action done <run_id> <step_id>` | Records a notify action as done. | Action update result. |
 
 ## Output Model
 
@@ -18,7 +18,7 @@ transition also appends an `ACTION_DONE` runtime event.
 - `step_id`: notify step that emitted the action.
 - `status`: update status.
 - `done`: whether the action is now done.
-- `changed`: whether the command mutated the persisted run context.
+- `changed`: whether the command appended a new `ACTION_DONE` event.
 - `error`: error message, present only when the action could not be marked done.
 
 ## Mark Done
@@ -29,7 +29,7 @@ Command:
 skiller action done <run_id> <step_id>
 ```
 
-Output when the action changes from `pending` to `done`:
+Output when a new `ACTION_DONE` event is recorded:
 
 ```json
 {

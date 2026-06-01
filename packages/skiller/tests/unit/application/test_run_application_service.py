@@ -3,19 +3,19 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.runs.service import RunApplicationService
+from skiller.application.use_cases.flow.flow_checker import (
+    FlowCheckError,
+    FlowCheckResult,
+    FlowCheckStatus,
+)
+from skiller.application.use_cases.flow.flow_readiness_checker import (
+    FlowReadinessCheckError,
+    FlowReadinessCheckResult,
+    FlowReadinessCheckStatus,
+)
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.create_run import CreateRunInput
 from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
-from skiller.application.use_cases.skill.skill_checker import (
-    SkillCheckError,
-    SkillCheckResult,
-    SkillCheckStatus,
-)
-from skiller.application.use_cases.skill.skill_server_checker import (
-    SkillServerCheckError,
-    SkillServerCheckResult,
-    SkillServerCheckStatus,
-)
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,
@@ -66,26 +66,26 @@ class _FakeAppendRuntimeEventUseCase:
         )
 
 
-class _FakeSkillCheckerUseCase:
-    def __init__(self, result: SkillCheckResult | None = None) -> None:
-        self.result = result or SkillCheckResult(status=SkillCheckStatus.VALID, errors=[])
+class _FakeFlowCheckerUseCase:
+    def __init__(self, result: FlowCheckResult | None = None) -> None:
+        self.result = result or FlowCheckResult(status=FlowCheckStatus.VALID, errors=[])
         self.calls: list[dict[str, object]] = []
 
-    def execute(self, skill_ref: str, *, skill_source: str) -> SkillCheckResult:
-        self.calls.append({"skill_ref": skill_ref, "skill_source": skill_source})
+    def execute(self, flow_ref: str, *, flow_source: str) -> FlowCheckResult:
+        self.calls.append({"flow_ref": flow_ref, "flow_source": flow_source})
         return self.result
 
 
-class _FakeSkillServerCheckerUseCase:
-    def __init__(self, result: SkillServerCheckResult | None = None) -> None:
-        self.result = result or SkillServerCheckResult(
-            status=SkillServerCheckStatus.VALID,
+class _FakeFlowReadinessCheckerUseCase:
+    def __init__(self, result: FlowReadinessCheckResult | None = None) -> None:
+        self.result = result or FlowReadinessCheckResult(
+            status=FlowReadinessCheckStatus.VALID,
             errors=[],
         )
         self.calls: list[dict[str, object]] = []
 
-    def execute(self, skill_ref: str, *, skill_source: str) -> SkillServerCheckResult:
-        self.calls.append({"skill_ref": skill_ref, "skill_source": skill_source})
+    def execute(self, flow_ref: str, *, flow_source: str) -> FlowReadinessCheckResult:
+        self.calls.append({"flow_ref": flow_ref, "flow_source": flow_source})
         return self.result
 
 
@@ -98,14 +98,14 @@ class _FakeFailRunUseCase:
 
 
 class _FakeGetStartStepUseCase:
-    def __init__(self, run_status_use_case: "_FakeGetRunStatusUseCase | None" = None) -> None:
-        self.run_status_use_case = run_status_use_case
+    def __init__(self, get_run_use_case: "_FakeGetRunUseCase | None" = None) -> None:
+        self.get_run_use_case = get_run_use_case
         self.calls: list[str] = []
 
     def execute(self, run_id: str) -> str:
         self.calls.append(run_id)
-        if self.run_status_use_case is not None:
-            self.run_status_use_case.current = "start"
+        if self.get_run_use_case is not None:
+            self.get_run_use_case.current = "start"
         return "start"
 
 
@@ -119,7 +119,7 @@ class _FakeResumeRunUseCase:
         return ResumeRunResult(status=self.status)
 
 
-class _FakeGetRunStatusUseCase:
+class _FakeGetRunUseCase:
     def __init__(self, status: str = "CREATED", current: str | None = None) -> None:
         self.status = status
         self.current = current
@@ -133,26 +133,26 @@ class _FakeGetRunStatusUseCase:
 class _FakeRunExecutor:
     def __init__(
         self,
-        run_status_use_case: _FakeGetRunStatusUseCase | None = None,
+        get_run_use_case: _FakeGetRunUseCase | None = None,
         *,
         final_status: str = "SUCCEEDED",
     ) -> None:
-        self.run_status_use_case = run_status_use_case
+        self.get_run_use_case = get_run_use_case
         self.final_status = final_status
         self.calls: list[str] = []
 
     def run(self, run_id: str):  # noqa: ANN201
         self.calls.append(run_id)
-        if self.run_status_use_case is not None:
-            self.run_status_use_case.status = self.final_status
+        if self.get_run_use_case is not None:
+            self.get_run_use_case.status = self.final_status
         return SimpleNamespace(run_id=run_id, status=self.final_status, error=None)
 
 
 def _build_service(
     *,
-    get_run_status_use_case: _FakeGetRunStatusUseCase | None = None,
-    skill_checker_use_case: _FakeSkillCheckerUseCase | None = None,
-    skill_server_checker_use_case: _FakeSkillServerCheckerUseCase | None = None,
+    get_run_use_case: _FakeGetRunUseCase | None = None,
+    flow_checker_use_case: _FakeFlowCheckerUseCase | None = None,
+    flow_readiness_checker_use_case: _FakeFlowReadinessCheckerUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RunApplicationService,
@@ -160,19 +160,19 @@ def _build_service(
     _FakeCreateRunUseCase,
     _FakeGetStartStepUseCase,
     _FakeRunExecutor,
-    _FakeSkillCheckerUseCase,
-    _FakeSkillServerCheckerUseCase,
+    _FakeFlowCheckerUseCase,
+    _FakeFlowReadinessCheckerUseCase,
 ]:
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     create_run_use_case = _FakeCreateRunUseCase()
-    final_skill_checker_use_case = skill_checker_use_case or _FakeSkillCheckerUseCase()
-    final_skill_server_checker_use_case = (
-        skill_server_checker_use_case or _FakeSkillServerCheckerUseCase()
+    final_flow_checker_use_case = flow_checker_use_case or _FakeFlowCheckerUseCase()
+    final_flow_readiness_checker_use_case = (
+        flow_readiness_checker_use_case or _FakeFlowReadinessCheckerUseCase()
     )
-    status_use_case = get_run_status_use_case or _FakeGetRunStatusUseCase()
-    get_start_step_use_case = _FakeGetStartStepUseCase(run_status_use_case=status_use_case)
+    final_get_run_use_case = get_run_use_case or _FakeGetRunUseCase()
+    get_start_step_use_case = _FakeGetStartStepUseCase(get_run_use_case=final_get_run_use_case)
     run_executor = _FakeRunExecutor(
-        run_status_use_case=status_use_case,
+        get_run_use_case=final_get_run_use_case,
         final_status=worker_final_status,
     )
     service = RunApplicationService(
@@ -184,13 +184,13 @@ def _build_service(
         delete_run_use_case=SimpleNamespace(execute=lambda run_id: None),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
-        skill_checker_use_case=final_skill_checker_use_case,
-        skill_server_checker_use_case=final_skill_server_checker_use_case,
+        flow_checker_use_case=final_flow_checker_use_case,
+        flow_readiness_checker_use_case=final_flow_readiness_checker_use_case,
         resume_run_use_case=_FakeResumeRunUseCase(),
         mark_notify_action_done_use_case=SimpleNamespace(
             execute=lambda request: None,
         ),
-        get_run_status_use_case=status_use_case,
+        get_run_use_case=final_get_run_use_case,
         run_executor=run_executor,
     )
     return (
@@ -199,8 +199,8 @@ def _build_service(
         create_run_use_case,
         get_start_step_use_case,
         run_executor,
-        final_skill_checker_use_case,
-        final_skill_server_checker_use_case,
+        final_flow_checker_use_case,
+        final_flow_readiness_checker_use_case,
     )
 
 
@@ -211,8 +211,8 @@ def test_create_run_only_creates_run() -> None:
         create_run_use_case,
         get_start_step_use_case,
         run_executor,
-        skill_checker_use_case,
-        skill_server_checker_use_case,
+        flow_checker_use_case,
+        flow_readiness_checker_use_case,
     ) = _build_service()
 
     result = service.create_run(
@@ -235,11 +235,11 @@ def test_create_run_only_creates_run() -> None:
     assert get_start_step_use_case.calls == []
     assert run_executor.calls == []
 
-    assert skill_checker_use_case.calls == [
-        {"skill_ref": "notify_test", "skill_source": "internal"}
+    assert flow_checker_use_case.calls == [
+        {"flow_ref": "notify_test", "flow_source": "internal"}
     ]
-    assert skill_server_checker_use_case.calls == [
-        {"skill_ref": "notify_test", "skill_source": "internal"}
+    assert flow_readiness_checker_use_case.calls == [
+        {"flow_ref": "notify_test", "flow_source": "internal"}
     ]
     assert append_runtime_event_use_case.calls == [
         {
@@ -254,17 +254,17 @@ def test_create_run_only_creates_run() -> None:
 
 
 def test_run_prepares_dispatches_and_reads_final_status() -> None:
-    get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
+    get_run_use_case = _FakeGetRunUseCase(status="WAITING")
     (
         service,
         _append_runtime_event_use_case,
         _create_run_use_case,
         get_start_step_use_case,
         run_executor,
-        _skill_checker_use_case,
-        _skill_server_checker_use_case,
+        _flow_checker_use_case,
+        _flow_readiness_checker_use_case,
     ) = _build_service(
-        get_run_status_use_case=get_run_status_use_case,
+        get_run_use_case=get_run_use_case,
         worker_final_status="WAITING",
     )
 
@@ -280,7 +280,7 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
     assert result.status.value == "WAITING"
     assert get_start_step_use_case.calls == ["run-1"]
     assert run_executor.calls == ["run-1"]
-    assert get_run_status_use_case.calls == ["run-1"]
+    assert get_run_use_case.calls == ["run-1"]
 
 
 def test_start_worker_prepares_created_run() -> None:
@@ -290,8 +290,8 @@ def test_start_worker_prepares_created_run() -> None:
         _create_run_use_case,
         get_start_step_use_case,
         run_executor,
-        _skill_checker_use_case,
-        _skill_server_checker_use_case,
+        _flow_checker_use_case,
+        _flow_readiness_checker_use_case,
     ) = _build_service()
 
     result = service.start_worker("run-1")
@@ -304,17 +304,17 @@ def test_start_worker_prepares_created_run() -> None:
 
 
 def test_run_worker_dispatches_prepared_run() -> None:
-    get_run_status_use_case = _FakeGetRunStatusUseCase(status="RUNNING", current="start")
+    get_run_use_case = _FakeGetRunUseCase(status="RUNNING", current="start")
     (
         service,
         _append_runtime_event_use_case,
         _create_run_use_case,
         _get_start_step_use_case,
         run_executor,
-        _skill_checker_use_case,
-        _skill_server_checker_use_case,
+        _flow_checker_use_case,
+        _flow_readiness_checker_use_case,
     ) = _build_service(
-        get_run_status_use_case=get_run_status_use_case,
+        get_run_use_case=get_run_use_case,
     )
     service.prepare_run("run-1")
 
@@ -326,11 +326,11 @@ def test_run_worker_dispatches_prepared_run() -> None:
 
 
 def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
-    get_run_status_use_case = _FakeGetRunStatusUseCase(status="WAITING")
+    get_run_use_case = _FakeGetRunUseCase(status="WAITING")
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     resume_run_use_case = _FakeResumeRunUseCase(status=ResumeRunStatus.RESUMED)
     run_executor = _FakeRunExecutor(
-        run_status_use_case=get_run_status_use_case,
+        get_run_use_case=get_run_use_case,
         final_status="WAITING",
     )
 
@@ -343,15 +343,15 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         delete_run_use_case=SimpleNamespace(execute=lambda run_id: None),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=_FakeGetStartStepUseCase(
-            run_status_use_case=get_run_status_use_case
+            get_run_use_case=get_run_use_case
         ),
-        skill_checker_use_case=_FakeSkillCheckerUseCase(),
-        skill_server_checker_use_case=_FakeSkillServerCheckerUseCase(),
+        flow_checker_use_case=_FakeFlowCheckerUseCase(),
+        flow_readiness_checker_use_case=_FakeFlowReadinessCheckerUseCase(),
         resume_run_use_case=resume_run_use_case,
         mark_notify_action_done_use_case=SimpleNamespace(
             execute=lambda request: None,
         ),
-        get_run_status_use_case=get_run_status_use_case,
+        get_run_use_case=get_run_use_case,
         run_executor=run_executor,
     )
 
@@ -374,15 +374,15 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
     assert run_executor.calls == ["run-1"]
 
 
-def test_create_run_fails_when_skill_checker_reports_errors() -> None:
-    checker = _FakeSkillCheckerUseCase(
-        result=SkillCheckResult(
-            status=SkillCheckStatus.INVALID,
+def test_create_run_fails_when_flow_checker_reports_errors() -> None:
+    checker = _FakeFlowCheckerUseCase(
+        result=FlowCheckResult(
+            status=FlowCheckStatus.INVALID,
             errors=[
-                SkillCheckError(
-                    code="SKILL_NOTIFY_MESSAGE_MISSING",
+                FlowCheckError(
+                    code="FLOW_NOTIFY_MESSAGE_MISSING",
                     message=(
-                        "SKILL_NOTIFY_MESSAGE_MISSING: notify step requires "
+                        "FLOW_NOTIFY_MESSAGE_MISSING: notify step requires "
                         "message (step=show_message)"
                     ),
                 )
@@ -395,13 +395,13 @@ def test_create_run_fails_when_skill_checker_reports_errors() -> None:
         create_run_use_case,
         _get_start_step_use_case,
         _run_executor,
-        _skill_checker_use_case,
-        _skill_server_checker_use_case,
-    ) = _build_service(skill_checker_use_case=checker)
+        _flow_checker_use_case,
+        _flow_readiness_checker_use_case,
+    ) = _build_service(flow_checker_use_case=checker)
 
     with pytest.raises(
         ValueError,
-        match="SKILL_NOTIFY_MESSAGE_MISSING: notify step requires message",
+        match="FLOW_NOTIFY_MESSAGE_MISSING: notify step requires message",
     ):
         service.create_run(
             CreateRunInput(
@@ -411,20 +411,20 @@ def test_create_run_fails_when_skill_checker_reports_errors() -> None:
             )
         )
 
-    assert checker.calls == [{"skill_ref": "notify_test", "skill_source": "internal"}]
+    assert checker.calls == [{"flow_ref": "notify_test", "flow_source": "internal"}]
     assert create_run_use_case.calls == []
     assert append_runtime_event_use_case.calls == []
 
 
-def test_create_run_fails_when_server_checker_reports_errors() -> None:
-    checker = _FakeSkillServerCheckerUseCase(
-        result=SkillServerCheckResult(
-            status=SkillServerCheckStatus.INVALID,
+def test_create_run_fails_when_flow_readiness_checker_reports_errors() -> None:
+    checker = _FakeFlowReadinessCheckerUseCase(
+        result=FlowReadinessCheckResult(
+            status=FlowReadinessCheckStatus.INVALID,
             errors=[
-                SkillServerCheckError(
-                    code="SKILL_SERVER_UNAVAILABLE",
+                FlowReadinessCheckError(
+                    code="FLOW_SERVER_UNAVAILABLE",
                     message=(
-                        "SKILL_SERVER_UNAVAILABLE: skill requires local server "
+                        "FLOW_SERVER_UNAVAILABLE: flow requires local server "
                         "for wait_channel (step=listen_whatsapp)"
                     ),
                 )
@@ -437,13 +437,13 @@ def test_create_run_fails_when_server_checker_reports_errors() -> None:
         create_run_use_case,
         _get_start_step_use_case,
         _run_executor,
-        skill_checker_use_case,
-        skill_server_checker_use_case,
-    ) = _build_service(skill_server_checker_use_case=checker)
+        flow_checker_use_case,
+        flow_readiness_checker_use_case,
+    ) = _build_service(flow_readiness_checker_use_case=checker)
 
     with pytest.raises(
         ValueError,
-        match="SKILL_SERVER_UNAVAILABLE: skill requires local server",
+        match="FLOW_SERVER_UNAVAILABLE: flow requires local server",
     ):
         service.create_run(
             CreateRunInput(
@@ -453,11 +453,11 @@ def test_create_run_fails_when_server_checker_reports_errors() -> None:
             )
         )
 
-    assert skill_checker_use_case.calls == [
-        {"skill_ref": "whatsapp_demo", "skill_source": "internal"}
+    assert flow_checker_use_case.calls == [
+        {"flow_ref": "whatsapp_demo", "flow_source": "internal"}
     ]
-    assert skill_server_checker_use_case.calls == [
-        {"skill_ref": "whatsapp_demo", "skill_source": "internal"}
+    assert flow_readiness_checker_use_case.calls == [
+        {"flow_ref": "whatsapp_demo", "flow_source": "internal"}
     ]
     assert create_run_use_case.calls == []
     assert append_runtime_event_use_case.calls == []

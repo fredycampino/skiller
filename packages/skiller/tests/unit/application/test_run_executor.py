@@ -95,6 +95,14 @@ class _FakeAppendRuntimeEventUseCase:
         )
 
 
+class _FakeSyncSnapshotUseCase:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def execute(self, run_id: str) -> None:
+        self.calls.append(run_id)
+
+
 class _FakeStepUseCase:
     def __init__(
         self,
@@ -178,10 +186,12 @@ def _build_service(
     complete_run_use_case = _FakeCompleteRunUseCase()
     fail_run_use_case = _FakeFailRunUseCase()
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
+    sync_snapshot_use_case = _FakeSyncSnapshotUseCase()
     service = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
+        sync_snapshot_use_case=sync_snapshot_use_case,
         render_current_step_use_case=_FakeRenderCurrentStepUseCase(render_results),
         render_mcp_config_use_case=_FakeRenderMcpConfigUseCase(mcp_render_result),
         execute_agent_step_use_case=_FakeStepUseCase(agent_results),

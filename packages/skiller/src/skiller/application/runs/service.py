@@ -1,5 +1,3 @@
-from typing import Any
-
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.models import (
     ResumeRunApplicationResult,
@@ -7,7 +5,15 @@ from skiller.application.runs.models import (
     WorkerStartResult,
     WorkerStartStatus,
 )
-from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.flow.flow_checker import (
+    FlowCheckerUseCase,
+    FlowCheckStatus,
+)
+from skiller.application.use_cases.flow.flow_readiness_checker import (
+    FlowReadinessCheckerUseCase,
+    FlowReadinessCheckStatus,
+)
+from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
@@ -20,21 +26,13 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunStatus, ResumeRunUseCase
-from skiller.application.use_cases.skill.skill_checker import (
-    SkillCheckerUseCase,
-    SkillCheckStatus,
-)
-from skiller.application.use_cases.skill.skill_server_checker import (
-    SkillServerCheckerUseCase,
-    SkillServerCheckStatus,
-)
 from skiller.domain.event.event_model import (
     RunCreatedPayload,
     RunFinishedPayload,
     RunResumedPayload,
     RuntimeEventType,
 )
-from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.run_model import Run, RunStatus
 
 
 class RunApplicationService:
@@ -46,11 +44,11 @@ class RunApplicationService:
         delete_run_use_case: DeleteRunUseCase,
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
-        skill_checker_use_case: SkillCheckerUseCase,
-        skill_server_checker_use_case: SkillServerCheckerUseCase,
+        flow_checker_use_case: FlowCheckerUseCase,
+        flow_readiness_checker_use_case: FlowReadinessCheckerUseCase,
         resume_run_use_case: ResumeRunUseCase,
         mark_notify_action_done_use_case: MarkNotifyActionDoneUseCase,
-        get_run_status_use_case: GetRunStatusUseCase,
+        get_run_use_case: GetRunUseCase,
         run_executor: RunExecutor,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
@@ -59,11 +57,11 @@ class RunApplicationService:
         self.delete_run_use_case = delete_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
-        self.skill_checker_use_case = skill_checker_use_case
-        self.skill_server_checker_use_case = skill_server_checker_use_case
+        self.flow_checker_use_case = flow_checker_use_case
+        self.flow_readiness_checker_use_case = flow_readiness_checker_use_case
         self.resume_run_use_case = resume_run_use_case
         self.mark_notify_action_done_use_case = mark_notify_action_done_use_case
-        self.get_run_status_use_case = get_run_status_use_case
+        self.get_run_use_case = get_run_use_case
         self.run_executor = run_executor
 
     def initialize(self) -> None:
@@ -108,19 +106,19 @@ class RunApplicationService:
         return self.get_run_result(run_id)
 
     def create_run(self, request: CreateRunInput) -> RunResult:
-        check_result = self.skill_checker_use_case.execute(
+        check_result = self.flow_checker_use_case.execute(
             request.skill_ref,
-            skill_source=request.skill_source,
+            flow_source=request.skill_source,
         )
-        if check_result.status == SkillCheckStatus.INVALID:
+        if check_result.status == FlowCheckStatus.INVALID:
             messages = [item.message for item in check_result.errors]
             raise ValueError("\n".join(messages))
-        server_check_result = self.skill_server_checker_use_case.execute(
+        readiness_check_result = self.flow_readiness_checker_use_case.execute(
             request.skill_ref,
-            skill_source=request.skill_source,
+            flow_source=request.skill_source,
         )
-        if server_check_result.status == SkillServerCheckStatus.INVALID:
-            messages = [item.message for item in server_check_result.errors]
+        if readiness_check_result.status == FlowReadinessCheckStatus.INVALID:
+            messages = [item.message for item in readiness_check_result.errors]
             raise ValueError("\n".join(messages))
         run_id = self.create_run_use_case.execute(request)
         self.append_runtime_event_use_case.execute(
@@ -146,7 +144,7 @@ class RunApplicationService:
         self.run_executor.run(run_id)
 
     def get_run_result(self, run_id: str) -> RunResult:
-        run = self.get_run_status_use_case.execute(run_id)
+        run = self.get_run_use_case.execute(run_id)
         status = RunStatus.FAILED
         if run is not None:
             status = RunStatus(run.status)
@@ -177,8 +175,8 @@ class RunApplicationService:
     ) -> MarkNotifyActionDoneResult:
         return self.mark_notify_action_done_use_case.execute(request)
 
-    def _get_run_or_raise(self, run_id: str) -> Any:
-        run = self.get_run_status_use_case.execute(run_id)
+    def _get_run_or_raise(self, run_id: str) -> Run:
+        run = self.get_run_use_case.execute(run_id)
         if run is None:
             raise ValueError(f"Run '{run_id}' not found")
         return run

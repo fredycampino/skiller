@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 import pytest
 
 from skiller.application.query_service import RunQueryService
@@ -9,28 +7,23 @@ from skiller.domain.event.event_model import (
     RunWaitingPayload,
     StepSuccessPayload,
 )
+from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 
 pytestmark = pytest.mark.unit
 
 
 class _FakeGetRunStatusUseCase:
     def execute(self, run_id: str):  # noqa: ANN201
-        return SimpleNamespace(
-            to_dict=lambda: {
-                "id": run_id,
-                "status": "WAITING",
-                "current": "ask_user",
-                "context": {
-                    "inputs": {},
-                    "step_executions": {},
-                },
-            }
+        return RunStatusRuntime(
+            run_id=run_id,
+            status=RunStatus.WAITING,
         )
 
 
 class _FakeGetWaitingMetadataUseCase:
     def execute(self, run_id: str):  # noqa: ANN201
-        return {"prompt": f"prompt for {run_id}"}
+        return {"wait_type": "input", "prompt": f"prompt for {run_id}"}
 
 
 class _FakeGetRunLogsUseCase:
@@ -95,31 +88,16 @@ def test_query_service_status_includes_last_event_cursor() -> None:
 
     status = service.get_status("run-1")
 
-    assert status == {
-        "id": "run-1",
-        "status": "WAITING",
-        "current": "ask_user",
-        "prompt": "prompt for run-1",
-        "last_event_sequence": 11,
-        "last_event_type": "RUN_WAITING",
-    }
-
-
-def test_query_service_status_can_include_runtime_context() -> None:
-    service = RunQueryService(
-        get_run_status_use_case=_FakeGetRunStatusUseCase(),
-        get_run_logs_use_case=_FakeGetRunLogsUseCase(),
-        get_runs_use_case=_UnusedUseCase(),
-        get_waiting_metadata_use_case=_FakeGetWaitingMetadataUseCase(),
+    assert status == (
+        RunStatusRuntime(
+            run_id="run-1",
+            status=RunStatus.WAITING,
+            wait_type="input",
+            prompt="prompt for run-1",
+            last_event_sequence=11,
+            last_event_type=RuntimeEventType.RUN_WAITING,
+        )
     )
-
-    status = service.get_status("run-1", include_context=True)
-
-    assert status is not None
-    assert status["context"] == {
-        "inputs": {},
-        "step_executions": {},
-    }
 
 
 def test_query_service_logs_returns_public_json() -> None:

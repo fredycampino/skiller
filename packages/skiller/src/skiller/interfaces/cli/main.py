@@ -108,7 +108,7 @@ def _merge_waiting_metadata(
     if status_payload is None:
         return run_result
 
-    for field in ("current", "wait_type", "webhook", "key", "prompt", "channel"):
+    for field in ("wait_type", "prompt"):
         if field in status_payload:
             run_result[field] = status_payload[field]
     return run_result
@@ -189,7 +189,7 @@ def _watch_run(
 
         if status in _WATCH_TERMINAL_STATUSES:
             return {
-                "run_id": str(run.get("id", run_id)),
+                "run_id": str(run.get("run_id", run_id)),
                 "status": status,
                 "events": collected_events,
             }
@@ -369,11 +369,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
-    status_parser.add_argument(
-        "--context",
-        action="store_true",
-        help="Include persisted runtime context in the status output",
-    )
 
     runs_parser = sub.add_parser("runs", help="List recent runs")
     runs_parser.add_argument("--limit", type=int, default=20)
@@ -547,6 +542,7 @@ def main(argv: list[str] | None = None) -> int:
         run_service=container.run_service,
         run_mapper=container.run_mapper,
         query_service=container.query_service,
+        status_mapper=container.status_mapper,
         wait_service=container.wait_service,
         input_wait_mapper=container.input_wait_mapper,
         channel_wait_mapper=container.channel_wait_mapper,
@@ -1027,7 +1023,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["deleted"] else 1
 
     if args.command == "status":
-        run = controller.status(args.run_id, include_context=args.context)
+        run = controller.status(args.run_id)
         if run is None:
             print("Run not found")
             return 1

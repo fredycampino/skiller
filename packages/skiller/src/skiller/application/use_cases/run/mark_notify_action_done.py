@@ -1,6 +1,7 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import StrEnum
 
+from skiller.domain.action.action_model import ActionStatus, ActionType, OpenUrlAction
 from skiller.domain.event.event_model import (
     ActionDonePayload,
     RuntimeEventDraft,
@@ -9,9 +10,6 @@ from skiller.domain.event.event_model import (
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.step_execution_model import (
-    NotifyActionStatus,
-    NotifyActionType,
-    NotifyOpenUrlAction,
     NotifyOutput,
 )
 from skiller.domain.step.step_type import StepType
@@ -73,8 +71,7 @@ class MarkNotifyActionDoneUseCase:
         if (
             execution.step_type != StepType.NOTIFY
             or not isinstance(output, NotifyOutput)
-            or output.action_type != NotifyActionType.OPEN_URL
-            or not isinstance(output.action, NotifyOpenUrlAction)
+            or not isinstance(output.action, OpenUrlAction)
         ):
             return MarkNotifyActionDoneResult(
                 run_id=request.run_id,
@@ -84,20 +81,22 @@ class MarkNotifyActionDoneUseCase:
                 error=f"Step '{request.step_id}' is not a notify action",
             )
 
-        if output.action.status == NotifyActionStatus.DONE:
-            return MarkNotifyActionDoneResult(
-                run_id=request.run_id,
-                step_id=request.step_id,
-                status=MarkNotifyActionDoneStatus.DONE,
-                changed=False,
-            )
+        for event in self.events.list_events(request.run_id):
+            payload = event.payload
+            if (
+                event.type == RuntimeEventType.ACTION_DONE
+                and event.step_id == request.step_id
+                and isinstance(payload, ActionDonePayload)
+                and payload.type == ActionType.OPEN_URL
+                and payload.status == ActionStatus.DONE
+            ):
+                return MarkNotifyActionDoneResult(
+                    run_id=request.run_id,
+                    step_id=request.step_id,
+                    status=MarkNotifyActionDoneStatus.DONE,
+                    changed=False,
+                )
 
-        action = replace(output.action, status=NotifyActionStatus.DONE)
-        run.context.step_executions[request.step_id] = replace(
-            execution,
-            output=replace(output, action=action),
-        )
-        self.store.update_run(request.run_id, context=run.context)
         self.events.append_event(
             RuntimeEventDraft(
                 run_id=request.run_id,
@@ -105,8 +104,8 @@ class MarkNotifyActionDoneUseCase:
                 step_id=request.step_id,
                 step_type=StepType.NOTIFY.value,
                 payload=ActionDonePayload(
-                    action_type=output.action_type.value,
-                    status=NotifyActionStatus.DONE.value,
+                    type=ActionType.OPEN_URL,
+                    status=ActionStatus.DONE,
                 ),
             )
         )

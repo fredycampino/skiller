@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from skiller.domain.action.action_model import OpenUrlAction
 from skiller.domain.event.event_model import (
     RunCreatedPayload,
     RuntimeEventDraft,
@@ -19,9 +20,6 @@ from skiller.domain.run.steering_model import (
     SteeringAgentMessage,
 )
 from skiller.domain.step.step_execution_model import (
-    NotifyActionStatus,
-    NotifyActionType,
-    NotifyOpenUrlAction,
     NotifyOutput,
     StepExecution,
     SwitchOutput,
@@ -68,7 +66,7 @@ def _notify_execution(message: str) -> StepExecution:
     )
 
 
-def _notify_action_execution(status: NotifyActionStatus) -> StepExecution:
+def _notify_action_execution() -> StepExecution:
     return StepExecution(
         step_type=StepType.NOTIFY,
         input={"message": "Authorize the app"},
@@ -76,11 +74,9 @@ def _notify_action_execution(status: NotifyActionStatus) -> StepExecution:
         output=NotifyOutput(
             text="Authorize the app",
             message="Authorize the app",
-            action_type=NotifyActionType.OPEN_URL,
-            action=NotifyOpenUrlAction(
+            action=OpenUrlAction(
                 label="Open authorization",
                 url="https://example.com/oauth/start",
-                status=status,
             ),
         ),
     )
@@ -159,7 +155,7 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     )
 
 
-def test_get_run_uses_persisted_notify_action_status(tmp_path) -> None:
+def test_get_run_uses_persisted_notify_action(tmp_path) -> None:
     db_path = tmp_path / "persisted-notify-action.db"
     store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -173,7 +169,7 @@ def test_get_run_uses_persisted_notify_action_status(tmp_path) -> None:
     )
     context = RunContext(
         inputs={},
-        step_executions={"auth_link": _notify_action_execution(NotifyActionStatus.DONE)},
+        step_executions={"auth_link": _notify_action_execution()},
     )
 
     store.update_run(run_id, status=RunStatus.RUNNING, current="auth_link", context=context)
@@ -183,7 +179,7 @@ def test_get_run_uses_persisted_notify_action_status(tmp_path) -> None:
     assert run is not None
     assert (
         run.context.step_executions["auth_link"].to_persisted_dict()
-        == _notify_action_execution(NotifyActionStatus.DONE).to_persisted_dict()
+        == _notify_action_execution().to_persisted_dict()
     )
 
 

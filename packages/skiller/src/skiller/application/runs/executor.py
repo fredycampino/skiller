@@ -32,6 +32,7 @@ from skiller.application.use_cases.render.render_mcp_config import (
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.domain.event.event_model import (
     RunFinishedPayload,
     RuntimeEventType,
@@ -69,6 +70,7 @@ class RunExecutor:
         complete_run_use_case: CompleteRunUseCase,
         fail_run_use_case: FailRunUseCase,
         append_runtime_event_use_case: AppendRuntimeEventUseCase,
+        sync_snapshot_use_case: SyncSnapshotUseCase,
         render_current_step_use_case: RenderCurrentStepUseCase,
         render_mcp_config_use_case: RenderMcpConfigUseCase,
         execute_agent_step_use_case: ExecuteAgentStepUseCase,
@@ -86,6 +88,7 @@ class RunExecutor:
         self.complete_run_use_case = complete_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
+        self.sync_snapshot_use_case = sync_snapshot_use_case
         self.render_current_step_use_case = render_current_step_use_case
         self.render_mcp_config_use_case = render_mcp_config_use_case
         self.execute_agent_step_use_case = execute_agent_step_use_case
@@ -104,6 +107,7 @@ class RunExecutor:
         current_step: CurrentStep | None = None
         try:
             while True:
+                self.sync_snapshot_use_case.execute(run_id)
                 result = self.render_current_step_use_case.execute(run_id)
                 status = result.status
 

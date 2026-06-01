@@ -59,6 +59,8 @@ Payload model:
 RuntimeEventPayload: TypeAlias = (
     RunCreatedPayload
     | RunResumedPayload
+    | RunSnapshotUpdatedPayload
+    | RunSnapshotFailedPayload
     | RunWaitingPayload
     | RunFinishedPayload
     | StepStartedPayload
@@ -77,6 +79,8 @@ Event type model:
 class RuntimeEventType(StrEnum):
     RUN_CREATE = "RUN_CREATE"
     RUN_RESUME = "RUN_RESUME"
+    RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
+    RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -158,6 +162,56 @@ Runtime events describe run and step lifecycle transitions.
 }
 ```
 
+### `RUN_SNAPSHOT_UPDATED`
+
+`RUN_SNAPSHOT_UPDATED` is emitted when the runtime synchronizes the persisted
+run snapshot from the current flow definition and the snapshot content changes.
+It is a run-level event, so `step_id` and `step_type` are `null`.
+
+```json
+{
+  "sequence": 102,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "RUN_SNAPSHOT_UPDATED",
+  "step_id": null,
+  "step_type": null,
+  "agent_sequence": null,
+  "created_at": "2026-05-12T10:30:12Z",
+  "payload": {
+    "source": "internal",
+    "ref": "mono"
+  }
+}
+```
+
+### `RUN_SNAPSHOT_FAILED`
+
+`RUN_SNAPSHOT_FAILED` is emitted when the runtime loads the current flow
+definition but cannot validate it as a run snapshot. The persisted snapshot is
+left unchanged and the run continues with the last valid snapshot.
+
+It is not emitted when the flow source cannot be loaded, or when the current
+step is no longer present in the new definition.
+
+```json
+{
+  "sequence": 103,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "RUN_SNAPSHOT_FAILED",
+  "step_id": null,
+  "step_type": null,
+  "agent_sequence": null,
+  "created_at": "2026-05-12T10:30:13Z",
+  "payload": {
+    "source": "internal",
+    "ref": "mono",
+    "error": "Could not sync snapshot 'mono': missing required field 'steps'"
+  }
+}
+```
+
 ### `STEP_STARTED`
 
 ```json
@@ -221,10 +275,11 @@ Runtime events describe run and step lifecycle transitions.
 
 ### `ACTION_DONE`
 
-`ACTION_DONE` is emitted when `skiller action done <run_id> <step_id>` changes
-a notify action from `pending` to `done`.
+`ACTION_DONE` is emitted when `skiller action done <run_id> <step_id>` records
+that a notify action is done.
 
-Idempotent calls for an already done action do not emit another event.
+Idempotent calls for an action with an existing `ACTION_DONE` event do not emit
+another event.
 
 ```json
 {
@@ -237,7 +292,7 @@ Idempotent calls for an already done action do not emit another event.
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:21Z",
   "payload": {
-    "action_type": "open_url",
+    "type": "open_url",
     "status": "done"
   }
 }

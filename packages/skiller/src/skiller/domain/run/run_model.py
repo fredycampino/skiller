@@ -31,6 +31,15 @@ class RunAgent:
         }
 
 
+@dataclass(frozen=True)
+class RunSnapshotSyncState:
+    run_id: str
+    source: str
+    ref: str
+    current: str | None
+    snapshot: dict[str, Any]
+
+
 @dataclass
 class Run:
     id: str

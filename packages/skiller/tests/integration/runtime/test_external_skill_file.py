@@ -34,6 +34,8 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
     ExecuteWaitWebhookStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
+from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
+from skiller.application.use_cases.flow.flow_readiness_checker import FlowReadinessCheckerUseCase
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import (
     HandleInputInput,
@@ -43,7 +45,7 @@ from skiller.application.use_cases.ingress.handle_webhook import (
     HandleWebhookInput,
     HandleWebhookUseCase,
 )
-from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
+from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
 from skiller.application.use_cases.render.render_current_step import (
     CurrentStepStatus,
@@ -61,8 +63,7 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
-from skiller.application.use_cases.skill.skill_server_checker import SkillServerCheckerUseCase
+from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.application.waits.service import WaitApplicationService
@@ -186,10 +187,16 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         wait_store=store,
         external_event_store=external_event_store,
     )
+    sync_snapshot_use_case = SyncSnapshotUseCase(
+        store=store,
+        runner=skill_runner,
+        events=runtime_event_store,
+    )
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
+        sync_snapshot_use_case=sync_snapshot_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
@@ -214,9 +221,9 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         delete_run_use_case=DeleteRunUseCase(store),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
-        skill_checker_use_case=SkillCheckerUseCase(skill_runner=skill_runner),
-        skill_server_checker_use_case=SkillServerCheckerUseCase(
-            skill_runner=skill_runner,
+        flow_checker_use_case=FlowCheckerUseCase(runner=skill_runner),
+        flow_readiness_checker_use_case=FlowReadinessCheckerUseCase(
+            runner=skill_runner,
             server_status=_FakeServerStatus(),
             channel_sender=channel_sender,
         ),
@@ -225,7 +232,7 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
             store=store,
             events=runtime_event_store,
         ),
-        get_run_status_use_case=GetRunStatusUseCase(store),
+        get_run_use_case=GetRunUseCase(store),
         run_executor=run_executor,
     )
     return runtime

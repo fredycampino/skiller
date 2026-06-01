@@ -15,10 +15,10 @@ from textual.widgets import Button, DataTable, Static, TextArea
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.runs_port import RunsPortItem
+from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.markdown import MarkdownView
-from stui.screen.notify_action_view import NotifyActionView
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
     RunRowStatus,
@@ -89,7 +89,7 @@ class ConsoleScreen(App[str]):
                 ScreenStatusView(id="status", theme=self.ui_theme),
                 Container(
                     Vertical(
-                        NotifyActionView(
+                        ActionOpenUrlView(
                             id="notify-action",
                             theme=self.ui_theme,
                             strings=self.ui_strings,
@@ -262,13 +262,13 @@ class ConsoleScreen(App[str]):
         )
         self._prompt_view().focus_prompt()
 
-    @on(NotifyActionView.OpenLink)
-    def on_notify_action_open_link(self, event: NotifyActionView.OpenLink) -> None:
+    @on(ActionOpenUrlView.OpenLink)
+    def on_notify_action_open_link(self, event: ActionOpenUrlView.OpenLink) -> None:
         event.stop()
         self._open_notify_action_link()
 
-    @on(NotifyActionView.Done)
-    def on_notify_action_done(self, event: NotifyActionView.Done) -> None:
+    @on(ActionOpenUrlView.Done)
+    def on_notify_action_done(self, event: ActionOpenUrlView.Done) -> None:
         event.stop()
         self._done_notify_action()
 
@@ -327,7 +327,7 @@ class ConsoleScreen(App[str]):
         self.viewmodel.open_notify_action_link(
             run_id=notify_action.run_id,
             step_id=notify_action.step_id,
-            url=notify_action.url,
+            url=notify_action.action.url,
         )
         self._prompt_view().focus_prompt()
 
@@ -367,7 +367,7 @@ class ConsoleScreen(App[str]):
 
     def _refresh_notify_action(self, *, new_state: ConsoleScreenState) -> None:
         try:
-            notify_action = self.query_one("#notify-action", NotifyActionView)
+            notify_action = self.query_one("#notify-action", ActionOpenUrlView)
         except NoMatches:
             return
         notify_action.set_state(new_state.notify_action)

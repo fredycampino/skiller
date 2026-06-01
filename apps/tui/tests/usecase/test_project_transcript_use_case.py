@@ -6,6 +6,7 @@ from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.viewmodel.console_screen_state import (
+    ActionOpenUrlItem,
     ConsoleScreenState,
     NotifyActionDoneItem,
     RunResumeItem,
@@ -48,16 +49,17 @@ def test_project_transcript_use_case_hides_notify_action_items() -> None:
                 step_id="auth_link",
                 step_type="notify",
                 message="Authorize the app",
-                action_type="open_url",
-                label="Open authorization",
-                url="https://example.com/oauth/start",
-                status="pending",
+                action=ActionOpenUrlItem(
+                    type="open_url",
+                    label="Open authorization",
+                    url="https://example.com/oauth/start",
+                ),
             ),
             NotifyActionDoneItem(
                 run_id="run-1",
                 step_id="auth_link",
                 step_type="notify",
-                action_type="open_url",
+                type="open_url",
                 status="done",
             ),
         ]

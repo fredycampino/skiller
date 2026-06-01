@@ -29,8 +29,9 @@ controls message rendering.
   action:
     type: open_url
     label: "Open authorization"
+    message: "Continue authorization in the browser."
     url: "https://example.com/oauth/start"
-    auto_open: true
+    auto: true
 ```
 
 Supported action types:
@@ -38,7 +39,39 @@ Supported action types:
 - `open_url`: opens an HTTP(S) URL.
 
 `action.label` and `action.url` are required. `action.url` must start with
-`http://` or `https://`. `action.auto_open` is optional and defaults to `false`.
+`http://` or `https://`. `action.auto` is optional and defaults to `false`.
+
+`action.message` is optional. Runtime resolves the action message as follows:
+
+- when `action.message` is present and non-empty, that value is used;
+- when `action.message` is omitted, null, or empty, runtime uses the resolved
+  notify step `message`.
+
+Example without `action.message`:
+
+```yaml
+- notify: auth_link
+  message: '{{output_value("wait_any_text").payload.text}}'
+  action:
+    type: open_url
+    label: "Open authorization"
+    url: "https://example.com/oauth/start"
+```
+
+If the notify message resolves to `Authorize the app`, the stored action will
+include:
+
+```json
+{
+  "action": {
+    "type": "open_url",
+    "label": "Open authorization",
+    "message": "Authorize the app",
+    "url": "https://example.com/oauth/start",
+    "auto": false
+  }
+}
+```
 
 ## Persistence
 
@@ -64,12 +97,12 @@ For notify actions, runtime stores a typed action:
     "value": {
       "message": "Authorize the app",
       "format": "markdown",
-      "action_type": "open_url",
       "action": {
+        "type": "open_url",
         "label": "Open authorization",
+        "message": "Continue authorization in the browser.",
         "url": "https://example.com/oauth/start",
-        "status": "pending",
-        "auto_open": true
+        "auto": true
       }
     },
     "body_ref": null
@@ -77,10 +110,9 @@ For notify actions, runtime stores a typed action:
 }
 ```
 
-Action status values:
-
-- `pending`: action is available to the user.
-- `done`: action was executed by the UI/client.
+The notify output stores the declared action. Mutable action state is not stored
+in the run context; a completed action is represented by an `ACTION_DONE`
+runtime event.
 
 Mark an action as done:
 

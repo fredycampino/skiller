@@ -128,7 +128,7 @@ class FilesystemSkillRunner(RunnerPort):
     def _resolve_expression(self, context: dict[str, Any], expression: str) -> tuple[bool, Any]:
         if ".output.value" in expression and expression.startswith("step_executions."):
             raise ValueError(
-                "SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS: direct output.value "
+                "FLOW_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS: direct output.value "
                 "access is not allowed "
                 f"(expression={expression})"
             )
@@ -140,13 +140,13 @@ class FilesystemSkillRunner(RunnerPort):
             return True, value
         if expression.startswith("output_value("):
             raise ValueError(
-                "SKILL_OUTPUT_VALUE_INVALID_SYNTAX: invalid output_value expression "
+                "FLOW_OUTPUT_VALUE_INVALID_SYNTAX: invalid output_value expression "
                 f"(expression={expression})"
             )
 
         if _UNSUPPORTED_HELPER_RE.match(expression):
             raise ValueError(
-                "SKILL_OUTPUT_VALUE_UNSUPPORTED_HELPER: unsupported template helper "
+                "FLOW_OUTPUT_VALUE_UNSUPPORTED_HELPER: unsupported template helper "
                 f"(expression={expression})"
             )
 

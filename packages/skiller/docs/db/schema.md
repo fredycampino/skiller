@@ -1,11 +1,10 @@
-# DB Schema
+# DB Schema (SQLite runtime v6)
 
-Current SQLite schema used by Skiller.
+Current SQLite runtime schema used by Skiller.
 
 Source of truth:
-- [`sqlite_state_store.py`](../../packages/skiller/src/skiller/infrastructure/db/sqlite_state_store.py)
-- [`sqlite_webhook_registry.py`](../../packages/skiller/src/skiller/infrastructure/db/sqlite_webhook_registry.py)
-- [`bootstrap_runtime.py`](../../packages/skiller/src/skiller/application/use_cases/run/bootstrap_runtime.py)
+- [`sqlite_runtime_bootstrap.py`](../../src/skiller/infrastructure/db/sqlite_runtime_bootstrap.py)
+- [`sqlite_agent_context_datasource.py`](../../src/skiller/infrastructure/db/sqlite_agent_context_datasource.py)
 
 ## `runs`
 
@@ -18,13 +17,14 @@ Represents:
 | column                 | type     | notes                                |
 +------------------------+----------+--------------------------------------+
 | id                     | TEXT     | PK                                   |
-| skill_source           | TEXT     | NOT NULL                             |
-| skill_ref              | TEXT     | NOT NULL                             |
-| skill_snapshot_json    | TEXT     | NOT NULL                             |
+| source                 | TEXT     | NOT NULL                             |
+| ref                    | TEXT     | NOT NULL                             |
+| snapshot_json          | TEXT     | NOT NULL                             |
 | status                 | TEXT     | NOT NULL                             |
 | current                | TEXT     | nullable                             |
 | inputs_json            | TEXT     | NOT NULL, default '{}'               |
 | step_executions_json   | TEXT     | NOT NULL, default '{}'               |
+| agents_json            | TEXT     | NOT NULL, default '{}'               |
 | steering_queue_json    | TEXT     | NOT NULL, default '[]'               |
 | cancel_reason          | TEXT     | nullable                             |
 | created_at             | TEXT     | NOT NULL, default CURRENT_TIMESTAMP  |
@@ -109,7 +109,7 @@ idx_runs_status_updated_at(status, updated_at)
 ## `waits`
 
 Represents:
-- active or resolved waits owned by a run step
+- active, resolved, or expired waits owned by a run step
 - one unified model for `wait_channel`, `wait_input`, and `wait_webhook`
 - normalized matching around `source_*` and `match_*`
 
@@ -151,19 +151,19 @@ Represents:
 - observability for `/logs`, `watch`, and the TUI transcript
 
 ```text
-+--------------+-------+--------------------------------------+
-| column       | type  | notes                                |
-+--------------+-------+--------------------------------------+
-| id             | TEXT    | PK                                  |
-| run_id         | TEXT    | NOT NULL                            |
-| sequence       | INTEGER | NOT NULL, ordered per run           |
-| event_type     | TEXT    | NOT NULL                            |
-| step_id        | TEXT    | nullable                            |
-| step_type      | TEXT    | nullable                            |
-| agent_sequence | INTEGER | nullable                            |
-| body_json      | TEXT    | NOT NULL                            |
-| created_at     | TEXT    | NOT NULL, default CURRENT_TIMESTAMP |
-+--------------+-------+--------------------------------------+
++----------------+---------+--------------------------------------+
+| column         | type    | notes                                |
++----------------+---------+--------------------------------------+
+| id             | TEXT    | PK                                   |
+| run_id         | TEXT    | NOT NULL                             |
+| sequence       | INTEGER | NOT NULL, ordered per run            |
+| event_type     | TEXT    | NOT NULL                             |
+| step_id        | TEXT    | nullable                             |
+| step_type      | TEXT    | nullable                             |
+| agent_sequence | INTEGER | nullable                             |
+| body_json      | TEXT    | NOT NULL                             |
+| created_at     | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
++----------------+---------+--------------------------------------+
 ```
 
 Indexes:
@@ -207,24 +207,24 @@ Represents:
 - normalized around `source_*` and `match_*`
 
 ```text
-+------------------+-------+---------------------------------------------------+
-| column           | type  | notes                                             |
-+------------------+-------+---------------------------------------------------+
-| id               | TEXT  | PK                                                |
-| source_type      | TEXT  | NOT NULL (`input`/`webhook`/`channel`)            |
-| source_name      | TEXT  | NOT NULL                                          |
-| match_type       | TEXT  | NOT NULL (`run`/`signal`/`channel_key`)           |
-| match_key        | TEXT  | NOT NULL                                          |
-| run_id           | TEXT  | nullable, FK -> runs(id)                          |
-| step_id          | TEXT  | nullable                                          |
-| external_id      | TEXT  | nullable (message id, delivery id, etc.)          |
-| dedup_key        | TEXT  | nullable                                          |
-| status             | TEXT  | NOT NULL (`pending`/`consumed`)                 |
-| consumed_by_run_id | TEXT  | nullable, FK -> runs(id)                        |
-| consumed_at        | TEXT  | nullable                                        |
-| payload_json     | TEXT  | NOT NULL                                          |
-| created_at       | TEXT  | NOT NULL, default CURRENT_TIMESTAMP               |
-+------------------+-------+---------------------------------------------------+
++--------------------+------+---------------------------------------------------+
+| column             | type | notes                                             |
++--------------------+------+---------------------------------------------------+
+| id                 | TEXT | PK                                                |
+| source_type        | TEXT | NOT NULL (`input`/`webhook`/`channel`)            |
+| source_name        | TEXT | NOT NULL                                          |
+| match_type         | TEXT | NOT NULL (`run`/`signal`/`channel_key`)           |
+| match_key          | TEXT | NOT NULL                                          |
+| run_id             | TEXT | nullable, FK -> runs(id)                          |
+| step_id            | TEXT | nullable                                          |
+| external_id        | TEXT | nullable (message id, delivery id, etc.)          |
+| dedup_key          | TEXT | nullable                                          |
+| status             | TEXT | NOT NULL (`pending`/`consumed`)                   |
+| consumed_by_run_id | TEXT | nullable, FK -> runs(id)                          |
+| consumed_at        | TEXT | nullable                                          |
+| payload_json       | TEXT | NOT NULL                                          |
+| created_at         | TEXT | NOT NULL, default CURRENT_TIMESTAMP               |
++--------------------+------+---------------------------------------------------+
 ```
 
 Indexes:
@@ -241,27 +241,66 @@ Represents:
 - registry data used by webhook registration/list/remove and HTTP validation
 
 ```text
-+------------+---------+--------------------------------------+
-| column     | type    | notes                                |
-+------------+---------+--------------------------------------+
-| webhook    | TEXT    | PK                                   |
-| secret     | TEXT    | NOT NULL                             |
-| enabled    | INTEGER | NOT NULL, default 1                  |
-| created_at | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
-+------------+---------+--------------------------------------+
++----------------+---------+--------------------------------------+
+| column         | type    | notes                                |
++----------------+---------+--------------------------------------+
+| webhook        | TEXT    | PK                                   |
+| secret         | TEXT    | NOT NULL                             |
+| method         | TEXT    | NOT NULL, default 'POST'             |
+| auth           | TEXT    | NOT NULL, default 'signed'           |
+| payload_source | TEXT    | NOT NULL, default 'body_json'        |
+| enabled        | INTEGER | NOT NULL, default 1                  |
+| created_at     | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
++----------------+---------+--------------------------------------+
+```
+
+## `agent_context_entries`
+
+Represents:
+- persisted agent context entries
+- the ordered memory used by agent steps
+- final assistant markers used to move the context window
+
+```text
++-----------------------+---------+--------------------------------------+
+| column                | type    | notes                                |
++-----------------------+---------+--------------------------------------+
+| id                    | TEXT    | PK                                   |
+| run_id                | TEXT    | NOT NULL, FK -> runs(id)             |
+| context_id            | TEXT    | NOT NULL                             |
+| sequence              | INTEGER | NOT NULL, ordered per context        |
+| entry_type            | TEXT    | NOT NULL                             |
+| message_type          | TEXT    | nullable                             |
+| position_tokens       | INTEGER | nullable                             |
+| window_tokens         | INTEGER | nullable                             |
+| window_start_sequence | INTEGER | nullable                             |
+| payload_json          | TEXT    | NOT NULL                             |
+| usage_json            | TEXT    | nullable                             |
+| source_step_id        | TEXT    | NOT NULL                             |
+| created_at            | TEXT    | NOT NULL, default CURRENT_TIMESTAMP  |
++-----------------------+---------+--------------------------------------+
+```
+
+Indexes:
+
+```text
+idx_agent_context_entries_context(context_id, sequence)
+idx_agent_context_entries_final_marker(context_id, entry_type, message_type, position_tokens, sequence)
 ```
 
 ## Notes
 
 - `runs.step_executions_json` is the source of truth for persisted step execution data.
 - `log_events.body_json` is the observability stream body used by `/logs`, `watch`, and the UI transcript.
+- `agent_context_entries` is the source of truth for persisted agent memory.
+- `position_tokens`, `window_tokens`, `window_start_sequence`, and `usage_json` are normally populated on final assistant messages.
 - `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
 - `wait_type` remains the step-level discriminator for wait semantics.
 - `source_*` models where an external event came from.
 - `match_*` models how a wait or event is correlated.
 - `external_events` is the unified storage for raw external payloads used to resume waits.
 - `external_events.status` tracks whether an event is still pending or already consumed by a run.
-- external-event lookup is scoped to `run.created_at`, not `wait.created_at`.
+- external-event lookup is scoped by each wait use case.
 - matching is FIFO: oldest active wait, then oldest pending matching event.
 - `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteStateStore`.
 
@@ -270,6 +309,7 @@ Represents:
 `skiller delete <run_id>` deletes the run row and the database rows tied to that run in one
 SQLite transaction:
 
+- `agent_context_entries` where `run_id` matches
 - `external_receipts` whose `dedup_key` belongs to an `external_events` row tied to the run
 - `external_events` where `run_id` or `consumed_by_run_id` matches
 - `waits` where `run_id` matches

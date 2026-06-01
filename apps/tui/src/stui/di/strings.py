@@ -23,6 +23,8 @@ class TuiStrings:
     agent_config_invalid_notice_title: str = "Invalid agent config"
     agent_config_invalid_notice_template: str = "{title}\n\n{message}"
     agent_context_stats_title: str = "Agent Context"
+    run_snapshot_updated_notice_template: str = "Run snapshot updated: {ref}"
+    run_snapshot_failed_notice_template: str = "Run snapshot sync failed: {error}"
 
 
 DEFAULT_TUI_STRINGS = TuiStrings()

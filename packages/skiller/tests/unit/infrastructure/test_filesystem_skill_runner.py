@@ -261,7 +261,7 @@ def test_render_step_raises_clear_error_when_output_value_path_is_missing() -> N
 def test_render_step_rejects_direct_output_value_access() -> None:
     runner = FilesystemSkillRunner(skills_dir="skills")
 
-    with pytest.raises(ValueError, match="SKILL_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"):
+    with pytest.raises(ValueError, match="FLOW_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"):
         runner.render(
             {
                 "message": "{{step_executions.inspect_cloudflared.output.value.stderr}}",

@@ -10,50 +10,50 @@ from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.channel_sender_port import ChannelSenderPort
 
 
-class SkillServerCheckStatus(str, Enum):
+class FlowReadinessCheckStatus(str, Enum):
     VALID = "VALID"
     INVALID = "INVALID"
 
 
 @dataclass(frozen=True)
-class SkillServerCheckError:
+class FlowReadinessCheckError:
     code: str
     message: str
 
 
 @dataclass(frozen=True)
-class SkillServerCheckResult:
-    status: SkillServerCheckStatus
-    errors: list[SkillServerCheckError]
+class FlowReadinessCheckResult:
+    status: FlowReadinessCheckStatus
+    errors: list[FlowReadinessCheckError]
 
 
-class SkillServerCheckerUseCase:
+class FlowReadinessCheckerUseCase:
     def __init__(
         self,
-        skill_runner: RunnerPort,
+        runner: RunnerPort,
         server_status: ServerStatusPort,
         channel_sender: ChannelSenderPort,
     ) -> None:
-        self.skill_runner = skill_runner
+        self.runner = runner
         self.server_status = server_status
         self.channel_sender = channel_sender
 
     def execute(
         self,
-        skill_ref: str,
+        flow_ref: str,
         *,
-        skill_source: str,
-    ) -> SkillServerCheckResult:
-        raw_skill = self.skill_runner.load(skill_source, skill_ref)
-        raw_steps = raw_skill["steps"]
+        flow_source: str,
+    ) -> FlowReadinessCheckResult:
+        raw_flow = self.runner.load(flow_source, flow_ref)
+        raw_steps = raw_flow["steps"]
         server_required_step = self._find_server_required_step(raw_steps)
         channel_required_step = self._find_channel_required_step(raw_steps)
 
         if server_required_step is not None and not self.server_status.is_available():
             return self._invalid(
-                code="SKILL_SERVER_UNAVAILABLE",
+                code="FLOW_SERVER_UNAVAILABLE",
                 message=(
-                    "SKILL_SERVER_UNAVAILABLE: skill requires local server for "
+                    "FLOW_SERVER_UNAVAILABLE: flow requires local server for "
                     f"{server_required_step['step_type']} (step={server_required_step['step_id']})"
                 ),
             )
@@ -63,9 +63,9 @@ class SkillServerCheckerUseCase:
             and not self.channel_sender.is_available(channel=channel_required_step["channel"])
         ):
             return self._invalid(
-                code="SKILL_WHATSAPP_UNAVAILABLE",
+                code="FLOW_WHATSAPP_UNAVAILABLE",
                 message=(
-                    "SKILL_WHATSAPP_UNAVAILABLE: skill requires active WhatsApp bridge "
+                    "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
                     f"for {channel_required_step['step_type']} "
                     f"(step={channel_required_step['step_id']})"
                 ),
@@ -109,9 +109,9 @@ class SkillServerCheckerUseCase:
 
         return None
 
-    def _valid(self) -> SkillServerCheckResult:
-        return SkillServerCheckResult(
-            status=SkillServerCheckStatus.VALID,
+    def _valid(self) -> FlowReadinessCheckResult:
+        return FlowReadinessCheckResult(
+            status=FlowReadinessCheckStatus.VALID,
             errors=[],
         )
 
@@ -120,8 +120,8 @@ class SkillServerCheckerUseCase:
         *,
         code: str,
         message: str,
-    ) -> SkillServerCheckResult:
-        return SkillServerCheckResult(
-            status=SkillServerCheckStatus.INVALID,
-            errors=[SkillServerCheckError(code=code, message=message)],
+    ) -> FlowReadinessCheckResult:
+        return FlowReadinessCheckResult(
+            status=FlowReadinessCheckStatus.INVALID,
+            errors=[FlowReadinessCheckError(code=code, message=message)],
         )

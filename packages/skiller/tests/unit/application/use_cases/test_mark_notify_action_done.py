@@ -5,13 +5,15 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneStatus,
     MarkNotifyActionDoneUseCase,
 )
-from skiller.domain.event.event_model import RuntimeEventDraft, RuntimeEventType
+from skiller.domain.action.action_model import ActionStatus, ActionType, OpenUrlAction
+from skiller.domain.event.event_model import (
+    ActionDonePayload,
+    RuntimeEventDraft,
+    RuntimeEventType,
+)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.step.step_execution_model import (
-    NotifyActionStatus,
-    NotifyActionType,
-    NotifyOpenUrlAction,
     NotifyOutput,
     StepExecution,
 )
@@ -42,16 +44,19 @@ class _FakeStore:
 
 
 class _FakeEvents:
-    def __init__(self) -> None:
-        self.events: list[RuntimeEventDraft] = []
+    def __init__(self, events: list[RuntimeEventDraft] | None = None) -> None:
+        self.events = events or []
 
     def append_event(self, event: RuntimeEventDraft) -> str:
         self.events.append(event)
         return "event-1"
 
+    def list_events(self, run_id: str, *, after_sequence=None, limit=None):  # noqa: ANN001
+        return [event for event in self.events if event.run_id == run_id]
 
-def test_mark_notify_action_done_updates_action_status() -> None:
-    run = _build_run(action_status=NotifyActionStatus.PENDING)
+
+def test_mark_notify_action_done_emits_action_done_event() -> None:
+    run = _build_run()
     store = _FakeStore(run)
     events = _FakeEvents()
     use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
@@ -62,33 +67,38 @@ def test_mark_notify_action_done_updates_action_status() -> None:
     assert result.changed is True
     execution = run.context.step_executions["auth_link"]
     assert isinstance(execution.output, NotifyOutput)
-    assert execution.output.action == NotifyOpenUrlAction(
+    assert execution.output.action == OpenUrlAction(
         label="Open authorization",
         url="https://example.com/oauth/start",
-        status=NotifyActionStatus.DONE,
     )
-    assert store.updated_runs == [
-        {
-            "run_id": "run-1",
-            "status": None,
-            "current": None,
-            "context": run.context,
-        }
-    ]
+    assert store.updated_runs == []
     assert len(events.events) == 1
     event = events.events[0]
     assert event.run_id == "run-1"
     assert event.type == RuntimeEventType.ACTION_DONE
     assert event.step_id == "auth_link"
     assert event.step_type == "notify"
-    assert event.payload.action_type == "open_url"
-    assert event.payload.status == "done"
+    assert event.payload.type == ActionType.OPEN_URL
+    assert event.payload.status == ActionStatus.DONE
 
 
 def test_mark_notify_action_done_is_idempotent() -> None:
-    run = _build_run(action_status=NotifyActionStatus.DONE)
+    run = _build_run()
     store = _FakeStore(run)
-    events = _FakeEvents()
+    events = _FakeEvents(
+        [
+            RuntimeEventDraft(
+                run_id="run-1",
+                type=RuntimeEventType.ACTION_DONE,
+                step_id="auth_link",
+                step_type="notify",
+                payload=ActionDonePayload(
+                    type=ActionType.OPEN_URL,
+                    status=ActionStatus.DONE,
+                ),
+            )
+        ]
+    )
     use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
 
     result = use_case.execute(_request("auth_link"))
@@ -96,11 +106,11 @@ def test_mark_notify_action_done_is_idempotent() -> None:
     assert result.status == MarkNotifyActionDoneStatus.DONE
     assert result.changed is False
     assert store.updated_runs == []
-    assert events.events == []
+    assert len(events.events) == 1
 
 
 def test_mark_notify_action_done_returns_step_not_found() -> None:
-    run = _build_run(action_status=NotifyActionStatus.PENDING)
+    run = _build_run()
     store = _FakeStore(run)
     events = _FakeEvents()
     use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
@@ -138,7 +148,7 @@ def test_mark_notify_action_done_returns_not_action_for_regular_notify() -> None
     assert events.events == []
 
 
-def _build_run(action_status: NotifyActionStatus) -> Run:
+def _build_run() -> Run:
     context = RunContext(
         inputs={},
         step_executions={
@@ -147,11 +157,9 @@ def _build_run(action_status: NotifyActionStatus) -> Run:
                 output=NotifyOutput(
                     text="Authorize the app",
                     message="Authorize the app",
-                    action_type=NotifyActionType.OPEN_URL,
-                    action=NotifyOpenUrlAction(
+                    action=OpenUrlAction(
                         label="Open authorization",
                         url="https://example.com/oauth/start",
-                        status=action_status,
                     ),
                 ),
             )

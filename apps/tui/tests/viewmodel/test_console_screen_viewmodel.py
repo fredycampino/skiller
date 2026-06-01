@@ -20,8 +20,6 @@ from stui.port.event_models import (
     LogEvent,
     LogEventPayload,
     LogEventType,
-    NotifyActionStatus,
-    NotifyActionType,
     NotifyActionValue,
     OutputPayload,
     RunFinishedPayload,
@@ -52,6 +50,7 @@ from stui.usecase.done_notify_action_use_case import DoneNotifyActionResult
 from stui.usecase.open_notify_action_use_case import OpenNotifyActionResult
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    ActionOpenUrlItem,
     AgentContextStatsState,
     CompletionItem,
     CompletionState,
@@ -478,11 +477,11 @@ def test_notify_projects_pending_notify_action_to_screen_state() -> None:
                         text="Authorize the app",
                         value=NotifyActionValue(
                             message="Authorize the app",
-                            action_type=NotifyActionType.OPEN_URL,
                             action=ActionOpenUrlValue(
+                                type="open_url",
                                 label="Open authorization",
+                                message="Open the authorization link.",
                                 url="https://example.com/oauth/start",
-                                status=NotifyActionStatus.PENDING,
                             ),
                         ),
                         body_ref=None,
@@ -495,10 +494,13 @@ def test_notify_projects_pending_notify_action_to_screen_state() -> None:
     assert viewmodel.state.notify_action == NotifyActionState(
         run_id="run-1234",
         step_id="auth_link",
-        message="Authorize the app",
-        label="Open authorization",
-        url="https://example.com/oauth/start",
-        status="pending",
+        message="Open the authorization link.",
+        action=ActionOpenUrlItem(
+            type="open_url",
+            label="Open authorization",
+            message="Open the authorization link.",
+            url="https://example.com/oauth/start",
+        ),
     )
 
 

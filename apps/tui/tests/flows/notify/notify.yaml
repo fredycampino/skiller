@@ -23,7 +23,7 @@ steps:
       type: open_url
       label: "Open authorization"
       url: "https://www.google.com/"
-      auto_open: false
+      auto: false
     next: wait_any_text
 
   - notify: done

@@ -1,5 +1,6 @@
 import pytest
 
+from skiller.domain.action.action_model import OpenUrlAction, RunAction
 from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel, AgentLLMProviderType
 from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
@@ -7,11 +8,82 @@ from skiller.domain.step.step_execution_model import (
     AgentOutput,
     AgentStopOutputData,
     AgentUsageOutput,
+    NotifyOutput,
     StepExecution,
 )
 from skiller.domain.step.step_type import StepType
 
 pytestmark = pytest.mark.unit
+
+
+def test_notify_open_url_action_serializes_and_restores_typed_data() -> None:
+    execution = StepExecution(
+        step_type=StepType.NOTIFY,
+        output=NotifyOutput(
+            text="Authorize the app",
+            message="Authorize the app",
+            action=OpenUrlAction(
+                label="Open authorization",
+                message="Continue in the browser.",
+                url="https://example.com/oauth/start",
+                auto=True,
+            ),
+        ),
+    )
+
+    persisted = execution.to_persisted_dict()
+
+    assert persisted["output"] == {
+        "text": "Authorize the app",
+        "body_ref": None,
+        "value": {
+            "message": "Authorize the app",
+            "format": "simple",
+            "action": {
+                "type": "open_url",
+                "label": "Open authorization",
+                "message": "Continue in the browser.",
+                "url": "https://example.com/oauth/start",
+                "auto": True,
+            },
+        },
+    }
+    assert StepExecution.from_dict(persisted) == execution
+
+
+def test_notify_run_action_serializes_and_restores_typed_data() -> None:
+    execution = StepExecution(
+        step_type=StepType.NOTIFY,
+        output=NotifyOutput(
+            text="Debug failure",
+            message="Debug failure",
+            action=RunAction(
+                label="Debug failure",
+                arg="--file ./flows/debug.yaml",
+                params="--mood nice --path .",
+                auto=True,
+            ),
+        ),
+    )
+
+    persisted = execution.to_persisted_dict()
+
+    assert persisted["output"] == {
+        "text": "Debug failure",
+        "body_ref": None,
+        "value": {
+            "message": "Debug failure",
+            "format": "simple",
+            "action": {
+                "type": "run",
+                "label": "Debug failure",
+                "arg": "--file ./flows/debug.yaml",
+                "params": "--mood nice --path .",
+                "auto": True,
+            },
+        },
+    }
+    assert StepExecution.from_dict(persisted) == execution
 
 
 def test_agent_final_output_serializes_and_restores_typed_data() -> None:

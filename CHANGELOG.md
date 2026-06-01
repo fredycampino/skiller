@@ -19,7 +19,7 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
-## 1.0.0-beta.10 - 2026-06-01
+## 0.1.0-beta.1 - 2026-06-01
 
 ### Added
 - Add notify action domain models, completion handling, and open-url action rendering in the TUI.
@@ -35,7 +35,8 @@ All notable changes to this project should be summarized here before a version i
 - Align TUI action button and transcript rendering with the typed notify action contract.
 
 ### Notes
-- Includes PR #51.
+- First public beta release from the reset `0.1.0` version line.
+- Includes PR #51 and PR #53.
 
 ## 1.0.0-beta.9 - 2026-05-30
 

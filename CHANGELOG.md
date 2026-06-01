@@ -19,6 +19,24 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 1.0.0-beta.10 - 2026-06-01
+
+### Added
+- Add notify action domain models, completion handling, and open-url action rendering in the TUI.
+- Add live run snapshot sync events and TUI run-level notices for updated and failed snapshot syncs.
+- Add run query/status support and runtime database model documentation.
+
+### Changed
+- Rename skill checker/readiness code and docs to flow checker/readiness terminology.
+- Update notify, status, flow, event, and database documentation for current runtime contracts.
+
+### Fixed
+- Keep completed notify actions hidden after action done events.
+- Align TUI action button and transcript rendering with the typed notify action contract.
+
+### Notes
+- Includes PR #51.
+
 ## 1.0.0-beta.9 - 2026-05-30
 
 ### Added

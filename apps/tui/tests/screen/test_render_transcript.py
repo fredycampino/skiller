@@ -23,6 +23,7 @@ from stui.screen.transcript.step_notify_output_view import StepNotifyOutputView
 from stui.screen.transcript.step_output_view import StepOutputView
 from stui.screen.transcript.step_shell_output_view import StepShellOutputView
 from stui.viewmodel.console_screen_state import (
+    ActionRunItem,
     AgentFinalAssistantMessageItem,
     AgentToolCallItem,
     AgentToolResultItem,
@@ -359,6 +360,22 @@ def test_run_finished_view_renders_failed_as_muted_text() -> None:
 
     assert isinstance(renderable, Text)
     assert renderable.plain == "  failed"
+    assert str(renderable.style) == DEFAULT_TUI_THEME.color_text_muted
+
+
+def test_run_finished_view_renders_action_as_muted_second_line() -> None:
+    view = RunFinishedView(
+        item=RunFinishedItem(
+            run_id="run-1",
+            status="succeeded",
+            action=ActionRunItem(type="run", label="Open follow-up"),
+        )
+    )
+
+    renderable = view.render(theme=DEFAULT_TUI_THEME)
+
+    assert isinstance(renderable, Text)
+    assert renderable.plain == "  succeeded\n  run Open follow-up"
     assert str(renderable.style) == DEFAULT_TUI_THEME.color_text_muted
 
 

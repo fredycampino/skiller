@@ -93,6 +93,42 @@ def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
     asyncio.run(run())
 
 
+def test_logs_event_observer_stops_immediately_on_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    adapter = FakeLogEventAdapter(
+        [
+            [_step_started_event(sequence=1)],
+            [_run_finished_event(sequence=2)],
+        ]
+    )
+    listener = FakeLogEventsListener()
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        observer = LogsEventObserver(logs=adapter)
+        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert [event.sequence for event in listener.events] == [1, 2]
+        assert adapter.called_with == [
+            ("run-1", None, 100),
+            ("run-1", 1, 100),
+        ]
+
+    asyncio.run(run())
+
+
 def test_logs_event_observer_uses_listener_max_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -332,6 +368,20 @@ def _run_waiting_event(*, sequence: int, step_type: str = "wait_input") -> CliLo
                 "body_ref": None,
             }
         },
+    )
+
+
+def _run_finished_event(*, sequence: int) -> CliLogEvent:
+    return CliLogEvent(
+        sequence=sequence,
+        id=f"evt-{sequence}",
+        run_id="run-1",
+        type=LogEventType.RUN_FINISHED,
+        step_id=None,
+        step_type=None,
+        agent_sequence=None,
+        created_at="2026-05-12T10:30:18Z",
+        payload={"status": "SUCCEEDED"},
     )
 
 

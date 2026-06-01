@@ -18,7 +18,6 @@ from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
-    RunAckItem,
     UserInputItem,
     ViewStatusKind,
 )
@@ -137,10 +136,7 @@ def test_run_command_use_case_dispatch_success_loads_run(
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert state.prompt.text == ""
         assert state.prompt.cursor_position == 0
-        assert len(state.transcript.items) == 1
-        assert isinstance(state.transcript.items[0], RunAckItem)
-        assert state.transcript.items[0].skill == "chat"
-        assert state.transcript.items[0].run_id == "run-1234"
+        assert state.transcript.items == []
 
     asyncio.run(run())
 

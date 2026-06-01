@@ -51,6 +51,7 @@ from stui.usecase.project_transcript_use_case import (
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
+from stui.usecase.run_finished_action_use_case import RunFinishedActionUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -162,6 +163,7 @@ def build_tui_container(
             events_port=resolved_events_port,
             context=run_event_context,
         ),
+        run_finished_action=RunFinishedActionUseCase(),
         start_console=StartConsoleUseCase(
             installation_state_port=resolved_installation_state_port,
             run_port=resolved_run_port,

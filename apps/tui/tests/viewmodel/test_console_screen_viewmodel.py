@@ -16,6 +16,7 @@ from apps.tui.tests.support import (
 from stui.di.strings import TuiStrings
 from stui.port.event_models import (
     ActionOpenUrlValue,
+    ActionRunValue,
     AgentOutputValue,
     LogEvent,
     LogEventPayload,
@@ -59,7 +60,6 @@ from stui.viewmodel.console_screen_state import (
     InfoItem,
     NotifyActionState,
     PromptMode,
-    RunAckItem,
     RunFinishedItem,
     RunOutputItem,
     RunResumeItem,
@@ -712,10 +712,7 @@ def test_console_screen_viewmodel_dispatches_run() -> None:
         await viewmodel.submit("/run chat")
 
         assert run_port.called_with == ["chat"]
-        assert len(viewmodel.state.transcript.items) == 1
-        assert isinstance(viewmodel.state.transcript.items[0], RunAckItem)
-        assert viewmodel.state.transcript.items[0].skill == "chat"
-        assert viewmodel.state.transcript.items[0].run_id == "run-1234"
+        assert viewmodel.state.transcript.items == []
         assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
         assert viewmodel.state.session_key == "run-1234"
         assert viewmodel.state.run_name == "chat"
@@ -931,6 +928,54 @@ def test_console_screen_viewmodel_subscribes_and_applies_log_events() -> None:
     assert viewmodel.state.transcript.items[1].status == "succeeded"
 
 
+def test_console_screen_viewmodel_runs_finished_action() -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(
+            CommandAck(
+                status=CommandAckStatus.ACCEPTED,
+                run_id="run-next",
+                message="unused",
+            )
+        )
+        events_port = FakeEventsPort()
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            events_port=events_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        attach_run_observer(viewmodel, events_port, "run-1234")
+        with patched_to_thread(run_command_use_case_module):
+            viewmodel.notify(
+                [
+                    _event(
+                        LogEventType.RUN_FINISHED,
+                        payload=RunFinishedPayload(
+                            status="SUCCEEDED",
+                            action=ActionRunValue(
+                                type="run",
+                                label="Run follow-up",
+                                arg="ci",
+                                params="--fast",
+                            ),
+                        ),
+                    )
+                ]
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        assert run_port.called_with == ["ci --fast"]
+        assert events_port.subscribe_calls == ["run-1234", "run-next"]
+        assert viewmodel.state.session_key == "run-next"
+        assert viewmodel.state.run_name == "ci --fast"
+        assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
+        assert viewmodel.state.transcript.items == []
+
+    asyncio.run(run())
+
+
 def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> None:
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     waiting_port = FakeWaitingPort(
@@ -977,6 +1022,50 @@ def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> N
         assert viewmodel.state.prompt.waiting_prompt == ""
         assert viewmodel.state.prompt.text == ""
         assert viewmodel.state.prompt.cursor_position == 0
+
+    with patched_to_thread(submit_waiting_input_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_sends_unknown_slash_text_when_waiting_for_input() -> None:
+    run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
+    waiting_port = FakeWaitingPort(
+        WaitingInputAck(
+            status=WaitingInputStatus.ACCEPTED,
+            run_id="run-1234",
+            message="",
+        )
+    )
+
+    async def run() -> None:
+        events_port = FakeEventsPort()
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            events_port=events_port,
+            waiting_port=waiting_port,
+        )
+        attach_run_observer(viewmodel, events_port, "run-1234")
+        viewmodel._run_event_context.activate_run(  # noqa: SLF001
+            "run-1234",
+            run_name="run-1234",
+            status=RunStatus.RUNNING,
+        )
+        viewmodel.notify(
+            [
+                _event(
+                    LogEventType.RUN_WAITING,
+                    step_type="wait_input",
+                    payload=RunWaitingPayload(output=_waiting_output("Write a message.")),
+                )
+            ]
+        )
+
+        await viewmodel.submit("/home/fede/project/file.py\nnext line")
+
+        assert waiting_port.called_with == [("run-1234", "/home/fede/project/file.py\nnext line")]
+        assert isinstance(viewmodel.state.transcript.items[-1], RunResumeItem)
+        assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
 
     with patched_to_thread(submit_waiting_input_use_case_module):
         asyncio.run(run())

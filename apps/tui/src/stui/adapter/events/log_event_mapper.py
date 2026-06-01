@@ -9,6 +9,7 @@ from stui.port.event_models import (
     ActionBaseValue,
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionRunValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -71,7 +72,6 @@ class ActionValueModel(BaseModel):
 
     type: str
     label: str
-    message: str | None = None
 
 
 class ActionOpenUrlValueModel(BaseModel):
@@ -81,6 +81,16 @@ class ActionOpenUrlValueModel(BaseModel):
     label: str
     message: str | None = None
     url: str
+    auto: bool = False
+
+
+class ActionRunValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["run"]
+    label: str
+    arg: str
+    params: str | None = None
     auto: bool = False
 
 
@@ -213,6 +223,7 @@ class RunFinishedModel(BaseModel):
 
     status: str
     error: str | None = None
+    action: JsonObject | None = None
 
 
 class InputReceivedModel(BaseModel):
@@ -335,7 +346,16 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_FINISHED:
             model = _validate_model(RunFinishedModel, payload, "payload")
-            return RunFinishedPayload(status=model.status, error=model.error)
+            action = (
+                _to_action_value(model.action, "payload.action")
+                if model.action is not None
+                else None
+            )
+            return RunFinishedPayload(
+                status=model.status,
+                error=model.error,
+                action=action,
+            )
 
         if event_type == LogEventType.ACTION_DONE:
             model = _validate_model(ActionDoneModel, payload, "payload")
@@ -436,7 +456,7 @@ def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputV
             return NotifyActionValue(
                 message=model.message,
                 format=model.format,
-                action=_to_action_value(model.action),
+                action=_to_action_value(model.action, "output.value.action"),
             )
         model = _validate_model(
             NotifyOutputValueModel,
@@ -505,13 +525,13 @@ def _notify_output_payload(value: JsonObject) -> JsonObject:
     return payload
 
 
-def _to_action_value(value: JsonObject) -> ActionBaseValue:
-    model = _validate_model(ActionValueModel, value, "output.value.action")
+def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
+    model = _validate_model(ActionValueModel, value, label)
     if model.type == "open_url":
         open_url = _validate_model(
             ActionOpenUrlValueModel,
             value,
-            "output.value.action",
+            label,
         )
         return ActionOpenUrlValue(
             type=open_url.type,
@@ -520,10 +540,22 @@ def _to_action_value(value: JsonObject) -> ActionBaseValue:
             url=open_url.url,
             auto=open_url.auto,
         )
+    if model.type == "run":
+        run = _validate_model(
+            ActionRunValueModel,
+            value,
+            label,
+        )
+        return ActionRunValue(
+            type=run.type,
+            label=run.label,
+            arg=run.arg,
+            params=run.params,
+            auto=run.auto,
+        )
     return ActionBaseValue(
         type=model.type,
         label=model.label,
-        message=model.message,
     )
 
 

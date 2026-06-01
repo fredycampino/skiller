@@ -1,0 +1,170 @@
+import pytest
+
+from skiller.application.use_cases.run.resolve_end_action import (
+    ResolveEndActionInput,
+    ResolveEndActionUseCase,
+)
+from skiller.application.use_cases.run.resolve_end_action_config import (
+    ResolveEndActionConfigParser,
+)
+from skiller.domain.action.action_model import EndActionTrigger, RunAction
+from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run, RunStatus
+
+pytestmark = pytest.mark.unit
+
+
+class _FakeStore:
+    def __init__(self, run: Run | None) -> None:
+        self.run = run
+
+    def get_run(self, run_id: str) -> Run | None:
+        if self.run is None or self.run.id != run_id:
+            return None
+        return self.run
+
+
+class _FakeRunner:
+    def render(self, step, context):  # noqa: ANN001, ANN201
+        rendered = dict(step)
+        inputs = context.get("inputs", {})
+        if isinstance(inputs, dict):
+            for key, value in inputs.items():
+                token = "{{inputs." + str(key) + "}}"
+                for field, raw in rendered.items():
+                    if isinstance(raw, str):
+                        rendered[field] = raw.replace(token, str(value))
+        return rendered
+
+
+def test_resolve_end_action_returns_on_success_run_action() -> None:
+    run = _build_run(
+        {
+            "on_success": {
+                "action": {
+                    "type": "run",
+                    "label": "Open result",
+                    "arg": "--file {{inputs.flow}}",
+                    "params": "--id {{inputs.run_key}}",
+                    "auto": True,
+                }
+            }
+        }
+    )
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(run),
+        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    )
+
+    assert result.action == RunAction(
+        label="Open result",
+        arg="--file ./flows/result.yaml",
+        params="--id abc",
+        auto=True,
+    )
+
+
+def test_resolve_end_action_returns_on_error_run_action() -> None:
+    run = _build_run(
+        {
+            "on_error": {
+                "action": {
+                    "type": "run",
+                    "label": "Debug failure",
+                    "arg": "--file ./flows/debug.yaml",
+                    "params": "--val pepe",
+                    "auto": True,
+                }
+            }
+        }
+    )
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(run),
+        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_ERROR)
+    )
+
+    assert result.action == RunAction(
+        label="Debug failure",
+        arg="--file ./flows/debug.yaml",
+        params="--val pepe",
+        auto=True,
+    )
+
+
+def test_resolve_end_action_ignores_open_url_action() -> None:
+    run = _build_run(
+        {
+            "on_success": {
+                "action": {
+                    "type": "open_url",
+                    "label": "Open",
+                    "url": "https://example.com",
+                }
+            }
+        }
+    )
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(run),
+        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    )
+
+    assert result.action is None
+
+
+def test_resolve_end_action_ignores_missing_or_invalid_action() -> None:
+    run = _build_run({"on_success": {"action": {"type": "run", "label": "Debug"}}})
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(run),
+        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    )
+
+    assert result.action is None
+
+
+def test_resolve_end_action_ignores_missing_run() -> None:
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(None),
+        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="missing", trigger=EndActionTrigger.ON_SUCCESS)
+    )
+
+    assert result.action is None
+
+
+def _build_run(snapshot: dict[str, object]) -> Run:
+    return Run(
+        id="run-1",
+        source="internal",
+        ref="test",
+        snapshot=snapshot,
+        status=RunStatus.SUCCEEDED.value,
+        current=None,
+        context=RunContext(
+            inputs={
+                "flow": "./flows/result.yaml",
+                "run_key": "abc",
+            },
+            step_executions={},
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )

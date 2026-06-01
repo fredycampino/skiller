@@ -364,6 +364,35 @@ Failed:
 }
 ```
 
+With run action:
+
+`payload.action` is present when the flow defines `on_success.action` or
+`on_error.action`. This first implementation emits only `type: "run"` actions.
+
+```json
+{
+  "sequence": 108,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "RUN_FINISHED",
+  "step_id": null,
+  "step_type": null,
+  "agent_sequence": null,
+  "created_at": "2026-05-12T10:30:20Z",
+  "payload": {
+    "status": "FAILED",
+    "error": "LLM step 'answer' returned invalid JSON",
+    "action": {
+      "type": "run",
+      "label": "Debug failure",
+      "arg": "--file ./flows/debug.yaml",
+      "params": "--val pepe",
+      "auto": true
+    }
+  }
+}
+```
+
 Current `RUN_FINISHED` statuses emitted by runtime are `SUCCEEDED` and `FAILED`.
 `RUN_FINISHED` with `FAILED` can also be emitted during run preparation when the
 start step cannot be resolved.

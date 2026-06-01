@@ -36,7 +36,6 @@ class SubmitWaitingInputUseCase:
         text: str,
     ) -> SubmitWaitingInputResult:
         run_id = self.context.run_id
-        normalized_text = text.strip()
         if not run_id:
             return SubmitWaitingInputResult(state=state)
 
@@ -46,7 +45,7 @@ class SubmitWaitingInputUseCase:
         ack = await asyncio.to_thread(
             self.waiting_port.send_input,
             run_id=run_id,
-            text=normalized_text,
+            text=text,
         )
 
         if ack.status != WaitingInputStatus.ACCEPTED:

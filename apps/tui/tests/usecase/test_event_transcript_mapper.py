@@ -6,6 +6,7 @@ from stui.di.strings import TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionRunValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -41,6 +42,7 @@ from stui.port.event_models import (
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
     ActionOpenUrlItem,
+    ActionRunItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
@@ -786,6 +788,37 @@ def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished(
     assert isinstance(items[0], RunFinishedItem)
     assert items[0].status == "error"
     assert items[0].message == "failed"
+
+
+def test_event_transcript_mapper_keeps_run_finished_action() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_FINISHED,
+                payload=RunFinishedPayload(
+                    status="SUCCEEDED",
+                    action=ActionRunValue(
+                        type="run",
+                        label="Open follow-up",
+                        arg="--file ./flows/followup.yaml",
+                        params="--val pepe",
+                        auto=True,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], RunFinishedItem)
+    assert items[0].status == "succeeded"
+    assert isinstance(items[0].action, ActionRunItem)
+    assert items[0].action.label == "Open follow-up"
+    assert items[0].action.arg == "--file ./flows/followup.yaml"
+    assert items[0].action.params == "--val pepe"
+    assert items[0].action.auto is True
 
 
 def _event(

@@ -7,6 +7,7 @@ from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionRunValue,
     ActionValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
@@ -34,6 +35,7 @@ from stui.port.event_models import (
 from stui.viewmodel.console_screen_state import (
     ActionItem,
     ActionOpenUrlItem,
+    ActionRunItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
@@ -266,7 +268,7 @@ class EventTranscriptMapper:
                     step_id=event.step_id,
                     step_type=event.step_type,
                     message=output_value.message,
-                    action=_notify_action_item(output_value.action),
+                    action=_action_item(output_value.action),
                 )
             output_value = cast(NotifyOutputValue, payload.output.value)
             return StepNotifyOutputItem(
@@ -360,12 +362,22 @@ class EventTranscriptMapper:
                     sequence=event.sequence,
                     run_id=event.run_id,
                     status="succeeded",
+                    action=(
+                        _action_item(payload.action)
+                        if payload.action is not None
+                        else None
+                    ),
                 )
             return RunFinishedItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 status="error",
                 message="failed",
+                action=(
+                    _action_item(payload.action)
+                    if payload.action is not None
+                    else None
+                ),
             )
 
         return None
@@ -377,7 +389,7 @@ def _payload(event: LogEvent, expected: type) -> object:
     return event.payload
 
 
-def _notify_action_item(action: ActionValue) -> ActionItem:
+def _action_item(action: ActionValue) -> ActionItem:
     if isinstance(action, ActionOpenUrlValue):
         return ActionOpenUrlItem(
             type=action.type,
@@ -386,10 +398,17 @@ def _notify_action_item(action: ActionValue) -> ActionItem:
             url=action.url,
             auto=action.auto,
         )
+    if isinstance(action, ActionRunValue):
+        return ActionRunItem(
+            type=action.type,
+            label=action.label,
+            arg=action.arg,
+            params=action.params,
+            auto=action.auto,
+        )
     return ActionItem(
         type=action.type,
         label=action.label,
-        message=action.message,
     )
 
 

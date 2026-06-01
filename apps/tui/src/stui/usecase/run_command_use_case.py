@@ -14,7 +14,6 @@ from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
     PromptMode,
-    RunAckItem,
     UserInputItem,
     ViewStatusKind,
 )
@@ -78,10 +77,7 @@ class RunCommandUseCase:
             status=RunStatus.RUNNING,
         )
         state.load_session(run_id=ack.run_id, run_name=raw_args)
-        state.set_transcript(
-            mode=state.transcript.mode,
-            items=[RunAckItem(skill=raw_args, run_id=ack.run_id)],
-        )
+        state.set_transcript(mode=state.transcript.mode)
         state.set_autocompletion()
         state.set_prompt(mode=PromptMode.DEFAULT)
         state.set_status(kind=ViewStatusKind.RUNNING)

@@ -32,7 +32,12 @@ from skiller.application.use_cases.render.render_mcp_config import (
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
+from skiller.application.use_cases.run.resolve_end_action import (
+    ResolveEndActionInput,
+    ResolveEndActionUseCase,
+)
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
+from skiller.domain.action.action_model import EndActionTrigger, RunAction
 from skiller.domain.event.event_model import (
     RunFinishedPayload,
     RuntimeEventType,
@@ -71,6 +76,7 @@ class RunExecutor:
         fail_run_use_case: FailRunUseCase,
         append_runtime_event_use_case: AppendRuntimeEventUseCase,
         sync_snapshot_use_case: SyncSnapshotUseCase,
+        resolve_end_action_use_case: ResolveEndActionUseCase,
         render_current_step_use_case: RenderCurrentStepUseCase,
         render_mcp_config_use_case: RenderMcpConfigUseCase,
         execute_agent_step_use_case: ExecuteAgentStepUseCase,
@@ -89,6 +95,7 @@ class RunExecutor:
         self.fail_run_use_case = fail_run_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
         self.sync_snapshot_use_case = sync_snapshot_use_case
+        self.resolve_end_action_use_case = resolve_end_action_use_case
         self.render_current_step_use_case = render_current_step_use_case
         self.render_mcp_config_use_case = render_mcp_config_use_case
         self.execute_agent_step_use_case = execute_agent_step_use_case
@@ -116,8 +123,17 @@ class RunExecutor:
 
                 if status == CurrentStepStatus.DONE:
                     self.complete_run_use_case.execute(run_id)
-                    self._append_run_finished(run_id, status=RunExecutionStatus.SUCCEEDED)
-                    return self.finish(run_id, RunExecutionStatus.SUCCEEDED)
+                    result = self.finish(run_id, RunExecutionStatus.SUCCEEDED)
+                    action = self._resolve_end_action(
+                        result,
+                        EndActionTrigger.ON_SUCCESS,
+                    )
+                    self._append_run_finished(
+                        run_id,
+                        status=RunExecutionStatus.SUCCEEDED,
+                        action=action,
+                    )
+                    return result
 
                 if status == CurrentStepStatus.CANCELLED:
                     return self.finish(run_id, RunExecutionStatus.CANCELLED)
@@ -153,8 +169,17 @@ class RunExecutor:
                 if execution_result.status == StepExecutionStatus.COMPLETED:
                     self._append_step_success(run_id, current_step, execution_result)
                     self.complete_run_use_case.execute(run_id)
-                    self._append_run_finished(run_id, status=RunExecutionStatus.SUCCEEDED)
-                    return self.finish(run_id, RunExecutionStatus.SUCCEEDED)
+                    result = self.finish(run_id, RunExecutionStatus.SUCCEEDED)
+                    action = self._resolve_end_action(
+                        result,
+                        EndActionTrigger.ON_SUCCESS,
+                    )
+                    self._append_run_finished(
+                        run_id,
+                        status=RunExecutionStatus.SUCCEEDED,
+                        action=action,
+                    )
+                    return result
 
                 if execution_result.status == StepExecutionStatus.WAITING:
                     self._append_run_waiting(run_id, current_step, execution_result)
@@ -170,9 +195,7 @@ class RunExecutor:
         run_id: str,
         status: RunExecutionStatus,
     ) -> RunExecutionResult:
-        result = RunExecutionResult(run_id=run_id, status=status)
-        self.on_finish(result)
-        return result
+        return RunExecutionResult(run_id=run_id, status=status)
 
     def fail(
         self,
@@ -185,21 +208,32 @@ class RunExecutor:
             self._append_step_error(run_id, step, error)
 
         self.fail_run_use_case.execute(run_id, error=error)
-        self._append_run_finished(run_id, status=RunExecutionStatus.FAILED, error=error)
 
         result = RunExecutionResult(
             run_id=run_id,
             status=RunExecutionStatus.FAILED,
             error=error,
         )
-        self.on_error(result)
+        action = self._resolve_end_action(result, EndActionTrigger.ON_ERROR)
+        self._append_run_finished(
+            run_id,
+            status=RunExecutionStatus.FAILED,
+            error=error,
+            action=action,
+        )
         return result
 
-    def on_finish(self, result: RunExecutionResult) -> None:
-        pass
-
-    def on_error(self, result: RunExecutionResult) -> None:
-        pass
+    def _resolve_end_action(
+        self,
+        result: RunExecutionResult,
+        trigger: EndActionTrigger,
+    ) -> RunAction | None:
+        return self.resolve_end_action_use_case.execute(
+            ResolveEndActionInput(
+                run_id=result.run_id,
+                trigger=trigger,
+            )
+        ).action
 
     def _execute_ready_step(self, current_step: CurrentStep) -> StepAdvance:
         if current_step.step_type == StepType.AGENT:
@@ -316,9 +350,10 @@ class RunExecutor:
         *,
         status: RunExecutionStatus,
         error: str | None = None,
+        action: RunAction | None = None,
     ) -> None:
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_FINISHED,
-            payload=RunFinishedPayload(status=status.value, error=error),
+            payload=RunFinishedPayload(status=status.value, error=error, action=action),
         )

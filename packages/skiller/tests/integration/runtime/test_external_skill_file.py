@@ -62,6 +62,10 @@ from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
+from skiller.application.use_cases.run.resolve_end_action import ResolveEndActionUseCase
+from skiller.application.use_cases.run.resolve_end_action_config import (
+    ResolveEndActionConfigParser,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
@@ -78,6 +82,8 @@ from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBoot
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
+from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
+from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -120,6 +126,10 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     skill_runner = FilesystemSkillRunner(
         skills_dir="skills",
+    )
+    flow_port = FilesystemFlowPort(
+        flows_dir=str(skill_runner.skills_dir),
+        mapper=FlowYamlMapper(),
     )
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
@@ -192,11 +202,16 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         runner=skill_runner,
         events=runtime_event_store,
     )
+    resolve_end_action_use_case = ResolveEndActionUseCase(
+        store=store,
+        config_parser=ResolveEndActionConfigParser(skill_runner),
+    )
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         sync_snapshot_use_case=sync_snapshot_use_case,
+        resolve_end_action_use_case=resolve_end_action_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
@@ -221,7 +236,7 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         delete_run_use_case=DeleteRunUseCase(store),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
-        flow_checker_use_case=FlowCheckerUseCase(runner=skill_runner),
+        flow_checker_use_case=FlowCheckerUseCase(flow_port=flow_port),
         flow_readiness_checker_use_case=FlowReadinessCheckerUseCase(
             runner=skill_runner,
             server_status=_FakeServerStatus(),

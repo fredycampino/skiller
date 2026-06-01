@@ -12,6 +12,7 @@ from stui.port.event_models import (
     ActionBaseValue,
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionRunValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -29,6 +30,7 @@ from stui.port.event_models import (
     OutputValue,
     RouteOutputValue,
     RunCreatePayload,
+    RunFinishedPayload,
     RunSnapshotFailedPayload,
     RunSnapshotUpdatedPayload,
     RunWaitingPayload,
@@ -155,6 +157,48 @@ def test_cli_log_event_adapter_parses_run_snapshot_failed_payload() -> None:
         source="internal",
         ref="mono",
         error="Could not sync snapshot 'mono'",
+    )
+
+
+def test_cli_log_event_adapter_parses_run_finished_action_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 3,
+                "id": "event-3",
+                "run_id": "run-1",
+                "type": "RUN_FINISHED",
+                "step_id": None,
+                "step_type": None,
+                "agent_sequence": None,
+                "created_at": "2026-06-01T10:30:16Z",
+                "payload": {
+                    "status": "SUCCEEDED",
+                    "action": {
+                        "type": "run",
+                        "label": "Open follow-up",
+                        "arg": "--file ./flows/followup.yaml",
+                        "params": "--val pepe",
+                        "auto": True,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.RUN_FINISHED
+    assert event.step_id is None
+    assert event.step_type is None
+    assert event.agent_sequence is None
+    assert event.payload == RunFinishedPayload(
+        status="SUCCEEDED",
+        action=ActionRunValue(
+            type="run",
+            label="Open follow-up",
+            arg="--file ./flows/followup.yaml",
+            params="--val pepe",
+            auto=True,
+        ),
     )
 
 
@@ -333,7 +377,7 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
     )
 
 
-def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
+def test_cli_log_event_adapter_maps_run_notify_action() -> None:
     event = _mapped_event(
         [
             {
@@ -354,7 +398,6 @@ def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
                             "action": {
                                 "type": "run",
                                 "label": "Run flow",
-                                "message": "Run a follow-up flow.",
                                 "arg": "ci",
                                 "params": "--fast",
                                 "auto": False,
@@ -371,10 +414,55 @@ def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
     assert event.payload.output.value == NotifyActionValue(
         message="Run follow-up",
         format=NotifyOutputFormat.MARKDOWN,
-        action=ActionBaseValue(
+        action=ActionRunValue(
             type="run",
             label="Run flow",
-            message="Run a follow-up flow.",
+            arg="ci",
+            params="--fast",
+            auto=False,
+        ),
+    )
+
+
+def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "custom_action",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "Custom action",
+                        "value": {
+                            "message": "Custom action",
+                            "format": "markdown",
+                            "action": {
+                                "type": "custom",
+                                "label": "Do custom",
+                                "message": "Custom action.",
+                                "data": "kept by runtime only",
+                            },
+                        },
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == NotifyActionValue(
+        message="Custom action",
+        format=NotifyOutputFormat.MARKDOWN,
+        action=ActionBaseValue(
+            type="custom",
+            label="Do custom",
         ),
     )
 

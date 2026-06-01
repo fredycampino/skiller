@@ -29,6 +29,8 @@ Optional root blocks:
 - `version`
 - `inputs`
 - `mcp`
+- `on_success`
+- `on_error`
 
 ## Root `inputs`
 
@@ -137,6 +139,28 @@ mcp:
       - /opt/local-mcp/local_mcp.py
     cwd: /opt/local-mcp
 ```
+
+## Root End Actions
+
+`on_success` and `on_error` may define a run action to expose after the run
+finishes.
+
+```yaml
+on_error:
+  action:
+    type: run
+    label: "Debug failure"
+    arg: "--file ./flows/debug.yaml"
+    params: "--run {{inputs.run_id}}"
+    auto: true
+```
+
+Rules:
+- `action.type` must be `run`
+- `action.label` is required
+- `action.arg` is required
+- `action.params` is optional
+- `action.auto` is optional and defaults to `false`
 
 ## `shell` Example
 

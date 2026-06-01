@@ -1,6 +1,10 @@
 import pytest
 
-from skiller.domain.action.action_model import ActionStatus, ActionType
+from skiller.domain.action.action_model import (
+    ActionStatus,
+    ActionType,
+    RunAction,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -12,6 +16,7 @@ from skiller.domain.event.event_model import (
     AgentBodyToolMessage,
     AgentEventPayload,
     AgentLifecyclePayload,
+    RunFinishedPayload,
     RuntimeEventDraft,
     RuntimeEventType,
     RunWaitingPayload,
@@ -183,6 +188,67 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
     assert events[0].model_dump(mode="json")["payload"] == {
         "type": "open_url",
         "status": "done",
+    }
+
+
+def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
+    db_path = tmp_path / "runtime-run-end-action-events.db"
+    run_store = SqliteStateStore(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440042"
+    run_store.create_run(
+        "internal",
+        "skill",
+        {"start": "done", "steps": [{"notify": "done"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    event_id = runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.RUN_FINISHED,
+            payload=RunFinishedPayload(
+                status="FAILED",
+                error="run failed",
+                action=RunAction(
+                    label="Debug failure",
+                    arg="--file ./flows/debug.yaml",
+                    params="--val pepe",
+                    auto=True,
+                ),
+            ),
+        )
+    )
+
+    events = runtime_event_store.list_events(run_id)
+
+    assert len(events) == 1
+    assert events[0].id == event_id
+    assert events[0].type == RuntimeEventType.RUN_FINISHED
+    assert events[0].step_id is None
+    assert events[0].step_type is None
+    assert events[0].payload == RunFinishedPayload(
+        status="FAILED",
+        error="run failed",
+        action=RunAction(
+            label="Debug failure",
+            arg="--file ./flows/debug.yaml",
+            params="--val pepe",
+            auto=True,
+        ),
+    )
+    assert events[0].model_dump(mode="json")["payload"] == {
+        "status": "FAILED",
+        "error": "run failed",
+        "action": {
+            "type": "run",
+            "label": "Debug failure",
+            "arg": "--file ./flows/debug.yaml",
+            "params": "--val pepe",
+            "auto": True,
+        },
     }
 
 

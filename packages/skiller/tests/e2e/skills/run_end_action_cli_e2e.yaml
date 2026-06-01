@@ -1,0 +1,18 @@
+name: run_end_action_cli_e2e
+description: "CLI e2e for RUN_FINISHED action payload"
+version: "0.1"
+start: done
+
+inputs: {}
+
+on_success:
+  action:
+    type: run
+    label: "Open follow-up"
+    arg: "--file ./flows/followup.yaml"
+    params: "--val pepe"
+    auto: true
+
+steps:
+  - notify: done
+    message: "Done."

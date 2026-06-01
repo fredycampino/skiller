@@ -15,6 +15,11 @@ class RunFinishedView(TranscriptView):
     item: RunFinishedItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:
+        text = Text(style=theme.color_text_muted)
         if self.item.status == "error":
-            return Text("  failed", style=theme.color_text_muted)
-        return Text("  succeeded", style=theme.color_text_muted)
+            text.append("  failed")
+        else:
+            text.append("  succeeded")
+        if self.item.action is not None:
+            text.append(f"\n  {self.item.action.type} {self.item.action.label}")
+        return text

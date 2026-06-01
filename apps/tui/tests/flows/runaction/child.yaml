@@ -1,0 +1,12 @@
+name: tui_run_action_child
+description: "Child flow launched by RUN_FINISHED run action"
+version: "0.1"
+start: show_message
+
+inputs:
+  message:
+    required: true
+
+steps:
+  - notify: show_message
+    message: "Child received: {{inputs.message}}"

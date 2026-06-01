@@ -1,0 +1,18 @@
+name: tui_run_action_parent
+description: "Parent flow for RUN_FINISHED run action payload"
+version: "0.1"
+start: done
+
+inputs: {}
+
+on_success:
+  action:
+    type: run
+    label: "Run child flow"
+    arg: "--file apps/tui/tests/flows/runaction/child.yaml"
+    params: "--arg message=hello-from-parent"
+    auto: false
+
+steps:
+  - notify: done
+    message: "Parent done."

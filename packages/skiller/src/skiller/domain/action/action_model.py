@@ -12,6 +12,11 @@ class ActionStatus(StrEnum):
     DONE = "done"
 
 
+class EndActionTrigger(StrEnum):
+    ON_SUCCESS = "on_success"
+    ON_ERROR = "on_error"
+
+
 @dataclass(frozen=True, kw_only=True)
 class ActionBase:
     type: ClassVar[ActionType]

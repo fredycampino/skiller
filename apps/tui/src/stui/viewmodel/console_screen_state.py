@@ -185,16 +185,23 @@ class StepNotifyOutputItem(TranscriptItem):
 class ActionItem:
     type: str
     label: str
-    message: str | None = None
 
 
 @dataclass(frozen=True)
 class ActionOpenUrlItem(ActionItem):
+    message: str | None = None
     url: str = ""
     auto: bool = False
 
 
-ActionNotifyItem = ActionOpenUrlItem | ActionItem
+@dataclass(frozen=True)
+class ActionRunItem(ActionItem):
+    arg: str = ""
+    params: str | None = None
+    auto: bool = False
+
+
+ActionTranscriptItem = ActionOpenUrlItem | ActionRunItem | ActionItem
 
 
 @dataclass(frozen=True)
@@ -203,7 +210,7 @@ class StepNotifyActionItem(TranscriptItem):
     step_id: str
     step_type: str
     message: str
-    action: ActionNotifyItem
+    action: ActionTranscriptItem
 
 
 @dataclass(frozen=True)
@@ -238,6 +245,7 @@ class RunFinishedItem(TranscriptItem):
     run_id: str
     status: str
     message: str = ""
+    action: ActionTranscriptItem | None = None
 
 
 @dataclass(frozen=True)

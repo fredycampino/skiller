@@ -220,7 +220,7 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
     asyncio.run(run())
 
 
-def test_submit_waiting_input_use_case_normalizes_user_text(
+def test_submit_waiting_input_use_case_preserves_user_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
@@ -254,10 +254,10 @@ def test_submit_waiting_input_use_case_normalizes_user_text(
         await use_case.execute(
             FakeObserver(),
             state=ConsoleScreenState(session_key="main"),
-            text="  hello world  ",
+            text="  hello world  \nsecond line",
         )
 
-        assert waiting_port.called_with == [("run-1234", "hello world")]
+        assert waiting_port.called_with == [("run-1234", "  hello world  \nsecond line")]
 
     asyncio.run(run())
 

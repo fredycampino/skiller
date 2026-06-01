@@ -41,16 +41,23 @@ class NotifyActionStatus(StrEnum):
 class ActionBaseValue:
     type: str
     label: str
-    message: str | None = None
 
 
 @dataclass(frozen=True)
 class ActionOpenUrlValue(ActionBaseValue):
+    message: str | None = None
     url: str = ""
     auto: bool = False
 
 
-ActionValue: TypeAlias = ActionBaseValue | ActionOpenUrlValue
+@dataclass(frozen=True)
+class ActionRunValue(ActionBaseValue):
+    arg: str = ""
+    params: str | None = None
+    auto: bool = False
+
+
+ActionValue: TypeAlias = ActionBaseValue | ActionOpenUrlValue | ActionRunValue
 
 
 @dataclass(frozen=True)
@@ -197,6 +204,7 @@ class RunWaitingPayload:
 class RunFinishedPayload:
     status: str
     error: str | None = None
+    action: ActionValue | None = None
 
 
 @dataclass(frozen=True)

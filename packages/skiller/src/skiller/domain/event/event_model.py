@@ -4,7 +4,13 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import StrEnum
 from typing import Any, TypeAlias
 
-from skiller.domain.action.action_model import ActionStatus, ActionType
+from skiller.domain.action.action_model import (
+    ActionStatus,
+    ActionType,
+    RunAction,
+    action_from_dict,
+    action_to_public_dict,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
     AgentToolCallPayload,
@@ -67,6 +73,7 @@ class RunWaitingPayload:
 class RunFinishedPayload:
     status: str
     error: str | None = None
+    action: RunAction | None = None
 
 
 @dataclass(frozen=True)
@@ -188,6 +195,14 @@ def runtime_event_payload_to_dict(payload: object) -> dict[str, Any]:
             "body": agent_event_body_to_dict(payload.body),
         }
 
+    if isinstance(payload, RunFinishedPayload):
+        result = {"status": payload.status}
+        if payload.error is not None:
+            result["error"] = payload.error
+        if payload.action is not None:
+            result["action"] = action_to_public_dict(payload.action)
+        return result
+
     if is_dataclass(payload):
         return _without_none(asdict(payload))
 
@@ -263,10 +278,17 @@ def runtime_event_payload_from_dict(
         )
 
     if event_type == RuntimeEventType.RUN_FINISHED:
+        raw_action = value.get("action")
+        action = None
+        if raw_action is not None:
+            action = action_from_dict(_dict_value(raw_action))
+            if not isinstance(action, RunAction):
+                raise ValueError("RUN_FINISHED action must be run action")
         error = value.get("error")
         return RunFinishedPayload(
             status=str(value.get("status", "")),
             error=str(error) if error is not None else None,
+            action=action,
         )
 
     if event_type == RuntimeEventType.STEP_STARTED:

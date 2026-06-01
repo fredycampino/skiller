@@ -24,6 +24,7 @@ from stui.usecase.project_transcript_use_case import (
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
+from stui.usecase.run_finished_action_use_case import RunFinishedActionUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -53,6 +54,7 @@ class ConsoleScreenUseCases:
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
+    run_finished_action: RunFinishedActionUseCase
     start_console: StartConsoleUseCase
     submit_waiting_input: SubmitWaitingInputUseCase
     toggle_agent_stats: ToggleAgentStatsUseCase

@@ -80,6 +80,10 @@ from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
+from skiller.application.use_cases.run.resolve_end_action import ResolveEndActionUseCase
+from skiller.application.use_cases.run.resolve_end_action_config import (
+    ResolveEndActionConfigParser,
+)
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
@@ -106,6 +110,8 @@ from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEv
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
+from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
+from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -144,8 +150,13 @@ def build_runtime_container(
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
-    skill_runner: RunnerPort = FilesystemSkillRunner(
+    filesystem_skill_runner = FilesystemSkillRunner(
         skills_dir=skills_dir,
+    )
+    skill_runner: RunnerPort = filesystem_skill_runner
+    flow_port = FilesystemFlowPort(
+        flows_dir=str(filesystem_skill_runner.skills_dir),
+        mapper=FlowYamlMapper(),
     )
     shell_tool = ShellProcessTool()
     notify_tool = NotifyTool()
@@ -205,7 +216,7 @@ def build_runtime_container(
         store=store,
         steering=agent_steering_store,
     )
-    flow_checker_use_case = FlowCheckerUseCase(runner=skill_runner)
+    flow_checker_use_case = FlowCheckerUseCase(flow_port=flow_port)
     flow_readiness_checker_use_case = FlowReadinessCheckerUseCase(
         runner=skill_runner,
         server_status=server_status,
@@ -309,11 +320,16 @@ def build_runtime_container(
         runner=skill_runner,
         events=runtime_event_store,
     )
+    resolve_end_action_use_case = ResolveEndActionUseCase(
+        store=store,
+        config_parser=ResolveEndActionConfigParser(skill_runner),
+    )
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         sync_snapshot_use_case=sync_snapshot_use_case,
+        resolve_end_action_use_case=resolve_end_action_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,

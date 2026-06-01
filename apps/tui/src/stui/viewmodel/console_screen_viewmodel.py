@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 
 from stui.port.event_models import LogEvent
 from stui.port.event_port import LogEventsListener
 from stui.usecase.normalize_command_use_case import (
+    Command,
     CommandKind,
 )
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
@@ -58,8 +60,14 @@ class ConsoleScreenViewModel(LogEventsListener):
         notify_action_result = self._use_cases.notify_action.execute(
             state=agent_usage_result.state,
         )
+        run_finished_action_result = self._use_cases.run_finished_action.execute(
+            state=notify_action_result.state,
+        )
         self.state = notify_action_result.state
         self._emit_state()
+        command = run_finished_action_result.command
+        if command is not None:
+            asyncio.create_task(self._execute_run_finished_action(command))
 
     def open_notify_action_link(
         self,
@@ -87,6 +95,15 @@ class ConsoleScreenViewModel(LogEventsListener):
             state=self.state,
             run_id=run_id,
             step_id=step_id,
+        )
+        self.state = result.state
+        self._emit_state()
+
+    async def _execute_run_finished_action(self, command: Command) -> None:
+        result = await self._use_cases.run_command.execute(
+            self,
+            state=self.state,
+            command=command,
         )
         self.state = result.state
         self._emit_state()
@@ -124,14 +141,14 @@ class ConsoleScreenViewModel(LogEventsListener):
             return
 
         if (
-            command.kind == CommandKind.FREE_TEXT
+            command.kind in {CommandKind.FREE_TEXT, CommandKind.UNKNOWN}
             and self._run_event_context.status == RunStatus.WAITING_INPUT
             and self._run_event_context.run_id
         ):
             result = await self._use_cases.submit_waiting_input.execute(
                 self,
                 state=self.state,
-                text=command.raw_text,
+                text=text,
             )
             self.state = result.state
             self._emit_state()

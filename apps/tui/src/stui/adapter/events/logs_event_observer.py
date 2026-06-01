@@ -16,11 +16,6 @@ from stui.port.event_port import (
 )
 from stui.port.run_port import RunPort, RunRuntimeStatus
 
-_STOP_EVENT_TYPES = {
-    LogEventType.RUN_WAITING,
-    LogEventType.RUN_FINISHED,
-}
-
 
 class CliLogEventSource(Protocol):
     def list(
@@ -102,14 +97,22 @@ class LogsEventObserver(LogEventsObserver):
         try:
             while self._listener is listener:
                 events = await asyncio.to_thread(self._list_next_events, listener)
-                if events:
-                    self._last_seen_sequence = max(event.sequence for event in events)
-                    self._pending_stop = _ends_in_stop(events)
-                    listener.notify(events)
-                elif self._pending_stop:
+                if not events and self._pending_stop:
                     self._listener = None
                     self._pending_stop = False
                     return
+                if not events:
+                    await asyncio.sleep(self._current_interval_seconds)
+                    continue
+
+                self._last_seen_sequence = max(event.sequence for event in events)
+                if _ends_in_finished(events):
+                    listener.notify(events)
+                    self._listener = None
+                    return
+
+                self._pending_stop = _ends_in_waiting(events)
+                listener.notify(events)
                 await asyncio.sleep(self._current_interval_seconds)
         except asyncio.CancelledError:
             raise
@@ -173,7 +176,13 @@ class LogsEventObserver(LogEventsObserver):
             return None
 
 
-def _ends_in_stop(events: list[LogEvent]) -> bool:
+def _ends_in_finished(events: list[LogEvent]) -> bool:
     if not events:
         return False
-    return events[-1].event_type in _STOP_EVENT_TYPES
+    return events[-1].event_type == LogEventType.RUN_FINISHED
+
+
+def _ends_in_waiting(events: list[LogEvent]) -> bool:
+    if not events:
+        return False
+    return events[-1].event_type == LogEventType.RUN_WAITING

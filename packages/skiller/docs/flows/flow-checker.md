@@ -25,6 +25,13 @@ The checker returns `FLOW_*` error codes for YAML flow validation.
 | `FLOW_STEPS_INVALID` | `steps` exists but is not a list | `FLOW_STEPS_INVALID: flow steps must be a list` |
 | `FLOW_STEPS_EMPTY` | `steps` exists but is empty | `FLOW_STEPS_EMPTY: flow requires at least one step` |
 | `FLOW_START_STEP_NOT_FOUND` | `start` does not reference an existing `step_id` | `FLOW_START_STEP_NOT_FOUND: start references unknown step_id (start={start_step_id})` |
+| `FLOW_END_ACTION_INVALID` | `on_success` or `on_error` exists but is not an object | `FLOW_END_ACTION_INVALID: end action config must be an object (trigger={trigger})` |
+| `FLOW_END_ACTION_ACTION_INVALID` | `on_success.action` or `on_error.action` is missing or is not an object | `FLOW_END_ACTION_ACTION_INVALID: end action requires action object (trigger={trigger})` |
+| `FLOW_END_ACTION_TYPE_UNSUPPORTED` | root end action type is not `run` | `FLOW_END_ACTION_TYPE_UNSUPPORTED: end action type must be run (trigger={trigger})` |
+| `FLOW_END_ACTION_LABEL_MISSING` | root end action has no non-empty `label` | `FLOW_END_ACTION_LABEL_MISSING: end action requires non-empty label (trigger={trigger})` |
+| `FLOW_END_ACTION_ARG_MISSING` | root end action has no non-empty `arg` | `FLOW_END_ACTION_ARG_MISSING: end action requires non-empty arg (trigger={trigger})` |
+| `FLOW_END_ACTION_PARAMS_INVALID` | root end action `params` exists but is not a string | `FLOW_END_ACTION_PARAMS_INVALID: end action params must be string (trigger={trigger})` |
+| `FLOW_END_ACTION_AUTO_INVALID` | root end action `auto` exists but is not boolean | `FLOW_END_ACTION_AUTO_INVALID: end action auto must be boolean (trigger={trigger})` |
 | `FLOW_STEP_PRIMARY_HEADER_MISSING` | a step item has no primary header like `notify`, `shell`, `switch`, etc. | `FLOW_STEP_PRIMARY_HEADER_MISSING: step requires a primary header (index={step_index})` |
 | `FLOW_STEP_PRIMARY_HEADER_INVALID` | a step uses an unsupported primary header | `FLOW_STEP_PRIMARY_HEADER_INVALID: unsupported step type (index={step_index}, step_type={step_type})` |
 | `FLOW_STEP_ID_MISSING` | a step primary header has an empty `step_id` | `FLOW_STEP_ID_MISSING: step requires non-empty step_id (index={step_index}, step_type={step_type})` |

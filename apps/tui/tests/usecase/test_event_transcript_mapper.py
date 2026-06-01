@@ -21,7 +21,6 @@ from stui.port.event_models import (
     LogEventPayload,
     LogEventType,
     NotifyActionStatus,
-    NotifyActionType,
     NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
@@ -29,6 +28,8 @@ from stui.port.event_models import (
     RouteOutputValue,
     RunFinishedPayload,
     RunResumePayload,
+    RunSnapshotFailedPayload,
+    RunSnapshotUpdatedPayload,
     RunWaitingPayload,
     ShellOutputValue,
     StepErrorPayload,
@@ -39,6 +40,7 @@ from stui.port.event_models import (
 )
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.viewmodel.console_screen_state import (
+    ActionOpenUrlItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
@@ -50,6 +52,8 @@ from stui.viewmodel.console_screen_state import (
     NotifyActionDoneItem,
     OutputFormat,
     RunFinishedItem,
+    RunSnapshotStatus,
+    RunSyncSnapshotItem,
     RunWaitingInputItem,
     RunWaitingWebhookItem,
     StepErrorItem,
@@ -158,7 +162,7 @@ def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -
                 step_id="auth_link",
                 step_type="notify",
                 payload=ActionDonePayload(
-                    action_type=NotifyActionType.OPEN_URL,
+                    type="open_url",
                     status=NotifyActionStatus.DONE,
                 ),
             ),
@@ -170,8 +174,57 @@ def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -
     assert items[0].run_id == "run-1"
     assert items[0].step_id == "auth_link"
     assert items[0].step_type == "notify"
-    assert items[0].action_type == "open_url"
+    assert items[0].type == "open_url"
     assert items[0].status == "done"
+
+
+def test_event_transcript_mapper_uses_snapshot_updated_as_run_snapshot_item() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_SNAPSHOT_UPDATED,
+                payload=RunSnapshotUpdatedPayload(source="internal", ref="mono"),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert items[0] == RunSyncSnapshotItem(
+        sequence=1,
+        run_id="run-1",
+        source="internal",
+        ref="mono",
+        status=RunSnapshotStatus.UPDATED,
+    )
+
+
+def test_event_transcript_mapper_uses_snapshot_failed_as_run_snapshot_item() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_SNAPSHOT_FAILED,
+                payload=RunSnapshotFailedPayload(
+                    source="internal",
+                    ref="mono",
+                    error="Could not sync snapshot 'mono'",
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert items[0] == RunSyncSnapshotItem(
+        sequence=1,
+        run_id="run-1",
+        source="internal",
+        ref="mono",
+        status=RunSnapshotStatus.FAILED,
+        error="Could not sync snapshot 'mono'",
+    )
 
 
 def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_output() -> None:
@@ -317,12 +370,11 @@ def test_event_transcript_mapper_uses_notify_action_as_step_notify_action() -> N
                         text="Authorize the app",
                         value=NotifyActionValue(
                             message="Authorize the app",
-                            action_type=NotifyActionType.OPEN_URL,
                             action=ActionOpenUrlValue(
+                                type="open_url",
                                 label="Open authorization",
                                 url="https://example.com/oauth/start",
-                                status=NotifyActionStatus.PENDING,
-                                auto_open=True,
+                                auto=True,
                             ),
                         ),
                         body_ref=None,
@@ -337,13 +389,13 @@ def test_event_transcript_mapper_uses_notify_action_as_step_notify_action() -> N
     assert items[0].step_id == "auth_link"
     assert items[0].step_type == "notify"
     assert items[0].message == "Authorize the app"
-    assert items[0].action_type == "open_url"
-    assert items[0].label == "Open authorization"
-    assert items[0].url == "https://example.com/oauth/start"
-    assert items[0].status == "pending"
-    assert items[0].auto_open is True
-    assert items[0].icon == "•"
-    assert items[0].muted is False
+    assert items[0].action == ActionOpenUrlItem(
+        type="open_url",
+        label="Open authorization",
+        message=None,
+        url="https://example.com/oauth/start",
+        auto=True,
+    )
 
 
 def test_event_transcript_mapper_uses_generic_step_success_as_step_output() -> None:

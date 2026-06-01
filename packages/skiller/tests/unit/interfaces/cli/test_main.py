@@ -56,8 +56,8 @@ class _FakeController:
             }
         ]
         self.status_results: list[dict[str, object]] = [
-            {"id": "run-1", "status": "RUNNING"},
-            {"id": "run-1", "status": "SUCCEEDED"},
+            {"run_id": "run-1", "status": "RUNNING"},
+            {"run_id": "run-1", "status": "SUCCEEDED"},
         ]
         self.list_runs_result: list[dict[str, object]] = [
             {
@@ -162,18 +162,8 @@ class _FakeController:
         )
         return list(self.logs_result)
 
-    def status(
-        self,
-        run_id: str,
-        *,
-        include_context: bool = False,
-    ) -> dict[str, object] | None:
-        self.status_calls.append(
-            {
-                "run_id": run_id,
-                "include_context": include_context,
-            }
-        )
+    def status(self, run_id: str) -> dict[str, object] | None:
+        self.status_calls.append({"run_id": run_id})
         if not self.status_results:
             return None
         if len(self.status_results) == 1:
@@ -279,6 +269,7 @@ def fake_container() -> SimpleNamespace:
         run_service=object(),
         run_mapper=object(),
         query_service=object(),
+        status_mapper=object(),
         wait_service=object(),
         input_wait_mapper=object(),
         channel_wait_mapper=object(),
@@ -413,9 +404,8 @@ def test_run_waiting_result_merges_wait_metadata(
     controller = _FakeController()
     controller.status_results = [
         {
-            "id": "run-1",
+            "run_id": "run-1",
             "status": "WAITING",
-            "current": "ask_user",
             "wait_type": "input",
             "prompt": "Write a short summary",
         }
@@ -434,7 +424,6 @@ def test_run_waiting_result_merges_wait_metadata(
     data, _ = _read_json(capsys)
     assert exit_code == 0
     assert data["status"] == "WAITING"
-    assert data["current"] == "ask_user"
     assert data["wait_type"] == "input"
     assert data["prompt"] == "Write a short summary"
 
@@ -646,7 +635,7 @@ def test_logs_help_describes_raw_events_and_cursor(
     assert "status.last_event_sequence" in captured.out
 
 
-def test_status_command_can_request_runtime_context(
+def test_status_command_prints_runtime_summary(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
@@ -654,20 +643,29 @@ def test_status_command_can_request_runtime_context(
     controller = _FakeController()
     controller.status_results = [
         {
-            "id": "run-1",
+            "run_id": "run-1",
             "status": "WAITING",
-            "current": "ask_user",
-            "context": {"inputs": {}, "step_executions": {}},
+            "wait_type": "input",
+            "prompt": "Write a message",
+            "last_event_sequence": 42,
+            "last_event_type": "RUN_WAITING",
         }
     ]
     _install_runtime(monkeypatch, fake_container, controller)
 
-    exit_code = cli_main.main(["status", "run-1", "--context"])
+    exit_code = cli_main.main(["status", "run-1"])
 
     data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.status_calls == [{"run_id": "run-1", "include_context": True}]
-    assert data["context"] == {"inputs": {}, "step_executions": {}}
+    assert controller.status_calls == [{"run_id": "run-1"}]
+    assert data == {
+        "run_id": "run-1",
+        "status": "WAITING",
+        "wait_type": "input",
+        "prompt": "Write a message",
+        "last_event_sequence": 42,
+        "last_event_type": "RUN_WAITING",
+    }
 
 
 def test_runs_command_normalizes_status_filters(

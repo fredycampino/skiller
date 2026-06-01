@@ -33,21 +33,24 @@ class NotifyOutputFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
-class NotifyActionType(StrEnum):
-    OPEN_URL = "open_url"
-
-
 class NotifyActionStatus(StrEnum):
-    PENDING = "pending"
     DONE = "done"
 
 
 @dataclass(frozen=True)
-class ActionOpenUrlValue:
+class ActionBaseValue:
+    type: str
     label: str
-    url: str
-    status: NotifyActionStatus = NotifyActionStatus.PENDING
-    auto_open: bool = False
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class ActionOpenUrlValue(ActionBaseValue):
+    url: str = ""
+    auto: bool = False
+
+
+ActionValue: TypeAlias = ActionBaseValue | ActionOpenUrlValue
 
 
 @dataclass(frozen=True)
@@ -59,9 +62,8 @@ class NotifyOutputValue:
 @dataclass(frozen=True)
 class NotifyActionValue:
     message: str
-    action: ActionOpenUrlValue
+    action: ActionValue
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
-    action_type: NotifyActionType = NotifyActionType.OPEN_URL
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,8 @@ OutputValue: TypeAlias = (
 class LogEventType(StrEnum):
     RUN_CREATE = "RUN_CREATE"
     RUN_RESUME = "RUN_RESUME"
+    RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
+    RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -156,6 +160,19 @@ class RunResumePayload:
 
 
 @dataclass(frozen=True)
+class RunSnapshotUpdatedPayload:
+    source: str
+    ref: str
+
+
+@dataclass(frozen=True)
+class RunSnapshotFailedPayload:
+    source: str
+    ref: str
+    error: str
+
+
+@dataclass(frozen=True)
 class StepStartedPayload:
     pass
 
@@ -189,7 +206,7 @@ class InputReceivedPayload:
 
 @dataclass(frozen=True)
 class ActionDonePayload:
-    action_type: NotifyActionType
+    type: str
     status: NotifyActionStatus
 
 
@@ -254,6 +271,8 @@ class ErrorPayload:
 LogEventPayload: TypeAlias = (
     RunCreatePayload
     | RunResumePayload
+    | RunSnapshotUpdatedPayload
+    | RunSnapshotFailedPayload
     | StepStartedPayload
     | StepSuccessPayload
     | StepErrorPayload

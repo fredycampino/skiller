@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.agents.mapper import AgentServiceMapper
+from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.runs.mapper import RunServiceMapper
 from skiller.application.runs.models import RunResult
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookResult
@@ -17,12 +18,14 @@ from skiller.application.use_cases.webhook.register_webhook import (
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
+from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
     WebhookPayloadSource,
 )
 from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 from skiller.interfaces.runtime_controller import RuntimeController
 
 pytestmark = pytest.mark.unit
@@ -80,9 +83,26 @@ class _FakeWaitService:
         )
 
 
+class _FakeQueryService:
+    def __init__(self) -> None:
+        self.status_calls: list[str] = []
+
+    def get_status(self, run_id: str) -> RunStatusRuntime:
+        self.status_calls.append(run_id)
+        return RunStatusRuntime(
+            run_id=run_id,
+            status=RunStatus.WAITING,
+            wait_type="input",
+            prompt="Write a message",
+            last_event_sequence=42,
+            last_event_type=RuntimeEventType.RUN_WAITING,
+        )
+
+
 def _controller(
     wait_service: _FakeWaitService,
     run_service: _FakeRunService | None = None,
+    query_service: _FakeQueryService | None = None,
 ) -> RuntimeController:
     final_run_service = run_service or _FakeRunService()
     return RuntimeController(
@@ -90,12 +110,30 @@ def _controller(
         agent_mapper=AgentServiceMapper(),
         run_service=final_run_service,
         run_mapper=RunServiceMapper(),
-        query_service=SimpleNamespace(),
+        query_service=query_service or SimpleNamespace(),
+        status_mapper=RunStatusMapper(),
         wait_service=wait_service,
         input_wait_mapper=InputWaitMapper(),
         channel_wait_mapper=ChannelWaitMapper(),
         webhook_wait_mapper=WebhookWaitMapper(),
     )
+
+
+def test_controller_maps_status_result_to_public_dict() -> None:
+    query_service = _FakeQueryService()
+    controller = _controller(_FakeWaitService(), query_service=query_service)
+
+    result = controller.status(" run-1 ")
+
+    assert query_service.status_calls == ["run-1"]
+    assert result == {
+        "run_id": "run-1",
+        "status": "WAITING",
+        "wait_type": "input",
+        "prompt": "Write a message",
+        "last_event_sequence": 42,
+        "last_event_type": "RUN_WAITING",
+    }
 
 
 def test_controller_maps_create_run_to_typed_service_input() -> None:

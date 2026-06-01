@@ -9,6 +9,7 @@ import pytest
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.log_event_mapper import LogEventMapper
 from stui.port.event_models import (
+    ActionBaseValue,
     ActionDonePayload,
     ActionOpenUrlValue,
     AgentAssistantMessagePayload,
@@ -22,13 +23,14 @@ from stui.port.event_models import (
     LogEventType,
     McpOutputValue,
     NotifyActionStatus,
-    NotifyActionType,
     NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
     OutputValue,
     RouteOutputValue,
     RunCreatePayload,
+    RunSnapshotFailedPayload,
+    RunSnapshotUpdatedPayload,
     RunWaitingPayload,
     SendOutputValue,
     ShellOutputValue,
@@ -94,6 +96,68 @@ def test_cli_log_event_adapter_parses_run_create_payload() -> None:
     assert event.payload.source == "internal"
 
 
+def test_cli_log_event_adapter_parses_run_snapshot_updated_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 2,
+                "id": "event-2",
+                "run_id": "run-1",
+                "type": "RUN_SNAPSHOT_UPDATED",
+                "step_id": None,
+                "step_type": None,
+                "agent_sequence": None,
+                "created_at": "2026-06-01T10:30:15Z",
+                "payload": {
+                    "source": "internal",
+                    "ref": "mono",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.RUN_SNAPSHOT_UPDATED
+    assert event.step_id is None
+    assert event.step_type is None
+    assert event.agent_sequence is None
+    assert event.payload == RunSnapshotUpdatedPayload(
+        source="internal",
+        ref="mono",
+    )
+
+
+def test_cli_log_event_adapter_parses_run_snapshot_failed_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 2,
+                "id": "event-2",
+                "run_id": "run-1",
+                "type": "RUN_SNAPSHOT_FAILED",
+                "step_id": None,
+                "step_type": None,
+                "agent_sequence": None,
+                "created_at": "2026-06-01T10:30:15Z",
+                "payload": {
+                    "source": "internal",
+                    "ref": "mono",
+                    "error": "Could not sync snapshot 'mono'",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.RUN_SNAPSHOT_FAILED
+    assert event.step_id is None
+    assert event.step_type is None
+    assert event.agent_sequence is None
+    assert event.payload == RunSnapshotFailedPayload(
+        source="internal",
+        ref="mono",
+        error="Could not sync snapshot 'mono'",
+    )
+
+
 def test_cli_log_event_adapter_parses_action_done_payload() -> None:
     event = _mapped_event(
         [
@@ -107,7 +171,7 @@ def test_cli_log_event_adapter_parses_action_done_payload() -> None:
                 "agent_sequence": None,
                 "created_at": "2026-05-12T10:30:16Z",
                 "payload": {
-                    "action_type": "open_url",
+                    "type": "open_url",
                     "status": "done",
                 },
             }
@@ -118,7 +182,7 @@ def test_cli_log_event_adapter_parses_action_done_payload() -> None:
     assert event.step_id == "auth_link"
     assert event.step_type == "notify"
     assert event.payload == ActionDonePayload(
-        action_type=NotifyActionType.OPEN_URL,
+        type="open_url",
         status=NotifyActionStatus.DONE,
     )
 
@@ -240,12 +304,12 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
                         "value": {
                             "message": "Authorize the app",
                             "format": "markdown",
-                            "action_type": "open_url",
                             "action": {
+                                "type": "open_url",
                                 "label": "Open authorization",
+                                "message": "Open the auth URL.",
                                 "url": "https://example.com/oauth/start",
-                                "status": "pending",
-                                "auto_open": True,
+                                "auto": True,
                             },
                         },
                         "body_ref": None,
@@ -259,12 +323,58 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
     assert event.payload.output.value == NotifyActionValue(
         message="Authorize the app",
         format=NotifyOutputFormat.MARKDOWN,
-        action_type=NotifyActionType.OPEN_URL,
         action=ActionOpenUrlValue(
+            type="open_url",
             label="Open authorization",
+            message="Open the auth URL.",
             url="https://example.com/oauth/start",
-            status=NotifyActionStatus.PENDING,
-            auto_open=True,
+            auto=True,
+        ),
+    )
+
+
+def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 10,
+                "id": "event-1",
+                "run_id": "run-1",
+                "type": "STEP_SUCCESS",
+                "step_id": "custom_action",
+                "step_type": "notify",
+                "agent_sequence": None,
+                "created_at": "2026-05-12T10:30:15Z",
+                "payload": {
+                    "output": {
+                        "text": "Run follow-up",
+                        "value": {
+                            "message": "Run follow-up",
+                            "format": "markdown",
+                            "action": {
+                                "type": "run",
+                                "label": "Run flow",
+                                "message": "Run a follow-up flow.",
+                                "arg": "ci",
+                                "params": "--fast",
+                                "auto": False,
+                            },
+                        },
+                        "body_ref": None,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert isinstance(event.payload, StepSuccessPayload)
+    assert event.payload.output.value == NotifyActionValue(
+        message="Run follow-up",
+        format=NotifyOutputFormat.MARKDOWN,
+        action=ActionBaseValue(
+            type="run",
+            label="Run flow",
+            message="Run a follow-up flow.",
         ),
     )
 
@@ -287,7 +397,6 @@ def test_cli_log_event_adapter_maps_null_notify_action_as_notify_output() -> Non
                         "value": {
                             "message": "hello",
                             "format": "markdown",
-                            "action_type": "open_url",
                             "action": None,
                         },
                         "body_ref": None,

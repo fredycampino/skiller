@@ -15,6 +15,7 @@ from stui.screen.transcript.agent_tool_result_view import AgentToolResultView
 from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.screen.transcript.run_finished_view import RunFinishedView
+from stui.screen.transcript.run_system_notice_view import RunSystemNoticeView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
 from stui.screen.transcript.run_waiting_webhook_view import RunWaitingWebhookView
 from stui.screen.transcript.step_error_view import StepErrorView
@@ -27,6 +28,8 @@ from stui.viewmodel.console_screen_state import (
     AgentToolResultItem,
     InfoItem,
     RunFinishedItem,
+    RunSnapshotStatus,
+    RunSyncSnapshotItem,
     RunWaitingInputItem,
     RunWaitingWebhookItem,
     StepErrorItem,
@@ -396,6 +399,45 @@ def test_run_waiting_webhook_view_renders_icon_and_message() -> None:
         "↯ Waiting webhook:",
         "  example-auth/GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl",
     ]
+
+
+def test_run_system_notice_view_renders_snapshot_updated_with_strings() -> None:
+    view = RunSystemNoticeView(
+        item=RunSyncSnapshotItem(
+            run_id="run-1",
+            source="internal",
+            ref="mono",
+            status=RunSnapshotStatus.UPDATED,
+        ),
+        strings=TuiStrings(
+            run_snapshot_updated_notice_template="Snapshot OK: {source}/{ref}",
+        ),
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    assert console.export_text().rstrip() == "✓ Snapshot OK: internal/mono"
+
+
+def test_run_system_notice_view_renders_snapshot_failed_with_strings() -> None:
+    view = RunSystemNoticeView(
+        item=RunSyncSnapshotItem(
+            run_id="run-1",
+            source="internal",
+            ref="mono",
+            status=RunSnapshotStatus.FAILED,
+            error="Could not sync snapshot 'mono'",
+        ),
+        strings=TuiStrings(
+            run_snapshot_failed_notice_template="Snapshot KO: {error}",
+        ),
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    assert console.export_text().rstrip() == "! Snapshot KO: Could not sync snapshot 'mono'"
 
 
 def test_render_markdown_inline_code_has_no_background() -> None:

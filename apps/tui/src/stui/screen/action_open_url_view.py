@@ -12,7 +12,7 @@ from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.viewmodel.console_screen_state import NotifyActionState
 
 
-class NotifyActionView(Vertical):
+class ActionOpenUrlView(Vertical):
     class OpenLink(Message):
         def __init__(self, *, state: NotifyActionState) -> None:
             super().__init__()
@@ -98,11 +98,13 @@ class NotifyActionView(Vertical):
             done.display = False
             open_link.label = "open link"
             open_link.remove_class("opened")
+            open_link.disabled = False
             open_link.display = False
             return
         message.update(Text(self._state.message, style=self._theme.color_text_primary))
         done.label = self._strings.notify_action_done_label
         done.display = True
-        open_link.label = self._state.label
+        open_link.label = self._state.action.label
         open_link.set_class(self._opened, "opened")
+        open_link.disabled = not self._state.action.url
         open_link.display = True

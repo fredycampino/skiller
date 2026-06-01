@@ -39,6 +39,11 @@ class AgentStepStopReason(StrEnum):
     CONFIG_INVALID = "config_invalid"
 
 
+class RunSnapshotStatus(StrEnum):
+    UPDATED = "updated"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class TranscriptItem:
     sequence: int | None = field(default=None, kw_only=True)
@@ -140,6 +145,15 @@ class AgentSystemNoticeItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class RunSyncSnapshotItem(TranscriptItem):
+    run_id: str
+    source: str
+    ref: str
+    status: RunSnapshotStatus
+    error: str = ""
+
+
+@dataclass(frozen=True)
 class RunOutputItem(TranscriptItem):
     run_id: str
     step_type: str
@@ -168,18 +182,28 @@ class StepNotifyOutputItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class ActionItem:
+    type: str
+    label: str
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class ActionOpenUrlItem(ActionItem):
+    url: str = ""
+    auto: bool = False
+
+
+ActionNotifyItem = ActionOpenUrlItem | ActionItem
+
+
+@dataclass(frozen=True)
 class StepNotifyActionItem(TranscriptItem):
     run_id: str
     step_id: str
     step_type: str
     message: str
-    action_type: str
-    label: str
-    url: str
-    status: str
-    auto_open: bool = False
-    icon: str = "•"
-    muted: bool = False
+    action: ActionNotifyItem
 
 
 @dataclass(frozen=True)
@@ -187,7 +211,7 @@ class NotifyActionDoneItem(TranscriptItem):
     run_id: str
     step_id: str
     step_type: str
-    action_type: str
+    type: str
     status: str
 
 
@@ -310,10 +334,7 @@ class NotifyActionState:
     run_id: str
     step_id: str
     message: str
-    label: str
-    url: str
-    status: str
-    auto_open: bool = False
+    action: ActionOpenUrlItem
 
 
 @dataclass

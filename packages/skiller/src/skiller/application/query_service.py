@@ -6,6 +6,7 @@ from skiller.application.use_cases.query.get_runs import GetRunsUseCase
 from skiller.application.use_cases.query.get_waiting_metadata import (
     GetWaitingMetadataUseCase,
 )
+from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 
 
 class RunQueryService:
@@ -21,26 +22,34 @@ class RunQueryService:
         self.get_runs_use_case = get_runs_use_case
         self.get_waiting_metadata_use_case = get_waiting_metadata_use_case
 
-    def get_status(
-        self,
-        run_id: str,
-        *,
-        include_context: bool = False,
-    ) -> dict[str, Any] | None:
-        run = self.get_run_status_use_case.execute(run_id)
-        if run is None:
+    def get_status(self, run_id: str) -> RunStatusRuntime | None:
+        status = self.get_run_status_use_case.execute(run_id)
+        if status is None:
             return None
-        payload = run.to_dict()
-        if not include_context:
-            payload.pop("context", None)
+
         waiting_metadata = self.get_waiting_metadata_use_case.execute(run_id)
-        if waiting_metadata is not None:
-            payload.update(waiting_metadata)
         last_event = self.get_run_logs_use_case.latest(run_id)
+
+        wait_type = "none"
+        prompt = ""
+        if waiting_metadata is not None:
+            wait_type = str(waiting_metadata.get("wait_type", "none")).strip() or "none"
+            prompt = str(waiting_metadata.get("prompt", "")).strip()
+
+        last_event_sequence = None
+        last_event_type = None
         if last_event is not None:
-            payload["last_event_sequence"] = last_event.sequence
-            payload["last_event_type"] = last_event.type.value
-        return payload
+            last_event_sequence = last_event.sequence
+            last_event_type = last_event.type
+
+        return RunStatusRuntime(
+            run_id=status.run_id,
+            status=status.status,
+            wait_type=wait_type,
+            prompt=prompt,
+            last_event_sequence=last_event_sequence,
+            last_event_type=last_event_type,
+        )
 
     def get_logs(
         self,

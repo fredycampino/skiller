@@ -1,14 +1,12 @@
 import pytest
 
 from skiller.application.use_cases.execute.execute_notify_step import ExecuteNotifyStepUseCase
+from skiller.domain.action.action_model import OpenUrlAction
 from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.step_execution_model import (
-    NotifyActionStatus,
-    NotifyActionType,
-    NotifyOpenUrlAction,
     NotifyOutput,
     NotifyOutputFormat,
 )
@@ -126,7 +124,7 @@ def test_notify_persists_declared_output_format() -> None:
     }
 
 
-def test_notify_persists_action_with_pending_status() -> None:
+def test_notify_persists_action_message() -> None:
     store = _FakeStore()
     use_case = ExecuteNotifyStepUseCase(store=store)
     next_step = _build_next_step(
@@ -135,8 +133,9 @@ def test_notify_persists_action_with_pending_status() -> None:
             "action": {
                 "type": "open_url",
                 "label": "Open authorization",
+                "message": "Continue in the browser.",
                 "url": "https://example.com/oauth/start",
-                "auto_open": True,
+                "auto": True,
             },
         }
     )
@@ -148,12 +147,11 @@ def test_notify_persists_action_with_pending_status() -> None:
         text="Authorize the app",
         message="Authorize the app",
         format=NotifyOutputFormat.SIMPLE,
-        action_type=NotifyActionType.OPEN_URL,
-        action=NotifyOpenUrlAction(
+        action=OpenUrlAction(
             label="Open authorization",
+            message="Continue in the browser.",
             url="https://example.com/oauth/start",
-            status=NotifyActionStatus.PENDING,
-            auto_open=True,
+            auto=True,
         ),
     )
     assert result.execution.to_public_output_dict() == {
@@ -161,15 +159,53 @@ def test_notify_persists_action_with_pending_status() -> None:
         "value": {
             "message": "Authorize the app",
             "format": NotifyOutputFormat.SIMPLE,
-            "action_type": NotifyActionType.OPEN_URL,
             "action": {
+                "type": "open_url",
                 "label": "Open authorization",
+                "message": "Continue in the browser.",
                 "url": "https://example.com/oauth/start",
-                "status": NotifyActionStatus.PENDING,
-                "auto_open": True,
+                "auto": True,
             },
         },
         "body_ref": None,
+    }
+
+
+def test_notify_defaults_action_message_to_notify_message() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step(
+        {
+            "message": "Authorize the app",
+            "action": {
+                "type": "open_url",
+                "label": "Open authorization",
+                "url": "https://example.com/oauth/start",
+                "auto": True,
+            },
+        }
+    )
+
+    result = use_case.execute(next_step)
+
+    assert result.execution is not None
+    assert result.execution.output == NotifyOutput(
+        text="Authorize the app",
+        message="Authorize the app",
+        format=NotifyOutputFormat.SIMPLE,
+        action=OpenUrlAction(
+            label="Open authorization",
+            message="Authorize the app",
+            url="https://example.com/oauth/start",
+            auto=True,
+        ),
+    )
+    assert result.execution.to_public_output_dict()["value"]["action"] == {
+        "type": "open_url",
+        "label": "Open authorization",
+        "message": "Authorize the app",
+        "url": "https://example.com/oauth/start",
+        "auto": True,
     }
 
 
@@ -194,7 +230,7 @@ def test_notify_rejects_unknown_output_format() -> None:
     assert store.updated_runs == []
 
 
-def test_notify_rejects_invalid_action_auto_open() -> None:
+def test_notify_rejects_invalid_action_auto() -> None:
     store = _FakeStore()
     use_case = ExecuteNotifyStepUseCase(store=store)
     next_step = _build_next_step(
@@ -204,12 +240,34 @@ def test_notify_rejects_invalid_action_auto_open() -> None:
                 "type": "open_url",
                 "label": "Open authorization",
                 "url": "https://example.com/oauth/start",
-                "auto_open": "false",
+                "auto": "false",
             },
         }
     )
 
-    with pytest.raises(ValueError, match="action auto_open must be boolean"):
+    with pytest.raises(ValueError, match="action auto must be boolean"):
+        use_case.execute(next_step)
+
+    assert next_step.context.step_executions == {}
+    assert store.updated_runs == []
+
+
+def test_notify_rejects_invalid_action_message() -> None:
+    store = _FakeStore()
+    use_case = ExecuteNotifyStepUseCase(store=store)
+    next_step = _build_next_step(
+        {
+            "message": "Authorize the app",
+            "action": {
+                "type": "open_url",
+                "label": "Open authorization",
+                "message": ["invalid"],
+                "url": "https://example.com/oauth/start",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="action message must be string"):
         use_case.execute(next_step)
 
     assert next_step.context.step_executions == {}

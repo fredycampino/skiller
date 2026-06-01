@@ -15,8 +15,9 @@ steps:
     action:
       type: open_url
       label: "Open authorization"
+      message: "Continue authorization in the browser."
       url: "https://www.google.com/"
-      auto_open: true
+      auto: true
     next: wait_any_text
 
   - wait_input: wait_any_text

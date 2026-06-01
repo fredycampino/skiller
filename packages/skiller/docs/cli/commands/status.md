@@ -1,37 +1,39 @@
 # `skiller status`
 
-Reads the current persisted state of a run and writes JSON to `stdout`.
+Reads the current persisted runtime status of one run and writes a small JSON
+summary to `stdout`.
 
-## Combinations
+## Command
 
 | Command | Behavior | Returns |
 | --- | --- | --- |
-| `skiller status <run_id>` | Reads one run by id without runtime context. | Immediately after reading the database. |
-| `skiller status <run_id> --context` | Reads one run by id including runtime context. | Immediately after reading the database. |
+| `skiller status <run_id>` | Reads one run status by id. | Immediately after reading the database. |
 
-`status` does not watch the run and does not stream events.
+`status` does not watch the run and does not stream events. Use `skiller logs`
+for the event transcript and step-level details.
 
 ## Output Model
 
-- `id`: run id.
-- `skill_source`: source used to create the run, for example `internal` or `file`.
-- `skill_ref`: flow reference used to create the run.
-- `status`: current persisted run status.
-- `current`: current step id, or `null` when no current step is active.
-- `context`: persisted runtime context for the run, present only with `--context`.
-- `created_at`: run creation timestamp.
-- `updated_at`: last run update timestamp.
-- `last_event_sequence`: latest persisted runtime event cursor, when events exist.
-- `last_event_type`: latest persisted runtime event type, when events exist.
-- `wait_type`: active wait type. Present only when `status` is `WAITING` and
-  the current step is `wait_input`, `wait_webhook`, or `wait_channel` with
-  resolvable wait metadata.
-- `prompt`: input prompt, present for input waits.
-- `webhook`: webhook name, present for webhook waits.
-- `key`: webhook correlation key, present for webhook waits.
+The command always returns the same public shape when the run exists:
 
-`status` does not include `step_type`. Read the latest event with `logs` when
-the current step type is needed.
+- `run_id`: run id.
+- `status`: current persisted run status.
+- `wait_type`: active wait type, or `none`.
+- `prompt`: input prompt for `wait_input`; otherwise an empty string.
+- `last_event_sequence`: latest persisted runtime event cursor, or `null` when no event exists.
+- `last_event_type`: latest persisted runtime event type, or an empty string when no event exists.
+
+`status` does not include the full run model. It does not expose:
+
+- `source`
+- `ref`
+- `current`
+- `context`
+- `created_at`
+- `updated_at`
+- webhook/channel correlation details such as `webhook`, `channel`, or `key`
+
+Use `skiller logs <run_id>` when those details are needed.
 
 ## Running Run
 
@@ -45,13 +47,10 @@ Output:
 
 ```json
 {
-  "id": "run-uuid",
-  "source": "internal",
-  "ref": "ci",
+  "run_id": "run-uuid",
   "status": "RUNNING",
-  "current": "support_agent",
-  "created_at": "2026-05-12T10:30:10Z",
-  "updated_at": "2026-05-12T10:30:12Z",
+  "wait_type": "none",
+  "prompt": "",
   "last_event_sequence": 42,
   "last_event_type": "AGENT_TOOL_CALL"
 }
@@ -69,13 +68,8 @@ Output:
 
 ```json
 {
-  "id": "run-uuid",
-  "skill_source": "internal",
-  "skill_ref": "chat",
+  "run_id": "run-uuid",
   "status": "WAITING",
-  "current": "ask_user",
-  "created_at": "2026-05-12T10:30:10Z",
-  "updated_at": "2026-05-12T10:30:15Z",
   "wait_type": "input",
   "prompt": "Continue?",
   "last_event_sequence": 43,
@@ -83,7 +77,8 @@ Output:
 }
 ```
 
-The current step type is available in the corresponding `RUN_WAITING` event:
+The current step id and step type are available in the corresponding
+`RUN_WAITING` event:
 
 ```bash
 skiller logs <run_id> --after 42 --limit 1
@@ -94,10 +89,8 @@ skiller logs <run_id> --after 42 --limit 1
   {
     "sequence": 43,
     "type": "RUN_WAITING",
-    "payload": {
-      "step": "ask_user",
-      "step_type": "wait_input"
-    }
+    "step_id": "ask_user",
+    "step_type": "wait_input"
   }
 ]
 ```
@@ -114,19 +107,19 @@ Output:
 
 ```json
 {
-  "id": "run-uuid",
-  "skill_source": "internal",
-  "skill_ref": "webhook_signal_oracle",
+  "run_id": "run-uuid",
   "status": "WAITING",
-  "current": "wait_signal",
-  "created_at": "2026-05-12T10:30:10Z",
-  "updated_at": "2026-05-12T10:30:15Z",
   "wait_type": "webhook",
-  "webhook": "market-signal",
-  "key": "btc-usd",
+  "prompt": "",
   "last_event_sequence": 44,
   "last_event_type": "RUN_WAITING"
 }
+```
+
+Webhook name and key are available in the `RUN_WAITING` event payload:
+
+```bash
+skiller logs <run_id> --after 43 --limit 1
 ```
 
 ## Finished Run
@@ -141,48 +134,14 @@ Output:
 
 ```json
 {
-  "id": "run-uuid",
-  "skill_source": "internal",
-  "skill_ref": "ci",
+  "run_id": "run-uuid",
   "status": "SUCCEEDED",
-  "current": null,
-  "created_at": "2026-05-12T10:30:10Z",
-  "updated_at": "2026-05-12T10:31:00Z",
+  "wait_type": "none",
+  "prompt": "",
   "last_event_sequence": 50,
   "last_event_type": "RUN_FINISHED"
 }
 ```
-
-## Include Runtime Context
-
-Command:
-
-```bash
-skiller status <run_id> --context
-```
-
-Output:
-
-```json
-{
-  "id": "run-uuid",
-  "skill_source": "internal",
-  "skill_ref": "ci",
-  "status": "WAITING",
-  "current": "ask_user",
-  "context": {
-    "inputs": {},
-    "step_executions": {}
-  },
-  "created_at": "2026-05-12T10:30:10Z",
-  "updated_at": "2026-05-12T10:30:15Z",
-  "prompt": "Continue?",
-  "last_event_sequence": 43,
-  "last_event_type": "RUN_WAITING"
-}
-```
-
-`context` can be large. Use `--context` only when debugging runtime data.
 
 ## Missing Run
 

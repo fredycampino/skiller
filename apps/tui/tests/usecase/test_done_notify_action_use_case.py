@@ -5,6 +5,7 @@ import pytest
 from stui.port.notify_action_port import NotifyActionAck, NotifyActionAckStatus
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.viewmodel.console_screen_state import (
+    ActionOpenUrlItem,
     ConsoleScreenState,
     DispatchErrorItem,
     NotifyActionState,
@@ -21,9 +22,11 @@ def test_done_notify_action_use_case_calls_port_and_clears_action() -> None:
             run_id="run-1",
             step_id="auth_link",
             message="Authorize",
-            label="Open",
-            url="https://example.com",
-            status="pending",
+            action=ActionOpenUrlItem(
+                type="open_url",
+                label="Open",
+                url="https://example.com",
+            ),
         )
     )
     port = _FakeNotifyActionPort()

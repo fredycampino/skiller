@@ -23,6 +23,7 @@ from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_output_view import RunOutputView
 from stui.screen.transcript.run_resume_view import RunResumeView
 from stui.screen.transcript.run_step_view import RunStepView
+from stui.screen.transcript.run_system_notice_view import RunSystemNoticeView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
 from stui.screen.transcript.run_waiting_webhook_view import RunWaitingWebhookView
 from stui.screen.transcript.step_error_view import StepErrorView
@@ -44,6 +45,7 @@ from stui.viewmodel.console_screen_state import (
     RunOutputItem,
     RunResumeItem,
     RunStepItem,
+    RunSyncSnapshotItem,
     RunWaitingInputItem,
     RunWaitingWebhookItem,
     StepErrorItem,
@@ -250,6 +252,8 @@ class RenderTranscript:
             return RunResumeView(item=item)
         if isinstance(item, RunStepItem):
             return RunStepView(item=item, mode=TranscriptMode.CHAT)
+        if isinstance(item, RunSyncSnapshotItem):
+            return RunSystemNoticeView(item=item, strings=self.strings)
         if isinstance(item, AgentToolCallItem):
             return AgentToolCallView(item=item)
         if isinstance(item, AgentToolResultItem):

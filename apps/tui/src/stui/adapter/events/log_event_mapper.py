@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from stui.adapter.events.cli_log_event import CliLogEvent
 from stui.port.event_models import (
+    ActionBaseValue,
     ActionDonePayload,
     ActionOpenUrlValue,
     AgentAssistantMessagePayload,
@@ -23,7 +24,6 @@ from stui.port.event_models import (
     LogEventType,
     McpOutputValue,
     NotifyActionStatus,
-    NotifyActionType,
     NotifyActionValue,
     NotifyOutputFormat,
     NotifyOutputValue,
@@ -33,6 +33,8 @@ from stui.port.event_models import (
     RunCreatePayload,
     RunFinishedPayload,
     RunResumePayload,
+    RunSnapshotFailedPayload,
+    RunSnapshotUpdatedPayload,
     RunWaitingPayload,
     SendOutputValue,
     ShellOutputValue,
@@ -64,13 +66,22 @@ class NotifyOutputValueModel(BaseModel):
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
 
 
+class ActionValueModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+    label: str
+    message: str | None = None
+
+
 class ActionOpenUrlValueModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal["open_url"]
     label: str
+    message: str | None = None
     url: str
-    status: NotifyActionStatus
-    auto_open: bool = False
+    auto: bool = False
 
 
 class NotifyActionValueModel(BaseModel):
@@ -78,8 +89,7 @@ class NotifyActionValueModel(BaseModel):
 
     message: str = ""
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
-    action_type: NotifyActionType
-    action: ActionOpenUrlValueModel
+    action: JsonObject
 
 
 class RunCreateModel(BaseModel):
@@ -93,6 +103,21 @@ class RunResumeModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: str
+
+
+class RunSnapshotUpdatedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str
+    ref: str
+
+
+class RunSnapshotFailedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str
+    ref: str
+    error: str
 
 
 class StepStartedModel(BaseModel):
@@ -199,7 +224,7 @@ class InputReceivedModel(BaseModel):
 class ActionDoneModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action_type: NotifyActionType
+    type: str
     status: NotifyActionStatus
 
 
@@ -275,6 +300,18 @@ class LogEventMapper:
             model = _validate_model(RunResumeModel, payload, "payload")
             return RunResumePayload(source=model.source)
 
+        if event_type == LogEventType.RUN_SNAPSHOT_UPDATED:
+            model = _validate_model(RunSnapshotUpdatedModel, payload, "payload")
+            return RunSnapshotUpdatedPayload(source=model.source, ref=model.ref)
+
+        if event_type == LogEventType.RUN_SNAPSHOT_FAILED:
+            model = _validate_model(RunSnapshotFailedModel, payload, "payload")
+            return RunSnapshotFailedPayload(
+                source=model.source,
+                ref=model.ref,
+                error=model.error,
+            )
+
         if event_type == LogEventType.STEP_STARTED:
             _validate_model(StepStartedModel, payload, "payload")
             return StepStartedPayload()
@@ -303,7 +340,7 @@ class LogEventMapper:
         if event_type == LogEventType.ACTION_DONE:
             model = _validate_model(ActionDoneModel, payload, "payload")
             return ActionDonePayload(
-                action_type=model.action_type,
+                type=model.type,
                 status=model.status,
             )
 
@@ -399,13 +436,7 @@ def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputV
             return NotifyActionValue(
                 message=model.message,
                 format=model.format,
-                action_type=model.action_type,
-                action=ActionOpenUrlValue(
-                    label=model.action.label,
-                    url=model.action.url,
-                    status=model.action.status,
-                    auto_open=model.action.auto_open,
-                ),
+                action=_to_action_value(model.action),
             )
         model = _validate_model(
             NotifyOutputValueModel,
@@ -472,6 +503,28 @@ def _notify_output_payload(value: JsonObject) -> JsonObject:
     if "format" in value:
         payload["format"] = value["format"]
     return payload
+
+
+def _to_action_value(value: JsonObject) -> ActionBaseValue:
+    model = _validate_model(ActionValueModel, value, "output.value.action")
+    if model.type == "open_url":
+        open_url = _validate_model(
+            ActionOpenUrlValueModel,
+            value,
+            "output.value.action",
+        )
+        return ActionOpenUrlValue(
+            type=open_url.type,
+            label=open_url.label,
+            message=open_url.message,
+            url=open_url.url,
+            auto=open_url.auto,
+        )
+    return ActionBaseValue(
+        type=model.type,
+        label=model.label,
+        message=model.message,
+    )
 
 
 def _validate_model(

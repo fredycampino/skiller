@@ -1,22 +1,22 @@
 import pytest
 
-from skiller.application.use_cases.skill.skill_server_checker import (
-    SkillServerCheckError,
-    SkillServerCheckerUseCase,
-    SkillServerCheckStatus,
+from skiller.application.use_cases.flow.flow_readiness_checker import (
+    FlowReadinessCheckError,
+    FlowReadinessCheckerUseCase,
+    FlowReadinessCheckStatus,
 )
 
 pytestmark = pytest.mark.unit
 
 
-class _FakeSkillRunner:
-    def __init__(self, skill: object) -> None:
-        self.skill = skill
+class _FakeFlowRunner:
+    def __init__(self, flow: object) -> None:
+        self.flow = flow
         self.calls: list[dict[str, str]] = []
 
     def load(self, source: str, ref: str) -> object:
-        self.calls.append({"skill_source": source, "skill_ref": ref})
-        return self.skill
+        self.calls.append({"flow_source": source, "flow_ref": ref})
+        return self.flow
 
 
 class _FakeServerStatus:
@@ -39,11 +39,11 @@ class _FakeChannelSender:
         return self.available
 
 
-def test_returns_valid_when_skill_does_not_use_server_steps() -> None:
+def test_returns_valid_when_flow_does_not_use_server_steps() -> None:
     server_status = _FakeServerStatus(available=False)
     channel_sender = _FakeChannelSender(available=False)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "notify_test",
                 "start": "show_message",
@@ -56,19 +56,19 @@ def test_returns_valid_when_skill_does_not_use_server_steps() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("notify_test", skill_source="internal")
+    result = use_case.execute("notify_test", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.VALID
+    assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
     assert server_status.calls == 0
     assert channel_sender.calls == []
 
 
-def test_returns_valid_when_wait_channel_skill_has_server_available() -> None:
+def test_returns_valid_when_wait_channel_flow_has_server_available() -> None:
     server_status = _FakeServerStatus(available=True)
     channel_sender = _FakeChannelSender(available=True)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "whatsapp_demo",
                 "start": "listen_whatsapp",
@@ -85,19 +85,19 @@ def test_returns_valid_when_wait_channel_skill_has_server_available() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", skill_source="internal")
+    result = use_case.execute("whatsapp_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.VALID
+    assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
     assert server_status.calls == 1
     assert channel_sender.calls == ["whatsapp"]
 
 
-def test_returns_invalid_when_wait_channel_skill_has_server_unavailable() -> None:
+def test_returns_invalid_when_wait_channel_flow_has_server_unavailable() -> None:
     server_status = _FakeServerStatus(available=False)
     channel_sender = _FakeChannelSender(available=True)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "whatsapp_demo",
                 "start": "listen_whatsapp",
@@ -114,14 +114,14 @@ def test_returns_invalid_when_wait_channel_skill_has_server_unavailable() -> Non
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", skill_source="internal")
+    result = use_case.execute("whatsapp_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.INVALID
+    assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
-        SkillServerCheckError(
-            code="SKILL_SERVER_UNAVAILABLE",
+        FlowReadinessCheckError(
+            code="FLOW_SERVER_UNAVAILABLE",
             message=(
-                "SKILL_SERVER_UNAVAILABLE: skill requires local server for wait_channel "
+                "FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_channel "
                 "(step=listen_whatsapp)"
             ),
         )
@@ -130,11 +130,11 @@ def test_returns_invalid_when_wait_channel_skill_has_server_unavailable() -> Non
     assert channel_sender.calls == []
 
 
-def test_returns_valid_when_wait_webhook_skill_has_server_available() -> None:
+def test_returns_valid_when_wait_webhook_flow_has_server_available() -> None:
     server_status = _FakeServerStatus(available=True)
     channel_sender = _FakeChannelSender(available=False)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "webhook_demo",
                 "start": "listen_webhook",
@@ -151,19 +151,19 @@ def test_returns_valid_when_wait_webhook_skill_has_server_available() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("webhook_demo", skill_source="internal")
+    result = use_case.execute("webhook_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.VALID
+    assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
     assert server_status.calls == 1
     assert channel_sender.calls == []
 
 
-def test_returns_invalid_when_wait_webhook_skill_has_server_unavailable() -> None:
+def test_returns_invalid_when_wait_webhook_flow_has_server_unavailable() -> None:
     server_status = _FakeServerStatus(available=False)
     channel_sender = _FakeChannelSender(available=True)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "webhook_demo",
                 "start": "listen_webhook",
@@ -180,14 +180,14 @@ def test_returns_invalid_when_wait_webhook_skill_has_server_unavailable() -> Non
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("webhook_demo", skill_source="internal")
+    result = use_case.execute("webhook_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.INVALID
+    assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
-        SkillServerCheckError(
-            code="SKILL_SERVER_UNAVAILABLE",
+        FlowReadinessCheckError(
+            code="FLOW_SERVER_UNAVAILABLE",
             message=(
-                "SKILL_SERVER_UNAVAILABLE: skill requires local server for "
+                "FLOW_SERVER_UNAVAILABLE: flow requires local server for "
                 "wait_webhook (step=listen_webhook)"
             ),
         )
@@ -196,11 +196,11 @@ def test_returns_invalid_when_wait_webhook_skill_has_server_unavailable() -> Non
     assert channel_sender.calls == []
 
 
-def test_returns_invalid_when_wait_channel_skill_has_whatsapp_unavailable() -> None:
+def test_returns_invalid_when_wait_channel_flow_has_whatsapp_unavailable() -> None:
     server_status = _FakeServerStatus(available=True)
     channel_sender = _FakeChannelSender(available=False)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "whatsapp_demo",
                 "start": "listen_whatsapp",
@@ -217,14 +217,14 @@ def test_returns_invalid_when_wait_channel_skill_has_whatsapp_unavailable() -> N
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", skill_source="internal")
+    result = use_case.execute("whatsapp_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.INVALID
+    assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
-        SkillServerCheckError(
-            code="SKILL_WHATSAPP_UNAVAILABLE",
+        FlowReadinessCheckError(
+            code="FLOW_WHATSAPP_UNAVAILABLE",
             message=(
-                "SKILL_WHATSAPP_UNAVAILABLE: skill requires active WhatsApp bridge "
+                "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
                 "for wait_channel (step=listen_whatsapp)"
             ),
         )
@@ -233,11 +233,11 @@ def test_returns_invalid_when_wait_channel_skill_has_whatsapp_unavailable() -> N
     assert channel_sender.calls == ["whatsapp"]
 
 
-def test_returns_invalid_when_send_skill_has_whatsapp_unavailable() -> None:
+def test_returns_invalid_when_send_flow_has_whatsapp_unavailable() -> None:
     server_status = _FakeServerStatus(available=True)
     channel_sender = _FakeChannelSender(available=False)
-    use_case = SkillServerCheckerUseCase(
-        skill_runner=_FakeSkillRunner(
+    use_case = FlowReadinessCheckerUseCase(
+        runner=_FakeFlowRunner(
             {
                 "name": "whatsapp_send_demo",
                 "start": "reply",
@@ -255,14 +255,14 @@ def test_returns_invalid_when_send_skill_has_whatsapp_unavailable() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_send_demo", skill_source="internal")
+    result = use_case.execute("whatsapp_send_demo", flow_source="internal")
 
-    assert result.status == SkillServerCheckStatus.INVALID
+    assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
-        SkillServerCheckError(
-            code="SKILL_WHATSAPP_UNAVAILABLE",
+        FlowReadinessCheckError(
+            code="FLOW_WHATSAPP_UNAVAILABLE",
             message=(
-                "SKILL_WHATSAPP_UNAVAILABLE: skill requires active WhatsApp bridge "
+                "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
                 "for send (step=reply)"
             ),
         )

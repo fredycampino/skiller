@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import StrEnum
 from typing import Any, TypeAlias
 
+from skiller.domain.action.action_model import ActionStatus, ActionType
 from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
     AgentToolCallPayload,
@@ -16,6 +17,8 @@ from skiller.domain.agent.agent_context_model import (
 class RuntimeEventType(StrEnum):
     RUN_CREATE = "RUN_CREATE"
     RUN_RESUME = "RUN_RESUME"
+    RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
+    RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -40,6 +43,19 @@ class RunCreatedPayload:
 @dataclass(frozen=True)
 class RunResumedPayload:
     source: str
+
+
+@dataclass(frozen=True)
+class RunSnapshotUpdatedPayload:
+    source: str
+    ref: str
+
+
+@dataclass(frozen=True)
+class RunSnapshotFailedPayload:
+    source: str
+    ref: str
+    error: str
 
 
 @dataclass(frozen=True)
@@ -71,8 +87,8 @@ class StepErrorPayload:
 
 @dataclass(frozen=True)
 class ActionDonePayload:
-    action_type: str
-    status: str
+    type: ActionType
+    status: ActionStatus
 
 
 @dataclass(frozen=True)
@@ -110,6 +126,8 @@ class InputReceivedPayload:
 RuntimeEventPayload: TypeAlias = (
     RunCreatedPayload
     | RunResumedPayload
+    | RunSnapshotUpdatedPayload
+    | RunSnapshotFailedPayload
     | RunWaitingPayload
     | RunFinishedPayload
     | StepStartedPayload
@@ -226,6 +244,19 @@ def runtime_event_payload_from_dict(
     if event_type == RuntimeEventType.RUN_RESUME:
         return RunResumedPayload(source=str(value.get("source", "")))
 
+    if event_type == RuntimeEventType.RUN_SNAPSHOT_UPDATED:
+        return RunSnapshotUpdatedPayload(
+            source=str(value.get("source", "")),
+            ref=str(value.get("ref", "")),
+        )
+
+    if event_type == RuntimeEventType.RUN_SNAPSHOT_FAILED:
+        return RunSnapshotFailedPayload(
+            source=str(value.get("source", "")),
+            ref=str(value.get("ref", "")),
+            error=str(value.get("error", "")),
+        )
+
     if event_type == RuntimeEventType.RUN_WAITING:
         return RunWaitingPayload(
             output=_dict_value(value.get("output")),
@@ -255,8 +286,8 @@ def runtime_event_payload_from_dict(
 
     if event_type == RuntimeEventType.ACTION_DONE:
         return ActionDonePayload(
-            action_type=str(value.get("action_type", "")),
-            status=str(value.get("status", "")),
+            type=ActionType(str(value.get("type", ""))),
+            status=ActionStatus(str(value.get("status", ""))),
         )
 
     if event_type == RuntimeEventType.INPUT_RECEIVED:

@@ -19,6 +19,7 @@ from skiller.application.agent.tools.agent_tool_executor import AgentToolExecuto
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
+from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.mapper import RunServiceMapper
@@ -50,9 +51,14 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
     ExecuteWaitWebhookStepUseCase,
 )
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
+from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
+from skiller.application.use_cases.flow.flow_readiness_checker import (
+    FlowReadinessCheckerUseCase,
+)
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.query.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
 from skiller.application.use_cases.query.get_runs import GetRunsUseCase
@@ -75,10 +81,7 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
-from skiller.application.use_cases.skill.skill_checker import SkillCheckerUseCase
-from skiller.application.use_cases.skill.skill_server_checker import (
-    SkillServerCheckerUseCase,
-)
+from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
@@ -118,6 +121,7 @@ class RuntimeContainer:
     run_service: RunApplicationService
     run_mapper: RunServiceMapper
     query_service: RunQueryService
+    status_mapper: RunStatusMapper
     wait_service: WaitApplicationService
     input_wait_mapper: InputWaitMapper
     channel_wait_mapper: ChannelWaitMapper
@@ -201,9 +205,9 @@ def build_runtime_container(
         store=store,
         steering=agent_steering_store,
     )
-    skill_checker_use_case = SkillCheckerUseCase(skill_runner=skill_runner)
-    skill_server_checker_use_case = SkillServerCheckerUseCase(
-        skill_runner=skill_runner,
+    flow_checker_use_case = FlowCheckerUseCase(runner=skill_runner)
+    flow_readiness_checker_use_case = FlowReadinessCheckerUseCase(
+        runner=skill_runner,
         server_status=server_status,
         channel_sender=channel_sender,
     )
@@ -296,13 +300,20 @@ def build_runtime_container(
         store=store,
         skill_runner=skill_runner,
     )
+    get_run_use_case = GetRunUseCase(store)
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(runtime_event_store)
     get_runs_use_case = GetRunsUseCase(run_query)
+    sync_snapshot_use_case = SyncSnapshotUseCase(
+        store=store,
+        runner=skill_runner,
+        events=runtime_event_store,
+    )
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
+        sync_snapshot_use_case=sync_snapshot_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
@@ -338,14 +349,15 @@ def build_runtime_container(
         delete_run_use_case=delete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,
-        skill_checker_use_case=skill_checker_use_case,
-        skill_server_checker_use_case=skill_server_checker_use_case,
+        flow_checker_use_case=flow_checker_use_case,
+        flow_readiness_checker_use_case=flow_readiness_checker_use_case,
         resume_run_use_case=resume_run_use_case,
         mark_notify_action_done_use_case=mark_notify_action_done_use_case,
-        get_run_status_use_case=get_run_status_use_case,
+        get_run_use_case=get_run_use_case,
         run_executor=run_executor,
     )
     run_mapper = RunServiceMapper()
+    status_mapper = RunStatusMapper()
     input_wait_mapper = InputWaitMapper()
     channel_wait_mapper = ChannelWaitMapper()
     webhook_wait_mapper = WebhookWaitMapper()
@@ -362,6 +374,7 @@ def build_runtime_container(
         run_service=run_service,
         run_mapper=run_mapper,
         query_service=query_service,
+        status_mapper=status_mapper,
         wait_service=wait_service,
         input_wait_mapper=input_wait_mapper,
         channel_wait_mapper=channel_wait_mapper,

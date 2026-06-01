@@ -3,7 +3,8 @@ import sqlite3
 from typing import Any
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import Run, RunAgent, RunStatus
+from skiller.domain.run.run_model import Run, RunAgent, RunSnapshotSyncState, RunStatus
+from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
@@ -130,6 +131,57 @@ class SqliteStateStore(SqliteRepository, RunStorePort):
         if row is None:
             return None
         return build_run_from_row(row)
+
+    def get_status(self, run_id: str) -> RunStatusRuntime | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, status
+                FROM runs
+                WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RunStatusRuntime(
+            run_id=str(row["id"]),
+            status=RunStatus(str(row["status"])),
+        )
+
+    def get_snapshot_sync_state(self, run_id: str) -> RunSnapshotSyncState | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, source, ref, current, snapshot_json
+                FROM runs
+                WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        snapshot = json.loads(row["snapshot_json"])
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        return RunSnapshotSyncState(
+            run_id=str(row["id"]),
+            source=str(row["source"]),
+            ref=str(row["ref"]),
+            current=(str(row["current"]) if row["current"] is not None else None),
+            snapshot=snapshot,
+        )
+
+    def update_snapshot(self, run_id: str, snapshot: dict[str, object]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE runs
+                SET snapshot_json = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (json.dumps(snapshot), run_id),
+            )
 
     def get_agent(
         self,

@@ -24,10 +24,10 @@ from stui.port.run_port import (
     RunRuntimeStatusKind,
 )
 from stui.screen import console_screen as console_screen_module
+from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
-from stui.screen.notify_action_view import NotifyActionView
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.transcript_log import TranscriptLog
 from stui.usecase import (
@@ -36,6 +36,7 @@ from stui.usecase import (
 from stui.usecase import run_command_use_case as run_command_use_case_module
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
+    ActionOpenUrlItem,
     AgentContextStatsState,
     AgentStepFinalOutputItem,
     AgentStepStopReason,
@@ -443,7 +444,7 @@ def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
             status = app.query_one("#status", Static)
             prompt_row = app.query_one("#prompt-row")
             message = app.query_one("#notify-action-message", Static)
-            view = app.query_one("#notify-action", NotifyActionView)
+            view = app.query_one("#notify-action", ActionOpenUrlView)
             open_link = app.query_one("#notify-action-open-link", Button)
             open_link.focus()
 
@@ -601,9 +602,11 @@ def _notify_action_state() -> NotifyActionState:
         run_id="run-1",
         step_id="auth_link",
         message=LONG_NOTIFY_ACTION_MESSAGE,
-        label="Open authorization",
-        url="https://example.com/oauth/start",
-        status="pending",
+        action=ActionOpenUrlItem(
+            type="open_url",
+            label="Open authorization",
+            url="https://example.com/oauth/start",
+        ),
     )
 
 

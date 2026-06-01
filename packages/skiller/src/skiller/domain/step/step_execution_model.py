@@ -2,6 +2,11 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum, StrEnum
 from typing import Any, Type
 
+from skiller.domain.action.action_model import (
+    Action,
+    action_from_dict,
+    action_to_public_dict,
+)
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentCodexLLMModel,
     AgentFakeLLMModel,
@@ -90,38 +95,20 @@ class NotifyOutputFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
-class NotifyActionType(StrEnum):
-    OPEN_URL = "open_url"
-
-
-class NotifyActionStatus(StrEnum):
-    PENDING = "pending"
-    DONE = "done"
-
-
-@dataclass(frozen=True)
-class NotifyOpenUrlAction:
-    label: str = ""
-    url: str = ""
-    status: NotifyActionStatus = NotifyActionStatus.PENDING
-    auto_open: bool = False
-
-
 @dataclass(frozen=True)
 class NotifyOutput(OutputBase):
     message: str = ""
     format: NotifyOutputFormat = NotifyOutputFormat.SIMPLE
-    action_type: NotifyActionType | None = None
-    action: NotifyOpenUrlAction | None = None
+    action: Action | None = None
 
     def to_public_dict(self) -> dict[str, Any]:
         payload = super().to_public_dict()
         value = payload.get("value")
         if isinstance(value, dict):
-            if value.get("action_type") is None:
-                value.pop("action_type", None)
-            if value.get("action") is None:
+            if self.action is None:
                 value.pop("action", None)
+            else:
+                value["action"] = action_to_public_dict(self.action)
             payload["value"] = value or None
         return payload
 
@@ -300,27 +287,14 @@ def _build_notify_output_fields(output_fields: dict[str, Any]) -> dict[str, Any]
     if "format" in fields:
         fields["format"] = NotifyOutputFormat(str(fields["format"]))
 
-    if "action_type" in fields and fields["action_type"] is not None:
-        fields["action_type"] = NotifyActionType(str(fields["action_type"]))
-
-    if fields.get("action_type") == NotifyActionType.OPEN_URL:
-        raw_action = fields.get("action")
-        action = raw_action if isinstance(raw_action, dict) else {}
-        raw_auto_open = action.get("auto_open", False)
-        if not isinstance(raw_auto_open, bool):
-            raise ValueError("notify action auto_open must be boolean")
-        fields["action"] = NotifyOpenUrlAction(
-            label=str(action.get("label", "")),
-            url=str(action.get("url", "")),
-            status=NotifyActionStatus(
-                str(action.get("status", NotifyActionStatus.PENDING.value))
-            ),
-            auto_open=raw_auto_open,
-        )
+    raw_action = fields.get("action")
+    if raw_action is None:
+        fields["action"] = None
         return fields
+    if not isinstance(raw_action, dict):
+        raise ValueError("notify action must be an object")
 
-    fields["action_type"] = None
-    fields["action"] = None
+    fields["action"] = action_from_dict(raw_action)
     return fields
 
 

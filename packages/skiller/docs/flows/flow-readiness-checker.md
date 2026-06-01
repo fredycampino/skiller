@@ -1,8 +1,8 @@
-# Flow Server Checker
+# Flow Readiness Checker
 
 ## Goal
 
-`SkillServerCheckerUseCase` loads a YAML flow definition and verifies whether required
+`FlowReadinessCheckerUseCase` loads a YAML flow definition and verifies whether required
 local runtime services must already be available before run creation.
 
 Current scope:
@@ -19,13 +19,13 @@ It depends on runtime state through:
 Current `create_run(...)` flow:
 
 ```text
-SkillCheckerUseCase.execute(skill_ref, skill_source=...)
-SkillServerCheckerUseCase.execute(skill_ref, skill_source=...)
+FlowCheckerUseCase.execute(flow_ref, flow_source=...)
+FlowReadinessCheckerUseCase.execute(flow_ref, flow_source=...)
 CreateRunUseCase.execute(skill_ref, inputs, skill_source=...)
 AppendRuntimeEventUseCase.execute(run_id, event_type=RUN_CREATE, ...)
 ```
 
-If `SkillServerCheckerUseCase` returns `INVALID`, run creation stops before `CreateRunUseCase.execute(...)`.
+If `FlowReadinessCheckerUseCase` returns `INVALID`, run creation stops before `CreateRunUseCase.execute(...)`.
 
 ## Rule
 
@@ -35,13 +35,13 @@ If it finds a step with primary header:
 - `wait_channel`
 - `wait_webhook`
 
-then the agent requires the local server.
+then the flow requires the local server.
 
 If it finds a step with primary header:
 - `wait_channel`
 - `send`
 
-and `channel=whatsapp`, then the agent also requires an active WhatsApp bridge.
+and `channel=whatsapp`, then the flow also requires an active WhatsApp bridge.
 
 If none of those conditions apply, the result is `VALID`.
 
@@ -57,7 +57,7 @@ The current implementation reports only the first matching step for each require
 
 ## Result Contract
 
-The `SKILL_*` code prefix is historical. These errors validate YAML flow files.
+The checker returns `FLOW_*` error codes for flow readiness validation.
 
 ### Status
 
@@ -68,35 +68,35 @@ The `SKILL_*` code prefix is historical. These errors validate YAML flow files.
 
 ```json
 {
-  "code": "SKILL_SERVER_UNAVAILABLE",
-  "message": "SKILL_SERVER_UNAVAILABLE: skill requires local server for wait_channel (step=listen_whatsapp)"
+  "code": "FLOW_SERVER_UNAVAILABLE",
+  "message": "FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_channel (step=listen_whatsapp)"
 }
 ```
 
 For `wait_webhook`, the same code is used and the message changes the step type:
 
 ```text
-SKILL_SERVER_UNAVAILABLE: skill requires local server for wait_webhook (step=listen_webhook)
+FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_webhook (step=listen_webhook)
 ```
 
 For WhatsApp channel availability:
 
 ```json
 {
-  "code": "SKILL_WHATSAPP_UNAVAILABLE",
-  "message": "SKILL_WHATSAPP_UNAVAILABLE: skill requires active WhatsApp bridge for send (step=reply)"
+  "code": "FLOW_WHATSAPP_UNAVAILABLE",
+  "message": "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge for send (step=reply)"
 }
 ```
 
 ## Boundary
 
-`SkillServerCheckerUseCase` does:
-- load the agent definition
+`FlowReadinessCheckerUseCase` does:
+- load the flow definition
 - inspect `steps`
 - check whether the server is available
 - check whether a required channel bridge is available
 
-`SkillServerCheckerUseCase` does not:
+`FlowReadinessCheckerUseCase` does not:
 - validate general flow structure
 - start the server
 - start the channel bridge

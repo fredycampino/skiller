@@ -2,6 +2,7 @@ from typing import Any
 
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
+from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.mapper import RunServiceMapper
 from skiller.application.runs.service import RunApplicationService
@@ -22,6 +23,7 @@ class RuntimeController:
         run_service: RunApplicationService,
         run_mapper: RunServiceMapper,
         query_service: RunQueryService,
+        status_mapper: RunStatusMapper,
         wait_service: WaitApplicationService,
         input_wait_mapper: InputWaitMapper,
         channel_wait_mapper: ChannelWaitMapper,
@@ -32,6 +34,7 @@ class RuntimeController:
         self.run_service = run_service
         self.run_mapper = run_mapper
         self.query_service = query_service
+        self.status_mapper = status_mapper
         self.wait_service = wait_service
         self.input_wait_mapper = input_wait_mapper
         self.channel_wait_mapper = channel_wait_mapper
@@ -152,13 +155,11 @@ class RuntimeController:
         result = self.wait_service.remove_webhook(request)
         return self.webhook_wait_mapper.to_remove_dict(result)
 
-    def status(
-        self,
-        run_id: str,
-        *,
-        include_context: bool = False,
-    ) -> dict[str, Any] | None:
-        return self.query_service.get_status(run_id, include_context=include_context)
+    def status(self, run_id: str) -> dict[str, object] | None:
+        result = self.query_service.get_status(run_id.strip())
+        if result is None:
+            return None
+        return self.status_mapper.to_status_dict(result)
 
     def logs(
         self,

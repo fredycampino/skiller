@@ -3,6 +3,14 @@ import pytest
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentCodexProvider,
+    AgentFakeLLMModel,
+    AgentFakeProvider,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
+)
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMSystemMessage,
@@ -11,8 +19,17 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
 
 pytestmark = pytest.mark.unit
+
+
+def _provider() -> AgentFakeProvider:
+    return AgentFakeProvider(
+        model=AgentFakeLLMModel.MODEL1,
+        timeout_seconds=30,
+        window_width_tokens=100_000,
+    )
 
 
 def _entry(
@@ -80,13 +97,15 @@ def test_agent_prompt_builder_builds_messages() -> None:
     ]
 
     request = builder.build_request(
-        model="model1",
+        provider=_provider(),
         system="Be useful.",
         entries=entries,
         tools=(),
     )
 
     assert request.model == "model1"
+    assert isinstance(request, LLMRequest)
+    assert not isinstance(request, MiniMaxLLMRequest)
     assert request.messages == (
         LLMSystemMessage("Be useful."),
         LLMUserMessage("Hello"),
@@ -155,7 +174,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
     ]
 
     request = builder.build_request(
-        model="model1",
+        provider=_provider(),
         system="Be useful.",
         entries=entries,
         tools=(),
@@ -244,7 +263,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
     ]
 
     request = builder.build_request(
-        model="model1",
+        provider=_provider(),
         system="Be useful.",
         entries=entries,
         tools=(),
@@ -286,7 +305,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
     builder = AgentPromptBuilder()
 
     request = builder.build_request(
-        model="model1",
+        provider=_provider(),
         system="Be useful.",
         entries=[],
         tools=(),
@@ -297,12 +316,58 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
     )
 
 
+def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
+    builder = AgentPromptBuilder()
+    provider = AgentMiniMaxProvider(
+        model=AgentMiniMaxLLMModel.M2_7,
+        api_key="secret",
+        timeout_seconds=30,
+        window_width_tokens=100_000,
+    )
+
+    request = builder.build_request(
+        provider=provider,
+        system="Be useful.",
+        entries=[],
+        tools=(),
+    )
+
+    assert isinstance(request, MiniMaxLLMRequest)
+    assert request.temperature == 1
+    assert request.max_tokens == 4096
+    assert request.top_p == 1
+
+
+def test_agent_prompt_builder_returns_codex_request() -> None:
+    builder = AgentPromptBuilder()
+    provider = AgentCodexProvider(
+        model=AgentCodexLLMModel.GPT_5_5,
+        credentials_file="/tmp/openai-codex.json",
+        timeout_seconds=120,
+        window_width_tokens=100_000,
+    )
+
+    request = builder.build_request(
+        provider=provider,
+        system="Be useful.",
+        entries=[],
+        tools=(),
+    )
+
+    assert isinstance(request, CodexLLMRequest)
+    assert request.model == AgentCodexLLMModel.GPT_5_5
+    assert request.parallel_tool_calls is True
+    assert not hasattr(request, "temperature")
+    assert not hasattr(request, "max_tokens")
+    assert not hasattr(request, "top_p")
+
+
 def test_agent_prompt_builder_adds_tools_to_request() -> None:
     builder = AgentPromptBuilder()
     tool = ShellProcessTool()
 
     request = builder.build_request(
-        model="model1",
+        provider=_provider(),
         system="Be useful.",
         entries=[],
         tools=(tool,),

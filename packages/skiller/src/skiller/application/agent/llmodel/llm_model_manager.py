@@ -1,15 +1,23 @@
 from dataclasses import replace
+from typing import overload
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexProvider,
+    AgentFakeProvider,
+    AgentLLMProvider,
+    AgentMiniMaxProvider,
+    AgentNullProvider,
+)
 from skiller.domain.agent.llm_client_resolver import LLMClientResolver
-from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
+from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
 
 
 class LLMModelManager:
     def __init__(self, *, client_resolver: LLMClientResolver) -> None:
         self.client_resolver = client_resolver
-        self.clients: dict[AgentLLMProvider, LLMPort] = {}
+        self.clients: dict[AgentLLMProvider, ResolvedLLMPort] = {}
 
     def generate(
         self,
@@ -17,14 +25,38 @@ class LLMModelManager:
         provider: AgentLLMProvider,
         request: LLMRequest,
     ) -> LLMResponse:
-        client = self.client(provider)
-        response = client.generate(request)
+        if isinstance(provider, AgentMiniMaxProvider):
+            if not isinstance(request, MiniMaxLLMRequest):
+                raise RuntimeError("MiniMax LLM provider requires MiniMaxLLMRequest")
+            client = self.client(provider)
+            response = client.generate(request)
+        elif isinstance(provider, AgentCodexProvider):
+            if not isinstance(request, CodexLLMRequest):
+                raise RuntimeError("Codex LLM provider requires CodexLLMRequest")
+            client = self.client(provider)
+            response = client.generate(request)
+        else:
+            client = self.client(provider)
+            response = client.generate(request)
+
         return _response_with_usage_metadata(
             response=response,
             provider=provider,
         )
 
-    def client(self, provider: AgentLLMProvider) -> LLMPort:
+    @overload
+    def client(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentCodexProvider) -> LLMPort[CodexLLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentFakeProvider | AgentNullProvider) -> LLMPort[LLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentLLMProvider) -> ResolvedLLMPort: ...
+
+    def client(self, provider: AgentLLMProvider) -> ResolvedLLMPort:
         client = self.clients.get(provider)
         if client is not None:
             return client

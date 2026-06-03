@@ -17,6 +17,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
 from skiller.domain.agent.llm_model import (
@@ -171,7 +172,7 @@ def _tool_request() -> ToolExecutionRequest:
             context_id="ctx-1",
         ),
         turn_id="turn-1",
-        response=LLMResponse(ok=True, model="model1"),
+        response=LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1),
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
         event_config=AgentEventOutputConfig(),

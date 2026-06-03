@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
+from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_request import CodexLLMRequest
 from skiller.infrastructure.llm.openai_codex_credentials import (
     OpenAICodexCredentialsLoader,
 )
 from skiller.infrastructure.llm.openai_responses_mapper import (
     OpenAIResponsesStreamResult,
-    to_openai_responses_kwargs,
+    to_openai_responses_prompt_payload,
+    to_openai_responses_response_format_payload,
+    to_openai_responses_tool_payload,
     to_port_llm_response,
 )
 
@@ -22,7 +25,7 @@ def _load_openai_client_class() -> type[object]:
     return OpenAI
 
 
-class OpenAICodexResponsesLLM(LLMPort):
+class OpenAICodexResponsesLLM(LLMPort[CodexLLMRequest]):
     def __init__(
         self,
         *,
@@ -35,8 +38,8 @@ class OpenAICodexResponsesLLM(LLMPort):
         self.credentials_loader = credentials_loader or OpenAICodexCredentialsLoader()
         self.client = self._build_client()
 
-    def generate(self, request: LLMRequest) -> LLMResponse:
-        kwargs = to_openai_responses_kwargs(request)
+    def generate(self, request: CodexLLMRequest) -> LLMResponse:
+        kwargs = _to_openai_codex_responses_kwargs(request)
         kwargs["stream"] = True
         response: object | None = None
         text_deltas: list[object] = []
@@ -95,6 +98,27 @@ class OpenAICodexResponsesLLM(LLMPort):
             timeout=self.timeout_seconds,
             default_headers=_codex_headers(credentials.account_id),
         )
+
+
+def _to_openai_codex_responses_kwargs(request: CodexLLMRequest) -> dict[str, object]:
+    instructions, input_items = to_openai_responses_prompt_payload(request.messages)
+    payload: dict[str, object] = {
+        "model": request.model.value,
+        "instructions": instructions,
+        "input": input_items,
+        "store": False,
+        "tool_choice": "auto",
+        "parallel_tool_calls": request.parallel_tool_calls,
+    }
+    if request.tools:
+        payload["tools"] = [to_openai_responses_tool_payload(tool) for tool in request.tools]
+    if request.response_format is not None:
+        payload["text"] = {
+            "format": to_openai_responses_response_format_payload(
+                request.response_format,
+            )
+        }
+    return payload
 
 
 def _codex_headers(account_id: str | None) -> dict[str, str]:

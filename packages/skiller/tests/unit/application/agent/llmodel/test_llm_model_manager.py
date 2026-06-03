@@ -2,16 +2,20 @@ import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentCodexProvider,
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProvider,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
 )
 from skiller.domain.agent.llm_model import (
-    LLMRequest,
     LLMResponse,
     LLMUsage,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import LLMRequest
 
 pytestmark = pytest.mark.unit
 
@@ -38,24 +42,28 @@ class _FakeClientResolver:
 
 def test_llm_model_manager_uses_factory_client() -> None:
     provider = _provider()
-    request = LLMRequest(messages=(LLMUserMessage("hello"),), model="model1")
+    request = _request()
     client_resolver = _FakeClientResolver(
-        LLMResponse(ok=True, model="model1", content="fake")
+        LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1, content="fake")
     )
     manager = LLMModelManager(client_resolver=client_resolver)
 
     response = manager.generate(provider=provider, request=request)
 
-    assert response == LLMResponse(ok=True, model="model1", content="fake")
+    assert response == LLMResponse(
+        ok=True,
+        model=AgentFakeLLMModel.MODEL1,
+        content="fake",
+    )
     assert client_resolver.providers == [provider]
     assert client_resolver.client.calls == [request]
 
 
 def test_llm_model_manager_reuses_client_for_same_provider() -> None:
     provider = _provider()
-    request = LLMRequest(messages=(LLMUserMessage("hello"),), model="model1")
+    request = _request()
     client_resolver = _FakeClientResolver(
-        LLMResponse(ok=True, model="model1", content="fake")
+        LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1, content="fake")
     )
     manager = LLMModelManager(client_resolver=client_resolver)
 
@@ -67,10 +75,10 @@ def test_llm_model_manager_reuses_client_for_same_provider() -> None:
 
 
 def test_llm_model_manager_adds_provider_usage_metadata() -> None:
-    provider = _provider(model="model1")
+    provider = _provider(model=AgentFakeLLMModel.MODEL1)
     response = LLMResponse(
         ok=True,
-        model="model1",
+        model=AgentFakeLLMModel.MODEL1,
         content="fake",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
     )
@@ -78,7 +86,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
 
     result = manager.generate(
         provider=provider,
-        request=LLMRequest(messages=(LLMUserMessage("hello"),), model="model1"),
+        request=_request(),
     )
 
     assert result.usage == LLMUsage(
@@ -86,16 +94,61 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         completion_tokens=5,
         total_tokens=15,
         provider="fake",
-        model="model1",
+        model=AgentFakeLLMModel.MODEL1,
     )
+
+
+@pytest.mark.parametrize(
+    ("provider", "error"),
+    [
+        (
+            AgentMiniMaxProvider(
+                model=AgentMiniMaxLLMModel.M2_7,
+                api_key="secret",
+                timeout_seconds=30,
+                window_width_tokens=100_000,
+            ),
+            "MiniMax LLM provider requires MiniMaxLLMRequest",
+        ),
+        (
+            AgentCodexProvider(
+                model=AgentCodexLLMModel.GPT_5_5,
+                credentials_file="/tmp/openai-codex.json",
+                timeout_seconds=120,
+                window_width_tokens=100_000,
+            ),
+            "Codex LLM provider requires CodexLLMRequest",
+        ),
+    ],
+)
+def test_llm_model_manager_rejects_provider_request_mismatch(
+    provider: AgentLLMProvider,
+    error: str,
+) -> None:
+    client_resolver = _FakeClientResolver(
+        LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1)
+    )
+    manager = LLMModelManager(client_resolver=client_resolver)
+
+    with pytest.raises(RuntimeError, match=error):
+        manager.generate(provider=provider, request=_request())
+
+    assert client_resolver.providers == []
 
 
 def _provider(
     *,
-    model: str = "model1",
+    model: AgentFakeLLMModel = AgentFakeLLMModel.MODEL1,
 ) -> AgentLLMProvider:
     return AgentFakeProvider(
-        model=AgentFakeLLMModel(model),
+        model=model,
         timeout_seconds=30,
-        context_window_tokens=100_000,
+        window_width_tokens=100_000,
+    )
+
+
+def _request() -> LLMRequest:
+    return LLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentFakeLLMModel.MODEL1,
     )

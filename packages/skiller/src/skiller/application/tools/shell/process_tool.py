@@ -48,7 +48,10 @@ class ShellProcessTool(
                 "properties": {
                     "command": {"type": "string"},
                     "cwd": {"type": "string"},
-                    "env": {"type": "object"},
+                    "env": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
                     "timeout": {"type": "integer"},
                 },
                 "required": ["command"],

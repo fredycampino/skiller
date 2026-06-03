@@ -45,16 +45,15 @@ import json
 import os
 
 from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.agent_config_model import (
-    AgentLLMProviderConfig,
-    AgentLLMProviderType,
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentCodexProvider,
 )
 from skiller.domain.agent.llm_model import (
-    LLMRequest,
     LLMSystemMessage,
-    LLMToolChoice,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import CodexLLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -88,25 +87,24 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.5")
-provider = AgentLLMProviderConfig(
-    provider_type=AgentLLMProviderType.CODEX,
+model = AgentCodexLLMModel(os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.5"))
+provider = AgentCodexProvider(
     model=model,
-    api_key=None,
     timeout_seconds=120,
-    context_window_tokens=100000,
+    window_width_tokens=100000,
     credentials_file=os.environ["SKILLER_OPENAI_CODEX_CREDENTIALS_FILE"],
 )
-client = LLMClientFactory().create(provider)
+client = LLMClientFactory().resolve(provider)
 
 text_marker = "skiller-codex-client-text-ok"
 text_response = client.generate(
-    LLMRequest(
+    CodexLLMRequest(
         model=model,
         messages=(
             LLMSystemMessage("Reply with the requested exact text only."),
             LLMUserMessage(f"Reply exactly: {text_marker}"),
         ),
+        parallel_tool_calls=True,
     )
 )
 if not text_response.ok:
@@ -116,14 +114,14 @@ if text_response.content != text_marker:
 
 command = "echo skiller-codex-tool-ok"
 tool_response = client.generate(
-    LLMRequest(
+    CodexLLMRequest(
         model=model,
         messages=(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),
             LLMUserMessage(f"Call the shell tool with command: {command}"),
         ),
         tools=(ShellSmokeTool(),),
-        tool_choice=LLMToolChoice.tool("shell"),
+        parallel_tool_calls=True,
     )
 )
 if not tool_response.ok:

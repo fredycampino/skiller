@@ -4,12 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
+from skiller.domain.agent.agent_llm_provider_model import AgentMiniMaxLLMModel
 from skiller.domain.agent.llm_model import (
-    LLMRequest,
     LLMToolCall,
     LLMToolCallFunction,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.infrastructure.llm import openai_llm
 from skiller.infrastructure.llm.openai_llm import OpenAILLM
 
@@ -53,9 +55,14 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
@@ -66,14 +73,19 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     }
     assert llm.client.completions.calls == [
         {
-            "model": "gpt-5.4",
+            "model": "MiniMax-M2.7",
             "messages": [{"role": "user", "content": "hello"}],
+            "tool_choice": "auto",
+            "temperature": 1,
+            "max_tokens": 4096,
+            "top_p": 1,
+            "parallel_tool_calls": True,
             "extra_body": {"reasoning_split": True},
         }
     ]
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == "gpt-5.4"
+    assert result.model == AgentMiniMaxLLMModel.M2_7
     assert result.finish_reason == "stop"
     assert result.tool_calls == ()
 
@@ -86,9 +98,14 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="model1",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
@@ -137,15 +154,20 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
     assert result.ok is True
     assert result.content is None
-    assert result.model == "gpt-5.4"
+    assert result.model == AgentMiniMaxLLMModel.M2_7
     assert result.finish_reason == "tool_calls"
     assert result.tool_calls == (
         LLMToolCall(

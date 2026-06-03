@@ -131,7 +131,7 @@ class _FakeAgentConfig:
         provider = AgentNullProvider(
             model=AgentNullLLMModel.NULL1,
             timeout_seconds=30,
-            context_window_tokens=100000,
+            window_width_tokens=100000,
         )
         return AgentConfig(
             llm=AgentLLMProviderList(

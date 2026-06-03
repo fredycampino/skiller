@@ -4,20 +4,20 @@ from types import SimpleNamespace
 
 import pytest
 
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentCodexLLMModel,
     AgentMiniMaxLLMModel,
 )
 from skiller.domain.agent.llm_model import (
-    LLMRequest,
     LLMResponseFormat,
     LLMResponseFormatType,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
-    LLMToolChoice,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -51,16 +51,16 @@ class _ShellTool(ToolDefinition[ToolRequest]):
 
 
 def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
-    request = LLMRequest(
+    request = MiniMaxLLMRequest(
         messages=(
             LLMSystemMessage("system"),
             LLMUserMessage("hello", name="tester"),
         ),
-        model=AgentCodexLLMModel.GPT_5_4,
+        model=AgentMiniMaxLLMModel.M2_7,
         tools=(
             _ShellTool(),
         ),
-        tool_choice=LLMToolChoice.tool("shell"),
+        tool_choice=LLMToolChoiceMode.REQUIRED,
         response_format=LLMResponseFormat(
             type=LLMResponseFormatType.JSON_SCHEMA,
             json_schema_name="result",
@@ -76,7 +76,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
     kwargs = to_openai_kwargs(request)
 
     assert kwargs == {
-        "model": "gpt-5.4",
+        "model": "MiniMax-M2.7",
         "messages": [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "hello", "name": "tester"},
@@ -91,7 +91,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
                 },
             }
         ],
-        "tool_choice": {"type": "function", "function": {"name": "shell"}},
+        "tool_choice": "required",
         "response_format": {
             "type": "json_schema",
             "json_schema": {

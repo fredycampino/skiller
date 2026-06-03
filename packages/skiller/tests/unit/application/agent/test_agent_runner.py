@@ -17,6 +17,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
     AgentContextWindow,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
 from skiller.domain.agent.agent_run_model import AgentStopReason
 from skiller.domain.agent.agent_stats_model import (
@@ -25,7 +26,6 @@ from skiller.domain.agent.agent_stats_model import (
 )
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
-    LLMRequest,
     LLMResponse,
     LLMSystemMessage,
     LLMToolCall,
@@ -34,6 +34,7 @@ from skiller.domain.agent.llm_model import (
     LLMUsage,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import LLMRequest
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,
@@ -403,7 +404,7 @@ def _build_runner(
 def test_agent_runner_returns_final_text_without_tools() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
-        responses=[LLMResponse(ok=True, content="Hello back.", model="model1")]
+        responses=[LLMResponse(ok=True, content="Hello back.", model=AgentFakeLLMModel.MODEL1)]
     )
     runner = _build_runner(context_store=context_store, llm=llm)
 
@@ -436,7 +437,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
             LLMResponse(
                 ok=True,
                 content=None,
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 tool_calls=(
                     LLMToolCall(
                         id="call-1",
@@ -505,7 +506,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         responses=[
             LLMResponse(
                 ok=True,
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -520,7 +521,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
             ),
         ]
@@ -564,7 +565,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
             completion_tokens=25,
             total_tokens=125,
             provider="fake",
-            model="model1",
+            model=AgentFakeLLMModel.MODEL1,
         )
     executed_request = tool_manager.execute_prepared_calls[0].request
     assert isinstance(executed_request, AgentToolRequest)
@@ -611,7 +612,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
             LLMResponse(
                 ok=True,
                 content="I should send a notification.",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -627,7 +628,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
             ),
         ]
@@ -698,7 +699,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         responses=[
             LLMResponse(
                 ok=True,
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -713,7 +714,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
             ),
         ]
     )
@@ -771,7 +772,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
                         ),
                     ),
                 ),
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
             )
         ]
     )
@@ -838,7 +839,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
             LLMResponse(
                 ok=True,
                 content="Done.",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
             )
         ]
     )
@@ -878,7 +879,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
         responses=[
             LLMResponse(
                 ok=False,
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 error="invalid params",
                 error_code="2013",
             )
@@ -916,7 +917,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
             LLMResponse(
                 ok=True,
                 content=None,
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
                 tool_calls=(
                     LLMToolCall(
                         id="call-1",
@@ -963,7 +964,7 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
             LLMResponse(
                 ok=True,
                 content="   ",
-                model="model1",
+                model=AgentFakeLLMModel.MODEL1,
             )
         ]
     )

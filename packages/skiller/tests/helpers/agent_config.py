@@ -50,7 +50,7 @@ def agent_config(
                 AgentFakeProvider(
                     model=AgentFakeLLMModel.MODEL1,
                     timeout_seconds=30,
-                    context_window_tokens=100_000,
+                    window_width_tokens=100_000,
                 ),
             ),
         ),

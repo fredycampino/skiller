@@ -1,6 +1,7 @@
 import pytest
 
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.llm_model import LLMResponse
 
 pytestmark = pytest.mark.unit
@@ -11,7 +12,7 @@ def test_llm_request_includes_provider_error_and_code() -> None:
         agent_id="support_agent",
         response=LLMResponse(
             ok=False,
-            model="model1",
+            model=AgentFakeLLMModel.MODEL1,
             error="invalid params",
             error_code="2013",
         ),
@@ -28,7 +29,7 @@ def test_llm_request_falls_back_to_finish_reason() -> None:
         agent_id="support_agent",
         response=LLMResponse(
             ok=False,
-            model="model1",
+            model=AgentFakeLLMModel.MODEL1,
             finish_reason="content_filter",
         ),
     )
@@ -39,7 +40,7 @@ def test_llm_request_falls_back_to_finish_reason() -> None:
 def test_llm_request_falls_back_to_generic_detail() -> None:
     message = AgentErrorMapper().llm_request(
         agent_id="support_agent",
-        response=LLMResponse(ok=False, model="model1"),
+        response=LLMResponse(ok=False, model=AgentFakeLLMModel.MODEL1),
     )
 
     assert (

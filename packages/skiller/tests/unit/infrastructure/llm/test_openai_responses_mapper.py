@@ -4,19 +4,22 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentMiniMaxLLMModel,
+)
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
-    LLMRequest,
     LLMResponseFormat,
     LLMResponseFormatType,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
-    LLMToolChoice,
     LLMToolMessage,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -66,7 +69,7 @@ class _ResponseWithBrokenOutputText:
 
 
 def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
-    request = LLMRequest(
+    request = MiniMaxLLMRequest(
         messages=(
             LLMSystemMessage("system"),
             LLMUserMessage("hello"),
@@ -84,9 +87,9 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
             ),
             LLMToolMessage("pwd output", tool_call_id="call_1"),
         ),
-        model=AgentCodexLLMModel.GPT_5_4,
+        model=AgentMiniMaxLLMModel.M2_7,
         tools=(_ShellTool(),),
-        tool_choice=LLMToolChoice.tool("shell"),
+        tool_choice=LLMToolChoiceMode.REQUIRED,
         response_format=LLMResponseFormat(
             type=LLMResponseFormatType.JSON_SCHEMA,
             json_schema_name="result",
@@ -102,7 +105,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
     kwargs = to_openai_responses_kwargs(request)
 
     assert kwargs == {
-        "model": "gpt-5.4",
+        "model": "MiniMax-M2.7",
         "instructions": "system",
         "input": [
             {"role": "user", "content": "hello"},
@@ -128,7 +131,7 @@ def test_to_openai_responses_kwargs_maps_request_to_responses_payload() -> None:
                 "parameters": {"type": "object", "properties": {"command": {"type": "string"}}},
             }
         ],
-        "tool_choice": {"type": "function", "name": "shell"},
+        "tool_choice": "required",
         "text": {
             "format": {
                 "type": "json_schema",

@@ -7,7 +7,7 @@
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.5",
       "timeout_seconds": 30,
-      "context_window_tokens": 1000000
+      "window_width_tokens": 1000000
     }
   },
   "loop": {

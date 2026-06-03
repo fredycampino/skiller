@@ -1,7 +1,19 @@
-from typing import Protocol
+from typing import Protocol, TypeAlias, TypeVar
 
-from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
+from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm_request import (
+    CodexLLMRequest,
+    LLMRequest,
+    MiniMaxLLMRequest,
+)
+
+RequestT = TypeVar("RequestT", bound=LLMRequest, contravariant=True)
 
 
-class LLMPort(Protocol):
-    def generate(self, request: LLMRequest) -> LLMResponse: ...
+class LLMPort(Protocol[RequestT]):
+    def generate(self, request: RequestT) -> LLMResponse: ...
+
+
+ResolvedLLMPort: TypeAlias = (
+    LLMPort[LLMRequest] | LLMPort[MiniMaxLLMRequest] | LLMPort[CodexLLMRequest]
+)

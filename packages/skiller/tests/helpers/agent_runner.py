@@ -6,6 +6,9 @@ from skiller.application.agent.context.agent_context_manager import AgentContext
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
+from skiller.application.agent.event.agent_event_draft_builder import (
+    AgentEventDraftBuilder,
+)
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
@@ -14,24 +17,10 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
-from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
-    AgentContextEntry,
-    AgentContextEntryType,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
-)
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
 from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm_request import LLMRequest
-from skiller.domain.event.event_model import (
-    AgentBodyToolMessage,
-    AgentEventPayload,
-    AgentLifecyclePayload,
-    RuntimeEventType,
-)
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunAgent
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
@@ -82,154 +71,6 @@ class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
     def __init__(self, append_runtime_event_use_case: AppendRuntimeEventUseCase | None) -> None:
         self.append_runtime_event_use_case = append_runtime_event_use_case
 
-    def emit_max_turns_exhausted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        if self.append_runtime_event_use_case is None:
-            return
-
-        self.append_runtime_event_use_case.execute(
-            run_id,
-            event_type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
-            step_id=step_id,
-            step_type="agent",
-            payload=AgentLifecyclePayload(
-                turn_id=turn_id,
-                stop_reason="max_turns_exhausted",
-            ),
-        )
-
-    def emit_interrupted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        if self.append_runtime_event_use_case is None:
-            return
-
-        self.append_runtime_event_use_case.execute(
-            run_id,
-            event_type=RuntimeEventType.AGENT_INTERRUPTED,
-            step_id=step_id,
-            step_type="agent",
-            payload=AgentLifecyclePayload(
-                turn_id=turn_id,
-                stop_reason="interrupted",
-            ),
-        )
-
-    def emit_assistant_message(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if self.append_runtime_event_use_case is None:
-            return
-        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
-            raise ValueError("Assistant event requires assistant_message entry")
-        if not isinstance(entry.payload, AgentAssistantMessagePayload):
-            raise ValueError("Assistant event requires AgentAssistantMessagePayload")
-
-        self.append_runtime_event_use_case.execute(
-            entry.run_id,
-            event_type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
-            payload=AgentEventPayload(
-                step_id=entry.source_step_id,
-                turn_id=entry.payload.turn_id,
-                agent_sequence=entry.sequence,
-                body=AgentBodyToolMessage(
-                    total_tokens=entry.payload.total_tokens or 0,
-                    text=entry.payload.text,
-                ),
-            ),
-        )
-
-    def emit_final_assistant_message(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if self.append_runtime_event_use_case is None:
-            return
-        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
-            raise ValueError("Final assistant event requires assistant_message entry")
-        if not isinstance(entry.payload, AgentAssistantMessagePayload):
-            raise ValueError("Final assistant event requires AgentAssistantMessagePayload")
-
-        self.append_runtime_event_use_case.execute(
-            entry.run_id,
-            event_type=RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
-            payload=AgentEventPayload(
-                step_id=entry.source_step_id,
-                turn_id=entry.payload.turn_id,
-                agent_sequence=entry.sequence,
-                body=AgentBodyToolMessage(
-                    total_tokens=entry.payload.total_tokens or 0,
-                    text=entry.payload.text,
-                ),
-            ),
-        )
-
-    def emit_tool_call(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if self.append_runtime_event_use_case is None:
-            return
-        if entry.entry_type != AgentContextEntryType.TOOL_CALL:
-            raise ValueError("Tool call event requires tool_call entry")
-        if not isinstance(entry.payload, AgentToolCallPayload):
-            raise ValueError("Tool call event requires AgentToolCallPayload")
-
-        self.append_runtime_event_use_case.execute(
-            entry.run_id,
-            event_type=RuntimeEventType.AGENT_TOOL_CALL,
-            payload=AgentEventPayload(
-                step_id=entry.source_step_id,
-                turn_id=entry.payload.turn_id,
-                agent_sequence=entry.sequence,
-                body=entry.payload,
-            ),
-        )
-
-    def emit_tool_result(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if self.append_runtime_event_use_case is None:
-            return
-        if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
-            raise ValueError("Tool result event requires tool_result entry")
-        if not isinstance(entry.payload, AgentToolResultPayload):
-            raise ValueError("Tool result event requires AgentToolResultPayload")
-
-        self.append_runtime_event_use_case.execute(
-            entry.run_id,
-            event_type=RuntimeEventType.AGENT_TOOL_RESULT,
-            payload=AgentEventPayload(
-                step_id=entry.source_step_id,
-                turn_id=entry.payload.turn_id,
-                agent_sequence=entry.sequence,
-                body=entry.payload,
-            ),
-        )
-
     def append_event(self, event):  # noqa: ANN001
         if self.append_runtime_event_use_case is None:
             return "event-1"
@@ -270,6 +111,7 @@ def build_tool_execution(
         context_publisher=context_publisher,
         event_publisher=AgentEventPublisher(
             runtime_event_store,
+            AgentEventDraftBuilder(),
             OutputTruncator(),
         ),
         steering=steering or _NullSteering(),
@@ -306,6 +148,7 @@ def build_agent_runner(
         ),
         event_publisher=AgentEventPublisher(
             runtime_event_store,
+            AgentEventDraftBuilder(),
             OutputTruncator(),
         ),
         tool_execution=build_tool_execution(

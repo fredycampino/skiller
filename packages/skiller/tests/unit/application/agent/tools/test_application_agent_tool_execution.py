@@ -9,12 +9,16 @@ from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
+from skiller.application.agent.event.agent_event_draft_builder import (
+    AgentEventDraftBuilder,
+)
 from skiller.application.agent.event.agent_event_publisher import (
     AgentEventPublisher,
 )
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import (
+    PreparedTool,
     ToolManager,
     ToolPrepareFailure,
     ToolPrepareResult,
@@ -26,12 +30,9 @@ from skiller.domain.agent.agent_config_model import (
     AgentEventOutputConfig,
 )
 from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
 )
 from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.agent_loop_model import AgentLoop
@@ -55,6 +56,7 @@ from skiller.domain.run.steering_model import (
     SteeringItemType,
 )
 from skiller.domain.tool.tool_contract import (
+    ToolResult,
     ToolResultStatus,
     ToolRuntimeConfigs,
 )
@@ -112,11 +114,108 @@ def test_agent_tool_execution_runs_process_tool() -> None:
         AgentContextEntryType.TOOL_CALL,
         AgentContextEntryType.TOOL_RESULT,
     ]
-    assert context_store.appended[-1]["payload"]["text"] == "ok"
+    assert context_store.appended[-1]["payload"]["data"]["stdout"] == "ok\n"
+    assert "text" not in context_store.appended[-1]["payload"]
     assert [event["type"] for event in runtime_events.calls] == [
         "tool_call",
         "tool_result",
     ]
+
+
+def test_agent_tool_execution_keeps_tool_result_text_out_of_context_payload() -> None:
+    context_store = _FakeAgentContextStore()
+    runtime_events = _FakeRuntimeEventStore()
+    executor = _build_executor(
+        context_store=context_store,
+        runtime_event_store=runtime_events,
+        tool_manager=_TextOnlyToolManager(),
+    )
+
+    results = executor.execute(_request_with_tool("notify", '{"message":"hello"}'))
+
+    assert results == ToolExecutionResults(
+        items=[
+            ToolExecutionResult(
+                tool_call_id="call-1",
+                tool="notify",
+                status=ToolExecutionStatus.EXECUTED,
+            )
+        ]
+    )
+    assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.COMPLETED.value
+    assert context_store.appended[-1]["payload"]["data"] == {"ok": True}
+    assert "text" not in context_store.appended[-1]["payload"]
+    assert runtime_events.calls[-1]["event"].payload.body.text == f"{'x' * 600}..."
+
+
+def test_agent_tool_execution_rejects_large_tool_result_data_before_publish() -> None:
+    context_store = _FakeAgentContextStore()
+    runtime_events = _FakeRuntimeEventStore()
+    executor = _build_executor(
+        context_store=context_store,
+        runtime_event_store=runtime_events,
+        tool_manager=_LargeDataToolManager(),
+    )
+
+    results = executor.execute(_request_with_tool("notify", '{"message":"hello"}'))
+
+    assert results == ToolExecutionResults(
+        items=[
+            ToolExecutionResult(
+                tool_call_id="call-1",
+                tool="notify",
+                status=ToolExecutionStatus.EXECUTED,
+            )
+        ]
+    )
+    payload = context_store.appended[-1]["payload"]
+    assert payload["status"] == ToolResultStatus.FAILED.value
+    assert payload["data"] == {}
+    assert "Tool result data from 'notify' is too large" in str(payload["error"])
+    assert "maximum allowed is 50000 bytes" in str(payload["error"])
+    assert "text" not in payload
+
+    body = runtime_events.calls[-1]["event"].payload.body
+    assert body.status == ToolResultStatus.FAILED.value
+    assert body.data == {}
+    assert body.text is None
+    assert "Tool result data from 'notify' is too large" in str(body.error)
+    assert "maximum allowed is 50000 bytes" in str(body.error)
+
+
+def test_agent_tool_execution_rejects_large_tool_result_error_before_publish() -> None:
+    context_store = _FakeAgentContextStore()
+    runtime_events = _FakeRuntimeEventStore()
+    executor = _build_executor(
+        context_store=context_store,
+        runtime_event_store=runtime_events,
+        tool_manager=_LargeErrorToolManager(),
+    )
+
+    results = executor.execute(_request_with_tool("notify", '{"message":"hello"}'))
+
+    assert results == ToolExecutionResults(
+        items=[
+            ToolExecutionResult(
+                tool_call_id="call-1",
+                tool="notify",
+                status=ToolExecutionStatus.EXECUTED,
+            )
+        ]
+    )
+    payload = context_store.appended[-1]["payload"]
+    assert payload["status"] == ToolResultStatus.FAILED.value
+    assert payload["data"] == {}
+    assert "Tool result error from 'notify' is too large" in str(payload["error"])
+    assert "maximum allowed is 50000 bytes" in str(payload["error"])
+    assert "text" not in payload
+
+    body = runtime_events.calls[-1]["event"].payload.body
+    assert body.status == ToolResultStatus.FAILED.value
+    assert body.data == {}
+    assert body.text is None
+    assert "Tool result error from 'notify' is too large" in str(body.error)
+    assert "maximum allowed is 50000 bytes" in str(body.error)
 
 
 def test_agent_tool_execution_interrupts_process_tool() -> None:
@@ -157,7 +256,6 @@ def test_agent_tool_execution_interrupts_process_tool() -> None:
         "tool": "shell",
         "status": "INTERRUPTED",
         "data": {"error": "interrupted"},
-        "text": None,
         "error": "Tool execution interrupted by user",
     }
 
@@ -177,7 +275,8 @@ def test_agent_tool_execution_falls_back_to_native_tool() -> None:
             )
         ]
     )
-    assert context_store.appended[-1]["payload"]["text"] == "hello"
+    assert context_store.appended[-1]["payload"]["data"] == {"message": "hello"}
+    assert "text" not in context_store.appended[-1]["payload"]
 
 
 def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
@@ -244,8 +343,10 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         AgentContextEntryType.TOOL_CALL,
         AgentContextEntryType.TOOL_RESULT,
     ]
-    assert context_store.appended[1]["payload"]["text"] == "hello"
-    assert context_store.appended[3]["payload"]["text"] == "world"
+    assert context_store.appended[1]["payload"]["data"] == {"message": "hello"}
+    assert context_store.appended[3]["payload"]["data"] == {"message": "world"}
+    assert "text" not in context_store.appended[1]["payload"]
+    assert "text" not in context_store.appended[3]["payload"]
     assert [event["type"] for event in runtime_events.calls] == [
         "tool_call",
         "tool_result",
@@ -327,6 +428,7 @@ def _build_executor(
         context_publisher=context_publisher,
         event_publisher=AgentEventPublisher(
             store,
+            AgentEventDraftBuilder(),
             OutputTruncator(),
         ),
         steering=steering or _FakeSteering(),
@@ -348,6 +450,78 @@ class _RequestExceptionToolManager:
             tool_name=request.tool,
             error=ToolPrepareFailure.REQUEST_EXCEPTION,
             error_message="request boom",
+        )
+
+
+class _TextOnlyToolManager:
+    def prepare(self, request) -> ToolPrepareResult:
+        return ToolPrepareResult(
+            ok=True,
+            tool_name=request.tool,
+            prepared=PreparedTool(
+                name=request.tool,
+                tool=NotifyTool(),
+                request=request,
+                config=request.runtime_config,
+            ),
+        )
+
+    def execute_prepared(self, prepared: PreparedTool) -> ToolResult:
+        _ = prepared
+        return ToolResult(
+            name="notify",
+            status=ToolResultStatus.COMPLETED,
+            data={"ok": True},
+            text="x" * 60_000,
+            error=None,
+        )
+
+
+class _LargeDataToolManager:
+    def prepare(self, request) -> ToolPrepareResult:
+        return ToolPrepareResult(
+            ok=True,
+            tool_name=request.tool,
+            prepared=PreparedTool(
+                name=request.tool,
+                tool=NotifyTool(),
+                request=request,
+                config=request.runtime_config,
+            ),
+        )
+
+    def execute_prepared(self, prepared: PreparedTool) -> ToolResult:
+        _ = prepared
+        return ToolResult(
+            name="notify",
+            status=ToolResultStatus.COMPLETED,
+            data={"content": "x" * 60_000},
+            text="short summary",
+            error=None,
+        )
+
+
+class _LargeErrorToolManager:
+    def prepare(self, request) -> ToolPrepareResult:
+        return ToolPrepareResult(
+            ok=True,
+            tool_name=request.tool,
+            prepared=PreparedTool(
+                name=request.tool,
+                tool=NotifyTool(),
+                request=request,
+                config=request.runtime_config,
+            ),
+        )
+
+    def execute_prepared(self, prepared: PreparedTool) -> ToolResult:
+        _ = prepared
+        return ToolResult(
+            name="notify",
+            status=ToolResultStatus.FAILED,
+            data={"ok": False},
+            text=None,
+            error="x" * 60_000,
         )
 
 
@@ -494,7 +668,6 @@ class _FakeAgentContextStore:
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,
-                "text": result.text,
                 "error": result.error,
             },
         )
@@ -628,77 +801,6 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
 
     def __init__(self) -> None:
         self.calls = []
-
-    def emit_max_turns_exhausted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        self.calls.append(
-            {
-                "type": "max_turns_exhausted",
-                "run_id": run_id,
-                "step_id": step_id,
-                "turn_id": turn_id,
-            }
-        )
-
-    def emit_interrupted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        self.calls.append(
-            {
-                "type": "interrupted",
-                "run_id": run_id,
-                "step_id": step_id,
-                "turn_id": turn_id,
-            }
-        )
-
-    def emit_assistant_message(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
-            raise ValueError("Assistant event requires assistant_message entry")
-        if not isinstance(entry.payload, AgentAssistantMessagePayload):
-            raise ValueError("Assistant event requires AgentAssistantMessagePayload")
-        self.calls.append({"type": "assistant_message", "entry": entry})
-
-    def emit_tool_call(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if entry.entry_type != AgentContextEntryType.TOOL_CALL:
-            raise ValueError("Tool call event requires tool_call entry")
-        if not isinstance(entry.payload, AgentToolCallPayload):
-            raise ValueError("Tool call event requires AgentToolCallPayload")
-        self.calls.append({"type": "tool_call", "entry": entry})
-
-    def emit_tool_result(
-        self,
-        *,
-        entry: AgentContextEntry,
-        config: AgentEventOutputConfig,
-    ) -> None:
-        _ = config
-        if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
-            raise ValueError("Tool result event requires tool_result entry")
-        if not isinstance(entry.payload, AgentToolResultPayload):
-            raise ValueError("Tool result event requires AgentToolResultPayload")
-        self.calls.append({"type": "tool_result", "entry": entry})
 
     def append_event(self, event):  # noqa: ANN001
         event_type_map = {

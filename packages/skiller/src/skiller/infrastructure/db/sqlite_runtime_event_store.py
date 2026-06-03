@@ -3,17 +3,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
-    AgentContextEntry,
-    AgentContextEntryType,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
-)
 from skiller.domain.event.event_model import (
-    AgentBodyToolMessage,
-    AgentEventPayload,
-    AgentLifecyclePayload,
     RuntimeEvent,
     RuntimeEventDraft,
     RuntimeEventType,
@@ -28,118 +18,6 @@ from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
 
 class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
-    def emit_assistant_message(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
-            raise ValueError("Assistant event requires assistant_message entry")
-        if not isinstance(entry.payload, AgentAssistantMessagePayload):
-            raise ValueError("Assistant event requires AgentAssistantMessagePayload")
-
-        self.append_event(
-            RuntimeEventDraft(
-                run_id=entry.run_id,
-                type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
-                payload=AgentEventPayload(
-                    step_id=entry.source_step_id,
-                    turn_id=entry.payload.turn_id,
-                    agent_sequence=entry.sequence,
-                    body=AgentBodyToolMessage(
-                        total_tokens=entry.window_tokens or 0,
-                        text=entry.payload.text,
-                    ),
-                ),
-            )
-        )
-
-    def emit_interrupted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        self.append_event(
-            RuntimeEventDraft(
-                run_id=run_id,
-                type=RuntimeEventType.AGENT_INTERRUPTED,
-                step_id=step_id,
-                step_type="agent",
-                payload=AgentLifecyclePayload(
-                    turn_id=turn_id,
-                    stop_reason="interrupted",
-                ),
-            )
-        )
-
-    def emit_max_turns_exhausted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        self.append_event(
-            RuntimeEventDraft(
-                run_id=run_id,
-                type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
-                step_id=step_id,
-                step_type="agent",
-                payload=AgentLifecyclePayload(
-                    turn_id=turn_id,
-                    stop_reason="max_turns_exhausted",
-                ),
-            )
-        )
-
-    def emit_tool_call(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        if entry.entry_type != AgentContextEntryType.TOOL_CALL:
-            raise ValueError("Tool call event requires tool_call entry")
-        if not isinstance(entry.payload, AgentToolCallPayload):
-            raise ValueError("Tool call event requires AgentToolCallPayload")
-
-        self.append_event(
-            RuntimeEventDraft(
-                run_id=entry.run_id,
-                type=RuntimeEventType.AGENT_TOOL_CALL,
-                payload=AgentEventPayload(
-                    step_id=entry.source_step_id,
-                    turn_id=entry.payload.turn_id,
-                    agent_sequence=entry.sequence,
-                    body=entry.payload,
-                ),
-            )
-        )
-
-    def emit_tool_result(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        if entry.entry_type != AgentContextEntryType.TOOL_RESULT:
-            raise ValueError("Tool result event requires tool_result entry")
-        if not isinstance(entry.payload, AgentToolResultPayload):
-            raise ValueError("Tool result event requires AgentToolResultPayload")
-
-        self.append_event(
-            RuntimeEventDraft(
-                run_id=entry.run_id,
-                type=RuntimeEventType.AGENT_TOOL_RESULT,
-                payload=AgentEventPayload(
-                    step_id=entry.source_step_id,
-                    turn_id=entry.payload.turn_id,
-                    agent_sequence=entry.sequence,
-                    body=entry.payload,
-                ),
-            )
-        )
-
     def append_event(self, event: RuntimeEventDraft) -> str:
         event_id = str(uuid.uuid4())
         with self._connect() as conn:

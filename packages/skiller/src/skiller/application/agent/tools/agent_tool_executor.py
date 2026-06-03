@@ -37,6 +37,8 @@ from skiller.domain.tool.tool_process_model import (
 )
 from skiller.domain.tool.tool_process_port import ToolProcessPort
 
+_MAX_TOOL_RESULT_BYTES = 50_000
+
 
 class AgentToolExecutor(ToolProcessInterruptSignal):
     def __init__(
@@ -201,6 +203,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 state.add(tool_result)
                 continue
 
+            tool_result = self._check_tool_result(tool_result)
             agent_tool_result = AgentToolResult(
                 turn_id=request.turn_id,
                 tool_call_id=agent_tool_call.tool_call_id,
@@ -212,6 +215,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 tool_result=agent_tool_result,
             )
             self.event_publisher.emit_tool_result(
+                text=tool_result.text,
                 entry=tool_result_entry,
                 config=request.event_config,
             )
@@ -235,6 +239,44 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             )
 
         return state.finish()
+
+    def _check_tool_result(self, tool_result: ToolResult) -> ToolResult:
+        data_bytes = self._tool_result_field_bytes(tool_result.data)
+        if data_bytes > _MAX_TOOL_RESULT_BYTES:
+            return ToolResult(
+                name=tool_result.name,
+                status=ToolResultStatus.FAILED,
+                data={},
+                text=None,
+                error=self.feedback.tool_result_too_large(
+                    tool_name=tool_result.name,
+                    field="data",
+                    max_bytes=_MAX_TOOL_RESULT_BYTES,
+                    actual_bytes=data_bytes,
+                ),
+            )
+
+        error_bytes = 0
+        if tool_result.error is not None:
+            error_bytes = self._tool_result_field_bytes(tool_result.error)
+        if error_bytes <= _MAX_TOOL_RESULT_BYTES:
+            return tool_result
+
+        return ToolResult(
+            name=tool_result.name,
+            status=ToolResultStatus.FAILED,
+            data={},
+            text=None,
+            error=self.feedback.tool_result_too_large(
+                tool_name=tool_result.name,
+                field="error",
+                max_bytes=_MAX_TOOL_RESULT_BYTES,
+                actual_bytes=error_bytes,
+            ),
+        )
+
+    def _tool_result_field_bytes(self, value: object) -> int:
+        return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
     def _execute_process_tool(
         self,

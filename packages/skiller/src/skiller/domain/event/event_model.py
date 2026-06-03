@@ -11,12 +11,13 @@ from skiller.domain.action.action_model import (
     action_from_dict,
     action_to_public_dict,
 )
-from skiller.domain.agent.agent_context_model import (
-    AgentContextEntryType,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
-    agent_context_payload_from_dict,
-    agent_context_payload_to_dict,
+from skiller.domain.event.event_agent_model import (
+    AgentEventBody,
+    AgentEventPayload,
+    AgentLifecyclePayload,
+    AgentMessageEventBody,
+    AgentToolCallEventBody,
+    AgentToolResultEventBody,
 )
 
 
@@ -96,33 +97,6 @@ class StepErrorPayload:
 class ActionDonePayload:
     type: ActionType
     status: ActionStatus
-
-
-@dataclass(frozen=True)
-class AgentBodyToolMessage:
-    total_tokens: int
-    text: str
-
-
-AgentEventBody: TypeAlias = (
-    AgentBodyToolMessage
-    | AgentToolCallPayload
-    | AgentToolResultPayload
-)
-
-
-@dataclass(frozen=True)
-class AgentEventPayload:
-    step_id: str
-    turn_id: str
-    agent_sequence: int
-    body: AgentEventBody
-
-
-@dataclass(frozen=True)
-class AgentLifecyclePayload:
-    turn_id: str
-    stop_reason: str
 
 
 @dataclass(frozen=True)
@@ -206,7 +180,7 @@ def runtime_event_payload_to_dict(payload: object) -> dict[str, Any]:
     if is_dataclass(payload):
         return _without_none(asdict(payload))
 
-    return {}
+    raise TypeError(f"Unsupported runtime event payload: {type(payload).__name__}")
 
 
 def runtime_event_body_to_dict(payload: RuntimeEventPayload) -> dict[str, Any]:
@@ -219,12 +193,35 @@ def runtime_event_body_to_dict(payload: RuntimeEventPayload) -> dict[str, Any]:
 def agent_event_body_to_dict(
     payload: AgentEventBody,
 ) -> dict[str, Any]:
-    if isinstance(payload, AgentBodyToolMessage):
+    if isinstance(payload, AgentMessageEventBody):
         return {
             "total_tokens": payload.total_tokens,
             "text": payload.text,
         }
-    return agent_context_payload_to_dict(payload)
+    if isinstance(payload, AgentToolCallEventBody):
+        return {
+            "type": payload.type,
+            "turn_id": payload.turn_id,
+            "parent_sequence": payload.parent_sequence,
+            "tool_call_id": payload.tool_call_id,
+            "tool": payload.tool,
+            "args": payload.args,
+        }
+    if isinstance(payload, AgentToolResultEventBody):
+        result: dict[str, Any] = {
+            "type": payload.type,
+            "turn_id": payload.turn_id,
+            "parent_sequence": payload.parent_sequence,
+            "tool_call_id": payload.tool_call_id,
+            "tool": payload.tool,
+            "status": payload.status,
+            "data": payload.data,
+            "error": payload.error,
+        }
+        if payload.text is not None:
+            result["text"] = payload.text
+        return result
+    raise TypeError(f"Unsupported agent event body: {type(payload).__name__}")
 
 
 def runtime_event_step_id(payload: RuntimeEventPayload) -> str | None:
@@ -360,20 +357,33 @@ def _agent_event_body_from_dict(
         RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
         RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
     }:
-        return AgentBodyToolMessage(
+        return AgentMessageEventBody(
             total_tokens=_int_value(value.get("total_tokens")),
             text=str(value.get("text", "")),
         )
-    return agent_context_payload_from_dict(
-        entry_type=_agent_context_entry_type(event_type),
-        value=value,
-    )
-
-
-def _agent_context_entry_type(event_type: RuntimeEventType) -> AgentContextEntryType:
     if event_type == RuntimeEventType.AGENT_TOOL_CALL:
-        return AgentContextEntryType.TOOL_CALL
-    return AgentContextEntryType.TOOL_RESULT
+        args = value.get("args")
+        return AgentToolCallEventBody(
+            turn_id=str(value.get("turn_id", "")),
+            parent_sequence=_optional_int(value.get("parent_sequence")),
+            tool_call_id=str(value.get("tool_call_id", "")),
+            tool=str(value.get("tool", "")),
+            args=dict(args) if isinstance(args, dict) else {},
+        )
+
+    data = value.get("data")
+    text = value.get("text")
+    error = value.get("error")
+    return AgentToolResultEventBody(
+        turn_id=str(value.get("turn_id", "")),
+        parent_sequence=_optional_int(value.get("parent_sequence")),
+        tool_call_id=str(value.get("tool_call_id", "")),
+        tool=str(value.get("tool", "")),
+        status=str(value.get("status", "")),
+        data=dict(data) if isinstance(data, dict) else {},
+        text=str(text) if text is not None else None,
+        error=str(error) if error is not None else None,
+    )
 
 
 def _dict_value(value: object) -> dict[str, Any]:
@@ -381,7 +391,15 @@ def _dict_value(value: object) -> dict[str, Any]:
 
 
 def _int_value(value: object) -> int:
-    return value if isinstance(value, int) else 0
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return value
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:

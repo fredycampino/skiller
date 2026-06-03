@@ -42,3 +42,18 @@ class AgentRunnerFeedback:
             f"received {tool_call_count}, maximum allowed is {max_tool_calls}. "
             f"Return at most {max_tool_calls} tool call(s) in one response."
         )
+
+    def tool_result_too_large(
+        self,
+        *,
+        tool_name: str,
+        field: str,
+        max_bytes: int,
+        actual_bytes: int,
+    ) -> str:
+        return (
+            f"[Skiller] Tool result {field} from '{tool_name}' is too large "
+            f"for agent context: {actual_bytes} bytes, maximum allowed is "
+            f"{max_bytes} bytes. "
+            "Use a narrower request, filter the output, or inspect smaller ranges."
+        )

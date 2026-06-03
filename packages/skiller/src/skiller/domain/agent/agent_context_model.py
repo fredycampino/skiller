@@ -56,7 +56,6 @@ class AgentToolResultPayload:
     tool: str
     status: str
     data: dict[str, Any]
-    text: str | None
     error: str | None
     type: Literal["tool_result"] = "tool_result"
 
@@ -131,7 +130,6 @@ def agent_context_payload_to_dict(payload: AgentContextPayload) -> dict[str, obj
         "tool": payload.tool,
         "status": payload.status,
         "data": _clone(payload.data),
-        "text": payload.text,
         "error": payload.error,
     }
 
@@ -162,7 +160,6 @@ def agent_context_payload_from_dict(
         )
 
     data = value.get("data")
-    text = value.get("text")
     error = value.get("error")
     return AgentToolResultPayload(
         turn_id=str(value.get("turn_id", "")),
@@ -171,7 +168,6 @@ def agent_context_payload_from_dict(
         tool=str(value.get("tool", "")),
         status=str(value.get("status", "")),
         data=_clone(data) if isinstance(data, dict) else {},
-        text=text if isinstance(text, str) else None,
         error=error if isinstance(error, str) else None,
     )
 

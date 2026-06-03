@@ -5,10 +5,10 @@ from skiller.application.agent.event.agent_event_truncator import (
     AgentEventOutputPolicy,
     AgentEventTruncator,
 )
-from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
+from skiller.domain.event.event_agent_model import (
+    AgentMessageEventBody,
+    AgentToolCallEventBody,
+    AgentToolResultEventBody,
 )
 
 pytestmark = pytest.mark.unit
@@ -21,9 +21,8 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
     )
 
     payload = truncator.truncate_assistant_message(
-        AgentAssistantMessagePayload(
-            turn_id="turn-1",
-            message_type="final",
+        AgentMessageEventBody(
+            total_tokens=125,
             text="abcdefghijklmnopqrstuvwxyz",
         )
     )
@@ -38,7 +37,7 @@ def test_agent_event_truncator_truncates_tool_call_args() -> None:
     )
 
     payload = truncator.truncate_tool_call(
-        AgentToolCallPayload(
+        AgentToolCallEventBody(
             turn_id="turn-1",
             parent_sequence=3,
             tool_call_id="call-1",
@@ -61,7 +60,7 @@ def test_agent_event_truncator_caps_large_tool_call_json_payload() -> None:
     )
 
     payload = truncator.truncate_tool_call(
-        AgentToolCallPayload(
+        AgentToolCallEventBody(
             turn_id="turn-1",
             parent_sequence=None,
             tool_call_id="call-1",
@@ -81,7 +80,7 @@ def test_agent_event_truncator_truncates_tool_result_fields() -> None:
     )
 
     payload = truncator.truncate_tool_result(
-        AgentToolResultPayload(
+        payload=AgentToolResultEventBody(
             turn_id="turn-1",
             parent_sequence=3,
             tool_call_id="call-1",

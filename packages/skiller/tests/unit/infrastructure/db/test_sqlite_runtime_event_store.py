@@ -5,17 +5,14 @@ from skiller.domain.action.action_model import (
     ActionType,
     RunAction,
 )
-from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
-    AgentContextEntry,
-    AgentContextEntryType,
-    AgentToolCallPayload,
+from skiller.domain.event.event_agent_model import (
+    AgentEventPayload,
+    AgentLifecyclePayload,
+    AgentMessageEventBody,
+    AgentToolCallEventBody,
 )
 from skiller.domain.event.event_model import (
     ActionDonePayload,
-    AgentBodyToolMessage,
-    AgentEventPayload,
-    AgentLifecyclePayload,
     RunFinishedPayload,
     RuntimeEventDraft,
     RuntimeEventType,
@@ -107,11 +104,11 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
                 step_id="support_agent",
                 turn_id="turn-1",
                 agent_sequence=33,
-                body=AgentToolCallPayload(
-                    turn_id="turn-1",
-                    parent_sequence=32,
-                    tool_call_id="call-1",
-                    tool="shell",
+            body=AgentToolCallEventBody(
+                turn_id="turn-1",
+                parent_sequence=32,
+                tool_call_id="call-1",
+                tool="shell",
                     args={"command": "pwd"},
                 ),
             ),
@@ -129,7 +126,7 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
         step_id="support_agent",
         turn_id="turn-1",
         agent_sequence=33,
-        body=AgentToolCallPayload(
+        body=AgentToolCallEventBody(
             turn_id="turn-1",
             parent_sequence=32,
             tool_call_id="call-1",
@@ -266,10 +263,17 @@ def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path
         run_id=run_id,
     )
 
-    runtime_event_store.emit_max_turns_exhausted(
-        run_id=run_id,
-        step_id="support_agent",
-        turn_id="turn-29",
+    runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED,
+            step_id="support_agent",
+            step_type="agent",
+            payload=AgentLifecyclePayload(
+                turn_id="turn-29",
+                stop_reason="max_turns_exhausted",
+            ),
+        )
     )
 
     event = runtime_event_store.list_events(run_id)[0]
@@ -287,7 +291,7 @@ def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path
     }
 
 
-def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tmp_path) -> None:
+def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> None:
     db_path = tmp_path / "runtime-assistant-message.db"
     run_store = SqliteStateStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
@@ -301,22 +305,19 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
         run_id=run_id,
     )
 
-    runtime_event_store.emit_assistant_message(
-        entry=AgentContextEntry(
-            id="entry-1",
+    runtime_event_store.append_event(
+        RuntimeEventDraft(
             run_id=run_id,
-            context_id="ctx-1",
-            sequence=7,
-            entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=None,
-            payload=AgentAssistantMessagePayload(
+            type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+            payload=AgentEventPayload(
+                step_id="support_agent",
                 turn_id="turn-4",
-                message_type="tool_calls",
-                text="I will inspect.",
+                agent_sequence=7,
+                body=AgentMessageEventBody(
+                    total_tokens=1000,
+                    text="I will inspect.",
+                ),
             ),
-            window_tokens=1000,
-            source_step_id="support_agent",
-            created_at="2026-05-15T00:00:00Z",
         )
     )
 
@@ -330,7 +331,7 @@ def test_runtime_event_store_emits_assistant_message_from_agent_context_entry(tm
         step_id="support_agent",
         turn_id="turn-4",
         agent_sequence=7,
-        body=AgentBodyToolMessage(
+        body=AgentMessageEventBody(
             total_tokens=1000,
             text="I will inspect.",
         ),
@@ -363,7 +364,7 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                 step_id="support_agent",
                 turn_id="turn-4",
                 agent_sequence=7,
-                body=AgentBodyToolMessage(
+                body=AgentMessageEventBody(
                     total_tokens=2144,
                     text="Done.",
                 ),
@@ -379,7 +380,7 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
         step_id="support_agent",
         turn_id="turn-4",
         agent_sequence=7,
-        body=AgentBodyToolMessage(
+        body=AgentMessageEventBody(
             total_tokens=2144,
             text="Done.",
         ),

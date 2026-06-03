@@ -19,6 +19,22 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.2 - 2026-06-03
+
+### Added
+- Add configurable LLM context windows for agent runs.
+- Add run end actions.
+
+### Changed
+- Refine agent runtime event construction and context handling.
+
+### Fixed
+- Keep agent event publishing out of infrastructure while preserving typed runtime event payloads.
+- Improve oversized tool result handling for agent context.
+
+### Notes
+- Includes PR #55, PR #56, and PR #57.
+
 ## 0.1.0-beta.1 - 2026-06-01
 
 ### Added

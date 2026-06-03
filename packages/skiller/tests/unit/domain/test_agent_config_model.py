@@ -9,11 +9,15 @@ from skiller.domain.agent.agent_config_model import (
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexLLMModel,
+    AgentCodexProvider,
+    AgentFakeLLMModel,
     AgentLLMProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
+    AgentNullLLMModel,
 )
 
 pytestmark = pytest.mark.unit
@@ -66,9 +70,9 @@ def test_agent_config_accepts_explicit_sections() -> None:
 
     assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
     assert provider.api_key == "secret"
-    assert provider.model == "MiniMax-M2.5"
+    assert provider.model == AgentMiniMaxLLMModel.M2_5
     assert provider.timeout_seconds == 30.0
-    assert provider.context_window_tokens == 1_000_000
+    assert provider.window_width_tokens == 1_000_000
     assert config.loop.max_turns == 20
     assert config.loop.max_tool_calls == 7
     assert config.context.compaction.enabled is True
@@ -87,10 +91,44 @@ def test_agent_llm_provider_list_requires_default_provider() -> None:
         )
 
 
+def test_agent_llm_models_define_model_context_window_tokens() -> None:
+    assert AgentNullLLMModel.NULL1.model_context_window_tokens == 100_000
+    assert AgentFakeLLMModel.MODEL1.model_context_window_tokens == 100_000
+    assert AgentMiniMaxLLMModel.M2_5.model_context_window_tokens == 204_800
+    assert AgentMiniMaxLLMModel.M2_7.model_context_window_tokens == 204_800
+    assert AgentCodexLLMModel.GPT_5_3_CODEX.model_context_window_tokens == 400_000
+    assert AgentCodexLLMModel.GPT_5_4.model_context_window_tokens == 1_050_000
+    assert AgentCodexLLMModel.GPT_5_5.model_context_window_tokens == 1_050_000
+
+
+def test_agent_llm_providers_require_typed_model_enum() -> None:
+    with pytest.raises(
+        TypeError,
+        match="MiniMax LLM provider model must be an AgentMiniMaxLLMModel",
+    ):
+        AgentMiniMaxProvider(
+            api_key="secret",
+            model=AgentCodexLLMModel.GPT_5_5,
+            timeout_seconds=30.0,
+            window_width_tokens=1_000_000,
+        )
+
+    with pytest.raises(
+        TypeError,
+        match="Codex LLM provider model must be an AgentCodexLLMModel",
+    ):
+        AgentCodexProvider(
+            credentials_file="/tmp/openai-codex.json",
+            model=AgentMiniMaxLLMModel.M2_5,
+            timeout_seconds=120.0,
+            window_width_tokens=1_000_000,
+        )
+
+
 def _minimax_provider() -> AgentLLMProvider:
     return AgentMiniMaxProvider(
         api_key="secret",
         model=AgentMiniMaxLLMModel.M2_5,
         timeout_seconds=30.0,
-        context_window_tokens=1_000_000,
+        window_width_tokens=1_000_000,
     )

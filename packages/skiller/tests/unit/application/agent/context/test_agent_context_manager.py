@@ -62,7 +62,7 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
     assert result.llm_request.messages[1].content == "Hello"
     assert result.llm_request.model == "model1"
     assert result.context_id == "ctx-1"
-    assert result.context_window_tokens == 80_000
+    assert result.window_width_tokens == 80_000
     assert result.window_start_sequence == 1
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 0
@@ -107,7 +107,7 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
     assert window_result.turn_id == "turn-3"
     assert window_result.llm_request.messages[1].content == "Window context"
     assert window_result.llm_request.model == "model1"
-    assert window_result.context_window_tokens == 80_000
+    assert window_result.window_width_tokens == 80_000
     assert window_result.window_start_sequence == 2
     assert window_result.max_ratio == 0.8
     assert window_result.estimated_tokens == 0
@@ -175,7 +175,7 @@ def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> 
 
     result = manager.build_window_context(context=context, config=config)
 
-    assert result.context_window_tokens == 80_000
+    assert result.window_width_tokens == 80_000
     assert result.window_start_sequence == 1
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 4

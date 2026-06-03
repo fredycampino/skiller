@@ -1,12 +1,14 @@
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentFakeLLMModel,
 )
-from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
+from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_request import LLMRequest
 
 FAKE_LLM_RESPONSE_TEXT = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
 
 
-class FakeLLM:
+class FakeLLM(LLMPort[LLMRequest]):
     def __init__(
         self,
         *,

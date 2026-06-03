@@ -3,45 +3,39 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMModel,
 )
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
-    LLMRequest,
     LLMResponse,
     LLMResponseFormat,
     LLMResponseFormatType,
     LLMToolCall,
     LLMToolCallFunction,
-    LLMToolChoice,
-    LLMToolChoiceMode,
     LLMToolMessage,
     LLMUsage,
 )
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
-def to_openai_kwargs(request: LLMRequest) -> dict[str, object]:
+def to_openai_kwargs(request: MiniMaxLLMRequest) -> dict[str, object]:
     payload: dict[str, object] = {
         "model": request.model.value,
         "messages": [_message_to_payload(message) for message in request.messages],
     }
     if request.tools:
         payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
-    if request.tool_choice is not None:
-        payload["tool_choice"] = _tool_choice_value(request.tool_choice)
+    payload["tool_choice"] = _tool_choice_value(request.tool_choice)
     if request.response_format is not None:
         payload["response_format"] = _response_format_value(request.response_format)
-    if request.temperature is not None:
-        payload["temperature"] = request.temperature
-    if request.max_tokens is not None:
-        payload["max_tokens"] = request.max_tokens
-    if request.top_p is not None:
-        payload["top_p"] = request.top_p
-    if request.parallel_tool_calls is not None:
-        payload["parallel_tool_calls"] = request.parallel_tool_calls
+    payload["temperature"] = request.temperature
+    payload["max_tokens"] = request.max_tokens
+    payload["top_p"] = request.top_p
+    payload["parallel_tool_calls"] = request.parallel_tool_calls
     return payload
 
 
@@ -236,15 +230,8 @@ def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
     return payload
 
 
-def _tool_choice_value(tool_choice: LLMToolChoice) -> str | dict[str, object]:
-    if tool_choice.mode in {LLMToolChoiceMode.AUTO, LLMToolChoiceMode.NONE}:
-        return tool_choice.mode.value
-    if tool_choice.tool_name is None:
-        return tool_choice.mode.value
-    return {
-        "type": "function",
-        "function": {"name": tool_choice.tool_name},
-    }
+def _tool_choice_value(tool_choice: LLMToolChoiceMode) -> str:
+    return tool_choice.value
 
 
 def _response_format_value(response_format: LLMResponseFormat) -> dict[str, object]:

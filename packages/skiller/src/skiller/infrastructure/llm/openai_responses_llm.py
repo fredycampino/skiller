@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from skiller.domain.agent.llm_model import LLMRequest, LLMResponse
+from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.infrastructure.llm.openai_responses_mapper import (
     OpenAIResponsesStreamResult,
     to_openai_responses_kwargs,
@@ -17,7 +18,7 @@ def _load_openai_client_class() -> type[object]:
     return OpenAI
 
 
-class OpenAIResponsesLLM(LLMPort):
+class OpenAIResponsesLLM(LLMPort[MiniMaxLLMRequest]):
     def __init__(
         self,
         *,
@@ -32,7 +33,7 @@ class OpenAIResponsesLLM(LLMPort):
         self.default_headers = dict(default_headers or {})
         self.client = self._build_client()
 
-    def generate(self, request: LLMRequest) -> LLMResponse:
+    def generate(self, request: MiniMaxLLMRequest) -> LLMResponse:
         if not self.api_key.strip():
             return LLMResponse(
                 ok=False,

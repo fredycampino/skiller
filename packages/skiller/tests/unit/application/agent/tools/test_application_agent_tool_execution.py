@@ -33,6 +33,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
     AgentToolResultPayload,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
@@ -188,7 +189,7 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
     )
     response = LLMResponse(
         ok=True,
-        model="model1",
+        model=AgentFakeLLMModel.MODEL1,
         tool_calls=(
             LLMToolCall(
                 id="call-1",
@@ -360,7 +361,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         turn_id="turn-1",
         response=LLMResponse(
             ok=True,
-            model="model1",
+            model=AgentFakeLLMModel.MODEL1,
             tool_calls=(
                 LLMToolCall(
                     id="call-1",

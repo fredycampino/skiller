@@ -8,16 +8,24 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentCodexProvider,
+    AgentLLMProvider,
+    AgentMiniMaxProvider,
+)
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
-    LLMRequest,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolMessage,
     LLMUserMessage,
+)
+from skiller.domain.agent.llm_request import (
+    CodexLLMRequest,
+    LLMRequest,
+    MiniMaxLLMRequest,
 )
 from skiller.domain.tool.tool_contract import ToolDefinition
 
@@ -26,14 +34,33 @@ class AgentPromptBuilder:
     def build_request(
         self,
         *,
-        model: AgentLLMModel,
+        provider: AgentLLMProvider,
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],
     ) -> LLMRequest:
+        messages = tuple(self._build_messages(system=system, entries=entries))
+        if isinstance(provider, AgentMiniMaxProvider):
+            return MiniMaxLLMRequest(
+                messages=messages,
+                model=provider.model,
+                tool_choice=provider.tool_choice,
+                parallel_tool_calls=provider.parallel_tool_calls,
+                temperature=provider.temperature,
+                max_tokens=provider.max_output_tokens,
+                top_p=provider.top_p,
+                tools=tools,
+            )
+        if isinstance(provider, AgentCodexProvider):
+            return CodexLLMRequest(
+                messages=messages,
+                model=provider.model,
+                parallel_tool_calls=provider.parallel_tool_calls,
+                tools=tools,
+            )
         return LLMRequest(
-            messages=tuple(self._build_messages(system=system, entries=entries)),
-            model=model,
+            messages=messages,
+            model=provider.model,
             tools=tools,
         )
 

@@ -9,7 +9,7 @@ from skiller.domain.agent.agent_context_model import (
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.llm_model import LLMRequest
+from skiller.domain.agent.llm_request import LLMRequest
 
 
 @dataclass(frozen=True)
@@ -17,7 +17,7 @@ class AgentContextLLMRequest:
     context_id: str
     turn_id: str
     llm_request: LLMRequest
-    context_window_tokens: int
+    window_width_tokens: int
     window_start_sequence: int
     window_end_sequence: int
     max_ratio: float
@@ -42,17 +42,17 @@ class AgentContextManager:
     ) -> AgentContextLLMRequest:
         provider = config.config.llm.default()
         max_ratio = config.config.context.compaction.max_total_tokens_ratio
-        context_window_tokens = int(
-            provider.context_window_tokens * max_ratio,
+        window_width_tokens = int(
+            provider.window_width_tokens * max_ratio,
         )
         context_window = self.agent_context_store.list_context_window(
             context_id=context.context_id,
-            window_tokens=context_window_tokens,
+            window_tokens=window_width_tokens,
         )
         entries = context_window.entries
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
         llm_request = self.prompt_builder.build_request(
-            model=provider.model,
+            provider=provider,
             system=config.system,
             entries=entries,
             tools=config.tools,
@@ -61,7 +61,7 @@ class AgentContextManager:
             context_id=context.context_id,
             turn_id=turn_id,
             llm_request=llm_request,
-            context_window_tokens=context_window_tokens,
+            window_width_tokens=window_width_tokens,
             window_start_sequence=context_window.start_sequence,
             window_end_sequence=context_window.end_sequence,
             max_ratio=max_ratio,

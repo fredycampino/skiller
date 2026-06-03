@@ -68,7 +68,7 @@ class AgentConfigMapper:
                 provider_type=provider_type,
                 provider=provider,
                 selected=selected,
-                max_context_tokens=config.llm.max_context_tokens,
+                selected_window_width_tokens=config.llm.window_width_tokens,
                 env=self.env,
             )
             providers.append(llm_provider)
@@ -105,7 +105,7 @@ def _build_provider(
     provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
-    max_context_tokens: int | None,
+    selected_window_width_tokens: int | None,
     env: Mapping[str, str],
 ) -> AgentLLMProvider:
     raw_model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
@@ -115,21 +115,21 @@ def _build_provider(
         selected=selected,
         env=env,
     )
-    context_window_tokens = provider.context_window_tokens
-    if selected and max_context_tokens is not None:
-        context_window_tokens = max_context_tokens
+    window_width_tokens = provider.window_width_tokens
+    if selected and selected_window_width_tokens is not None:
+        window_width_tokens = selected_window_width_tokens
 
     if provider_type == AgentLLMProviderType.NULL:
         return AgentNullProvider(
             model=_null_model(raw_model),
             timeout_seconds=timeout_seconds,
-            context_window_tokens=context_window_tokens,
+            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.FAKE:
         return AgentFakeProvider(
             model=_fake_model(raw_model),
             timeout_seconds=timeout_seconds,
-            context_window_tokens=context_window_tokens,
+            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.MINIMAX:
         api_key = _resolve_api_key(
@@ -142,14 +142,14 @@ def _build_provider(
             model=_minimax_model(raw_model),
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            context_window_tokens=context_window_tokens,
+            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.CODEX:
         return AgentCodexProvider(
             model=_codex_model(raw_model),
             credentials_file=_required_credentials_file(provider.credentials_file),
             timeout_seconds=timeout_seconds,
-            context_window_tokens=context_window_tokens,
+            window_width_tokens=window_width_tokens,
         )
 
     raise ValueError(f"Unsupported LLM provider: {provider_type.value}")

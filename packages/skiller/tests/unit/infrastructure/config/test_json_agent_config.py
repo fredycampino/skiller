@@ -14,7 +14,11 @@ from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMProviderType
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentFakeLLMModel,
+    AgentLLMProviderType,
+    AgentMiniMaxLLMModel,
+)
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 
@@ -46,9 +50,9 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
     assert provider.type == AgentLLMProviderType.MINIMAX
     assert provider.api_key == "secret"
-    assert provider.model == "MiniMax-M2.5"
+    assert provider.model == AgentMiniMaxLLMModel.M2_5
     assert provider.timeout_seconds == 30.0
-    assert provider.context_window_tokens == 1_000_000
+    assert provider.window_width_tokens == 1_000_000
     assert config.loop.max_turns == 12
     assert config.loop.max_tool_calls == 7
     assert config.context.compaction.enabled is True
@@ -76,7 +80,7 @@ def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> 
     provider = config.llm.default()
 
     assert provider.api_key == "env-key"
-    assert provider.model == "MiniMax-M2.7"
+    assert provider.model == AgentMiniMaxLLMModel.M2_7
     assert provider.timeout_seconds == 10.5
     assert config.loop.max_turns == 20
     assert config.loop.max_tool_calls == 3
@@ -84,20 +88,20 @@ def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> 
     assert config.event_output.truncate.max_text_chars == 100
 
 
-def test_json_agent_config_applies_llm_max_context_tokens_to_selected_provider(
+def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
     tmp_path,
 ) -> None:
     config_path = tmp_path / "agent.json"
     payload = _minimax_llm(api_key="secret")
     payload["llm"] = {
         "default_provider": "minimax",
-        "max_context_tokens": 80_000,
+        "window_width_tokens": 80_000,
     }
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
     config = _provider(config_path=config_path, env={}).get_config()
 
-    assert config.llm.default().context_window_tokens == 80_000
+    assert config.llm.default().window_width_tokens == 80_000
 
 
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
@@ -310,12 +314,12 @@ def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) ->
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "context_window_tokens": 1_000_000,
+                    "window_width_tokens": 1_000_000,
                 },
                 "fake": {
                     "model": "model1",
                     "timeout_seconds": 30,
-                    "context_window_tokens": 100_000,
+                    "window_width_tokens": 100_000,
                 },
             },
         },
@@ -334,7 +338,7 @@ def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) ->
     provider = config.llm.default()
 
     assert provider.type == AgentLLMProviderType.FAKE
-    assert provider.model == "model1"
+    assert provider.model == AgentFakeLLMModel.MODEL1
 
 
 def test_json_agent_config_does_not_use_cwd_agent_json(
@@ -362,7 +366,7 @@ def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
                     "api_key": "secret",
                     "model": "model",
                     "timeout_seconds": 30,
-                    "context_window_tokens": 100_000,
+                    "window_width_tokens": 100_000,
                 }
             },
         },
@@ -408,7 +412,7 @@ def _minimax_llm(
     provider: dict[str, object] = {
         "model": model,
         "timeout_seconds": 30,
-        "context_window_tokens": 1_000_000,
+        "window_width_tokens": 1_000_000,
     }
     if api_key is not None:
         provider["api_key"] = api_key
@@ -431,7 +435,7 @@ def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
     provider: dict[str, object] = {
         "model": "gpt-5.5",
         "timeout_seconds": 120,
-        "context_window_tokens": 100_000,
+        "window_width_tokens": 100_000,
     }
     if credentials_file is not None:
         provider["credentials_file"] = credentials_file
@@ -451,7 +455,7 @@ def _fake_llm() -> dict[str, object]:
             "fake": {
                 "model": "model1",
                 "timeout_seconds": 30,
-                "context_window_tokens": 100_000,
+                "window_width_tokens": 100_000,
             }
         },
     }
@@ -464,7 +468,7 @@ def _null_llm() -> dict[str, object]:
             "null": {
                 "model": "null1",
                 "timeout_seconds": 30,
-                "context_window_tokens": 100_000,
+                "window_width_tokens": 100_000,
             }
         },
     }

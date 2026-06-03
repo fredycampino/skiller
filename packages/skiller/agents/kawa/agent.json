@@ -1,6 +1,6 @@
 {
   "llm": {
-    "default_provider": "codex"
+    "default_provider": "minimax"
   },
   "loop": {
     "max_turns": 10,

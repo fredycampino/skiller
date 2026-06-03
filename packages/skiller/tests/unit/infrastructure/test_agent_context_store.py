@@ -9,6 +9,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
+from skiller.domain.agent.agent_llm_provider_model import AgentMiniMaxLLMModel
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.run.run_context_model import RunContext
@@ -64,7 +65,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             completion_tokens=45,
             total_tokens=168,
             provider="minimax",
-            model="MiniMax-M2.5",
+            model=AgentMiniMaxLLMModel.M2_5,
         ),
         window_tokens=168,
         window_start_sequence=1,
@@ -101,7 +102,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         completion_tokens=45,
         total_tokens=168,
         provider="minimax",
-        model="MiniMax-M2.5",
+        model=AgentMiniMaxLLMModel.M2_5,
     )
     assert raw_row[0] == "final"
     assert raw_row[1] == 168
@@ -119,7 +120,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         completion_tokens=45,
         total_tokens=168,
         provider="minimax",
-        model="MiniMax-M2.5",
+        model=AgentMiniMaxLLMModel.M2_5,
     )
 
 

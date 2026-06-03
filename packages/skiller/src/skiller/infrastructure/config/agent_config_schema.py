@@ -15,7 +15,7 @@ class LLMProviderConfigModel(BaseModel):
 
     model: str
     timeout_seconds: float = Field(gt=0)
-    context_window_tokens: int = Field(gt=0)
+    window_width_tokens: int = Field(gt=0)
     api_key: str | None = None
     api_key_env: str | None = None
     api_key_file: str | None = None
@@ -26,7 +26,7 @@ class LLMConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_provider: str
-    max_context_tokens: int | None = Field(default=None, gt=0)
+    window_width_tokens: int | None = Field(default=None, gt=0)
 
 
 class LoopConfigModel(BaseModel):

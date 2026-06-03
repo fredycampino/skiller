@@ -15,6 +15,17 @@ _GIT_STATUS_OUTPUT = (
 )
 
 
+def test_shell_process_tool_schema_defines_string_env_values() -> None:
+    tool = ShellProcessTool()
+
+    schema = tool.schema().value
+
+    assert schema["properties"]["env"] == {
+        "type": "object",
+        "additionalProperties": {"type": "string"},
+    }
+
+
 def test_shell_process_tool_builds_process_request() -> None:
     tool = ShellProcessTool(shell="/bin/zsh")
     config = ShellToolRuntimeConfig(

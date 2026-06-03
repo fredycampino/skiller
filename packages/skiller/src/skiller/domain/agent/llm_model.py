@@ -5,14 +5,10 @@ from enum import Enum
 from typing import Literal, Mapping, TypeAlias
 
 from skiller.domain.agent.agent_llm_provider_model import (
-    AgentCodexLLMModel,
-    AgentFakeLLMModel,
     AgentLLMModel,
+    AgentLLMModelEnum,
     AgentLLMProviderType,
-    AgentMiniMaxLLMModel,
-    AgentNullLLMModel,
 )
-from skiller.domain.tool.tool_contract import ToolDefinition
 
 
 class LLMMessageRole(str, Enum):
@@ -20,12 +16,6 @@ class LLMMessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
-
-
-class LLMToolChoiceMode(str, Enum):
-    AUTO = "auto"
-    NONE = "none"
-    REQUIRED = "required"
 
 
 class LLMResponseFormatType(str, Enum):
@@ -101,49 +91,11 @@ LLMMessage: TypeAlias = (
 
 
 @dataclass(frozen=True)
-class LLMToolChoice:
-    mode: LLMToolChoiceMode
-    tool_name: str | None = None
-
-    @classmethod
-    def auto(cls) -> "LLMToolChoice":
-        return cls(mode=LLMToolChoiceMode.AUTO)
-
-    @classmethod
-    def none(cls) -> "LLMToolChoice":
-        return cls(mode=LLMToolChoiceMode.NONE)
-
-    @classmethod
-    def required(cls) -> "LLMToolChoice":
-        return cls(mode=LLMToolChoiceMode.REQUIRED)
-
-    @classmethod
-    def tool(cls, tool_name: str) -> "LLMToolChoice":
-        return cls(mode=LLMToolChoiceMode.REQUIRED, tool_name=tool_name)
-
-
-@dataclass(frozen=True)
 class LLMResponseFormat:
     type: LLMResponseFormatType
     json_schema_name: str | None = None
     json_schema: Mapping[str, object] | None = None
     strict: bool | None = None
-
-
-@dataclass(frozen=True)
-class LLMRequest:
-    messages: tuple[LLMMessage, ...]
-    model: AgentLLMModel
-    tools: tuple[ToolDefinition, ...] = ()
-    tool_choice: LLMToolChoice | None = None
-    response_format: LLMResponseFormat | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
-    top_p: float | None = None
-    parallel_tool_calls: bool | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "model", _llm_model_from_value(self.model))
 
 
 @dataclass(frozen=True)
@@ -157,8 +109,8 @@ class LLMUsage:
     def __post_init__(self) -> None:
         if self.provider is not None:
             object.__setattr__(self, "provider", AgentLLMProviderType(self.provider))
-        if self.model is not None:
-            object.__setattr__(self, "model", _llm_model_from_value(self.model))
+        if self.model is not None and not isinstance(self.model, AgentLLMModelEnum):
+            raise TypeError("LLMUsage model must be an AgentLLMModel enum")
 
 
 @dataclass(frozen=True)
@@ -173,7 +125,8 @@ class LLMResponse:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "model", _llm_model_from_value(self.model))
+        if not isinstance(self.model, AgentLLMModelEnum):
+            raise TypeError("LLMResponse model must be an AgentLLMModel enum")
         object.__setattr__(self, "content", _clean_optional_string(self.content))
         object.__setattr__(
             self,
@@ -194,22 +147,6 @@ class LLMResponse:
     @property
     def is_error(self) -> bool:
         return self.ok is False
-
-
-def _llm_model_from_value(value: str) -> AgentLLMModel:
-    model_types = (
-        AgentNullLLMModel,
-        AgentFakeLLMModel,
-        AgentMiniMaxLLMModel,
-        AgentCodexLLMModel,
-    )
-    for model_type in model_types:
-        try:
-            return model_type(value)
-        except ValueError:
-            continue
-
-    raise ValueError(f"Unsupported LLM model: {value}")
 
 
 def _clean_optional_string(value: str | None) -> str | None:

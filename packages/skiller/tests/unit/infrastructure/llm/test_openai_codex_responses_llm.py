@@ -5,7 +5,9 @@ from typing import Any
 
 import pytest
 
-from skiller.domain.agent.llm_model import LLMRequest, LLMUserMessage
+from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel
+from skiller.domain.agent.llm_model import LLMUserMessage
+from skiller.domain.agent.llm_request import CodexLLMRequest
 from skiller.infrastructure.llm import openai_codex_responses_llm
 from skiller.infrastructure.llm.openai_codex_credentials import OpenAICodexCredentials
 from skiller.infrastructure.llm.openai_codex_responses_llm import (
@@ -128,9 +130,10 @@ def test_openai_codex_responses_llm_streams_response(
     )
 
     response = llm.generate(
-        LLMRequest(
+        CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentCodexLLMModel.GPT_5_4,
+            parallel_tool_calls=True,
         )
     )
 
@@ -142,6 +145,8 @@ def test_openai_codex_responses_llm_streams_response(
             "instructions": "",
             "input": [{"role": "user", "content": "hello"}],
             "store": False,
+            "tool_choice": "auto",
+            "parallel_tool_calls": True,
             "stream": True,
         }
     ]
@@ -180,9 +185,10 @@ def test_openai_codex_responses_llm_reads_completed_event_usage(
     )
 
     response = llm.generate(
-        LLMRequest(
+        CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentCodexLLMModel.GPT_5_4,
+            parallel_tool_calls=True,
         )
     )
 
@@ -219,9 +225,10 @@ def test_openai_codex_responses_llm_keeps_stream_items_when_raw_stream_fails(
     )
 
     response = llm.generate(
-        LLMRequest(
+        CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentCodexLLMModel.GPT_5_4,
+            parallel_tool_calls=True,
         )
     )
 

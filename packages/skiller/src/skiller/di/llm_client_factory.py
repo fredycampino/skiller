@@ -1,3 +1,5 @@
+from typing import overload
+
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentCodexProvider,
     AgentFakeProvider,
@@ -5,7 +7,8 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentMiniMaxProvider,
     AgentNullProvider,
 )
-from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
+from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
 from skiller.infrastructure.llm.fake_llm import FakeLLM
 from skiller.infrastructure.llm.null_llm import NullLLM
 from skiller.infrastructure.llm.openai_codex_responses_llm import OpenAICodexResponsesLLM
@@ -15,7 +18,22 @@ MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
 
 class LLMClientFactory:
-    def resolve(self, provider: AgentLLMProvider) -> LLMPort:
+    @overload
+    def resolve(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
+
+    @overload
+    def resolve(self, provider: AgentCodexProvider) -> LLMPort[CodexLLMRequest]: ...
+
+    @overload
+    def resolve(
+        self,
+        provider: AgentFakeProvider | AgentNullProvider,
+    ) -> LLMPort[LLMRequest]: ...
+
+    @overload
+    def resolve(self, provider: AgentLLMProvider) -> ResolvedLLMPort: ...
+
+    def resolve(self, provider: AgentLLMProvider) -> ResolvedLLMPort:
         if isinstance(provider, AgentNullProvider):
             return NullLLM()
         if isinstance(provider, AgentFakeProvider):

@@ -24,7 +24,8 @@ from skiller.domain.agent.agent_context_model import (
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
-from skiller.domain.agent.llm_port import LLMPort
+from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
+from skiller.domain.agent.llm_request import LLMRequest
 from skiller.domain.event.event_model import (
     AgentBodyToolMessage,
     AgentEventPayload,
@@ -55,10 +56,10 @@ class _NullSteering:
 
 
 class _FakeLLMClientResolver:
-    def __init__(self, llm: LLMPort) -> None:
+    def __init__(self, llm: LLMPort[LLMRequest]) -> None:
         self.llm = llm
 
-    def resolve(self, provider: AgentLLMProvider) -> LLMPort:
+    def resolve(self, provider: AgentLLMProvider) -> ResolvedLLMPort:
         _ = provider
         return self.llm
 
@@ -282,7 +283,7 @@ def build_agent_runner(
     *,
     agent_context_store: AgentContextStorePort,
     steering: SteeringPort | None = None,
-    llm: LLMPort,
+    llm: LLMPort[LLMRequest],
     tool_manager: ToolManager | None = None,
     append_runtime_event_use_case: AppendRuntimeEventUseCase | None = None,
 ) -> AgentRunner:

@@ -44,7 +44,7 @@ mapper/model defaults.
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.5",
       "timeout_seconds": 30,
-      "context_window_tokens": 1000000
+      "window_width_tokens": 1000000
     }
   },
   "loop": {
@@ -75,15 +75,15 @@ The root field `agent` is explicitly rejected.
 
 `llm.default_provider` is a logical key into the root `providers` section.
 
-`llm.max_context_tokens` is optional. When present, it is the effective context
-limit for the selected provider. When absent, the selected provider uses its
-own `context_window_tokens`.
+`llm.window_width_tokens` is optional. When present, it is the effective window
+width for the selected provider. When absent, the selected provider uses its own
+`window_width_tokens`.
 
 Each provider entry requires:
 
 - `model`
 - `timeout_seconds`
-- `context_window_tokens`
+- `window_width_tokens`
 - credentials required by that provider
 
 Provider entries are keyed by the logical provider id:
@@ -92,14 +92,14 @@ Provider entries are keyed by the logical provider id:
 {
   "llm": {
     "default_provider": "minimax",
-    "max_context_tokens": 80000
+    "window_width_tokens": 80000
   },
   "providers": {
     "minimax": {
       "api_key_env": "AGENT_MINIMAX_API_KEY",
       "model": "MiniMax-M2.5",
       "timeout_seconds": 30,
-      "context_window_tokens": 1000000
+      "window_width_tokens": 1000000
     }
   }
 }
@@ -153,13 +153,13 @@ The global file should own shared provider credentials and defaults:
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.7",
       "timeout_seconds": 60,
-      "context_window_tokens": 80000
+      "window_width_tokens": 80000
     },
     "codex": {
       "credentials_file": "~/.skiller/secrets/openai-codex.json",
       "model": "gpt-5.5",
       "timeout_seconds": 120,
-      "context_window_tokens": 100000
+      "window_width_tokens": 100000
     }
   }
 }
@@ -237,8 +237,8 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 Fields:
 
 - `context.compaction.enabled`: reserved compaction flag
-- `context.compaction.max_total_tokens_ratio`: ratio applied to `llm.max_context_tokens`
-  when present, otherwise to the selected provider `context_window_tokens`
+- `context.compaction.max_total_tokens_ratio`: ratio applied to `llm.window_width_tokens`
+  when present, otherwise to the selected provider `window_width_tokens`
 
 Defaults:
 

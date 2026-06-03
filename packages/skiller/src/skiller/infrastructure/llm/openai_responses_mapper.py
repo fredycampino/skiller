@@ -4,24 +4,23 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMModel,
 )
 from skiller.domain.agent.llm_model import (
     LLMAssistantMessage,
     LLMMessage,
-    LLMRequest,
     LLMResponse,
     LLMResponseFormat,
     LLMResponseFormatType,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
-    LLMToolChoice,
-    LLMToolChoiceMode,
     LLMToolMessage,
     LLMUsage,
 )
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -33,38 +32,70 @@ class OpenAIResponsesStreamResult:
 
 
 def to_openai_responses_kwargs(
-    request: LLMRequest,
+    request: MiniMaxLLMRequest,
 ) -> dict[str, object]:
+    instructions, input_items = to_openai_responses_prompt_payload(request.messages)
+
+    payload: dict[str, object] = {
+        "model": request.model.value,
+        "instructions": instructions,
+        "input": input_items,
+        "store": False,
+    }
+    if request.tools:
+        payload["tools"] = [
+            to_openai_responses_tool_payload(tool) for tool in request.tools
+        ]
+    payload["tool_choice"] = _tool_choice_value(request.tool_choice)
+    if request.response_format is not None:
+        payload["text"] = {
+            "format": to_openai_responses_response_format_payload(
+                request.response_format,
+            )
+        }
+    payload["temperature"] = request.temperature
+    payload["max_output_tokens"] = request.max_tokens
+    payload["top_p"] = request.top_p
+    payload["parallel_tool_calls"] = request.parallel_tool_calls
+    return payload
+
+
+def to_openai_responses_prompt_payload(
+    messages: tuple[LLMMessage, ...],
+) -> tuple[str, list[dict[str, object]]]:
     instructions: list[str] = []
     input_items: list[dict[str, object]] = []
 
-    for message in request.messages:
+    for message in messages:
         if isinstance(message, LLMSystemMessage):
             instructions.append(message.content)
             continue
 
         input_items.extend(_message_to_input_items(message))
 
-    payload: dict[str, object] = {
-        "model": request.model.value,
-        "instructions": "\n\n".join(instructions),
-        "input": input_items,
-        "store": False,
+    return "\n\n".join(instructions), input_items
+
+
+def to_openai_responses_tool_payload(tool: ToolDefinition) -> dict[str, object]:
+    return {
+        "type": "function",
+        "name": tool.name,
+        "description": tool.description,
+        "parameters": dict(tool.schema().value),
     }
-    if request.tools:
-        payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
-    if request.tool_choice is not None:
-        payload["tool_choice"] = _tool_choice_value(request.tool_choice)
-    if request.response_format is not None:
-        payload["text"] = {"format": _response_format_value(request.response_format)}
-    if request.temperature is not None:
-        payload["temperature"] = request.temperature
-    if request.max_tokens is not None:
-        payload["max_output_tokens"] = request.max_tokens
-    if request.top_p is not None:
-        payload["top_p"] = request.top_p
-    if request.parallel_tool_calls is not None:
-        payload["parallel_tool_calls"] = request.parallel_tool_calls
+
+
+def to_openai_responses_response_format_payload(
+    response_format: LLMResponseFormat,
+) -> dict[str, object]:
+    payload: dict[str, object] = {"type": response_format.type.value}
+    if response_format.type == LLMResponseFormatType.JSON_SCHEMA:
+        if response_format.json_schema_name is not None:
+            payload["name"] = response_format.json_schema_name
+        if response_format.json_schema is not None:
+            payload["schema"] = dict(response_format.json_schema)
+        if response_format.strict is not None:
+            payload["strict"] = response_format.strict
     return payload
 
 
@@ -166,36 +197,8 @@ def _tool_call_to_input_item(tool_call: LLMToolCall) -> dict[str, object]:
     }
 
 
-def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
-    return {
-        "type": "function",
-        "name": tool.name,
-        "description": tool.description,
-        "parameters": dict(tool.schema().value),
-    }
-
-
-def _tool_choice_value(tool_choice: LLMToolChoice) -> str | dict[str, object]:
-    if tool_choice.mode in {LLMToolChoiceMode.AUTO, LLMToolChoiceMode.NONE}:
-        return tool_choice.mode.value
-    if tool_choice.tool_name is None:
-        return tool_choice.mode.value
-    return {
-        "type": "function",
-        "name": tool_choice.tool_name,
-    }
-
-
-def _response_format_value(response_format: LLMResponseFormat) -> dict[str, object]:
-    payload: dict[str, object] = {"type": response_format.type.value}
-    if response_format.type == LLMResponseFormatType.JSON_SCHEMA:
-        if response_format.json_schema_name is not None:
-            payload["name"] = response_format.json_schema_name
-        if response_format.json_schema is not None:
-            payload["schema"] = dict(response_format.json_schema)
-        if response_format.strict is not None:
-            payload["strict"] = response_format.strict
-    return payload
+def _tool_choice_value(tool_choice: LLMToolChoiceMode) -> str:
+    return tool_choice.value
 
 
 def _to_port_tool_calls(output_items: list[object]) -> tuple[LLMToolCall, ...]:

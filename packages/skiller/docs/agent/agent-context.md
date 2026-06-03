@@ -324,8 +324,9 @@ The window is a read limit, not summarization or compaction.
 
 Inputs:
 
-- `providers.<name>.context_window_tokens`: provider context capacity.
-- `llm.max_context_tokens`: optional agent-level override for the selected provider capacity.
+- `providers.<name>.window_width_tokens`: configured provider window width.
+- `llm.window_width_tokens`: optional agent-level override for the selected provider
+  window width.
 - `context.compaction.max_total_tokens_ratio`: fraction of the effective capacity used
   for context reads.
 
@@ -336,7 +337,7 @@ AgentContextLLMRequest(
     context_id: str,
     turn_id: str,
     llm_request: LLMRequest,
-    context_window_tokens: int,
+    window_width_tokens: int,
     window_start_sequence: int,
     window_end_sequence: int,
     max_ratio: float,
@@ -349,20 +350,20 @@ Fields:
 - `context_id`: context being read.
 - `turn_id`: next agent turn id.
 - `llm_request`: provider-ready request built from system prompt, window entries, and tools.
-- `context_window_tokens`: effective token limit used for the context-window query after
-  applying `llm.max_context_tokens` and `context.compaction.max_total_tokens_ratio`.
+- `window_width_tokens`: effective token width used for the context-window query after
+  applying `llm.window_width_tokens` and `context.compaction.max_total_tokens_ratio`.
 - `window_start_sequence`: first selected entry sequence in the context window, or `0`
   when the window is empty.
 - `window_end_sequence`: last selected entry sequence in the context window, or `0`
   when the window is empty.
-- `max_ratio`: configured ratio used to calculate `context_window_tokens`.
+- `max_ratio`: configured ratio used to calculate `window_width_tokens`.
 - `estimated_tokens`: estimated token size of the selected window. It is `0` when the selected
   entries do not expose usable assistant final totals.
 
 Window selection example:
 
 ```text
-context_window_tokens = 80000
+window_width_tokens = 80000
 
 latest final:
   sequence = 40

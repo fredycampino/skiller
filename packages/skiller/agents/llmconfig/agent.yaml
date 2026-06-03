@@ -65,7 +65,7 @@ steps:
             "minimax": {
               "model": "MiniMax-M2.7",
               "timeout_seconds": 60,
-              "context_window_tokens": 80000,
+              "window_width_tokens": 80000,
               "api_key_file": "$secret_file"
             }
           }

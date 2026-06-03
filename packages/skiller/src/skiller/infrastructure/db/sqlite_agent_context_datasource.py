@@ -13,6 +13,10 @@ from skiller.domain.agent.agent_context_model import (
     agent_context_payload_from_dict,
     agent_context_payload_to_dict,
 )
+from skiller.domain.agent.agent_llm_provider_model import (
+    AgentLLMModel,
+    agent_llm_model_from_value,
+)
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
@@ -394,7 +398,7 @@ def _usage_from_json(raw_usage: object) -> LLMUsage | None:
         completion_tokens=_optional_int(parsed.get("completion_tokens")),
         total_tokens=_optional_int(parsed.get("total_tokens")),
         provider=_optional_string(parsed.get("provider")),
-        model=_optional_string(parsed.get("model")),
+        model=_optional_model(parsed.get("model")),
     )
 
 
@@ -411,6 +415,16 @@ def _optional_string(value: object) -> str | None:
     if not value:
         return None
     return value
+
+
+def _optional_model(value: object) -> AgentLLMModel | None:
+    value = _optional_string(value)
+    if value is None:
+        return None
+    try:
+        return agent_llm_model_from_value(value)
+    except ValueError:
+        return None
 
 
 def _optional_assistant_message_type(

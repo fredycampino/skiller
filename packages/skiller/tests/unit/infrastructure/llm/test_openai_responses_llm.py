@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from skiller.domain.agent.llm_model import LLMRequest, LLMUserMessage
+from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
+from skiller.domain.agent.agent_llm_provider_model import AgentMiniMaxLLMModel
+from skiller.domain.agent.llm_model import LLMUserMessage
+from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.infrastructure.llm import openai_responses_llm
 from skiller.infrastructure.llm.openai_responses_llm import OpenAIResponsesLLM
 
@@ -108,9 +111,14 @@ def test_generate_streams_response_and_maps_text(monkeypatch: pytest.MonkeyPatch
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="gpt-5.4",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
@@ -118,10 +126,15 @@ def test_generate_streams_response_and_maps_text(monkeypatch: pytest.MonkeyPatch
     assert result.content == "hello world"
     assert _FakeOpenAI.instances[0].responses.calls == [
         {
-            "model": "gpt-5.4",
+            "model": "MiniMax-M2.7",
             "instructions": "",
             "input": [{"role": "user", "content": "hello"}],
             "store": False,
+            "tool_choice": "auto",
+            "temperature": 1,
+            "max_output_tokens": 4096,
+            "top_p": 1,
+            "parallel_tool_calls": True,
         }
     ]
 
@@ -134,9 +147,14 @@ def test_generate_returns_api_key_error_without_building_client() -> None:
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="model1",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
@@ -156,9 +174,14 @@ def test_generate_returns_stream_error_event(monkeypatch: pytest.MonkeyPatch) ->
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="model1",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 
@@ -175,9 +198,14 @@ def test_generate_returns_request_failure(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     result = llm.generate(
-        LLMRequest(
+        MiniMaxLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model="model1",
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            temperature=1,
+            max_tokens=4096,
+            top_p=1,
+            parallel_tool_calls=True,
         )
     )
 

@@ -5,10 +5,11 @@ from typing import Any
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
-from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessagePayload,
-    AgentToolCallPayload,
-    AgentToolResultPayload,
+from skiller.domain.event.event_agent_model import (
+    AgentEventPayload,
+    AgentMessageEventBody,
+    AgentToolCallEventBody,
+    AgentToolResultEventBody,
 )
 
 
@@ -41,19 +42,18 @@ class AgentEventTruncator:
 
     def truncate_assistant_message(
         self,
-        payload: AgentAssistantMessagePayload,
-    ) -> AgentAssistantMessagePayload:
-        return AgentAssistantMessagePayload(
-            turn_id=payload.turn_id,
-            message_type=payload.message_type,
+        payload: AgentMessageEventBody,
+    ) -> AgentMessageEventBody:
+        return AgentMessageEventBody(
+            total_tokens=payload.total_tokens,
             text=self._truncate_text(payload.text),
         )
 
     def truncate_tool_call(
         self,
-        payload: AgentToolCallPayload,
-    ) -> AgentToolCallPayload:
-        return AgentToolCallPayload(
+        payload: AgentToolCallEventBody,
+    ) -> AgentToolCallEventBody:
+        return AgentToolCallEventBody(
             turn_id=payload.turn_id,
             parent_sequence=payload.parent_sequence,
             tool_call_id=payload.tool_call_id,
@@ -63,14 +63,15 @@ class AgentEventTruncator:
 
     def truncate_tool_result(
         self,
-        payload: AgentToolResultPayload,
-    ) -> AgentToolResultPayload:
+        *,
+        payload: AgentToolResultEventBody,
+    ) -> AgentToolResultEventBody:
         truncated_data = self._truncate_value(payload.data)
         if isinstance(truncated_data, dict):
             data = self._truncate_json(truncated_data)
         else:
             data = self._truncate_json({})
-        return AgentToolResultPayload(
+        return AgentToolResultEventBody(
             turn_id=payload.turn_id,
             parent_sequence=payload.parent_sequence,
             tool_call_id=payload.tool_call_id,
@@ -79,6 +80,21 @@ class AgentEventTruncator:
             data=data,
             text=self._truncate_optional_text(payload.text),
             error=self._truncate_optional_text(payload.error),
+        )
+
+    def truncate_payload(self, payload: AgentEventPayload) -> AgentEventPayload:
+        body = payload.body
+        if isinstance(body, AgentMessageEventBody):
+            body = self.truncate_assistant_message(body)
+        if isinstance(body, AgentToolCallEventBody):
+            body = self.truncate_tool_call(body)
+        if isinstance(body, AgentToolResultEventBody):
+            body = self.truncate_tool_result(payload=body)
+        return AgentEventPayload(
+            step_id=payload.step_id,
+            turn_id=payload.turn_id,
+            agent_sequence=payload.agent_sequence,
+            body=body,
         )
 
     def _truncate_args(self, args: dict[str, object]) -> dict[str, object]:

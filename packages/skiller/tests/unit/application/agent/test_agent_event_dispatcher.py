@@ -3,6 +3,9 @@ from dataclasses import dataclass
 import pytest
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.application.agent.event.agent_event_draft_builder import (
+    AgentEventDraftBuilder,
+)
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
 from skiller.domain.agent.agent_config_model import (
     AgentEventOutputConfig,
@@ -14,9 +17,12 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
     AgentToolCallPayload,
 )
-from skiller.domain.event.event_model import (
-    AgentBodyToolMessage,
+from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
+    AgentMessageEventBody,
+    AgentToolCallEventBody,
+)
+from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     RuntimeEventType,
 )
@@ -29,6 +35,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
+        AgentEventDraftBuilder(),
         OutputTruncator(),
     )
     event_output = _event_output(max_text_chars=10)
@@ -61,7 +68,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     assert event.payload.step_id == "support_agent"
     assert event.payload.turn_id == "turn-4"
     assert event.payload.agent_sequence == 7
-    assert isinstance(event.payload.body, AgentBodyToolMessage)
+    assert isinstance(event.payload.body, AgentMessageEventBody)
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "I will cal..."
 
@@ -70,6 +77,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
+        AgentEventDraftBuilder(),
         OutputTruncator(),
     )
     event_output = _event_output(max_text_chars=10)
@@ -97,7 +105,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
     event = store.events[0]
     assert event.type == RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE
     assert isinstance(event.payload, AgentEventPayload)
-    assert isinstance(event.payload.body, AgentBodyToolMessage)
+    assert isinstance(event.payload.body, AgentMessageEventBody)
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "Final answ..."
 
@@ -106,6 +114,7 @@ def test_agent_event_publisher_emits_agent_lifecycle_events() -> None:
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
+        AgentEventDraftBuilder(),
         OutputTruncator(),
     )
 
@@ -137,6 +146,7 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
     store = _FakeRuntimeEventStore()
     publisher = AgentEventPublisher(
         store,
+        AgentEventDraftBuilder(),
         OutputTruncator(),
     )
     event_output = AgentEventOutputConfig()
@@ -165,7 +175,7 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
     event = store.events[0]
     payload = event.payload
     assert isinstance(payload, AgentEventPayload)
-    assert isinstance(payload.body, AgentToolCallPayload)
+    assert isinstance(payload.body, AgentToolCallEventBody)
     assert payload.body.args["command"].endswith("...")
 
 
@@ -175,45 +185,6 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
 
     def __init__(self) -> None:
         self.events = []
-
-    def emit_max_turns_exhausted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        raise NotImplementedError
-
-    def emit_interrupted(
-        self,
-        *,
-        run_id: str,
-        step_id: str,
-        turn_id: str,
-    ) -> None:
-        raise NotImplementedError
-
-    def emit_assistant_message(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        raise NotImplementedError
-
-    def emit_tool_call(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        raise NotImplementedError
-
-    def emit_tool_result(
-        self,
-        *,
-        entry: AgentContextEntry,
-    ) -> None:
-        raise NotImplementedError
 
     def append_event(self, event: RuntimeEventDraft) -> str:
         self.events.append(event)

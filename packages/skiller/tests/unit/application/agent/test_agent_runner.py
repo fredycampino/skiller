@@ -162,7 +162,6 @@ class _FakeAgentContextStore:
                 "tool": result.name,
                 "status": result.status.value,
                 "data": result.data,
-                "text": result.text,
                 "error": result.error,
             },
             source_step_id=context.agent_id,

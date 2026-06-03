@@ -10,6 +10,9 @@ from skiller.application.agent.context.agent_context_manager import AgentContext
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
+from skiller.application.agent.event.agent_event_draft_builder import (
+    AgentEventDraftBuilder,
+)
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
@@ -243,6 +246,7 @@ def build_runtime_container(
     )
     agent_event_publisher = AgentEventPublisher(
         runtime_event_store,
+        AgentEventDraftBuilder(),
         OutputTruncator(),
     )
     execute_agent_step_use_case = ExecuteAgentStepUseCase(

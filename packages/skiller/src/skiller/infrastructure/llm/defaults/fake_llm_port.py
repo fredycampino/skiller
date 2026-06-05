@@ -8,7 +8,7 @@ from skiller.domain.agent.llm_request import LLMRequest
 FAKE_LLM_RESPONSE_TEXT = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
 
 
-class FakeLLM(LLMPort[LLMRequest]):
+class FakeLLMPort(LLMPort[LLMRequest]):
     def __init__(
         self,
         *,

@@ -17,7 +17,6 @@ from skiller.application.agent.tools.agent_tool_executor import AgentToolExecuto
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_loop_model import AgentLoop
 from skiller.domain.agent.agent_run_model import AgentStopReason
-from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.tool.tool_execution_model import (
     ToolExecutionRequest,
 )
@@ -105,8 +104,6 @@ class AgentRunner:
                     turn_id=turn_id,
                     text=final_text,
                     usage=response.usage,
-                    window_tokens=_response_total_tokens(response.usage),
-                    window_start_sequence=context_request.window_start_sequence,
                 )
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
@@ -148,8 +145,6 @@ class AgentRunner:
                     turn_id=turn_id,
                     text=final_text,
                     usage=response.usage,
-                    window_tokens=_response_total_tokens(response.usage),
-                    window_start_sequence=context_request.window_start_sequence,
                 )
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
@@ -191,9 +186,3 @@ class AgentRunner:
             usage=state.usage,
             error=state.error,
         )
-
-
-def _response_total_tokens(usage: LLMUsage | None) -> int:
-    if usage is None:
-        return 0
-    return usage.total_tokens or 0

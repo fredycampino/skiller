@@ -38,6 +38,8 @@ Use this skill to keep Skiller code flat, explicit, and easy to maintain.
 
 - For readability and control-flow rules, read `packages/skiller/docs/architecture/code-style.md`.
 - For architecture boundaries and allowed dependencies, read `packages/skiller/docs/architecture/architecture.md`.
+- For port, datasource, mapper, and infrastructure implementation names, read
+  `packages/skiller/docs/architecture/naming-style.md`.
 - For runtime patterns used in this repo, read `SKILL.md -> references/runtime-patterns.md`.
 - For test taxonomy and what counts as unit/integration/e2e here, read `SKILL.md -> references/testing-rules.md`.
 - For the general pre-commit checklist used in this repo, read `SKILL.md -> references/pre-commit-checklist.md`.

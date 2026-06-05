@@ -17,6 +17,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentContextEntryType,
     AgentToolCallPayload,
 )
+from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentMessageEventBody,
@@ -47,13 +48,12 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=None,
+            usage=LLMUsage(total_tokens=2144),
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="tool_calls",
                 text="I will call a tool.",
             ),
-            window_tokens=2144,
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
         ),
@@ -89,13 +89,12 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=None,
+            usage=LLMUsage(total_tokens=2144),
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="final",
                 text="Final answer is intentionally longer than the event text limit.",
             ),
-            window_tokens=2144,
             source_step_id="support_agent",
             created_at="2026-05-15T00:00:00Z",
         ),

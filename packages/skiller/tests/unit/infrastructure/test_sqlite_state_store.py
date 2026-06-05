@@ -255,37 +255,6 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
         store.create_run("internal", "demo", snapshot, context, run_id=run_id)
 
 
-def test_attach_agent_creates_and_reads_run_agent_context(tmp_path) -> None:
-    db_path = tmp_path / "run-agents.db"
-    store = SqliteStateStore(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_id = "550e8400-e29b-41d4-a716-446655440006"
-    store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=run_id,
-    )
-
-    assert store.get_agent(run_id=run_id, agent_id="support_agent") is None
-
-    store.attach_agent(
-        run_id=run_id,
-        agent_id="support_agent",
-        context_id="thread-123",
-    )
-
-    agent = store.get_agent(run_id=run_id, agent_id="support_agent")
-    run = store.get_run(run_id)
-
-    assert agent is not None
-    assert agent.agent_id == "support_agent"
-    assert agent.context_id == "thread-123"
-    assert run is not None
-    assert run.agents["support_agent"].context_id == "thread-123"
-
-
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-input.db"
     store = SqliteStateStore(str(db_path))

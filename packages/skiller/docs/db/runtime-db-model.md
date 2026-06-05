@@ -101,13 +101,14 @@ It contains:
 The context has its own `sequence` per `context_id`. That sequence is not the same as
 `log_events.sequence`.
 
-Final assistant messages can carry token markers:
-- `position_tokens`
-- `window_tokens`
+Measured assistant messages can carry token markers:
+- `delta_tokens`
 - `window_start_sequence`
+- `window_base`
 - `usage_json`
 
-Those markers are used to decide which part of the agent context is sent in the next LLM request.
+`delta_tokens` is the prompt-token delta attributed to that measured response. The active
+window start is stored in the run's agent state and copied to measured entries for diagnostics.
 
 ## Deletion Boundary
 

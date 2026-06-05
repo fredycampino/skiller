@@ -12,8 +12,8 @@ from skiller.domain.agent.llm_model import (
     LLMUserMessage,
 )
 from skiller.domain.agent.llm_request import MiniMaxLLMRequest
-from skiller.infrastructure.llm import openai_llm
-from skiller.infrastructure.llm.openai_llm import OpenAILLM
+from skiller.infrastructure.llm.openai import openai_llm_port
+from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 
 pytestmark = pytest.mark.unit
 
@@ -46,9 +46,9 @@ class _FakeClient:
 
 
 def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(openai_llm, "_load_openai_client_class", lambda: _FakeClient)
+    monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeClient)
 
-    llm = OpenAILLM(
+    llm = OpenAILLMPort(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
@@ -91,7 +91,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
 
 
 def test_openai_llm_returns_error_when_api_key_missing() -> None:
-    llm = OpenAILLM(
+    llm = OpenAILLMPort(
         api_key="",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
@@ -145,9 +145,9 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
             )
             self.chat = SimpleNamespace(completions=self.completions)
 
-    monkeypatch.setattr(openai_llm, "_load_openai_client_class", lambda: _FakeToolClient)
+    monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeToolClient)
 
-    llm = OpenAILLM(
+    llm = OpenAILLMPort(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,

@@ -25,7 +25,7 @@ from skiller.domain.tool.tool_contract import (
     ToolRequestResult,
     ToolSchema,
 )
-from skiller.infrastructure.llm.openai_mapper import (
+from skiller.infrastructure.llm.openai.openai_mapper import (
     to_openai_kwargs,
     to_port_llm_response,
 )

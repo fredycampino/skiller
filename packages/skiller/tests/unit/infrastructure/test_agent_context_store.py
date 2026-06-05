@@ -67,8 +67,9 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             provider="minimax",
             model=AgentMiniMaxLLMModel.M2_5,
         ),
-        window_tokens=168,
+        delta_tokens=123,
         window_start_sequence=1,
+        window_base=True,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
@@ -77,9 +78,9 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             """
             SELECT
               message_type,
-              position_tokens,
-              window_tokens,
               window_start_sequence,
+              delta_tokens,
+              window_base,
               usage_json
             FROM agent_context_entries
             WHERE id = ?
@@ -105,8 +106,8 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         model=AgentMiniMaxLLMModel.M2_5,
     )
     assert raw_row[0] == "final"
-    assert raw_row[1] == 168
-    assert raw_row[2] == 168
+    assert raw_row[1] == 1
+    assert raw_row[2] == 123
     assert raw_row[3] == 1
     assert json.loads(raw_row[4]) == {
         "prompt_tokens": 123,
@@ -124,7 +125,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     )
 
 
-def test_agent_context_store_offsets_position_tokens_when_window_start_changes(
+def test_agent_context_store_persists_delta_markers(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-position-token-reset.db"
@@ -148,8 +149,9 @@ def test_agent_context_store_offsets_position_tokens_when_window_start_changes(
         turn_id="turn-1",
         text="First",
         usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
-        window_tokens=95,
+        delta_tokens=90,
         window_start_sequence=1,
+        window_base=True,
     )
     reset_start = store.append_user_message(
         context=AGENT_CONTEXT,
@@ -160,32 +162,25 @@ def test_agent_context_store_offsets_position_tokens_when_window_start_changes(
         turn_id="turn-2",
         text="Reset",
         usage=LLMUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
-        window_tokens=2,
+        delta_tokens=1,
         window_start_sequence=reset_start.sequence,
+        window_base=True,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
 
-    assert first.window_tokens == 95
-    assert first.position_tokens == 95
-    assert reset.window_tokens == 2
-    assert reset.position_tokens == 97
+    assert first.delta_tokens == 90
+    assert reset.delta_tokens == 1
     assert reset.window_start_sequence == reset_start.sequence
     assert reset.usage == LLMUsage(
         prompt_tokens=1,
         completion_tokens=1,
         total_tokens=2,
     )
-    position_tokens = [
-        entry.position_tokens for entry in entries if entry.position_tokens
-    ]
-    assert position_tokens == [
-        95,
-        97,
-    ]
+    assert [entry.delta_tokens for entry in entries if entry.delta_tokens] == [90, 1]
 
 
-def test_agent_context_store_recomputes_position_tokens_from_window_base(
+def test_agent_context_store_keeps_delta_series_markers(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-position-token-delta.db"
@@ -209,23 +204,27 @@ def test_agent_context_store_recomputes_position_tokens_from_window_base(
         turn_id="turn-1",
         text="First",
         usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
-        window_tokens=95,
+        delta_tokens=90,
         window_start_sequence=1,
+        window_base=True,
     )
     next_final = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Next",
         usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
-        window_tokens=105,
+        delta_tokens=10,
         window_start_sequence=1,
+        window_base=False,
     )
 
-    assert first.position_tokens == 95
-    assert next_final.position_tokens == 105
+    assert first.delta_tokens == 90
+    assert first.window_base is True
+    assert next_final.delta_tokens == 10
+    assert next_final.window_base is False
 
 
-def test_agent_context_store_does_not_duplicate_final_used_as_window_start(
+def test_agent_context_store_returns_stats_from_latest_usage_marker(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-final-start.db"
@@ -249,8 +248,9 @@ def test_agent_context_store_does_not_duplicate_final_used_as_window_start(
         turn_id="turn-1",
         text="Base final",
         usage=LLMUsage(prompt_tokens=35, completion_tokens=5, total_tokens=40),
-        window_tokens=40,
+        delta_tokens=35,
         window_start_sequence=1,
+        window_base=True,
     )
     store.append_user_message(
         context=AGENT_CONTEXT,
@@ -261,31 +261,163 @@ def test_agent_context_store_does_not_duplicate_final_used_as_window_start(
         turn_id="turn-2",
         text="Previous current final",
         usage=LLMUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30),
-        window_tokens=30,
+        delta_tokens=25,
         window_start_sequence=3,
+        window_base=True,
     )
     latest = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest current final",
         usage=LLMUsage(prompt_tokens=45, completion_tokens=5, total_tokens=50),
-        window_tokens=50,
+        delta_tokens=20,
         window_start_sequence=previous.sequence,
+        window_base=False,
     )
 
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
     stats = store.get_stats(context_id=CONTEXT_ID)
+    entries = store.list_window_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=45,
+    )
 
-    assert base.position_tokens == 40
-    assert previous.position_tokens == 70
-    assert latest.position_tokens == 90
+    assert base.delta_tokens == 35
+    assert previous.delta_tokens == 25
+    assert latest.delta_tokens == 20
     assert latest.window_start_sequence == previous.sequence
-    assert [entry.id for entry in window.entries] == [latest.id]
+    assert [entry.sequence for entry in entries] == [3, 4, 5]
     assert stats.entries == 5
-    assert stats.estimated_tokens == 90
+    assert stats.estimated_tokens == 80
     assert stats.window.start_sequence == previous.sequence
     assert stats.window.end_sequence == 5
-    assert stats.window.current_tokens == 50
+    assert stats.window.current_tokens == 45
+
+
+def test_agent_context_store_lists_window_entries_across_marker_pages(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-pages.db"
+    run_store = SqliteStateStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+
+    for index in range(120):
+        sequence = index + 1
+        store.append_final_assistant_message(
+            context=AGENT_CONTEXT,
+            turn_id=f"turn-{sequence}",
+            text=f"Final {sequence}",
+            usage=LLMUsage(
+                prompt_tokens=sequence,
+                completion_tokens=1,
+                total_tokens=sequence + 1,
+            ),
+            delta_tokens=1,
+            window_start_sequence=1,
+            window_base=sequence == 1,
+        )
+
+    entries = store.list_window_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=105,
+    )
+
+    assert [entry.sequence for entry in entries] == list(range(16, 121))
+
+
+def test_agent_context_store_stops_after_oversized_latest_entry(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-oversized-latest.db"
+    run_store = SqliteStateStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Older task",
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Latest oversized final",
+        usage=LLMUsage(prompt_tokens=80, completion_tokens=1, total_tokens=81),
+        delta_tokens=80,
+        window_start_sequence=1,
+        window_base=True,
+    )
+
+    entries = store.list_window_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=50,
+    )
+
+    assert [entry.sequence for entry in entries] == [2]
+
+
+def test_agent_context_store_ignores_negative_delta_when_selecting_window(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-negative-delta.db"
+    run_store = SqliteStateStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Older final",
+        usage=LLMUsage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+        delta_tokens=10,
+        window_start_sequence=1,
+        window_base=True,
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-2",
+        text="Corrupt negative delta",
+        usage=LLMUsage(prompt_tokens=5, completion_tokens=1, total_tokens=6),
+        delta_tokens=-5,
+        window_start_sequence=1,
+        window_base=False,
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-3",
+        text="Latest final",
+        usage=LLMUsage(prompt_tokens=15, completion_tokens=1, total_tokens=16),
+        delta_tokens=10,
+        window_start_sequence=1,
+        window_base=False,
+    )
+
+    entries = store.list_window_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=15,
+    )
+
+    assert [entry.sequence for entry in entries] == [2, 3]
 
 
 def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
@@ -402,6 +534,10 @@ def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="I will inspect this.",
+        usage=None,
+        delta_tokens=0,
+        window_start_sequence=0,
+        window_base=False,
     )
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-2"
 
@@ -439,14 +575,19 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="I will call a tool.",
+        usage=None,
+        delta_tokens=0,
+        window_start_sequence=0,
+        window_base=False,
     )
     store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Done",
         usage=LLMUsage(prompt_tokens=None, completion_tokens=12, total_tokens=None),
-        window_tokens=0,
+        delta_tokens=0,
         window_start_sequence=1,
+        window_base=True,
     )
     store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -501,28 +642,33 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         turn_id="turn-1",
         text="First final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        window_tokens=15,
+        delta_tokens=10,
         window_start_sequence=1,
+        window_base=True,
     )
     store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Not final",
+        usage=None,
+        delta_tokens=0,
+        window_start_sequence=0,
+        window_base=False,
     )
     latest = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest final",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=9, total_tokens=39),
-        window_tokens=39,
+        delta_tokens=20,
         window_start_sequence=1,
+        window_base=False,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
     stats = store.get_stats(context_id=CONTEXT_ID)
 
     assert isinstance(latest.payload, AgentAssistantMessagePayload)
-    assert latest.window_tokens == 39
     assert latest.window_start_sequence == 1
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
         prompt_tokens=30,
@@ -530,18 +676,18 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         total_tokens=39,
     )
     assert stats.entries == 3
-    assert stats.estimated_tokens == 39
+    assert stats.estimated_tokens == 30
     assert stats.window.start_sequence == 1
     assert stats.window.end_sequence == 3
-    assert stats.window.current_tokens == 39
+    assert stats.window.current_tokens == 30
     assert [entry.usage.total_tokens for entry in entries if entry.usage is not None] == [
         15,
         39,
     ]
 
 
-def test_agent_context_store_lists_context_window_from_final_marker(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-window.db"
+def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-last-usage-marker.db"
     run_store = SqliteStateStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
@@ -553,234 +699,27 @@ def test_agent_context_store_lists_context_window_from_final_marker(tmp_path) ->
     )
     store = _store(db_path)
 
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Task",
-    )
-    old = store.append_final_assistant_message(
+    valid = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
-        text="Old",
-        usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
-        window_tokens=10,
+        text="First final",
+        usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        delta_tokens=10,
         window_start_sequence=1,
+        window_base=True,
     )
-    tool_calls = store.append_tool_calls_assistant_message(
+    store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
-        text="",
-    )
-    store.append_tool_call(
-        context=AGENT_CONTEXT,
-        tool_call=AgentToolCall(
-            turn_id="turn-2",
-            parent_sequence=tool_calls.sequence,
-            tool_call_id="call-1",
-            tool="notify",
-            args={},
-        ),
-    )
-    store.append_tool_result(
-        context=AGENT_CONTEXT,
-        tool_result=AgentToolResult(
-            turn_id="turn-2",
-            parent_sequence=tool_calls.sequence,
-            tool_call_id="call-1",
-            result=ToolResult(
-                name="notify",
-                status=ToolResultStatus.COMPLETED,
-                data={},
-                text="ok",
-                error=None,
-            ),
-        ),
-    )
-    marker = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-3",
-        text="Marker",
-        usage=LLMUsage(prompt_tokens=13, completion_tokens=2, total_tokens=15),
-        window_tokens=15,
+        text="Usage without prompt",
+        usage=LLMUsage(prompt_tokens=None, completion_tokens=5, total_tokens=None),
+        delta_tokens=0,
         window_start_sequence=1,
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-4",
-        text="Latest",
-        usage=LLMUsage(prompt_tokens=14, completion_tokens=6, total_tokens=20),
-        window_tokens=20,
-        window_start_sequence=1,
+        window_base=False,
     )
 
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
+    marker = store.get_last_usage_marker(context_id=CONTEXT_ID)
 
-    assert isinstance(old.payload, AgentAssistantMessagePayload)
-    assert old.window_tokens == 10
-    assert [entry.id for entry in window.entries] == [marker.id, latest.id]
-
-
-def test_agent_context_store_returns_full_context_when_window_is_not_exceeded(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-full.db"
-    run_store = SqliteStateStore(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    first = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Task",
-    )
-    final = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Done",
-        usage=LLMUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
-        window_tokens=10,
-        window_start_sequence=1,
-    )
-
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
-
-    assert [entry.id for entry in window.entries] == [first.id, final.id]
-
-
-def test_agent_context_store_expands_window_when_limit_allows_older_entries(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-persisted.db"
-    run_store = SqliteStateStore(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Old task",
-    )
-    old_final = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Old final",
-        usage=LLMUsage(prompt_tokens=60, completion_tokens=20, total_tokens=80),
-        window_tokens=80,
-        window_start_sequence=1,
-    )
-    marker = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Window task",
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="Latest final",
-        usage=LLMUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60),
-        window_tokens=60,
-        window_start_sequence=marker.sequence,
-    )
-
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=100)
-
-    assert latest.position_tokens == 140
-    assert latest.window_tokens == 60
-    assert latest.window_start_sequence == marker.sequence
-    assert [entry.id for entry in window.entries] == [
-        old_final.id,
-        marker.id,
-        latest.id,
-    ]
-
-
-def test_agent_context_store_moves_window_using_current_start_markers_only(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-current-start.db"
-    run_store = SqliteStateStore(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Old task",
-    )
-    previous_window_final = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Previous window final",
-        usage=LLMUsage(prompt_tokens=90, completion_tokens=10, total_tokens=100),
-        window_tokens=100,
-        window_start_sequence=1,
-    )
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Current window task",
-    )
-    first_current_final = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="First current final",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=2, total_tokens=12),
-        window_tokens=12,
-        window_start_sequence=previous_window_final.sequence,
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-3",
-        text="Latest current final",
-        usage=LLMUsage(prompt_tokens=28, completion_tokens=2, total_tokens=30),
-        window_tokens=30,
-        window_start_sequence=previous_window_final.sequence,
-    )
-
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
-
-    assert first_current_final.window_start_sequence == previous_window_final.sequence
-    assert [entry.id for entry in window.entries] == [latest.id]
-
-
-def test_agent_context_store_returns_full_context_without_final_marker(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-window-no-marker.db"
-    run_store = SqliteStateStore(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    first = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Task",
-    )
-    tool_calls = store.append_tool_calls_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="",
-    )
-
-    window = store.list_context_window(context_id=CONTEXT_ID, window_tokens=10)
-
-    assert [entry.id for entry in window.entries] == [first.id, tool_calls.id]
+    assert marker is not None
+    assert marker.sequence == valid.sequence
+    assert marker.prompt_tokens == 10

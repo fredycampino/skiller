@@ -23,7 +23,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextWindow,
+    AgentContextUsageMarker,
 )
 from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel, AgentLLMProviderType
 from skiller.domain.agent.agent_run_identity import AgentContext
@@ -157,6 +157,10 @@ class _FakeAgentContextStore:
         context: AgentContext,
         turn_id: str,
         text: str,
+        usage: LLMUsage | None = None,
+        delta_tokens: int = 0,
+        window_start_sequence: int = 0,
+        window_base: bool = False,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -168,7 +172,11 @@ class _FakeAgentContextStore:
                 "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
                 "text": text,
             },
+            usage=usage,
             message_type=AgentAssistantMessageType.TOOL_CALLS,
+            window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             source_step_id=context.agent_id,
         )
 
@@ -179,8 +187,9 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int,
+        delta_tokens: int,
         window_start_sequence: int,
+        window_base: bool,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -194,8 +203,9 @@ class _FakeAgentContextStore:
             },
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
-            window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             source_step_id=context.agent_id,
         )
 
@@ -253,13 +263,11 @@ class _FakeAgentContextStore:
         payload: dict[str, object],
         usage: LLMUsage | None = None,
         message_type: AgentAssistantMessageType | None = None,
-        window_tokens: int | None = None,
         window_start_sequence: int | None = None,
+        delta_tokens: int | None = None,
+        window_base: bool | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
-        position_tokens = (
-            window_tokens if message_type == AgentAssistantMessageType.FINAL else None
-        )
         self.appended.append(
             {
                 "run_id": run_id,
@@ -267,8 +275,9 @@ class _FakeAgentContextStore:
                 "entry_type": entry_type,
                 "payload": payload,
                 "message_type": message_type.value if message_type else None,
-                "window_tokens": window_tokens,
                 "window_start_sequence": window_start_sequence,
+                "delta_tokens": delta_tokens,
+                "window_base": window_base,
                 "source_step_id": source_step_id,
             }
         )
@@ -281,9 +290,9 @@ class _FakeAgentContextStore:
             payload=payload,
             usage=usage,
             message_type=message_type,
-            position_tokens=position_tokens,
-            window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
         )
@@ -297,19 +306,44 @@ class _FakeAgentContextStore:
             if entry.context_id == context_id
         ]
 
-    def list_context_window(
+    def list_window_entries(
         self,
         *,
         context_id: str,
-        window_tokens: int,
-    ) -> AgentContextWindow:
-        _ = window_tokens
-        entries = self.list_entries(context_id=context_id)
-        return AgentContextWindow(
-            entries=entries,
-            start_sequence=entries[0].sequence if entries else 0,
-            end_sequence=entries[-1].sequence if entries else 0,
-        )
+        window_width_tokens: int,
+    ) -> list[AgentContextEntry]:
+        _ = window_width_tokens
+        return self.list_entries(context_id=context_id)
+
+    def get_last_usage_marker(
+        self,
+        *,
+        context_id: str,
+    ) -> AgentContextUsageMarker | None:
+        entries = [
+            entry
+            for entry in self.entries
+            if entry.context_id == context_id
+        ]
+        for entry in reversed(entries):
+            if entry.usage is None:
+                continue
+            if entry.usage.prompt_tokens is None:
+                continue
+            if entry.delta_tokens is None:
+                continue
+            if entry.window_start_sequence is None:
+                continue
+            if entry.window_base is None:
+                continue
+            return AgentContextUsageMarker(
+                sequence=entry.sequence,
+                prompt_tokens=entry.usage.prompt_tokens,
+                delta_tokens=entry.delta_tokens,
+                window_start_sequence=entry.window_start_sequence,
+                window_base=entry.window_base,
+            )
+        return None
 
     def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         _ = context_id
@@ -722,13 +756,13 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             final="Done.",
             turn_count=2,
             tool_call_count=1,
-            usage=AgentUsageOutput(
-                prompt_tokens=100,
-                completion_tokens=25,
-                total_tokens=125,
-                provider=AgentLLMProviderType.FAKE,
-                model=AgentFakeLLMModel.MODEL1,
-            ),
+                usage=AgentUsageOutput(
+                    prompt_tokens=100,
+                    completion_tokens=25,
+                    total_tokens=125,
+                    provider=AgentLLMProviderType.FAKE,
+                    model=AgentFakeLLMModel.MODEL1,
+                ),
         ),
     )
     assert tool_manager.get_tool_definitions_calls == [["notify"]]

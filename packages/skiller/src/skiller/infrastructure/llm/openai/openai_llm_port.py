@@ -3,7 +3,7 @@ from __future__ import annotations
 from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.agent.llm_request import MiniMaxLLMRequest
-from skiller.infrastructure.llm.openai_mapper import (
+from skiller.infrastructure.llm.openai.openai_mapper import (
     to_openai_kwargs,
     to_port_llm_response,
 )
@@ -15,7 +15,7 @@ def _load_openai_client_class() -> type[object]:
     return OpenAI
 
 
-class OpenAILLM(LLMPort[MiniMaxLLMRequest]):
+class OpenAILLMPort(LLMPort[MiniMaxLLMRequest]):
     def __init__(
         self,
         *,

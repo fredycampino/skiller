@@ -3,7 +3,7 @@ from skiller.domain.agent.llm_port import LLMPort
 from skiller.domain.agent.llm_request import LLMRequest
 
 
-class NullLLM(LLMPort[LLMRequest]):
+class NullLLMPort(LLMPort[LLMRequest]):
     def generate(self, request: LLMRequest) -> LLMResponse:
         return LLMResponse(
             ok=False,

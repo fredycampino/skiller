@@ -9,6 +9,7 @@ from skiller.domain.agent.agent_stats_model import (
     AgentContextWindowStats,
     AgentStats,
 )
+from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
 
@@ -33,12 +34,14 @@ class GetAgentStatsUseCase:
     def __init__(
         self,
         *,
-        store: RunStorePort,
+        run_store: RunStorePort,
+        run_agent_store: RunAgentStorePort,
         context_stats: AgentContextStatsPort,
         agent_config: AgentConfigPort,
         skill_runner: RunnerPort,
     ) -> None:
-        self.store = store
+        self.run_store = run_store
+        self.run_agent_store = run_agent_store
         self.context_stats = context_stats
         self.agent_config = agent_config
         self.skill_runner = skill_runner
@@ -47,7 +50,7 @@ class GetAgentStatsUseCase:
         if not run_id or not agent_id:
             raise RuntimeError("GetAgentStatsUseCase requires run_id and agent_id")
 
-        run = self.store.get_run(run_id)
+        run = self.run_store.get_run(run_id)
         if run is None:
             return GetAgentStatsResult(
                 status=GetAgentStatsStatus.RUN_NOT_FOUND,
@@ -56,7 +59,7 @@ class GetAgentStatsUseCase:
                 error=f"Run '{run_id}' not found",
             )
 
-        agent = self.store.get_agent(run_id=run_id, agent_id=agent_id)
+        agent = self.run_agent_store.get_agent(run_id=run_id, agent_id=agent_id)
         if agent is None:
             return GetAgentStatsResult(
                 status=GetAgentStatsStatus.AGENT_NOT_FOUND,

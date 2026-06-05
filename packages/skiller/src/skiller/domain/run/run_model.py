@@ -23,12 +23,23 @@ class SkillSource(str, Enum):
 class RunAgent:
     agent_id: str
     context_id: str | None = None
+    window_start_sequence: int = 0
+    window_base: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "agent_id": self.agent_id,
             "context_id": self.context_id,
+            "window_start_sequence": self.window_start_sequence,
+            "window_base": self.window_base,
         }
+
+
+@dataclass(frozen=True)
+class RunAgentWindow:
+    agent_id: str
+    window_start_sequence: int
+    window_base: bool
 
 
 @dataclass(frozen=True)

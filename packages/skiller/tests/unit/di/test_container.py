@@ -1,3 +1,6 @@
+import base64
+import json
+
 import pytest
 
 from skiller.di.container import build_runtime_container
@@ -14,12 +17,12 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentNullProvider,
 )
 from skiller.infrastructure.config.settings_model import Settings
-from skiller.infrastructure.llm import openai_llm
-from skiller.infrastructure.llm.fake_llm import FakeLLM
-from skiller.infrastructure.llm.null_llm import NullLLM
-from skiller.infrastructure.llm.openai_codex_credentials import OpenAICodexCredentials
-from skiller.infrastructure.llm.openai_codex_responses_llm import OpenAICodexResponsesLLM
-from skiller.infrastructure.llm.openai_llm import OpenAILLM
+from skiller.infrastructure.llm.codex.codex_credentials_datasource import CodexCredentials
+from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
+from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
+from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
+from skiller.infrastructure.llm.openai import openai_llm_port
+from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 
 pytestmark = pytest.mark.unit
 
@@ -29,10 +32,24 @@ class _FakeOpenAIClient:
         self.kwargs = kwargs
 
 
-class _FakeCodexCredentialsLoader:
-    def load(self, credentials_file: str) -> OpenAICodexCredentials:
+class _FakeCodexCredentialsDatasource:
+    def load(self, credentials_file: str) -> CodexCredentials:
         _ = credentials_file
-        return OpenAICodexCredentials(access_token="codex-token", account_id="account-1")
+        return CodexCredentials(
+            access_token=_token_with_account_id("account-1"),
+            auth_mode="chatgpt",
+            client_id="client-1",
+            created_at=1,
+            device_auth_hash="device-hash",
+            expires_at=3,
+            expires_in=2,
+            id_token="id-token",
+            redirect_uri="https://auth.openai.com/deviceauth/callback",
+            refresh_token="refresh-token",
+            scope="openid profile email offline_access",
+            source="skiller-codex-auth",
+            token_type="bearer",
+        )
 
 
 @pytest.mark.parametrize(
@@ -44,7 +61,7 @@ class _FakeCodexCredentialsLoader:
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
-            NullLLM,
+            NullLLMPort,
         ),
         (
             AgentFakeProvider(
@@ -52,7 +69,7 @@ class _FakeCodexCredentialsLoader:
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
-            FakeLLM,
+            FakeLLMPort,
         ),
         (
             AgentMiniMaxProvider(
@@ -61,7 +78,7 @@ class _FakeCodexCredentialsLoader:
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
-            OpenAILLM,
+            OpenAILLMPort,
         ),
         (
             AgentCodexProvider(
@@ -70,7 +87,7 @@ class _FakeCodexCredentialsLoader:
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
-            OpenAICodexResponsesLLM,
+            CodexLLMPort,
         ),
     ],
 )
@@ -79,10 +96,10 @@ def test_llm_client_factory_creates_expected_client(
     provider: AgentLLMProvider,
     expected_type: type[object],
 ) -> None:
-    monkeypatch.setattr(openai_llm, "_load_openai_client_class", lambda: _FakeOpenAIClient)
+    monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeOpenAIClient)
     monkeypatch.setattr(
-        "skiller.infrastructure.llm.openai_codex_responses_llm.OpenAICodexCredentialsLoader",
-        lambda: _FakeCodexCredentialsLoader(),
+        "skiller.di.llm_client_factory.CodexCredentialsDatasource",
+        lambda: _FakeCodexCredentialsDatasource(),
     )
     factory = LLMClientFactory()
 
@@ -97,3 +114,15 @@ def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) ->
     )
 
     build_runtime_container(settings=settings, skills_dir=str(tmp_path))
+
+
+def _token_with_account_id(account_id: str) -> str:
+    payload = json.dumps(
+        {
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": account_id,
+            }
+        }
+    ).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    return f"header.{encoded}.signature"

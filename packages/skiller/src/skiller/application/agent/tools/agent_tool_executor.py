@@ -80,16 +80,22 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 ]
         )
 
-        if request.response.has_text_content:
+        should_persist_tool_calls = (
+            request.response.has_text_content
+            or request.response.usage is not None
+        )
+        if should_persist_tool_calls:
             assistant_message_entry = self.context_publisher.publish_tool_calls_assistant_message(
                 context=request.context,
                 turn_id=request.turn_id,
-                text=request.response.content,
+                text=request.response.content or "",
+                usage=request.response.usage,
             )
-            self.event_publisher.emit_assistant_message(
-                entry=assistant_message_entry,
-                config=request.event_config,
-            )
+            if request.response.has_text_content:
+                self.event_publisher.emit_assistant_message(
+                    entry=assistant_message_entry,
+                    config=request.event_config,
+                )
             state.parent_sequence = assistant_message_entry.sequence
 
         for raw_tool_call in request.response.tool_calls:

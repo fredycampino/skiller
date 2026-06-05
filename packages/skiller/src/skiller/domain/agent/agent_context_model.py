@@ -80,9 +80,9 @@ class AgentContextEntry:
     source_step_id: str
     created_at: str
     message_type: AgentAssistantMessageType | None = None
-    position_tokens: int | None = None
-    window_tokens: int | None = None
     window_start_sequence: int | None = None
+    delta_tokens: int | None = None
+    window_base: bool | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.payload, dict):
@@ -97,10 +97,12 @@ class AgentContextEntry:
 
 
 @dataclass(frozen=True)
-class AgentContextWindow:
-    entries: list[AgentContextEntry]
-    start_sequence: int
-    end_sequence: int
+class AgentContextUsageMarker:
+    sequence: int
+    prompt_tokens: int
+    delta_tokens: int
+    window_start_sequence: int
+    window_base: bool
 
 
 def agent_context_payload_to_dict(payload: AgentContextPayload) -> dict[str, object]:

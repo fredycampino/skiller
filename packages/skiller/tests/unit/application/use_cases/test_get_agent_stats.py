@@ -28,7 +28,8 @@ pytestmark = pytest.mark.unit
 def test_get_agent_stats_uses_attached_agent_context_id() -> None:
     context_stats = _FakeContextStats()
     use_case = GetAgentStatsUseCase(
-        store=_FakeStore(_build_run(), RunAgent("support_agent", "support-thread")),
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
         context_stats=context_stats,
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
@@ -49,13 +50,15 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
 
 def test_get_agent_stats_returns_not_found_statuses() -> None:
     missing_run = GetAgentStatsUseCase(
-        store=_FakeStore(None, None),
+        run_store=_FakeRunStore(None),
+        run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = GetAgentStatsUseCase(
-        store=_FakeStore(_build_run(), None),
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
@@ -69,7 +72,8 @@ def test_get_agent_stats_returns_not_found_statuses() -> None:
 
 def test_get_agent_stats_returns_context_not_ready() -> None:
     result = GetAgentStatsUseCase(
-        store=_FakeStore(_build_run(), RunAgent("support_agent", None)),
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", None)),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
@@ -81,7 +85,8 @@ def test_get_agent_stats_returns_context_not_ready() -> None:
 
 def test_get_agent_stats_rejects_invalid_programmer_input() -> None:
     use_case = GetAgentStatsUseCase(
-        store=_FakeStore(_build_run(), None),
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
@@ -94,14 +99,18 @@ def test_get_agent_stats_rejects_invalid_programmer_input() -> None:
         use_case.execute("run-1", "")
 
 
-class _FakeStore:
-    def __init__(self, run: Run | None, agent: RunAgent | None) -> None:
+class _FakeRunStore:
+    def __init__(self, run: Run | None) -> None:
         self.run = run
-        self.agent = agent
 
     def get_run(self, run_id: str) -> Run | None:
         _ = run_id
         return self.run
+
+
+class _FakeRunAgentStore:
+    def __init__(self, agent: RunAgent | None) -> None:
+        self.agent = agent
 
     def get_agent(self, *, run_id: str, agent_id: str) -> RunAgent | None:
         _ = run_id, agent_id

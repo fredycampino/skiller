@@ -72,7 +72,7 @@ from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEv
 from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
-from skiller.infrastructure.llm.null_llm import NullLLM
+from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 from skiller.infrastructure.tools.mcp.client import MCPClientTool
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -146,7 +146,7 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
         store=store,
         runner=build_agent_runner(
             agent_context_store=agent_context_store,
-            llm=NullLLM(),
+            llm=NullLLMPort(),
             tool_manager=agent_tool_manager,
             append_runtime_event_use_case=append_runtime_event_use_case,
         ),

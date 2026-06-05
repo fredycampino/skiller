@@ -22,7 +22,7 @@ from skiller.domain.agent.agent_llm_provider_model import AgentLLMProvider
 from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm_request import LLMRequest
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
-from skiller.domain.run.run_model import RunAgent
+from skiller.domain.run.run_model import RunAgent, RunAgentWindow
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_process_model import (
@@ -53,7 +53,7 @@ class _FakeLLMClientResolver:
         return self.llm
 
 
-class _FakeRunStore:
+class _FakeRunAgentStore:
     def __init__(self) -> None:
         self.agents: dict[tuple[str, str], RunAgent] = {}
 
@@ -64,6 +64,15 @@ class _FakeRunStore:
         self.agents[(run_id, agent_id)] = RunAgent(
             agent_id=agent_id,
             context_id=context_id,
+        )
+
+    def update_agent_window(self, *, run_id: str, window: RunAgentWindow) -> None:
+        current_agent = self.agents.get((run_id, window.agent_id))
+        self.agents[(run_id, window.agent_id)] = RunAgent(
+            agent_id=window.agent_id,
+            context_id=current_agent.context_id if current_agent is not None else None,
+            window_start_sequence=window.window_start_sequence,
+            window_base=window.window_base,
         )
 
 
@@ -103,7 +112,7 @@ def build_tool_execution(
 ) -> AgentToolExecutor:
     context_publisher = AgentContextPublisher(
         agent_context_store,
-        _FakeRunStore(),
+        _FakeRunAgentStore(),
         AgentRunnerFeedback(),
     )
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
@@ -130,20 +139,21 @@ def build_agent_runner(
     append_runtime_event_use_case: AppendRuntimeEventUseCase | None = None,
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
-    run_store = _FakeRunStore()
+    run_agent_store = _FakeRunAgentStore()
     llm_model = LLMModelManager(client_resolver=_FakeLLMClientResolver(llm))
     return AgentRunner(
         agent_context_store=agent_context_store,
         llm_model=llm_model,
         context_manager=AgentContextManager(
             agent_context_store=agent_context_store,
+            run_agent_store=run_agent_store,
             prompt_builder=AgentPromptBuilder(),
         ),
         error_mapper=AgentErrorMapper(),
         feedback=AgentRunnerFeedback(),
         context_publisher=AgentContextPublisher(
             agent_context_store,
-            run_store,
+            run_agent_store,
             AgentRunnerFeedback(),
         ),
         event_publisher=AgentEventPublisher(

@@ -3,7 +3,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextWindow,
+    AgentContextUsageMarker,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
@@ -13,7 +13,6 @@ from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.agent_stats_model import (
     AgentContextObservedStats,
-    AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
@@ -49,6 +48,10 @@ class AgentContextStore(
         context: AgentContext,
         turn_id: str,
         text: str,
+        usage: LLMUsage | None,
+        delta_tokens: int,
+        window_start_sequence: int,
+        window_base: bool,
     ) -> AgentContextEntry:
         return self.datasource.append_entry(
             run_id=context.run_id,
@@ -59,6 +62,10 @@ class AgentContextStore(
                 message_type=AgentAssistantMessageType.TOOL_CALLS,
                 text=text,
             ),
+            usage=usage,
+            window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             source_step_id=context.agent_id,
         )
 
@@ -69,15 +76,10 @@ class AgentContextStore(
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int,
+        delta_tokens: int,
         window_start_sequence: int,
+        window_base: bool,
     ) -> AgentContextEntry:
-        base_position_tokens = self.datasource.position_before_sequence(
-            context_id=context.context_id,
-            sequence=window_start_sequence,
-        )
-        position_tokens = base_position_tokens + window_tokens
-
         return self.datasource.append_entry(
             run_id=context.run_id,
             context_id=context.context_id,
@@ -88,9 +90,9 @@ class AgentContextStore(
                 text=text,
             ),
             usage=usage,
-            position_tokens=position_tokens,
-            window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             source_step_id=context.agent_id,
         )
 
@@ -140,101 +142,26 @@ class AgentContextStore(
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         return self.datasource.list_entries(context_id=context_id)
 
-    def list_context_window(
+    def list_window_entries(
         self,
         *,
         context_id: str,
-        window_tokens: int,
-    ) -> AgentContextWindow:
-        window_end = self.datasource.window_end_boundary(context_id=context_id)
-        if window_end is None:
-            entries = self.datasource.list_entries(context_id=context_id)
-            return AgentContextWindow(
-                entries=entries,
-                start_sequence=_start_sequence(entries),
-                end_sequence=_end_sequence(entries),
-            )
-
-        window_start_position_tokens = window_end.position_tokens - window_tokens
-        if window_start_position_tokens <= 0:
-            entries = self.datasource.list_entries(context_id=context_id)
-            return AgentContextWindow(
-                entries=entries,
-                start_sequence=_start_sequence(entries),
-                end_sequence=_end_sequence(entries),
-            )
-
-        base_position_tokens = self.datasource.position_before_sequence(
+        window_width_tokens: int,
+    ) -> list[AgentContextEntry]:
+        return self.datasource.list_window_entries(
             context_id=context_id,
-            sequence=window_end.window_start_sequence,
+            window_width_tokens=window_width_tokens,
         )
-        if window_start_position_tokens > base_position_tokens:
-            window_start = self.datasource.window_start_boundary_for_start_sequence(
-                context_id=context_id,
-                window_start_sequence=window_end.window_start_sequence,
-                window_start_position_tokens=window_start_position_tokens,
-            )
-            sequence = window_end.window_start_sequence
-            if window_start is not None:
-                sequence = window_start.sequence
-            entries = self.datasource.list_entries_from_sequence(
-                context_id=context_id,
-                sequence=sequence,
-            )
-            return AgentContextWindow(
-                entries=entries,
-                start_sequence=_start_sequence(entries),
-                end_sequence=_end_sequence(entries),
-            )
 
-        window_start = self.datasource.window_start_boundary(
-            context_id=context_id,
-            window_start_position_tokens=window_start_position_tokens,
-        )
-        if window_start is None:
-            entries = self.datasource.list_entries(context_id=context_id)
-            return AgentContextWindow(
-                entries=entries,
-                start_sequence=_start_sequence(entries),
-                end_sequence=_end_sequence(entries),
-            )
-
-        entries = self.datasource.list_entries_from_sequence(
-            context_id=context_id,
-            sequence=window_start.sequence,
-        )
-        return AgentContextWindow(
-            entries=entries,
-            start_sequence=_start_sequence(entries),
-            end_sequence=_end_sequence(entries),
-        )
+    def get_last_usage_marker(
+        self,
+        *,
+        context_id: str,
+    ) -> AgentContextUsageMarker | None:
+        return self.datasource.get_last_usage_marker(context_id=context_id)
 
     def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
-        entries = self.datasource.list_entries(context_id=context_id)
-        final_entry = _last_final_entry(entries)
-        if final_entry is None:
-            start_sequence = _start_sequence(entries)
-            return AgentContextObservedStats(
-                entries=len(entries),
-                estimated_tokens=0,
-                window=AgentContextObservedWindowStats(
-                    start_sequence=start_sequence,
-                    end_sequence=_end_sequence(entries),
-                    current_tokens=0,
-                ),
-            )
-
-        window_start_sequence = final_entry.window_start_sequence or 0
-
-        return AgentContextObservedStats(
-            entries=len(entries),
-            estimated_tokens=final_entry.position_tokens or 0,
-            window=AgentContextObservedWindowStats(
-                start_sequence=window_start_sequence,
-                end_sequence=_end_sequence(entries),
-                current_tokens=final_entry.window_tokens or 0,
-            ),
-        )
+        return self.datasource.get_observed_stats(context_id=context_id)
 
     def get_usage(self, *, context_id: str) -> LLMUsage:
         entries = self.datasource.list_entries(context_id=context_id)
@@ -251,18 +178,6 @@ def _empty_usage() -> LLMUsage:
         completion_tokens=0,
         total_tokens=0,
     )
-
-
-def _start_sequence(entries: list[AgentContextEntry]) -> int:
-    if not entries:
-        return 0
-    return entries[0].sequence
-
-
-def _end_sequence(entries: list[AgentContextEntry]) -> int:
-    if not entries:
-        return 0
-    return entries[-1].sequence
 
 
 def _last_final_usage_from_entries(entries: list[AgentContextEntry]) -> LLMUsage | None:

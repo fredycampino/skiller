@@ -12,6 +12,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextUsageMarker,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
@@ -39,7 +40,7 @@ pytestmark = pytest.mark.unit
 
 def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -> None:
     store = _FakeAgentContextStore()
-    publisher = AgentContextPublisher(store, _FakeRunStore(), AgentRunnerFeedback())
+    publisher = AgentContextPublisher(store, _FakeRunAgentStore(), AgentRunnerFeedback())
     request = _tool_request()
     tool_call_entry = publisher.publish_tool_call(
         request=request,
@@ -83,7 +84,7 @@ def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -
 
 def test_agent_context_publisher_publishes_tool_feedback_messages() -> None:
     store = _FakeAgentContextStore()
-    publisher = AgentContextPublisher(store, _FakeRunStore(), AgentRunnerFeedback())
+    publisher = AgentContextPublisher(store, _FakeRunAgentStore(), AgentRunnerFeedback())
     request = _tool_request()
 
     limit_entry = publisher.publish_tool_limit_feedback(
@@ -111,7 +112,14 @@ def test_agent_context_publisher_publishes_tool_feedback_messages() -> None:
 
 def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
     store = _FakeAgentContextStore()
-    publisher = AgentContextPublisher(store, _FakeRunStore(), AgentRunnerFeedback())
+    run_agent_store = _FakeRunAgentStore()
+    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
+        agent_id="agent-1",
+        context_id="ctx-1",
+        window_start_sequence=1,
+        window_base=True,
+    )
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
     request = _tool_request()
     usage = LLMUsage(prompt_tokens=10, completion_tokens=3, total_tokens=13)
 
@@ -120,8 +128,6 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         turn_id="turn-1",
         text="Done.",
         usage=usage,
-        window_tokens=13,
-        window_start_sequence=1,
     )
 
     assert entry.usage == usage
@@ -131,14 +137,16 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         "message_type": "final",
         "text": "Done.",
         "usage": usage,
+        "delta_tokens": 10,
         "window_start_sequence": 1,
+        "window_base": True,
     }
 
 
 def test_agent_context_publisher_attaches_agent_context_once() -> None:
     store = _FakeAgentContextStore()
-    run_store = _FakeRunStore()
-    publisher = AgentContextPublisher(store, run_store, AgentRunnerFeedback())
+    run_agent_store = _FakeRunAgentStore()
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
     agent = AgentRun(run_id="run-1", agent_id="agent-1")
 
     context = publisher.attach_context(agent=agent)
@@ -149,13 +157,13 @@ def test_agent_context_publisher_attaches_agent_context_once() -> None:
     assert context.agent_id == "agent-1"
     assert repeated_context == context
 
-    assert run_store.get_calls == [
+    assert run_agent_store.get_calls == [
         {
             "run_id": "run-1",
             "agent_id": "agent-1",
         }
     ]
-    assert run_store.attach_calls == [
+    assert run_agent_store.attach_calls == [
         {
             "run_id": "run-1",
             "agent_id": "agent-1",
@@ -213,6 +221,10 @@ class _FakeAgentContextStore(AgentContextStorePort):
         context: AgentContext,
         turn_id: str,
         text: str,
+        usage: LLMUsage | None = None,
+        delta_tokens: int = 0,
+        window_start_sequence: int = 0,
+        window_base: bool = False,
     ) -> AgentContextEntry:
         self.calls.append(
             {
@@ -220,6 +232,10 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "turn_id": turn_id,
                 "message_type": AgentAssistantMessageType.TOOL_CALLS.value,
                 "text": text,
+                "usage": usage,
+                "delta_tokens": delta_tokens,
+                "window_start_sequence": window_start_sequence,
+                "window_base": window_base,
             }
         )
         return AgentContextEntry(
@@ -228,10 +244,11 @@ class _FakeAgentContextStore(AgentContextStorePort):
             context_id=context.context_id,
             sequence=2,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=None,
+            usage=usage,
             message_type=AgentAssistantMessageType.TOOL_CALLS,
-            window_tokens=None,
-            window_start_sequence=None,
+            window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
                 message_type=AgentAssistantMessageType.TOOL_CALLS,
@@ -248,8 +265,9 @@ class _FakeAgentContextStore(AgentContextStorePort):
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int,
+        delta_tokens: int,
         window_start_sequence: int,
+        window_base: bool,
     ) -> AgentContextEntry:
         self.calls.append(
             {
@@ -258,7 +276,9 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "message_type": AgentAssistantMessageType.FINAL.value,
                 "text": text,
                 "usage": usage,
+                "delta_tokens": delta_tokens,
                 "window_start_sequence": window_start_sequence,
+                "window_base": window_base,
             }
         )
         return AgentContextEntry(
@@ -269,9 +289,9 @@ class _FakeAgentContextStore(AgentContextStorePort):
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
-            position_tokens=window_tokens,
-            window_tokens=window_tokens,
             window_start_sequence=window_start_sequence,
+            delta_tokens=delta_tokens,
+            window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
                 message_type=AgentAssistantMessageType.FINAL,
@@ -340,12 +360,29 @@ class _FakeAgentContextStore(AgentContextStorePort):
         _ = context_id
         raise NotImplementedError
 
+    def list_window_entries(
+        self,
+        *,
+        context_id: str,
+        window_width_tokens: int,
+    ) -> list[AgentContextEntry]:
+        _ = context_id, window_width_tokens
+        raise NotImplementedError
+
+    def get_last_usage_marker(
+        self,
+        *,
+        context_id: str,
+    ) -> AgentContextUsageMarker | None:
+        _ = context_id
+        return None
+
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id
         raise NotImplementedError
 
 
-class _FakeRunStore:
+class _FakeRunAgentStore:
     def __init__(self) -> None:
         self.agents: dict[tuple[str, str], RunAgent] = {}
         self.attach_calls: list[dict[str, str]] = []

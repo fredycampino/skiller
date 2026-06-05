@@ -107,6 +107,8 @@ from skiller.infrastructure.db.sqlite_agent_context_datasource import (
 )
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_run_agent_datasource import SqliteRunAgentDatasource
+from skiller.infrastructure.db.sqlite_run_agent_store import SqliteRunAgentStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
@@ -150,6 +152,8 @@ def build_runtime_container(
     runtime_event_store = SqliteRuntimeEventStore(cfg.db_path)
     agent_context_datasource = SqliteAgentContextDatasource(cfg.db_path)
     agent_context_store = AgentContextStore(agent_context_datasource)
+    run_agent_datasource = SqliteRunAgentDatasource(cfg.db_path)
+    run_agent_store = SqliteRunAgentStore(run_agent_datasource)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
@@ -231,15 +235,17 @@ def build_runtime_container(
     agent_feedback = AgentRunnerFeedback()
     agent_context_publisher = AgentContextPublisher(
         agent_context_store,
-        store,
+        run_agent_store,
         agent_feedback,
     )
     agent_context_manager = AgentContextManager(
         agent_context_store=agent_context_store,
+        run_agent_store=run_agent_store,
         prompt_builder=AgentPromptBuilder(),
     )
     get_agent_stats_use_case = GetAgentStatsUseCase(
-        store=store,
+        run_store=store,
+        run_agent_store=run_agent_store,
         context_stats=agent_context_store,
         agent_config=agent_config,
         skill_runner=skill_runner,

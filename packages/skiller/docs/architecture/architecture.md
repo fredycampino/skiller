@@ -78,6 +78,8 @@ interfaces -> application -> domain <- infrastructure
   - `domain/shared/*_port.py`
 - Do not create generic `domain/ports` or `application/ports` directories.
 - Do not leave port wrappers, aliases, compatibility shims, or re-export modules.
+- Naming for ports, infrastructure port implementations, datasources, and mappers must follow
+  [`naming-style.md`](naming-style.md).
 - External SDKs, DB drivers, HTTP clients, and MCP adapters live in `infrastructure`.
 - Environment reads belong in `infrastructure/config`.
 - Infrastructure implements technical details only. It should not decide runtime behavior such as

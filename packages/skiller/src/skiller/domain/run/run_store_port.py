@@ -1,7 +1,11 @@
 from typing import Protocol
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import Run, RunAgent, RunSnapshotSyncState, RunStatus
+from skiller.domain.run.run_model import (
+    Run,
+    RunSnapshotSyncState,
+    RunStatus,
+)
 from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 
 
@@ -32,20 +36,5 @@ class RunStorePort(Protocol):
     def get_snapshot_sync_state(self, run_id: str) -> RunSnapshotSyncState | None: ...
 
     def update_snapshot(self, run_id: str, snapshot: dict[str, object]) -> None: ...
-
-    def get_agent(
-        self,
-        *,
-        run_id: str,
-        agent_id: str,
-    ) -> RunAgent | None: ...
-
-    def attach_agent(
-        self,
-        *,
-        run_id: str,
-        agent_id: str,
-        context_id: str,
-    ) -> None: ...
 
     def delete_run(self, run_id: str) -> bool: ...

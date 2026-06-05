@@ -37,7 +37,7 @@ class AgentEventDraftBuilder:
                 turn_id=entry.payload.turn_id,
                 agent_sequence=entry.sequence,
                 body=AgentMessageEventBody(
-                    total_tokens=entry.window_tokens or 0,
+                    total_tokens=_usage_total_tokens(entry),
                     text=entry.payload.text,
                 ),
             ),
@@ -63,7 +63,7 @@ class AgentEventDraftBuilder:
                 turn_id=entry.payload.turn_id,
                 agent_sequence=entry.sequence,
                 body=AgentMessageEventBody(
-                    total_tokens=entry.window_tokens or 0,
+                    total_tokens=_usage_total_tokens(entry),
                     text=entry.payload.text,
                 ),
             ),
@@ -162,3 +162,9 @@ class AgentEventDraftBuilder:
                 stop_reason="max_turns_exhausted",
             ),
         )
+
+
+def _usage_total_tokens(entry: AgentContextEntry) -> int:
+    if entry.usage is None or entry.usage.total_tokens is None:
+        return 0
+    return entry.usage.total_tokens

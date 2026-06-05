@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.domain.agent.agent_context_model import (
-    AgentAssistantMessageType,
     AgentContextEntry,
-    AgentContextEntryType,
 )
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_run_identity import AgentContext
 from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.run.run_agent_store_port import RunAgentStorePort
+from skiller.domain.run.run_model import RunAgentWindow
 
 
 @dataclass(frozen=True)
@@ -29,9 +29,11 @@ class AgentContextManager:
         self,
         *,
         agent_context_store: AgentContextStorePort,
+        run_agent_store: RunAgentStorePort,
         prompt_builder: AgentPromptBuilder,
     ) -> None:
         self.agent_context_store = agent_context_store
+        self.run_agent_store = run_agent_store
         self.prompt_builder = prompt_builder
 
     def build_window_context(
@@ -45,11 +47,27 @@ class AgentContextManager:
         window_width_tokens = int(
             provider.window_width_tokens * max_ratio,
         )
-        context_window = self.agent_context_store.list_context_window(
+        entries = self.agent_context_store.list_window_entries(
             context_id=context.context_id,
-            window_tokens=window_width_tokens,
+            window_width_tokens=window_width_tokens,
         )
-        entries = context_window.entries
+        window_start_sequence = _start_sequence(entries)
+        run_agent = self.run_agent_store.get_agent(
+            run_id=context.run_id,
+            agent_id=context.agent_id,
+        )
+        window_base = (
+            run_agent is None
+            or run_agent.window_start_sequence != window_start_sequence
+        )
+        self.run_agent_store.update_agent_window(
+            run_id=context.run_id,
+            window=RunAgentWindow(
+                agent_id=context.agent_id,
+                window_start_sequence=window_start_sequence,
+                window_base=window_base,
+            ),
+        )
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
         llm_request = self.prompt_builder.build_request(
             provider=provider,
@@ -62,30 +80,24 @@ class AgentContextManager:
             turn_id=turn_id,
             llm_request=llm_request,
             window_width_tokens=window_width_tokens,
-            window_start_sequence=context_window.start_sequence,
-            window_end_sequence=context_window.end_sequence,
+            window_start_sequence=window_start_sequence,
+            window_end_sequence=_end_sequence(entries),
             max_ratio=max_ratio,
             estimated_tokens=_estimated_tokens(entries),
         )
 
 
 def _estimated_tokens(entries: list[AgentContextEntry]) -> int:
+    return sum(entry.delta_tokens or 0 for entry in entries)
+
+
+def _start_sequence(entries: list[AgentContextEntry]) -> int:
     if not entries:
         return 0
+    return entries[0].sequence
 
-    last_total = _final_position_tokens(entries[-1])
-    if last_total is None:
+
+def _end_sequence(entries: list[AgentContextEntry]) -> int:
+    if not entries:
         return 0
-
-    first_total = _final_position_tokens(entries[0])
-    if first_total is None:
-        return last_total
-    return last_total - first_total
-
-
-def _final_position_tokens(entry: AgentContextEntry) -> int | None:
-    if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
-        return None
-    if entry.message_type != AgentAssistantMessageType.FINAL:
-        return None
-    return entry.position_tokens
+    return entries[-1].sequence

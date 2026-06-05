@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from uuid import uuid4
 
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
@@ -5,7 +6,7 @@ from skiller.domain.agent.agent_context_model import AgentContextEntry
 from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
 from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
 from skiller.domain.agent.llm_model import LLMToolCall, LLMUsage
-from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.tool.tool_execution_model import (
     AgentToolCall,
     AgentToolResult,
@@ -17,11 +18,11 @@ class AgentContextPublisher:
     def __init__(
         self,
         agent_context_store: AgentContextStorePort,
-        run_store: RunStorePort,
+        run_agent_store: RunAgentStorePort,
         feedback: AgentRunnerFeedback,
     ) -> None:
         self.agent_context_store = agent_context_store
-        self.run_store = run_store
+        self.run_agent_store = run_agent_store
         self.feedback = feedback
         self._attached_contexts: dict[AgentRun, AgentContext] = {}
 
@@ -34,7 +35,7 @@ class AgentContextPublisher:
         if cached_context is not None:
             return cached_context
 
-        run_agent = self.run_store.get_agent(
+        run_agent = self.run_agent_store.get_agent(
             run_id=agent.run_id,
             agent_id=agent.agent_id,
         )
@@ -50,7 +51,7 @@ class AgentContextPublisher:
         context_uuid = uuid4()
         context_id = str(context_uuid)
 
-        self.run_store.attach_agent(
+        self.run_agent_store.attach_agent(
             run_id=agent.run_id,
             agent_id=agent.agent_id,
             context_id=context_id,
@@ -91,16 +92,16 @@ class AgentContextPublisher:
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        window_tokens: int,
-        window_start_sequence: int,
     ) -> AgentContextEntry:
+        marker = self._response_marker(context=context, usage=usage)
         return self.agent_context_store.append_final_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
             usage=usage,
-            window_tokens=window_tokens,
-            window_start_sequence=window_start_sequence,
+            delta_tokens=marker.delta_tokens,
+            window_start_sequence=marker.window_start_sequence,
+            window_base=marker.window_base,
         )
 
     def publish_tool_calls_assistant_message(
@@ -109,11 +110,17 @@ class AgentContextPublisher:
         context: AgentContext,
         turn_id: str,
         text: str,
+        usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
+        marker = self._response_marker(context=context, usage=usage)
         return self.agent_context_store.append_tool_calls_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
+            usage=usage,
+            delta_tokens=marker.delta_tokens,
+            window_start_sequence=marker.window_start_sequence,
+            window_base=marker.window_base,
         )
 
     def publish_tool_call(
@@ -178,3 +185,67 @@ class AgentContextPublisher:
                 error=error,
             ),
         )
+
+    def _response_marker(
+        self,
+        *,
+        context: AgentContext,
+        usage: LLMUsage | None,
+    ) -> "_ResponseMarker":
+        run_agent = self.run_agent_store.get_agent(
+            run_id=context.run_id,
+            agent_id=context.agent_id,
+        )
+        window_start_sequence = (
+            run_agent.window_start_sequence
+            if run_agent is not None
+            else 0
+        )
+        window_base = run_agent.window_base if run_agent is not None else True
+        prompt_tokens = usage.prompt_tokens if usage is not None else None
+        if prompt_tokens is None:
+            return _ResponseMarker(
+                delta_tokens=0,
+                window_start_sequence=window_start_sequence,
+                window_base=window_base,
+            )
+
+        last_marker = self.agent_context_store.get_last_usage_marker(
+            context_id=context.context_id,
+        )
+        if last_marker is None:
+            return _ResponseMarker(
+                delta_tokens=prompt_tokens,
+                window_start_sequence=window_start_sequence,
+                window_base=True,
+            )
+        if last_marker.window_start_sequence != window_start_sequence:
+            return _ResponseMarker(
+                delta_tokens=prompt_tokens,
+                window_start_sequence=window_start_sequence,
+                window_base=True,
+            )
+        if window_base:
+            return _ResponseMarker(
+                delta_tokens=prompt_tokens,
+                window_start_sequence=window_start_sequence,
+                window_base=True,
+            )
+        if prompt_tokens < last_marker.prompt_tokens:
+            return _ResponseMarker(
+                delta_tokens=prompt_tokens,
+                window_start_sequence=window_start_sequence,
+                window_base=True,
+            )
+        return _ResponseMarker(
+            delta_tokens=prompt_tokens - last_marker.prompt_tokens,
+            window_start_sequence=window_start_sequence,
+            window_base=False,
+        )
+
+
+@dataclass(frozen=True)
+class _ResponseMarker:
+    delta_tokens: int
+    window_start_sequence: int
+    window_base: bool

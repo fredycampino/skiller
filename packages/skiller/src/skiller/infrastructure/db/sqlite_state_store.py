@@ -3,7 +3,11 @@ import sqlite3
 from typing import Any
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import Run, RunAgent, RunSnapshotSyncState, RunStatus
+from skiller.domain.run.run_model import (
+    Run,
+    RunSnapshotSyncState,
+    RunStatus,
+)
 from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.wait.match_type import MatchType
@@ -18,6 +22,7 @@ class SqliteStateStore(SqliteRepository, RunStorePort):
     def __init__(self, db_path: str) -> None:
         super().__init__(db_path)
         self.wait_store = SqliteWaitStore(db_path)
+
     def create_run(
         self,
         source: str,
@@ -183,55 +188,6 @@ class SqliteStateStore(SqliteRepository, RunStorePort):
                 (json.dumps(snapshot), run_id),
             )
 
-    def get_agent(
-        self,
-        *,
-        run_id: str,
-        agent_id: str,
-    ) -> RunAgent | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT agents_json
-                FROM runs
-                WHERE id = ?
-                """,
-                (run_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        agents = _agents_from_json(row["agents_json"])
-        return agents.get(agent_id)
-
-    def attach_agent(
-        self,
-        *,
-        run_id: str,
-        agent_id: str,
-        context_id: str,
-    ) -> None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT agents_json
-                FROM runs
-                WHERE id = ?
-                """,
-                (run_id,),
-            ).fetchone()
-            if row is None:
-                return
-            agents = _agents_from_json(row["agents_json"])
-            agents[agent_id] = RunAgent(agent_id=agent_id, context_id=context_id)
-            conn.execute(
-                """
-                UPDATE runs
-                SET agents_json = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (_agents_to_json(agents), run_id),
-            )
-
     def delete_run(self, run_id: str) -> bool:
         with self._connect() as conn:
             row = conn.execute("SELECT 1 FROM runs WHERE id = ?", (run_id,)).fetchone()
@@ -323,35 +279,3 @@ class SqliteStateStore(SqliteRepository, RunStorePort):
 
     def expire_active_waits_for_run(self, run_id: str) -> int:
         return self.wait_store.expire_active_waits_for_run(run_id)
-
-
-def _agents_from_json(raw_agents: object) -> dict[str, RunAgent]:
-    if not isinstance(raw_agents, str) or not raw_agents.strip():
-        return {}
-    try:
-        parsed = json.loads(raw_agents)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(parsed, dict):
-        return {}
-
-    agents: dict[str, RunAgent] = {}
-    for raw_agent_id, raw_agent in parsed.items():
-        agent_id = str(raw_agent_id).strip()
-        if not agent_id or not isinstance(raw_agent, dict):
-            continue
-        context_id = raw_agent.get("context_id")
-        agents[agent_id] = RunAgent(
-            agent_id=agent_id,
-            context_id=context_id if isinstance(context_id, str) else None,
-        )
-    return agents
-
-
-def _agents_to_json(agents: dict[str, RunAgent]) -> str:
-    return json.dumps(
-        {
-            agent_id: agent.to_dict()
-            for agent_id, agent in agents.items()
-        }
-    )

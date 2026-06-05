@@ -8,10 +8,10 @@ from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
-    AgentContextWindow,
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.agent_run_identity import AgentContext
+from skiller.domain.run.run_model import RunAgent, RunAgentWindow
 
 pytestmark = pytest.mark.unit
 
@@ -37,6 +37,7 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
     )
     manager = AgentContextManager(
         agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
         prompt_builder=AgentPromptBuilder(),
     )
     context = AgentContext(
@@ -88,6 +89,7 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
     )
     manager = AgentContextManager(
         agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
         prompt_builder=AgentPromptBuilder(),
     )
     context = AgentContext(
@@ -111,10 +113,15 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
     assert window_result.window_start_sequence == 2
     assert window_result.max_ratio == 0.8
     assert window_result.estimated_tokens == 0
-    assert store.window_calls == [{"context_id": "ctx-1", "window_tokens": 80_000}]
+    assert store.window_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_width_tokens": 80_000,
+        }
+    ]
 
 
-def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> None:
+def test_agent_context_manager_estimates_window_width_from_context_deltas() -> None:
     store = _FakeAgentContextStore(
         window_entries=[
             AgentContextEntry(
@@ -130,9 +137,8 @@ def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> 
                 ),
                 usage=None,
                 message_type="final",
-                position_tokens=2,
-                window_tokens=2,
                 window_start_sequence=1,
+                delta_tokens=2,
                 source_step_id="agent-1",
                 created_at="2026-05-16T00:00:00Z",
             ),
@@ -149,9 +155,8 @@ def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> 
                 ),
                 usage=None,
                 message_type="final",
-                position_tokens=6,
-                window_tokens=6,
                 window_start_sequence=1,
+                delta_tokens=2,
                 source_step_id="agent-1",
                 created_at="2026-05-16T00:00:00Z",
             ),
@@ -160,6 +165,7 @@ def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> 
     )
     manager = AgentContextManager(
         agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
         prompt_builder=AgentPromptBuilder(),
     )
     context = AgentContext(
@@ -179,6 +185,82 @@ def test_agent_context_manager_estimates_window_tokens_from_context_totals() -> 
     assert result.window_start_sequence == 1
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 4
+
+
+def test_agent_context_manager_selects_window_by_delta_tokens_and_updates_run_agent() -> None:
+    run_agent_store = _FakeRunAgentStore()
+    store = _FakeAgentContextStore(
+        window_entries=[
+            AgentContextEntry(
+                id="entry-3",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=3,
+                entry_type=AgentContextEntryType.USER_MESSAGE,
+                payload=AgentUserMessagePayload(text="Window task"),
+                usage=None,
+                source_step_id="agent-1",
+                created_at="2026-05-16T00:00:00Z",
+            ),
+            AgentContextEntry(
+                id="entry-4",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=4,
+                entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+                payload=AgentAssistantMessagePayload(
+                    turn_id="turn-2",
+                    message_type="final",
+                    text="Window answer",
+                ),
+                usage=None,
+                message_type="final",
+                delta_tokens=50_000,
+                source_step_id="agent-1",
+                created_at="2026-05-16T00:00:00Z",
+            ),
+        ],
+        next_turn_id="turn-3",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=run_agent_store,
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    config = agent_runner_config(
+        task="Task",
+        system="Be useful.",
+        max_turns=1,
+    )
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.window_start_sequence == 3
+    assert result.window_end_sequence == 4
+    assert result.estimated_tokens == 50_000
+    assert store.window_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_width_tokens": 80_000,
+        }
+    ]
+    assert [message.content for message in result.llm_request.messages] == [
+        "Be useful.",
+        "Window task",
+        "Window answer",
+    ]
+    assert run_agent_store.window_updates == [
+        RunAgentWindow(
+            agent_id="agent-1",
+            window_start_sequence=3,
+            window_base=True,
+        )
+    ]
 
 
 class _FakeAgentContextStore:
@@ -211,24 +293,47 @@ class _FakeAgentContextStore:
         _ = context_id
         raise NotImplementedError
 
-    def list_context_window(
+    def list_window_entries(
         self,
         *,
         context_id: str,
-        window_tokens: int,
-    ) -> AgentContextWindow:
+        window_width_tokens: int,
+    ) -> list[AgentContextEntry]:
         self.window_calls.append(
             {
                 "context_id": context_id,
-                "window_tokens": window_tokens,
+                "window_width_tokens": window_width_tokens,
             }
         )
-        return AgentContextWindow(
-            entries=self.window_entries,
-            start_sequence=self.window_entries[0].sequence if self.window_entries else 0,
-            end_sequence=self.window_entries[-1].sequence if self.window_entries else 0,
-        )
+        return self.window_entries
 
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id
         return self.next
+
+    def get_last_usage_marker(self, *, context_id: str):  # noqa: ANN201
+        _ = context_id
+        raise NotImplementedError
+
+
+class _FakeRunAgentStore:
+    def __init__(self) -> None:
+        self.agent = RunAgent(
+            agent_id="agent-1",
+            context_id="ctx-1",
+            window_start_sequence=0,
+            window_base=True,
+        )
+        self.window_updates: list[RunAgentWindow] = []
+
+    def get_agent(self, *, run_id: str, agent_id: str) -> RunAgent | None:
+        _ = run_id, agent_id
+        return self.agent
+
+    def attach_agent(self, *, run_id: str, agent_id: str, context_id: str) -> None:
+        _ = run_id, agent_id, context_id
+        raise NotImplementedError
+
+    def update_agent_window(self, *, run_id: str, window: RunAgentWindow) -> None:
+        _ = run_id
+        self.window_updates.append(window)

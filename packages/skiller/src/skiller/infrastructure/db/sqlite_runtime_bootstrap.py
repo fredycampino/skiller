@@ -7,12 +7,15 @@ from skiller.infrastructure.db.sqlite_agent_context_datasource import (
 )
 from skiller.infrastructure.db.sqlite_repository import SqliteRepository
 
-SQLITE_RUNTIME_DB_VERSION = 6
+SQLITE_RUNTIME_DB_VERSION = 7
 
 
 class SqliteRuntimeBootstrap(SqliteRepository, RuntimeBootstrapPort):
     def init_db(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        db_path = Path(self.db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        if _should_reset_db(db_path):
+            _delete_db_files(db_path)
         with self._connect() as conn:
             apply_db_updates(conn, db_path=self.db_path)
             _create_runtime_schema(conn)
@@ -49,6 +52,45 @@ def _db_version(conn: sqlite3.Connection) -> int:
 
 def _set_db_version(conn: sqlite3.Connection, version: int) -> None:
     conn.execute(f"PRAGMA user_version = {version}")
+
+
+def _should_reset_db(db_path: Path) -> bool:
+    if not db_path.exists():
+        return False
+    with sqlite3.connect(db_path) as conn:
+        current_version = _db_version(conn)
+        if current_version == SQLITE_RUNTIME_DB_VERSION:
+            return False
+        table_count = _table_count(conn)
+    return not (current_version == 0 and table_count == 0)
+
+
+def _table_count(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+        """
+    ).fetchone()
+    if row is None:
+        return 0
+    return int(row[0])
+
+
+def _delete_db_files(db_path: Path) -> None:
+    for path in _db_files(db_path):
+        if path.exists():
+            path.unlink()
+
+
+def _db_files(db_path: Path) -> tuple[Path, Path, Path]:
+    return (
+        db_path,
+        Path(f"{db_path}-wal"),
+        Path(f"{db_path}-shm"),
+    )
 
 
 def _create_runtime_schema(conn: sqlite3.Connection) -> None:

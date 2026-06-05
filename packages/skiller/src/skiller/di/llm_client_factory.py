@@ -9,10 +9,13 @@ from skiller.domain.agent.agent_llm_provider_model import (
 )
 from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
-from skiller.infrastructure.llm.fake_llm import FakeLLM
-from skiller.infrastructure.llm.null_llm import NullLLM
-from skiller.infrastructure.llm.openai_codex_responses_llm import OpenAICodexResponsesLLM
-from skiller.infrastructure.llm.openai_llm import OpenAILLM
+from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
+    CodexCredentialsDatasource,
+)
+from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
+from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
+from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
+from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
@@ -35,9 +38,9 @@ class LLMClientFactory:
 
     def resolve(self, provider: AgentLLMProvider) -> ResolvedLLMPort:
         if isinstance(provider, AgentNullProvider):
-            return NullLLM()
+            return NullLLMPort()
         if isinstance(provider, AgentFakeProvider):
-            return FakeLLM(model=provider.model)
+            return FakeLLMPort(model=provider.model)
         if isinstance(provider, AgentMiniMaxProvider):
             return self._minimax_client(provider)
         if isinstance(provider, AgentCodexProvider):
@@ -45,15 +48,17 @@ class LLMClientFactory:
 
         raise RuntimeError(f"Unsupported LLM provider: {provider!r}")
 
-    def _minimax_client(self, provider: AgentMiniMaxProvider) -> OpenAILLM:
-        return OpenAILLM(
+    def _minimax_client(self, provider: AgentMiniMaxProvider) -> OpenAILLMPort:
+        return OpenAILLMPort(
             api_key=provider.api_key,
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
         )
 
-    def _codex_client(self, provider: AgentCodexProvider) -> OpenAICodexResponsesLLM:
-        return OpenAICodexResponsesLLM(
+    def _codex_client(self, provider: AgentCodexProvider) -> CodexLLMPort:
+        credentials_datasource = CodexCredentialsDatasource()
+        return CodexLLMPort(
             credentials_file=provider.credentials_file,
             timeout_seconds=provider.timeout_seconds,
+            credentials_datasource=credentials_datasource,
         )

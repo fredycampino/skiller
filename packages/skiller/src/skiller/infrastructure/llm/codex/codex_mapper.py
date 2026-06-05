@@ -4,7 +4,6 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMModel,
 )
@@ -20,47 +19,17 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUsage,
 )
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
 @dataclass(frozen=True)
-class OpenAIResponsesStreamResult:
+class CodexStreamResult:
     response: object | None
     text_deltas: tuple[object, ...] = ()
     output_items: tuple[object, ...] = ()
 
 
-def to_openai_responses_kwargs(
-    request: MiniMaxLLMRequest,
-) -> dict[str, object]:
-    instructions, input_items = to_openai_responses_prompt_payload(request.messages)
-
-    payload: dict[str, object] = {
-        "model": request.model.value,
-        "instructions": instructions,
-        "input": input_items,
-        "store": False,
-    }
-    if request.tools:
-        payload["tools"] = [
-            to_openai_responses_tool_payload(tool) for tool in request.tools
-        ]
-    payload["tool_choice"] = _tool_choice_value(request.tool_choice)
-    if request.response_format is not None:
-        payload["text"] = {
-            "format": to_openai_responses_response_format_payload(
-                request.response_format,
-            )
-        }
-    payload["temperature"] = request.temperature
-    payload["max_output_tokens"] = request.max_tokens
-    payload["top_p"] = request.top_p
-    payload["parallel_tool_calls"] = request.parallel_tool_calls
-    return payload
-
-
-def to_openai_responses_prompt_payload(
+def to_codex_prompt_payload(
     messages: tuple[LLMMessage, ...],
 ) -> tuple[str, list[dict[str, object]]]:
     instructions: list[str] = []
@@ -76,7 +45,7 @@ def to_openai_responses_prompt_payload(
     return "\n\n".join(instructions), input_items
 
 
-def to_openai_responses_tool_payload(tool: ToolDefinition) -> dict[str, object]:
+def to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     return {
         "type": "function",
         "name": tool.name,
@@ -85,7 +54,7 @@ def to_openai_responses_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     }
 
 
-def to_openai_responses_response_format_payload(
+def to_codex_response_format_payload(
     response_format: LLMResponseFormat,
 ) -> dict[str, object]:
     payload: dict[str, object] = {"type": response_format.type.value}
@@ -100,7 +69,7 @@ def to_openai_responses_response_format_payload(
 
 
 def to_port_llm_response(
-    stream_result: OpenAIResponsesStreamResult,
+    stream_result: CodexStreamResult,
     *,
     fallback_model: AgentLLMModel,
 ) -> LLMResponse:
@@ -195,10 +164,6 @@ def _tool_call_to_input_item(tool_call: LLMToolCall) -> dict[str, object]:
         "name": tool_call.function.name,
         "arguments": tool_call.function.arguments_json,
     }
-
-
-def _tool_choice_value(tool_choice: LLMToolChoiceMode) -> str:
-    return tool_choice.value
 
 
 def _to_port_tool_calls(output_items: list[object]) -> tuple[LLMToolCall, ...]:

@@ -1,4 +1,4 @@
-# DB Schema (SQLite runtime v6)
+# DB Schema (SQLite runtime v7)
 
 Current SQLite runtime schema used by Skiller.
 
@@ -271,9 +271,9 @@ Represents:
 | sequence              | INTEGER | NOT NULL, ordered per context        |
 | entry_type            | TEXT    | NOT NULL                             |
 | message_type          | TEXT    | nullable                             |
-| position_tokens       | INTEGER | nullable                             |
-| window_tokens         | INTEGER | nullable                             |
 | window_start_sequence | INTEGER | nullable                             |
+| delta_tokens          | INTEGER | nullable                             |
+| window_base           | INTEGER | nullable boolean                     |
 | payload_json          | TEXT    | NOT NULL                             |
 | usage_json            | TEXT    | nullable                             |
 | source_step_id        | TEXT    | NOT NULL                             |
@@ -285,7 +285,6 @@ Indexes:
 
 ```text
 idx_agent_context_entries_context(context_id, sequence)
-idx_agent_context_entries_final_marker(context_id, entry_type, message_type, position_tokens, sequence)
 ```
 
 ## Notes
@@ -293,7 +292,7 @@ idx_agent_context_entries_final_marker(context_id, entry_type, message_type, pos
 - `runs.step_executions_json` is the source of truth for persisted step execution data.
 - `log_events.body_json` is the observability stream body used by `/logs`, `watch`, and the UI transcript.
 - `agent_context_entries` is the source of truth for persisted agent memory.
-- `position_tokens`, `window_tokens`, `window_start_sequence`, and `usage_json` are normally populated on final assistant messages.
+- `delta_tokens`, `window_start_sequence`, `window_base`, and `usage_json` are populated on measured assistant messages.
 - `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
 - `wait_type` remains the step-level discriminator for wait semantics.
 - `source_*` models where an external event came from.

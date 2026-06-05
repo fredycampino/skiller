@@ -170,6 +170,8 @@ wait_result = process_runner.wait(handle, interrupt_signal=self)
 
 ## Naming
 
+- Layer-level naming for ports, infrastructure port implementations, datasources, and mappers is
+  defined in [`naming-style.md`](naming-style.md).
 - Names must describe the domain role in the current component.
 - Avoid generic names like `ctx`, `data`, `payload`, `params`, `info`, or `obj` unless the surrounding contract already makes the meaning exact.
 - Avoid `context` as a generic suffix. In Skiller, `context` is already overloaded by runtime context, agent context, and LLM context.

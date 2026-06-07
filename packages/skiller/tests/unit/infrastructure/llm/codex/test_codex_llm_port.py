@@ -456,14 +456,13 @@ def _codex_credentials(
         auth_mode="chatgpt",
         client_id="client-1",
         created_at=1,
-        device_auth_hash="device-hash",
         expires_at=expires_at,
         expires_in=expires_in,
         id_token=id_token,
-        redirect_uri="https://auth.openai.com/deviceauth/callback",
+        redirect_uri="http://localhost:1455/auth/callback",
         refresh_token=refresh_token,
         scope="openid profile email offline_access",
-        source="skiller-codex-auth",
+        source="skiller-openai-auth",
         token_type="bearer",
     )
 

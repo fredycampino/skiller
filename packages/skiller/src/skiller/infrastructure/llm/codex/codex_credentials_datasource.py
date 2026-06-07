@@ -18,7 +18,6 @@ class CodexCredentials:
     auth_mode: str
     client_id: str
     created_at: int
-    device_auth_hash: str
     expires_at: int
     expires_in: int
     id_token: str
@@ -50,10 +49,6 @@ class CodexCredentialsDatasource:
             auth_mode=_required_text(payload.get("auth_mode"), "auth_mode"),
             client_id=_required_text(payload.get("client_id"), "client_id"),
             created_at=_required_int(payload.get("created_at"), "created_at"),
-            device_auth_hash=_required_text(
-                payload.get("device_auth_hash"),
-                "device_auth_hash",
-            ),
             expires_at=_required_int(payload.get("expires_at"), "expires_at"),
             expires_in=_required_int(payload.get("expires_in"), "expires_in"),
             id_token=_required_text(payload.get("id_token"), "id_token"),
@@ -106,7 +101,6 @@ class CodexCredentialsDatasource:
             auth_mode=credentials.auth_mode,
             client_id=credentials.client_id,
             created_at=credentials.created_at,
-            device_auth_hash=credentials.device_auth_hash,
             expires_at=expires_at,
             expires_in=expires_in,
             id_token=id_token,
@@ -119,21 +113,23 @@ class CodexCredentialsDatasource:
 
         path = Path(credentials_file).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "access_token": refreshed_credentials.access_token,
-            "auth_mode": refreshed_credentials.auth_mode,
-            "client_id": refreshed_credentials.client_id,
-            "created_at": refreshed_credentials.created_at,
-            "device_auth_hash": refreshed_credentials.device_auth_hash,
-            "expires_at": refreshed_credentials.expires_at,
-            "expires_in": refreshed_credentials.expires_in,
-            "id_token": refreshed_credentials.id_token,
-            "redirect_uri": refreshed_credentials.redirect_uri,
-            "refresh_token": refreshed_credentials.refresh_token,
-            "scope": refreshed_credentials.scope,
-            "source": refreshed_credentials.source,
-            "token_type": refreshed_credentials.token_type,
-        }
+        payload = _load_json_object(path)
+        payload.update(
+            {
+                "access_token": refreshed_credentials.access_token,
+                "auth_mode": refreshed_credentials.auth_mode,
+                "client_id": refreshed_credentials.client_id,
+                "created_at": refreshed_credentials.created_at,
+                "expires_at": refreshed_credentials.expires_at,
+                "expires_in": refreshed_credentials.expires_in,
+                "id_token": refreshed_credentials.id_token,
+                "redirect_uri": refreshed_credentials.redirect_uri,
+                "refresh_token": refreshed_credentials.refresh_token,
+                "scope": refreshed_credentials.scope,
+                "source": refreshed_credentials.source,
+                "token_type": refreshed_credentials.token_type,
+            }
+        )
         with path.open("w", encoding="utf-8") as file:
             json.dump(payload, file, indent=2, sort_keys=True)
             file.write("\n")
@@ -151,6 +147,14 @@ def _required_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise CodexCredentialsError(f"Codex credentials require {name}")
     return value
+
+
+def _load_json_object(path: Path) -> dict[str, object]:
+    with path.open("r", encoding="utf-8") as file:
+        payload = json.load(file)
+    if not isinstance(payload, dict):
+        raise CodexCredentialsError("Codex credentials file must contain a JSON object")
+    return payload
 
 
 def _account_id_from_token(access_token: str) -> str | None:

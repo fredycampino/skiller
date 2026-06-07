@@ -40,14 +40,13 @@ class _FakeCodexCredentialsDatasource:
             auth_mode="chatgpt",
             client_id="client-1",
             created_at=1,
-            device_auth_hash="device-hash",
             expires_at=3,
             expires_in=2,
             id_token="id-token",
-            redirect_uri="https://auth.openai.com/deviceauth/callback",
+            redirect_uri="http://localhost:1455/auth/callback",
             refresh_token="refresh-token",
             scope="openid profile email offline_access",
-            source="skiller-codex-auth",
+            source="skiller-openai-auth",
             token_type="bearer",
         )
 

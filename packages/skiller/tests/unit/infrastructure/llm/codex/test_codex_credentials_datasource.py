@@ -36,14 +36,13 @@ def test_codex_credentials_datasource_reads_credentials(tmp_path) -> None:
         auth_mode="chatgpt",
         client_id="app_EMoamEEZ73f0CkXaXp7hrann",
         created_at=1779742890,
-        device_auth_hash="70c",
         expires_at=1780606889,
         expires_in=863999,
         id_token="id-token",
-        redirect_uri="https://auth.openai.com/deviceauth/callback",
+        redirect_uri="http://localhost:1455/auth/callback",
         refresh_token="refresh-token",
         scope="openid profile email offline_access",
-        source="skiller-codex-auth",
+        source="skiller-openai-auth",
         token_type="bearer",
     )
     assert credentials.account_id == "account-1"
@@ -84,6 +83,7 @@ def test_codex_credentials_datasource_refreshes_credentials(
     assert payload["expires_at"] == 1600
     assert payload["id_token"] == "new-id-token"
     assert payload["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
+    assert payload["state_hash"] == "state-hash"
     assert credentials_file.stat().st_mode & 0o777 == 0o600
 
 
@@ -120,14 +120,14 @@ def _credentials_payload(*, access_token: str) -> dict[str, object]:
         "auth_mode": "chatgpt",
         "client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
         "created_at": 1779742890,
-        "device_auth_hash": "70c",
         "expires_at": 1780606889,
         "expires_in": 863999,
         "id_token": "id-token",
-        "redirect_uri": "https://auth.openai.com/deviceauth/callback",
+        "redirect_uri": "http://localhost:1455/auth/callback",
         "refresh_token": "refresh-token",
         "scope": "openid profile email offline_access",
-        "source": "skiller-codex-auth",
+        "source": "skiller-openai-auth",
+        "state_hash": "state-hash",
         "token_type": "bearer",
     }
 

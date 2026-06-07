@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.4 - 2026-06-08
+
+### Changed
+- Migrate Codex auth from `codex-auth` agent to `auths/codex` callback flow.
+- Replace device-code OAuth with local callback endpoint (`localhost:1455/auth/callback`).
+- Update package description to "Skiller.run agentic workflows.".
+
+### Removed
+- Remove `codex-auth` agent and its associated agent configuration.
+
+### Notes
+- Includes PR #91.
+
 ## 0.1.0-beta.3 - 2026-06-07
 
 ### Added

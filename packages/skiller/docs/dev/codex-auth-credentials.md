@@ -1,119 +1,52 @@
 # Codex Auth Credentials
 
 This document describes how Skiller obtains OpenAI Codex credentials through
-the `codex-auth` agent.
+the `auths/codex` callback flow.
 
 ## Goal
 
-`codex-auth` links a ChatGPT/OpenAI account with Skiller and saves Codex OAuth
+`auths/codex` links a ChatGPT/OpenAI account with Skiller and saves Codex OAuth
 credentials in:
 
 ```text
 ~/.skiller/secrets/openai-codex.json
 ```
 
-The flow follows the same device-code approach used by Hermes Agent for
-`openai-codex`. It does not use a localhost callback and does not use Skiller
-webhooks.
+The flow uses a local OAuth callback endpoint:
+
+```text
+http://localhost:1455/auth/callback
+```
+
+It does not use the device-code flow.
 
 ## Run From TUI
 
 ```text
-/run codex-auth
+/run auths/codex
 ```
 
-The TUI shows an OpenAI authorization action. The user opens the link and enters
-the displayed user code.
-
-After the browser authorization is completed, the agent polls OpenAI, exchanges
-the authorization code for tokens, saves the credentials, and validates them.
+The TUI shows an OpenAI authorization action. The user opens the link and
+authorizes in the browser. The browser returns to the local callback endpoint,
+then the flow exchanges the authorization code for tokens, saves the
+credentials, writes the Codex provider config, and validates the credentials.
 
 ## Flow
 
 ```text
-request_device_authorization
-load_user_code
-open_device_authorization
-poll_device_auth
-exchange_device_authorization
+check_codex_credentials
+prepare_authorization
+start_callback_server
+open_authorization_url
+wait_authorization_callback
+exchange_authorization_code
+write_codex_config
 require_credentials
 verify_credentials
 credentials_ready
 ```
 
-## OpenAI Device Auth Endpoints
-
-Request a device authorization:
-
-```text
-POST https://auth.openai.com/api/accounts/deviceauth/usercode
-```
-
-Payload:
-
-```json
-{
-  "client_id": "app_EMoamEEZ73f0CkXaXp7hrann"
-}
-```
-
-The response contains:
-
-```text
-device_auth_id
-user_code
-interval
-expires_at
-```
-
-The user authorizes in:
-
-```text
-https://auth.openai.com/codex/device
-```
-
-Poll until authorized:
-
-```text
-POST https://auth.openai.com/api/accounts/deviceauth/token
-```
-
-Payload:
-
-```json
-{
-  "device_auth_id": "...",
-  "user_code": "..."
-}
-```
-
-While the user has not authorized yet, OpenAI may return `403` or `404`. The
-agent treats those statuses as pending and keeps polling.
-
-When authorized, OpenAI returns:
-
-```text
-authorization_code
-code_verifier
-```
-
-Exchange for credentials:
-
-```text
-POST https://auth.openai.com/oauth/token
-```
-
-Form payload:
-
-```text
-grant_type=authorization_code
-code=<authorization_code>
-redirect_uri=https://auth.openai.com/deviceauth/callback
-client_id=app_EMoamEEZ73f0CkXaXp7hrann
-code_verifier=<code_verifier>
-```
-
-## Sensitive Files
+## OAuth Callback Data
 
 Pending authorization data is stored in:
 
@@ -121,45 +54,77 @@ Pending authorization data is stored in:
 ~/.skiller/secrets/openai-codex.pending.json
 ```
 
+The pending file contains short-lived authorization state:
+
+```text
+state
+code_verifier
+redirect_uri
+authorization_url
+credentials_file
+created_at
+```
+
+The callback stores temporary callback/server files next to the credentials:
+
+```text
+~/.skiller/secrets/openai-codex.callback.json
+~/.skiller/secrets/openai-codex.server.json
+~/.skiller/secrets/openai-codex.callback-ready
+~/.skiller/secrets/openai-codex.callback.log
+```
+
+These files are cleanup artifacts and must not be required by the runtime LLM.
+
+## Final Credentials
+
 Final credentials are stored in:
 
 ```text
 ~/.skiller/secrets/openai-codex.json
 ```
 
-Both files are written with `0600` permissions.
-
-Sensitive values that must not be printed to stdout:
+The runtime LLM needs the OAuth token fields used to call and refresh Codex:
 
 ```text
-device_auth_id
+access_token
+refresh_token
+expires_at
+expires_in
+client_id
+id_token
+redirect_uri
+scope
+token_type
+auth_mode
+created_at
+source
+```
+
+The auth flow also writes metadata such as:
+
+```text
+account_id
+state_hash
+```
+
+`state_hash` belongs to the auth flow. The runtime LLM must not require it to
+call Codex or refresh tokens.
+
+## Sensitive Values
+
+Sensitive values must not be printed to stdout:
+
+```text
 authorization_code
 code_verifier
 access_token
 refresh_token
+id_token
 ```
 
-The `user_code` is shown to the user and appears in the run transcript. It is
-short-lived and does not grant access by itself, but it should still be treated
-as auth-related data.
-
-## HTTP Headers
-
-The auth endpoints reject or misroute Python's default `urllib` user agent in
-some environments. Skiller sends an explicit user agent for auth requests:
-
-```text
-User-Agent: skiller-codex-auth/0.1
-Accept: application/json
-```
-
-For Codex Responses validation, Skiller uses Codex-style headers:
-
-```text
-User-Agent: codex_cli_rs/0.0.0 (Skiller)
-originator: codex_cli_rs
-ChatGPT-Account-ID: <extracted from access token when available>
-```
+The callback `state` is short-lived auth state and should also stay out of the
+transcript. The saved credentials file is written with `0600` permissions.
 
 ## Credential Validation
 
@@ -211,12 +176,16 @@ If credentials are compromised or revoked, remove local files:
 ```bash
 rm -f ~/.skiller/secrets/openai-codex.json
 rm -f ~/.skiller/secrets/openai-codex.pending.json
+rm -f ~/.skiller/secrets/openai-codex.callback.json
+rm -f ~/.skiller/secrets/openai-codex.server.json
+rm -f ~/.skiller/secrets/openai-codex.callback-ready
+rm -f ~/.skiller/secrets/openai-codex.callback.log
 ```
 
-Then run the agent again:
+Then run the callback auth flow again:
 
 ```text
-/run codex-auth
+/run auths/codex
 ```
 
 If OpenAI returns `token_revoked`, the saved credentials are no longer valid and

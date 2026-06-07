@@ -30,30 +30,41 @@ class FlowNotifyActionChecker:
             )
             return
 
-        self._check_type(step=step, raw_action=raw_action, errors=errors)
-        self._check_label(step=step, raw_action=raw_action, errors=errors)
-        self._check_message(step=step, raw_action=raw_action, errors=errors)
-        self._check_url(step=step, raw_action=raw_action, errors=errors)
-        self._check_auto(step=step, raw_action=raw_action, errors=errors)
+        action_type = self._action_type(step=step, raw_action=raw_action, errors=errors)
+        if action_type is None:
+            return
 
-    def _check_type(
+        self._check_label(step=step, raw_action=raw_action, errors=errors)
+        self._check_auto(step=step, raw_action=raw_action, errors=errors)
+        if action_type == ActionType.OPEN_URL:
+            self._check_message(step=step, raw_action=raw_action, errors=errors)
+            self._check_url(step=step, raw_action=raw_action, errors=errors)
+            return
+
+        self._check_arg(step=step, raw_action=raw_action, errors=errors)
+        self._check_params(step=step, raw_action=raw_action, errors=errors)
+
+    def _action_type(
         self,
         *,
         step: ParsedFlowStep,
         raw_action: dict[object, object],
         errors: list[FlowCheckError],
-    ) -> None:
+    ) -> ActionType | None:
         raw_type = str(raw_action.get("type", "")).strip()
-        if raw_type == ActionType.OPEN_URL.value:
-            return
+        supported_types = {ActionType.OPEN_URL.value, ActionType.RUN.value}
+        if raw_type in supported_types:
+            return ActionType(raw_type)
 
         errors.append(
             FlowCheckError(
                 code="FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED",
                 message="FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED: notify action type "
-                f"must be {ActionType.OPEN_URL.value} (step={step.step_id})",
+                f"must be {ActionType.OPEN_URL.value} or {ActionType.RUN.value} "
+                f"(step={step.step_id})",
             )
         )
+        return None
 
     def _check_label(
         self,
@@ -140,5 +151,42 @@ class FlowNotifyActionChecker:
                 code="FLOW_NOTIFY_ACTION_AUTO_INVALID",
                 message="FLOW_NOTIFY_ACTION_AUTO_INVALID: notify action auto must "
                 f"be boolean (step={step.step_id})",
+            )
+        )
+
+    def _check_arg(
+        self,
+        *,
+        step: ParsedFlowStep,
+        raw_action: dict[object, object],
+        errors: list[FlowCheckError],
+    ) -> None:
+        if str(raw_action.get("arg", "")).strip():
+            return
+
+        errors.append(
+            FlowCheckError(
+                code="FLOW_NOTIFY_ACTION_ARG_MISSING",
+                message="FLOW_NOTIFY_ACTION_ARG_MISSING: notify run action requires "
+                f"non-empty arg (step={step.step_id})",
+            )
+        )
+
+    def _check_params(
+        self,
+        *,
+        step: ParsedFlowStep,
+        raw_action: dict[object, object],
+        errors: list[FlowCheckError],
+    ) -> None:
+        raw_params = raw_action.get("params")
+        if raw_params is None or isinstance(raw_params, str):
+            return
+
+        errors.append(
+            FlowCheckError(
+                code="FLOW_NOTIFY_ACTION_PARAMS_INVALID",
+                message="FLOW_NOTIFY_ACTION_PARAMS_INVALID: notify run action params "
+                f"must be string (step={step.step_id})",
             )
         )

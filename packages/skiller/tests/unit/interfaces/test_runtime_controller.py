@@ -51,9 +51,10 @@ class _FakeRunService:
         self.mark_action_call = request
         return MarkNotifyActionDoneResult(
             run_id=request.run_id,
-            step_id=request.step_id,
+            action_uid=request.action_uid,
             status=MarkNotifyActionDoneStatus.DONE,
             changed=True,
+            step_id="auth_link",
         )
 
 
@@ -156,12 +157,13 @@ def test_controller_maps_action_done_to_run_service() -> None:
     run_service = _FakeRunService()
     controller = _controller(_FakeWaitService(), run_service=run_service)
 
-    result = controller.action_done(" run-1 ", " auth_link ")
+    result = controller.action_done(" run-1 ", " action-1 ")
 
     assert run_service.mark_action_call.run_id == "run-1"
-    assert run_service.mark_action_call.step_id == "auth_link"
+    assert run_service.mark_action_call.action_uid == "action-1"
     assert result == {
         "run_id": "run-1",
+        "action_uid": "action-1",
         "step_id": "auth_link",
         "status": "DONE",
         "done": True,

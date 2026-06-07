@@ -1,15 +1,13 @@
 import sqlite3
 import uuid
-from typing import Any
 
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
-from skiller.domain.wait.wait_store_port import WaitStorePort
 from skiller.domain.wait.wait_type import WaitType
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
-class SqliteWaitStore(SqliteRepository, WaitStorePort):
+class SqliteWaitDatasource(SqliteConnectionSource):
     def create_wait(
         self,
         run_id: str,
@@ -71,7 +69,7 @@ class SqliteWaitStore(SqliteRepository, WaitStorePort):
         step_id: str,
         *,
         wait_type: WaitType,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -106,7 +104,7 @@ class SqliteWaitStore(SqliteRepository, WaitStorePort):
         source_name: str,
         match_type: MatchType,
         match_key: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         with self._connect() as conn:
             if match_type == MatchType.CHANNEL_KEY:
                 rows = conn.execute(
@@ -185,7 +183,7 @@ class SqliteWaitStore(SqliteRepository, WaitStorePort):
             )
             return result.rowcount
 
-    def _build_wait_payload(self, row: sqlite3.Row) -> dict[str, Any]:
+    def _build_wait_payload(self, row: sqlite3.Row) -> dict[str, object]:
         return {
             "id": row["id"],
             "run_id": row["run_id"],

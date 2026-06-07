@@ -6,6 +6,7 @@ from stui.usecase.agent_status_use_case import AgentStatusUseCase
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
+from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
@@ -24,7 +25,6 @@ from stui.usecase.project_transcript_use_case import (
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
-from stui.usecase.run_finished_action_use_case import RunFinishedActionUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -54,7 +54,7 @@ class ConsoleScreenUseCases:
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
-    run_finished_action: RunFinishedActionUseCase
+    get_run_action: GetRunActionUseCase
     start_console: StartConsoleUseCase
     submit_waiting_input: SubmitWaitingInputUseCase
     toggle_agent_stats: ToggleAgentStatsUseCase

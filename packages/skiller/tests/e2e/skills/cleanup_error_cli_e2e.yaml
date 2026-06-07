@@ -1,0 +1,17 @@
+name: cleanup_error_cli_e2e
+description: "CLI e2e for on_error cleanup after wait_input"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+on_error:
+  cleanup: true
+
+steps:
+  - wait_input: ask_user
+    prompt: "Type text to trigger a failing step"
+    next: fail_after_input
+
+  - shell: fail_after_input
+    command: 'sh -c "exit 23"'

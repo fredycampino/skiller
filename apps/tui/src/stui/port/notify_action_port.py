@@ -15,11 +15,11 @@ class NotifyActionAckStatus(StrEnum):
 class NotifyActionAck:
     status: NotifyActionAckStatus
     run_id: str
-    step_id: str
+    action_uid: str
     message: str = ""
 
 
 class NotifyActionPort(Protocol):
-    def open(self, *, run_id: str, step_id: str, url: str) -> NotifyActionAck: ...
+    def open(self, *, run_id: str, action_uid: str, url: str) -> NotifyActionAck: ...
 
-    def done(self, *, run_id: str, step_id: str) -> NotifyActionAck: ...
+    def done(self, *, run_id: str, action_uid: str) -> NotifyActionAck: ...

@@ -14,10 +14,10 @@ from skiller.domain.event.event_model import (
     runtime_event_step_type,
 )
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
-class SqliteRuntimeEventStore(SqliteRepository, RuntimeEventStorePort):
+class SqliteRuntimeEventStore(SqliteConnectionSource, RuntimeEventStorePort):
     def append_event(self, event: RuntimeEventDraft) -> str:
         event_id = str(uuid.uuid4())
         with self._connect() as conn:

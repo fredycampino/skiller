@@ -2,15 +2,15 @@ import sqlite3
 from pathlib import Path
 
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
-from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     ensure_agent_context_schema,
 )
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 SQLITE_RUNTIME_DB_VERSION = 7
 
 
-class SqliteRuntimeBootstrap(SqliteRepository, RuntimeBootstrapPort):
+class SqliteRuntimeBootstrap(SqliteConnectionSource, RuntimeBootstrapPort):
     def init_db(self) -> None:
         db_path = Path(self.db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)

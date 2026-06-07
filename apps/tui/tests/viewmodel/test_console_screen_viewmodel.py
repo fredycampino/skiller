@@ -30,6 +30,10 @@ from stui.port.event_models import (
     WaitInputOutputValue,
     WaitWebhookOutputValue,
 )
+from stui.port.notify_action_port import (
+    NotifyActionAck,
+    NotifyActionAckStatus,
+)
 from stui.port.run_port import (
     CommandAck,
     CommandAckStatus,
@@ -143,12 +147,16 @@ class FakeRunPort:
     def __init__(
         self,
         ack: CommandAck | RunDispatch | RuntimeError,
+        events: list[str] | None = None,
     ) -> None:
         self.ack = ack
+        self.events = events
         self.called_with: list[str] = []
         self.status_called_with: list[str] = []
 
     def run(self, raw_args: str) -> RunDispatch:
+        if self.events is not None:
+            self.events.append("run")
         self.called_with.append(raw_args)
         if isinstance(self.ack, RuntimeError):
             raise self.ack
@@ -186,6 +194,31 @@ class FakeWaitingPort:
         return self.ack
 
 
+class FakeNotifyActionPort:
+    def __init__(self, events: list[str] | None = None) -> None:
+        self.events = events
+        self.open_calls: list[tuple[str, str, str]] = []
+        self.done_calls: list[tuple[str, str]] = []
+
+    def open(self, *, run_id: str, action_uid: str, url: str) -> NotifyActionAck:
+        self.open_calls.append((run_id, action_uid, url))
+        return NotifyActionAck(
+            status=NotifyActionAckStatus.ACCEPTED,
+            run_id=run_id,
+            action_uid=action_uid,
+        )
+
+    def done(self, *, run_id: str, action_uid: str) -> NotifyActionAck:
+        if self.events is not None:
+            self.events.append("done")
+        self.done_calls.append((run_id, action_uid))
+        return NotifyActionAck(
+            status=NotifyActionAckStatus.ACCEPTED,
+            run_id=run_id,
+            action_uid=action_uid,
+        )
+
+
 class _FakeOpenNotifyActionUseCase:
     def __init__(self) -> None:
         self.called_with: list[tuple[str, str, str]] = []
@@ -195,10 +228,10 @@ class _FakeOpenNotifyActionUseCase:
         *,
         state: ConsoleScreenState,
         run_id: str,
-        step_id: str,
+        action_uid: str,
         url: str,
     ) -> OpenNotifyActionResult:
-        self.called_with.append((run_id, step_id, url))
+        self.called_with.append((run_id, action_uid, url))
         return OpenNotifyActionResult(state=state)
 
 
@@ -211,9 +244,9 @@ class _FakeDoneNotifyActionUseCase:
         *,
         state: ConsoleScreenState,
         run_id: str,
-        step_id: str,
+        action_uid: str,
     ) -> DoneNotifyActionResult:
-        self.called_with.append((run_id, step_id))
+        self.called_with.append((run_id, action_uid))
         return DoneNotifyActionResult(state=state)
 
 
@@ -478,6 +511,7 @@ def test_notify_projects_pending_notify_action_to_screen_state() -> None:
                         value=NotifyActionValue(
                             message="Authorize the app",
                             action=ActionOpenUrlValue(
+                                uid="action-open-1",
                                 type="open_url",
                                 label="Open authorization",
                                 message="Open the authorization link.",
@@ -493,9 +527,9 @@ def test_notify_projects_pending_notify_action_to_screen_state() -> None:
 
     assert viewmodel.state.notify_action == NotifyActionState(
         run_id="run-1234",
-        step_id="auth_link",
         message="Open the authorization link.",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -536,12 +570,12 @@ def test_open_notify_action_link_calls_use_case() -> None:
 
     viewmodel.open_notify_action_link(
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-open-1",
         url="https://example.com/oauth/start",
     )
 
     assert use_case.called_with == [
-        ("run-1", "auth_link", "https://example.com/oauth/start"),
+        ("run-1", "action-open-1", "https://example.com/oauth/start"),
     ]
 
 
@@ -556,10 +590,10 @@ def test_done_notify_action_calls_use_case() -> None:
 
     viewmodel.done_notify_action(
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-open-1",
     )
 
-    assert use_case.called_with == [("run-1", "auth_link")]
+    assert use_case.called_with == [("run-1", "action-open-1")]
 
 
 def test_prompt_change_hides_non_matching_queries() -> None:
@@ -954,6 +988,7 @@ def test_console_screen_viewmodel_runs_finished_action() -> None:
                         payload=RunFinishedPayload(
                             status="SUCCEEDED",
                             action=ActionRunValue(
+                                uid="action-run-1",
                                 type="run",
                                 label="Run follow-up",
                                 arg="ci",
@@ -972,6 +1007,73 @@ def test_console_screen_viewmodel_runs_finished_action() -> None:
         assert viewmodel.state.run_name == "ci --fast"
         assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
         assert viewmodel.state.transcript.items == []
+
+    asyncio.run(run())
+
+
+def test_console_screen_viewmodel_runs_notify_run_action() -> None:
+    async def run() -> None:
+        events: list[str] = []
+        run_port = FakeRunPort(
+            CommandAck(
+                status=CommandAckStatus.ACCEPTED,
+                run_id="run-child",
+                message="unused",
+            ),
+            events=events,
+        )
+        events_port = FakeEventsPort()
+        notify_action_port = FakeNotifyActionPort(events=events)
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            events_port=events_port,
+            notify_action_port=notify_action_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        attach_run_observer(viewmodel, events_port, "run-parent")
+        with patched_to_thread(run_command_use_case_module):
+            viewmodel.notify(
+                [
+                    _event(
+                        LogEventType.STEP_SUCCESS,
+                        step_id="run_child",
+                        step_type="notify",
+                        payload=StepSuccessPayload(
+                            output=OutputPayload(
+                                text="Run child",
+                                value=NotifyActionValue(
+                                    message="Run child",
+                                    action=ActionRunValue(
+                                        uid="action-run-1",
+                                        type="run",
+                                        label="Run child",
+                                        arg="--file child.yaml",
+                                        params="--arg message=hello",
+                                    ),
+                                ),
+                                body_ref=None,
+                            )
+                        ),
+                    ),
+                    _event(
+                        LogEventType.RUN_FINISHED,
+                        payload=RunFinishedPayload(status="SUCCEEDED"),
+                        event_id="evt-2",
+                        sequence=2,
+                    ),
+                ]
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        assert events == ["run", "done"]
+        assert notify_action_port.done_calls == [("run-1234", "action-run-1")]
+        assert run_port.called_with == ["--file child.yaml --arg message=hello"]
+        assert events_port.subscribe_calls == ["run-parent", "run-child"]
+        assert viewmodel.state.session_key == "run-child"
+        assert viewmodel.state.run_name == "--file child.yaml --arg message=hello"
 
     asyncio.run(run())
 

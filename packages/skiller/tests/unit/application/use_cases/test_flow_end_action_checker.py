@@ -32,6 +32,22 @@ def test_flow_end_action_checker_accepts_run_action() -> None:
     assert errors == []
 
 
+def test_flow_end_action_checker_accepts_cleanup_without_action() -> None:
+    errors = []
+
+    FlowEndActionChecker().check(
+        flow=FlowRawDefinition(
+            name="demo",
+            start="done",
+            steps=(),
+            raw={"on_success": {"cleanup": True}},
+        ),
+        errors=errors,
+    )
+
+    assert errors == []
+
+
 def test_flow_end_action_checker_reports_invalid_action_fields() -> None:
     errors = []
 
@@ -81,3 +97,19 @@ def test_flow_end_action_checker_reports_malformed_action_config() -> None:
         "FLOW_END_ACTION_INVALID",
         "FLOW_END_ACTION_ACTION_INVALID",
     ]
+
+
+def test_flow_end_action_checker_reports_invalid_cleanup() -> None:
+    errors = []
+
+    FlowEndActionChecker().check(
+        flow=FlowRawDefinition(
+            name="demo",
+            start="done",
+            steps=(),
+            raw={"on_success": {"cleanup": "true"}},
+        ),
+        errors=errors,
+    )
+
+    assert [item.code for item in errors] == ["FLOW_END_ACTION_CLEANUP_INVALID"]

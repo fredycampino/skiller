@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -26,6 +26,7 @@ class RunEventContext:
     status: RunStatus
     max_page: int = 100
     agent_id: str = ""
+    actions_done: set[str] = field(default_factory=set)
 
     def activate_run(
         self,
@@ -38,3 +39,4 @@ class RunEventContext:
         self.run_name = run_name
         self.status = status
         self.agent_id = ""
+        self.actions_done.clear()

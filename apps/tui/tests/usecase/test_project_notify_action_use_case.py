@@ -24,9 +24,9 @@ def test_project_notify_action_sets_pending_action() -> None:
 
     assert result.state.notify_action == NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message="Open the authorization link.",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -42,8 +42,7 @@ def test_project_notify_action_clears_when_action_done_event_arrives() -> None:
             _action_item(),
             NotifyActionDoneItem(
                 run_id="run-1",
-                step_id="auth_link",
-                step_type="notify",
+                action_uid="action-open-1",
                 type="open_url",
                 status="done",
             ),
@@ -63,8 +62,7 @@ def test_project_notify_action_ignores_done_before_latest_action() -> None:
             NotifyActionDoneItem(
                 sequence=2,
                 run_id="run-1",
-                step_id="auth_link",
-                step_type="notify",
+                action_uid="action-open-1",
                 type="open_url",
                 status="done",
             ),
@@ -76,9 +74,9 @@ def test_project_notify_action_ignores_done_before_latest_action() -> None:
 
     assert result.state.notify_action == NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message="Open the authorization link.",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -87,16 +85,15 @@ def test_project_notify_action_ignores_done_before_latest_action() -> None:
     )
 
 
-def test_project_notify_action_ignores_done_for_other_action_type() -> None:
+def test_project_notify_action_ignores_done_for_other_action_uid() -> None:
     state = ConsoleScreenState()
     state.transcript.items.extend(
         [
             _action_item(),
             NotifyActionDoneItem(
                 run_id="run-1",
-                step_id="auth_link",
-                step_type="notify",
-                type="run",
+                action_uid="other-action",
+                type="open_url",
                 status="done",
             ),
         ]
@@ -106,9 +103,9 @@ def test_project_notify_action_ignores_done_for_other_action_type() -> None:
 
     assert result.state.notify_action == NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message="Open the authorization link.",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -134,9 +131,9 @@ def test_project_notify_action_keeps_pending_action_after_later_regular_notify()
 
     assert result.state.notify_action == NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message="Open the authorization link.",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -153,9 +150,9 @@ def test_project_notify_action_uses_empty_message_when_action_has_no_message() -
 
     assert result.state.notify_action == NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message="",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             url="https://example.com/oauth/start",
@@ -171,7 +168,7 @@ def test_project_notify_action_ignores_non_open_url_action() -> None:
             step_id="run_flow",
             step_type="notify",
             message="Run follow-up",
-            action=ActionItem(type="run", label="Run flow"),
+            action=ActionItem(uid="action-run-1", type="run", label="Run flow"),
         )
     )
 
@@ -188,6 +185,7 @@ def _action_item(*, sequence: int | None = None) -> StepNotifyActionItem:
         step_type="notify",
         message="Authorize the app",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the authorization link.",
@@ -203,6 +201,7 @@ def _action_item_without_action_message() -> StepNotifyActionItem:
         step_type="notify",
         message="Authorize the app",
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             url="https://example.com/oauth/start",

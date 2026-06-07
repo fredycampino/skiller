@@ -163,10 +163,10 @@ skiller whatsapp pair start
 skiller whatsapp start
 ```
 
-3. Run an agent that waits on WhatsApp:
+3. Run a flow that waits on WhatsApp:
 
 ```bash
-skiller run whatsapp
+skiller run --file ./whatsapp-listener.yaml
 ```
 
 4. Inspect channel state if needed:

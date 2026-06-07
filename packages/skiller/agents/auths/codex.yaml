@@ -1,0 +1,173 @@
+name: auths/codex
+description: "Authorize OpenAI Codex credentials for Skiller agents"
+version: "0.1"
+start: check_codex_credentials
+
+inputs: {}
+
+on_success:
+  cleanup: true
+  action:
+    type: run
+    label: Continue onboarding
+    arg: onboarding/intro
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_codex_credentials
+    command: |
+      set -eu
+
+      credentials_file="$(python3 packages/skiller/agents/auths/codex_auth.py credentials-file)"
+      if verify_output="$(python3 packages/skiller/agents/auths/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}" 2>&1)"; then
+        printf '%s' ready
+        exit 0
+      fi
+
+      credentials_dir="$(dirname "$credentials_file")"
+      rm -f \
+        "$credentials_file" \
+        "$credentials_dir/openai-codex.pending.json" \
+        "$credentials_dir/openai-codex.callback.json" \
+        "$credentials_dir/openai-codex.server.json" \
+        "$credentials_dir/openai-codex.callback-ready" \
+        "$credentials_dir/openai-codex.callback.log"
+      printf '%s' missing
+    cwd: .
+    timeout: 15
+    check: true
+    next: route_codex_credentials
+
+  - switch: route_codex_credentials
+    value: '{{output_value("check_codex_credentials").stdout}}'
+    cases:
+      ready: write_codex_config
+    default: explain_authorization
+
+  - notify: explain_authorization
+    format: markdown
+    message: |
+      # Codex setup
+
+      This flow will authorize OpenAI Codex and save credentials in the configured
+      Codex credentials file.
+
+      If no file is configured, Skiller uses:
+
+      ```text
+      ~/.skiller/secrets/openai-codex.json
+      ```
+
+      The setup run will clean its persisted context after it finishes.
+    next: prepare_authorization
+
+  - shell: prepare_authorization
+    command: python3 packages/skiller/agents/auths/codex_auth.py prepare
+    cwd: .
+    timeout: 15
+    check: true
+    next: start_callback_server
+
+  - shell: start_callback_server
+    command: python3 packages/skiller/agents/auths/codex_auth.py start-callback-server
+    cwd: .
+    timeout: 15
+    check: true
+    next: open_authorization_url
+
+  - notify: open_authorization_url
+    format: markdown
+    message: Authorize OpenAI Codex in your browser.
+    action:
+      type: open_url
+      label: Open OpenAI authorization
+      url: '{{output_value("prepare_authorization").stdout}}'
+      auto: true
+    next: wait_authorization_callback
+
+  - shell: wait_authorization_callback
+    command: python3 packages/skiller/agents/auths/codex_auth.py wait-callback
+    cwd: .
+    timeout: 960
+    check: true
+    next: exchange_authorization_code
+
+  - shell: exchange_authorization_code
+    command: python3 packages/skiller/agents/auths/codex_auth.py exchange-token
+    cwd: .
+    timeout: 60
+    check: true
+    next: write_codex_config
+
+  - shell: write_codex_config
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      secrets_dir="$HOME/.skiller/secrets"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      credentials_file="$(python3 packages/skiller/agents/auths/codex_auth.py credentials-file)"
+
+      mkdir -p "$(dirname "$config_file")" "$secrets_dir"
+
+      CONFIG_FILE="$config_file" CREDENTIALS_FILE="$credentials_file" python3 - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      credentials_file = os.environ["CREDENTIALS_FILE"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      llm = config.setdefault("llm", {})
+      llm["default_provider"] = "codex"
+      providers = config.setdefault("providers", {})
+      providers["codex"] = {
+          "model": "gpt-5.5",
+          "timeout_seconds": 120,
+          "window_width_tokens": 100000,
+          "credentials_file": credentials_file,
+      }
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Codex config saved."
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Credentials: $credentials_file"
+    cwd: .
+    timeout: 15
+    check: true
+    next: require_credentials
+
+  - shell: require_credentials
+    command: python3 packages/skiller/agents/auths/codex_auth.py status --require
+    cwd: .
+    timeout: 15
+    check: true
+    next: verify_credentials
+
+  - shell: verify_credentials
+    command: python3 packages/skiller/agents/auths/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
+    cwd: .
+    timeout: 120
+    check: true
+    next: credentials_ready
+
+  - notify: credentials_ready
+    format: markdown
+    message: |
+      Codex credentials are valid.
+
+      ```text
+      {{output_value("verify_credentials").stdout}}
+      ```

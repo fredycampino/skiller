@@ -11,7 +11,7 @@ This document describes the YAML flow shape used by:
 ## Root Shape
 
 ```yaml
-name: ant
+name: demo_chat
 description: "Terminal agent chat"
 version: "0.1"
 start: ask_user
@@ -84,7 +84,7 @@ Supported `step_type` values:
 ## Example
 
 ```yaml
-name: ant
+name: demo_chat
 description: "Terminal agent chat"
 version: "0.1"
 start: ask_user
@@ -143,10 +143,11 @@ mcp:
 ## Root End Actions
 
 `on_success` and `on_error` may define a run action to expose after the run
-finishes.
+finishes. They may also request cleanup after the terminal event is written.
 
 ```yaml
 on_error:
+  cleanup: true
   action:
     type: run
     label: "Debug failure"
@@ -156,11 +157,13 @@ on_error:
 ```
 
 Rules:
-- `action.type` must be `run`
-- `action.label` is required
-- `action.arg` is required
-- `action.params` is optional
-- `action.auto` is optional and defaults to `false`
+- `cleanup` is optional and must be boolean
+- `action` is optional when `cleanup: true` is present
+- when `action` is present, `action.type` must be `run`
+- when `action` is present, `action.label` is required
+- when `action` is present, `action.arg` is required
+- when `action` is present, `action.params` is optional
+- when `action` is present, `action.auto` is optional and defaults to `false`
 
 ## `shell` Example
 

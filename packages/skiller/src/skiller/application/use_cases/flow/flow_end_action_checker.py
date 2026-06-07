@@ -41,13 +41,28 @@ class FlowEndActionChecker:
             )
             return
 
+        raw_cleanup = raw_config.get("cleanup")
+        cleanup_enabled = raw_cleanup is True
+        if raw_cleanup is not None and not isinstance(raw_cleanup, bool):
+            errors.append(
+                FlowCheckError(
+                    code="FLOW_END_ACTION_CLEANUP_INVALID",
+                    message="FLOW_END_ACTION_CLEANUP_INVALID: end action cleanup must "
+                    f"be boolean (trigger={trigger.value})",
+                )
+            )
+            return
+
         raw_action = raw_config.get("action")
+        if raw_action is None and cleanup_enabled:
+            return
+
         if not isinstance(raw_action, dict):
             errors.append(
                 FlowCheckError(
                     code="FLOW_END_ACTION_ACTION_INVALID",
-                    message="FLOW_END_ACTION_ACTION_INVALID: end action requires "
-                    f"action object (trigger={trigger.value})",
+                    message="FLOW_END_ACTION_ACTION_INVALID: end action requires action "
+                    f"object or cleanup true (trigger={trigger.value})",
                 )
             )
             return

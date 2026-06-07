@@ -6,10 +6,10 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookPayloadSource,
 )
 from skiller.domain.event.webhook_registry_port import WebhookRegistryPort
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
-class SqliteWebhookRegistry(SqliteRepository, WebhookRegistryPort):
+class SqliteWebhookRegistry(SqliteConnectionSource, WebhookRegistryPort):
     def register_webhook(
         self,
         webhook: str,

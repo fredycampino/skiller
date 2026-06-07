@@ -4,7 +4,7 @@ Current SQLite runtime schema used by Skiller.
 
 Source of truth:
 - [`sqlite_runtime_bootstrap.py`](../../src/skiller/infrastructure/db/sqlite_runtime_bootstrap.py)
-- [`sqlite_agent_context_datasource.py`](../../src/skiller/infrastructure/db/sqlite_agent_context_datasource.py)
+- [`sqlite_agent_context_datasource.py`](../../src/skiller/infrastructure/db/datasource/sqlite_agent_context_datasource.py)
 
 ## `runs`
 
@@ -301,7 +301,7 @@ idx_agent_context_entries_context(context_id, sequence)
 - `external_events.status` tracks whether an event is still pending or already consumed by a run.
 - external-event lookup is scoped by each wait use case.
 - matching is FIFO: oldest active wait, then oldest pending matching event.
-- `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteStateStore`.
+- `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteRunStorePort`.
 
 ## Run Deletion
 

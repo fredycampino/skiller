@@ -109,8 +109,7 @@ class EventTranscriptMapper:
             return NotifyActionDoneItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                step_id=event.step_id or "",
-                step_type=event.step_type or "",
+                action_uid=payload.uid,
                 type=payload.type,
                 status=payload.status.value,
             )
@@ -239,7 +238,10 @@ class EventTranscriptMapper:
                 strings=self.strings,
             )
             format = OutputFormat.SIMPLE
-            if stop_reason == AgentStepStopReason.CONFIG_INVALID:
+            if stop_reason in {
+                AgentStepStopReason.CONFIG_INVALID,
+                AgentStepStopReason.LLM_REQUEST_FAILED,
+            }:
                 format = OutputFormat.MARKDOWN
             return AgentSystemNoticeItem(
                 sequence=event.sequence,
@@ -392,6 +394,7 @@ def _payload(event: LogEvent, expected: type) -> object:
 def _action_item(action: ActionValue) -> ActionItem:
     if isinstance(action, ActionOpenUrlValue):
         return ActionOpenUrlItem(
+            uid=action.uid,
             type=action.type,
             label=action.label,
             message=action.message,
@@ -400,6 +403,7 @@ def _action_item(action: ActionValue) -> ActionItem:
         )
     if isinstance(action, ActionRunValue):
         return ActionRunItem(
+            uid=action.uid,
             type=action.type,
             label=action.label,
             arg=action.arg,
@@ -407,6 +411,7 @@ def _action_item(action: ActionValue) -> ActionItem:
             auto=action.auto,
         )
     return ActionItem(
+        uid=action.uid,
         type=action.type,
         label=action.label,
     )
@@ -492,6 +497,12 @@ def _agent_notice_text(
         message = cast(str, data["message"])
         return strings.agent_config_invalid_notice_template.format(
             title=strings.agent_config_invalid_notice_title,
+            message=message,
+        )
+    if stop_reason == AgentStepStopReason.LLM_REQUEST_FAILED:
+        message = cast(str, data["message"])
+        return strings.agent_llm_request_failed_notice_template.format(
+            title=strings.agent_llm_request_failed_notice_title,
             message=message,
         )
     return "Agent notice"

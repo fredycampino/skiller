@@ -10,12 +10,13 @@ transition is stored as an `ACTION_DONE` runtime event.
 
 | Command | Behavior | Returns |
 | --- | --- | --- |
-| `skiller action done <run_id> <step_id>` | Records a notify action as done. | Action update result. |
+| `skiller action done <run_id> <action_uid>` | Records a notify action as done. | Action update result. |
 
 ## Output Model
 
 - `run_id`: run that owns the action.
-- `step_id`: notify step that emitted the action.
+- `action_uid`: runtime-generated action identifier.
+- `step_id`: notify step that emitted the action, present after the action is resolved.
 - `status`: update status.
 - `done`: whether the action is now done.
 - `changed`: whether the command appended a new `ACTION_DONE` event.
@@ -26,7 +27,7 @@ transition is stored as an `ACTION_DONE` runtime event.
 Command:
 
 ```bash
-skiller action done <run_id> <step_id>
+skiller action done <run_id> <action_uid>
 ```
 
 Output when a new `ACTION_DONE` event is recorded:
@@ -34,6 +35,7 @@ Output when a new `ACTION_DONE` event is recorded:
 ```json
 {
   "run_id": "run-uuid",
+  "action_uid": "action-uuid",
   "step_id": "auth_link",
   "status": "DONE",
   "done": true,
@@ -46,6 +48,7 @@ Output when the action was already `done`:
 ```json
 {
   "run_id": "run-uuid",
+  "action_uid": "action-uuid",
   "step_id": "auth_link",
   "status": "DONE",
   "done": true,
@@ -53,20 +56,20 @@ Output when the action was already `done`:
 }
 ```
 
-Output when the step is not a notify action:
+Output when the action does not exist:
 
 ```json
 {
   "run_id": "run-uuid",
-  "step_id": "show_message",
-  "status": "NOT_ACTION",
+  "action_uid": "missing-action",
+  "status": "ACTION_NOT_FOUND",
   "done": false,
   "changed": false,
-  "error": "Step 'show_message' is not a notify action"
+  "error": "Action 'missing-action' not found in run 'run-uuid'"
 }
 ```
 
 ## Exit Code
 
 - `0`: the action is `done`, including idempotent calls.
-- `1`: the run or step was not found, or the step is not a notify action.
+- `1`: the run or action was not found.

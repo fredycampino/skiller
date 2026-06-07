@@ -41,7 +41,6 @@ class ProjectNotifyActionUseCase:
         state.set_notify_action(
             NotifyActionState(
                 run_id=action.run_id,
-                step_id=action.step_id,
                 message=action.action.message or "",
                 action=action.action,
             )
@@ -66,9 +65,7 @@ def _find_done(
             continue
         if item.run_id != action.run_id:
             continue
-        if item.step_id != action.step_id:
-            continue
-        if item.type != action.action.type:
+        if item.action_uid != action.action.uid:
             continue
         if (
             item.sequence is not None

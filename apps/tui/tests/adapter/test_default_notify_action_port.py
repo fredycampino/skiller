@@ -19,7 +19,7 @@ def test_default_notify_action_port_opens_url() -> None:
 
     result = port.open(
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-1",
         url="https://example.com/auth",
     )
 
@@ -35,7 +35,7 @@ def test_default_notify_action_port_maps_open_failure() -> None:
 
     result = port.open(
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-1",
         url="https://example.com/auth",
     )
 
@@ -47,10 +47,10 @@ def test_default_notify_action_port_delegates_done() -> None:
     command_adapter = _FakeCommandAdapter()
     port = DefaultNotifyActionPort(command_adapter=command_adapter)
 
-    result = port.done(run_id="run-1", step_id="auth_link")
+    result = port.done(run_id="run-1", action_uid="action-1")
 
     assert result.status == NotifyActionAckStatus.ACCEPTED
-    assert command_adapter.done_calls == [("run-1", "auth_link")]
+    assert command_adapter.done_calls == [("run-1", "action-1")]
 
 
 @dataclass
@@ -58,12 +58,12 @@ class _FakeCommandAdapter:
     def __post_init__(self) -> None:
         self.done_calls: list[tuple[str, str]] = []
 
-    def done(self, *, run_id: str, step_id: str) -> NotifyActionAck:
-        self.done_calls.append((run_id, step_id))
+    def done(self, *, run_id: str, action_uid: str) -> NotifyActionAck:
+        self.done_calls.append((run_id, action_uid))
         return NotifyActionAck(
             status=NotifyActionAckStatus.ACCEPTED,
             run_id=run_id,
-            step_id=step_id,
+            action_uid=action_uid,
         )
 
 

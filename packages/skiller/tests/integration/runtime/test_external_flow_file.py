@@ -8,8 +8,13 @@ import pytest
 from helpers.agent_config import FakeAgentConfigPort
 from helpers.agent_runner import build_agent_runner
 
+from skiller.application.action.action_mapper import ActionMapper
+from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
+from skiller.application.agent.mapper.agent_step_execution_mapper import (
+    AgentStepExecutionMapper,
+)
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.service import RunApplicationService
@@ -62,6 +67,7 @@ from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
+from skiller.application.use_cases.run.resolve_cleanup import ResolveCleanupUseCase
 from skiller.application.use_cases.run.resolve_end_action import ResolveEndActionUseCase
 from skiller.application.use_cases.run.resolve_end_action_config import (
     ResolveEndActionConfigParser,
@@ -73,14 +79,16 @@ from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUs
 from skiller.application.waits.service import WaitApplicationService
 from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPayload
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
-from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
+from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
-from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
+from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
@@ -113,13 +121,14 @@ class _FakeChannelSender:
         )
 
 
-def _event_store(store: SqliteStateStore) -> SqliteRuntimeEventStore:
+def _event_store(store: SqliteRunStorePort) -> SqliteRuntimeEventStore:
     return SqliteRuntimeEventStore(store.db_path)
 
 
-def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
+def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
+    wait_store = SqliteWaitStorePort(SqliteWaitDatasource(store.db_path))
     agent_context_store = AgentContextStore(
         SqliteAgentContextDatasource(store.db_path),
     )
@@ -156,13 +165,18 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
             skill_runner=skill_runner,
             tool_manager=agent_tool_manager,
         ),
+        execution_mapper=AgentStepExecutionMapper(),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
         mcp=mcp,
     )
-    execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    action_uid_factory = ActionUidFactory()
+    execute_notify_step_use_case = ExecuteNotifyStepUseCase(
+        store=store,
+        action_mapper=ActionMapper(action_uid_factory),
+    )
     execute_send_step_use_case = ExecuteSendStepUseCase(
         store=store,
         channel_sender=channel_sender,
@@ -184,17 +198,17 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
     execute_wait_channel_step_use_case = ExecuteWaitChannelStepUseCase(
         run_store=store,
-        wait_store=store,
+        wait_store=wait_store,
         external_event_store=external_event_store,
     )
     execute_wait_input_step_use_case = ExecuteWaitInputStepUseCase(
         run_store=store,
-        wait_store=store,
+        wait_store=wait_store,
         external_event_store=external_event_store,
     )
     execute_wait_webhook_step_use_case = ExecuteWaitWebhookStepUseCase(
         run_store=store,
-        wait_store=store,
+        wait_store=wait_store,
         external_event_store=external_event_store,
     )
     sync_snapshot_use_case = SyncSnapshotUseCase(
@@ -204,14 +218,16 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     )
     resolve_end_action_use_case = ResolveEndActionUseCase(
         store=store,
-        config_parser=ResolveEndActionConfigParser(skill_runner),
+        config_parser=ResolveEndActionConfigParser(skill_runner, action_uid_factory),
     )
+    resolve_cleanup_use_case = ResolveCleanupUseCase(store)
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         sync_snapshot_use_case=sync_snapshot_use_case,
         resolve_end_action_use_case=resolve_end_action_use_case,
+        resolve_cleanup_use_case=resolve_cleanup_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,
@@ -253,9 +269,10 @@ def _build_runtime(store: SqliteStateStore) -> RunApplicationService:
     return runtime
 
 
-def _build_waits(store: SqliteStateStore) -> WaitApplicationService:
+def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
+    wait_store = SqliteWaitStorePort(SqliteWaitDatasource(store.db_path))
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     return WaitApplicationService(
         handle_input_use_case=HandleInputUseCase(
@@ -265,11 +282,11 @@ def _build_waits(store: SqliteStateStore) -> WaitApplicationService:
         ),
         handle_channel_use_case=HandleChannelUseCase(
             external_event_store=external_event_store,
-            wait_store=store,
+            wait_store=wait_store,
         ),
         handle_webhook_use_case=HandleWebhookUseCase(
             external_event_store=external_event_store,
-            wait_store=store,
+            wait_store=wait_store,
         ),
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
@@ -277,7 +294,7 @@ def _build_waits(store: SqliteStateStore) -> WaitApplicationService:
     )
 
 
-def test_run_external_skill_file_succeeds() -> None:
+def test_run_external_flow_file_succeeds() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "external_notify.yaml"
@@ -293,7 +310,7 @@ def test_run_external_skill_file_succeeds() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
@@ -331,7 +348,7 @@ def test_external_notify_can_read_shell_output_value() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
@@ -346,7 +363,7 @@ def test_external_notify_can_read_shell_output_value() -> None:
         assert notify_output["value"]["message"] == ("x" * 400) + "\n"
 
 
-def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
+def test_external_flow_file_is_snapshotted_at_run_creation() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
         skill_path = Path(tmpdir) / "external_notify.yaml"
@@ -362,7 +379,7 @@ def test_external_skill_file_is_snapshotted_at_run_creation() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         skill_runner = FilesystemSkillRunner(skills_dir="skills")
         create_run_use_case = CreateRunUseCase(store, skill_runner)
@@ -419,7 +436,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
@@ -477,7 +494,7 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
@@ -547,7 +564,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
@@ -627,7 +644,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
             encoding="utf-8",
         )
 
-        store = SqliteStateStore(db_path)
+        store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 

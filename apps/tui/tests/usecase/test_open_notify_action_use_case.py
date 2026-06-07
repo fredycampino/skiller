@@ -20,9 +20,9 @@ def test_open_notify_action_use_case_calls_port() -> None:
     state.set_notify_action(
         NotifyActionState(
             run_id="run-1",
-            step_id="auth_link",
             message="Authorize",
             action=ActionOpenUrlItem(
+                uid="action-open-1",
                 type="open_url",
                 label="Open",
                 url="https://example.com/oauth/start",
@@ -34,15 +34,15 @@ def test_open_notify_action_use_case_calls_port() -> None:
     result = OpenNotifyActionUseCase(notify_action_port=port).execute(
         state=state,
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-open-1",
         url="https://example.com/oauth/start",
     )
 
     assert result.state is state
     assert port.open_calls == [
-        ("run-1", "auth_link", "https://example.com/oauth/start")
+        ("run-1", "action-open-1", "https://example.com/oauth/start")
     ]
-    assert port.done_calls == [("run-1", "auth_link")]
+    assert port.done_calls == [("run-1", "action-open-1")]
     assert state.notify_action is None
 
 
@@ -52,7 +52,7 @@ def test_open_notify_action_use_case_reports_port_error() -> None:
         open_ack=NotifyActionAck(
             status=NotifyActionAckStatus.ERROR,
             run_id="run-1",
-            step_id="auth_link",
+            action_uid="action-open-1",
             message="error: browser failed",
         )
     )
@@ -60,7 +60,7 @@ def test_open_notify_action_use_case_reports_port_error() -> None:
     result = OpenNotifyActionUseCase(notify_action_port=port).execute(
         state=state,
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-open-1",
         url="https://example.com/oauth/start",
     )
 
@@ -77,7 +77,7 @@ def test_open_notify_action_use_case_reports_done_error() -> None:
         done_ack=NotifyActionAck(
             status=NotifyActionAckStatus.ERROR,
             run_id="run-1",
-            step_id="auth_link",
+            action_uid="action-open-1",
             message="error: action done failed",
         )
     )
@@ -85,15 +85,15 @@ def test_open_notify_action_use_case_reports_done_error() -> None:
     result = OpenNotifyActionUseCase(notify_action_port=port).execute(
         state=state,
         run_id="run-1",
-        step_id="auth_link",
+        action_uid="action-open-1",
         url="https://example.com/oauth/start",
     )
 
     assert result.state is state
     assert port.open_calls == [
-        ("run-1", "auth_link", "https://example.com/oauth/start")
+        ("run-1", "action-open-1", "https://example.com/oauth/start")
     ]
-    assert port.done_calls == [("run-1", "auth_link")]
+    assert port.done_calls == [("run-1", "action-open-1")]
     assert isinstance(state.transcript.items[-1], DispatchErrorItem)
     assert state.transcript.items[-1].message == "error: action done failed"
     assert state.view_status.kind == ViewStatusKind.ERROR
@@ -109,20 +109,20 @@ class _FakeNotifyActionPort:
         self.open_ack = open_ack or NotifyActionAck(
             status=NotifyActionAckStatus.ACCEPTED,
             run_id="run-1",
-            step_id="auth_link",
+            action_uid="action-open-1",
         )
         self.done_ack = done_ack or NotifyActionAck(
             status=NotifyActionAckStatus.ACCEPTED,
             run_id="run-1",
-            step_id="auth_link",
+            action_uid="action-open-1",
         )
         self.open_calls: list[tuple[str, str, str]] = []
         self.done_calls: list[tuple[str, str]] = []
 
-    def open(self, *, run_id: str, step_id: str, url: str) -> NotifyActionAck:
-        self.open_calls.append((run_id, step_id, url))
+    def open(self, *, run_id: str, action_uid: str, url: str) -> NotifyActionAck:
+        self.open_calls.append((run_id, action_uid, url))
         return self.open_ack
 
-    def done(self, *, run_id: str, step_id: str) -> NotifyActionAck:
-        self.done_calls.append((run_id, step_id))
+    def done(self, *, run_id: str, action_uid: str) -> NotifyActionAck:
+        self.done_calls.append((run_id, action_uid))
         return self.done_ack

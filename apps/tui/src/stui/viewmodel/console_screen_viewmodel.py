@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from stui.port.event_models import LogEvent
 from stui.port.event_port import LogEventsListener
+from stui.usecase.get_run_action_use_case import GetRunActionResult
 from stui.usecase.normalize_command_use_case import (
     Command,
     CommandKind,
@@ -60,26 +61,27 @@ class ConsoleScreenViewModel(LogEventsListener):
         notify_action_result = self._use_cases.notify_action.execute(
             state=agent_usage_result.state,
         )
-        run_finished_action_result = self._use_cases.run_finished_action.execute(
+        run_action_result = self._use_cases.get_run_action.execute(
             state=notify_action_result.state,
         )
         self.state = notify_action_result.state
+
         self._emit_state()
-        command = run_finished_action_result.command
+        command = run_action_result.command
         if command is not None:
-            asyncio.create_task(self._execute_run_finished_action(command))
+            asyncio.create_task(self._execute_run_action(command, run_action_result))
 
     def open_notify_action_link(
         self,
         *,
         run_id: str,
-        step_id: str,
+        action_uid: str,
         url: str,
     ) -> None:
         result = self._use_cases.open_notify_action.execute(
             state=self.state,
             run_id=run_id,
-            step_id=step_id,
+            action_uid=action_uid,
             url=url,
         )
         self.state = result.state
@@ -89,23 +91,36 @@ class ConsoleScreenViewModel(LogEventsListener):
         self,
         *,
         run_id: str,
-        step_id: str,
+        action_uid: str,
     ) -> None:
         result = self._use_cases.done_notify_action.execute(
             state=self.state,
             run_id=run_id,
-            step_id=step_id,
+            action_uid=action_uid,
         )
         self.state = result.state
         self._emit_state()
 
-    async def _execute_run_finished_action(self, command: Command) -> None:
+    async def _execute_run_action(
+        self,
+        command: Command,
+        run_action: GetRunActionResult,
+    ) -> None:
         result = await self._use_cases.run_command.execute(
             self,
             state=self.state,
             command=command,
         )
         self.state = result.state
+
+        if run_action.action_uid:
+            result = self._use_cases.done_notify_action.execute(
+                state=self.state,
+                run_id=run_action.run_id,
+                action_uid=run_action.action_uid,
+            )
+            self.state = result.state
+
         self._emit_state()
 
     async def submit(self, text: str) -> None:

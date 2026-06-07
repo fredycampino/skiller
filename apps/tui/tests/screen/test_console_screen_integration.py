@@ -429,10 +429,10 @@ def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
         def record_open_notify_action_link(
             *,
             run_id: str,
-            step_id: str,
+            action_uid: str,
             url: str,
         ) -> None:
-            calls.append((run_id, step_id, url))
+            calls.append((run_id, action_uid, url))
 
         viewmodel.state.set_notify_action(action_state)
         viewmodel.open_notify_action_link = (  # type: ignore[method-assign]
@@ -461,7 +461,7 @@ def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
             assert str(open_link.label) == "Open authorization"
 
         assert calls == [
-            ("run-1", "auth_link", "https://example.com/oauth/start"),
+            ("run-1", "action-open-1", "https://example.com/oauth/start"),
         ]
 
     asyncio.run(run())
@@ -482,9 +482,9 @@ def test_console_screen_routes_notify_action_done_to_viewmodel() -> None:
         def record_done_notify_action(
             *,
             run_id: str,
-            step_id: str,
+            action_uid: str,
         ) -> None:
-            calls.append((run_id, step_id))
+            calls.append((run_id, action_uid))
 
         viewmodel.state.set_notify_action(action_state)
         viewmodel.done_notify_action = (  # type: ignore[method-assign]
@@ -503,7 +503,7 @@ def test_console_screen_routes_notify_action_done_to_viewmodel() -> None:
 
             assert str(done.label) == "complete"
 
-        assert calls == [("run-1", "auth_link")]
+        assert calls == [("run-1", "action-open-1")]
 
     asyncio.run(run())
 
@@ -600,9 +600,9 @@ def test_console_screen_keeps_right_arrow_in_prompt_without_notify_action() -> N
 def _notify_action_state() -> NotifyActionState:
     return NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message=LONG_NOTIFY_ACTION_MESSAGE,
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             url="https://example.com/oauth/start",

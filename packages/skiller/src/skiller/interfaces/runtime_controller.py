@@ -119,8 +119,8 @@ class RuntimeController:
         result = self.run_service.delete_run(run_id.strip())
         return self.run_mapper.to_delete_dict(result)
 
-    def action_done(self, run_id: str, step_id: str) -> dict[str, Any]:
-        request = self.run_mapper.to_action_done_input(run_id, step_id)
+    def action_done(self, run_id: str, action_uid: str) -> dict[str, Any]:
+        request = self.run_mapper.to_action_done_input(run_id, action_uid)
         result = self.run_service.mark_notify_action_done(
             request,
         )

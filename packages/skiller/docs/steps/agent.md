@@ -337,6 +337,17 @@ Exceeded per-turn tool limit:
   the runtime does not execute any of them
 - instead, it appends corrective feedback to the agent context and asks the LLM again
 
+## Recoverable LLM Request Failure
+
+If the configured LLM client returns `ok = false`, the `agent` step records a
+normal step output with:
+
+- `data.stop_reason = "llm_request_failed"`
+- `data.message` containing the provider error
+
+The runtime then follows the step's `next` transition. This lets flows recover
+from expected provider setup problems such as a missing or invalid API key.
+
 ## Fatal Exits
 
 Fatal exits do not produce the normal `agent` step output shown above. They raise
@@ -345,9 +356,6 @@ of advancing through `next`.
 
 Current fatal cases:
 
-- `llm_request_failed`
-  - the configured LLM client returns `ok = false`
-  - no final assistant message is persisted
 - `tool_execution_failed`
   - tool preparation/execution hits an unexpected request or policy exception
   - already-persisted context before the failure remains in the agent context

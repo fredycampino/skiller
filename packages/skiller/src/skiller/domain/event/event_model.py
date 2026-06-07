@@ -95,6 +95,7 @@ class StepErrorPayload:
 
 @dataclass(frozen=True)
 class ActionDonePayload:
+    uid: str
     type: ActionType
     status: ActionStatus
 
@@ -304,7 +305,11 @@ def runtime_event_payload_from_dict(
         )
 
     if event_type == RuntimeEventType.ACTION_DONE:
+        raw_uid = value.get("uid")
+        if not isinstance(raw_uid, str) or not raw_uid.strip():
+            raise ValueError("ACTION_DONE uid must be non-empty string")
         return ActionDonePayload(
+            uid=raw_uid.strip(),
             type=ActionType(str(value.get("type", ""))),
             status=ActionStatus(str(value.get("status", ""))),
         )

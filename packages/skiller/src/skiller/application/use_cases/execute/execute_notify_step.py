@@ -1,5 +1,5 @@
+from skiller.application.action.action_mapper import ActionMapper
 from skiller.application.tools.notify import NotifyTool
-from skiller.domain.action.action_model import ActionType, OpenUrlAction
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep
@@ -16,8 +16,9 @@ from skiller.domain.tool.tool_contract import ToolInput
 
 
 class ExecuteNotifyStepUseCase:
-    def __init__(self, store: RunStorePort) -> None:
+    def __init__(self, store: RunStorePort, action_mapper: ActionMapper) -> None:
         self.store = store
+        self.action_mapper = action_mapper
         self.notify_tool = NotifyTool()
 
     def execute(self, next_step: CurrentStep) -> StepAdvance:
@@ -52,7 +53,11 @@ class ExecuteNotifyStepUseCase:
             raise ValueError(
                 f"Notify step '{step_id}' has unsupported format '{raw_format}'"
             ) from exc
-        action = _build_notify_action(step_id, step, message)
+        action = self.action_mapper.to_notify_action(
+            step_id=step_id,
+            value=step.get("action"),
+            default_message=message,
+        )
         execution = StepExecution(
             step_type=next_step.step_type,
             input={"message": notify_request.message},
@@ -93,52 +98,3 @@ class ExecuteNotifyStepUseCase:
             next_step_id=next_step_id,
             execution=execution,
         )
-
-
-def _build_notify_action(
-    step_id: str,
-    step: dict[str, object],
-    notify_message: str,
-) -> OpenUrlAction | None:
-    raw_action = step.get("action")
-    if raw_action is None:
-        return None
-
-    if not isinstance(raw_action, dict):
-        raise ValueError(f"Notify step '{step_id}' action must be an object")
-
-    raw_type = str(raw_action.get("type", "")).strip()
-    if raw_type != ActionType.OPEN_URL.value:
-        raise ValueError(
-            f"Notify step '{step_id}' action type must be '{ActionType.OPEN_URL.value}'"
-        )
-
-    label = str(raw_action.get("label", "")).strip()
-    if not label:
-        raise ValueError(f"Notify step '{step_id}' action requires non-empty label")
-
-    raw_message = raw_action.get("message")
-    if raw_message is not None and not isinstance(raw_message, str):
-        raise ValueError(f"Notify step '{step_id}' action message must be string")
-    message = raw_message.strip() if raw_message is not None else ""
-    if not message:
-        message = notify_message
-
-    url = str(raw_action.get("url", "")).strip()
-    if not _is_http_url(url):
-        raise ValueError(f"Notify step '{step_id}' action requires http(s) url")
-
-    raw_auto = raw_action.get("auto", False)
-    if not isinstance(raw_auto, bool):
-        raise ValueError(f"Notify step '{step_id}' action auto must be boolean")
-
-    return OpenUrlAction(
-        label=label,
-        message=message,
-        url=url,
-        auto=raw_auto,
-    )
-
-
-def _is_http_url(value: str) -> bool:
-    return value.startswith(("http://", "https://"))

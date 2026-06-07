@@ -1,0 +1,77 @@
+name: auths/auth
+description: "Choose the initial LLM provider setup flow"
+version: "0.1"
+start: show_menu
+
+inputs: {}
+
+steps:
+  - notify: show_menu
+    format: markdown
+    message: |
+      # Configure an LLM provider
+
+      To work with agents, configure an LLM provider first.
+
+      Choose an option:
+
+      ```text
+      1 Codex
+      2 MiniMax
+      3 Configure later
+      4 Exit app
+      ```
+    next: select_provider
+
+  - wait_input: select_provider
+    prompt: "Choose 1, 2, 3, or 4."
+    next: route_provider
+
+  - switch: route_provider
+    value: '{{output_value("select_provider").payload.text}}'
+    cases:
+      "1": start_codex
+      "2": start_minimax
+      "3": configure_later
+      "4": exit_app
+    default: invalid_choice
+
+  - notify: start_codex
+    format: markdown
+    message: Starting Codex setup.
+    action:
+      type: run
+      label: Start Codex setup
+      arg: auths/codex
+      auto: true
+
+  - notify: start_minimax
+    format: markdown
+    message: Starting MiniMax setup.
+    action:
+      type: run
+      label: Start MiniMax setup
+      arg: auths/minimax
+      auto: true
+
+  - notify: configure_later
+    format: markdown
+    message: |
+      You can configure an LLM provider later with:
+
+      ```text
+      /run auths/auth
+      ```
+
+      Type `/` to see available commands.
+
+  - notify: exit_app
+    format: markdown
+    message: |
+      Press `Ctrl+Q` to exit the app.
+
+  - notify: invalid_choice
+    format: markdown
+    message: |
+      Invalid option. Choose `1`, `2`, `3`, or `4`.
+    next: select_provider

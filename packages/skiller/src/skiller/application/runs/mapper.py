@@ -67,17 +67,17 @@ class RunServiceMapper:
     def to_action_done_input(
         self,
         run_id: str,
-        step_id: str,
+        action_uid: str,
     ) -> MarkNotifyActionDoneInput:
         normalized_run_id = run_id.strip()
-        normalized_step_id = step_id.strip()
+        normalized_action_uid = action_uid.strip()
         if not normalized_run_id:
             raise ValueError("run_id is required")
-        if not normalized_step_id:
-            raise ValueError("step_id is required")
+        if not normalized_action_uid:
+            raise ValueError("action_uid is required")
         return MarkNotifyActionDoneInput(
             run_id=normalized_run_id,
-            step_id=normalized_step_id,
+            action_uid=normalized_action_uid,
         )
 
     def to_action_done_dict(
@@ -86,11 +86,13 @@ class RunServiceMapper:
     ) -> dict[str, Any]:
         payload = {
             "run_id": result.run_id,
-            "step_id": result.step_id,
+            "action_uid": result.action_uid,
             "status": result.status.value,
             "done": result.status == MarkNotifyActionDoneStatus.DONE,
             "changed": result.changed,
         }
+        if result.step_id is not None:
+            payload["step_id"] = result.step_id
         if result.error is not None:
             payload["error"] = result.error
         return payload

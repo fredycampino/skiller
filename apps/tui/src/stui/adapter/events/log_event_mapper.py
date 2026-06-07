@@ -70,6 +70,7 @@ class NotifyOutputValueModel(BaseModel):
 class ActionValueModel(BaseModel):
     model_config = ConfigDict(extra="allow")
 
+    uid: str
     type: str
     label: str
 
@@ -77,6 +78,7 @@ class ActionValueModel(BaseModel):
 class ActionOpenUrlValueModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    uid: str
     type: Literal["open_url"]
     label: str
     message: str | None = None
@@ -87,6 +89,7 @@ class ActionOpenUrlValueModel(BaseModel):
 class ActionRunValueModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    uid: str
     type: Literal["run"]
     label: str
     arg: str
@@ -235,6 +238,7 @@ class InputReceivedModel(BaseModel):
 class ActionDoneModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    uid: str
     type: str
     status: NotifyActionStatus
 
@@ -359,7 +363,13 @@ class LogEventMapper:
 
         if event_type == LogEventType.ACTION_DONE:
             model = _validate_model(ActionDoneModel, payload, "payload")
+            uid = model.uid.strip()
+            if not uid:
+                raise RuntimeError(
+                    "logs command returned invalid payload: action uid is required"
+                )
             return ActionDonePayload(
+                uid=uid,
                 type=model.type,
                 status=model.status,
             )
@@ -527,6 +537,9 @@ def _notify_output_payload(value: JsonObject) -> JsonObject:
 
 def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
     model = _validate_model(ActionValueModel, value, label)
+    uid = model.uid.strip()
+    if not uid:
+        raise RuntimeError(f"logs command returned invalid {label}: action uid is required")
     if model.type == "open_url":
         open_url = _validate_model(
             ActionOpenUrlValueModel,
@@ -534,6 +547,7 @@ def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
             label,
         )
         return ActionOpenUrlValue(
+            uid=uid,
             type=open_url.type,
             label=open_url.label,
             message=open_url.message,
@@ -547,6 +561,7 @@ def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
             label,
         )
         return ActionRunValue(
+            uid=uid,
             type=run.type,
             label=run.label,
             arg=run.arg,
@@ -554,6 +569,7 @@ def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
             auto=run.auto,
         )
     return ActionBaseValue(
+        uid=uid,
         type=model.type,
         label=model.label,
     )

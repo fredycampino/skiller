@@ -164,6 +164,7 @@ def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -
                 step_id="auth_link",
                 step_type="notify",
                 payload=ActionDonePayload(
+                    uid="action-open-1",
                     type="open_url",
                     status=NotifyActionStatus.DONE,
                 ),
@@ -174,8 +175,7 @@ def test_event_transcript_mapper_uses_action_done_as_notify_action_done_item() -
     assert len(items) == 1
     assert isinstance(items[0], NotifyActionDoneItem)
     assert items[0].run_id == "run-1"
-    assert items[0].step_id == "auth_link"
-    assert items[0].step_type == "notify"
+    assert items[0].action_uid == "action-open-1"
     assert items[0].type == "open_url"
     assert items[0].status == "done"
 
@@ -373,6 +373,7 @@ def test_event_transcript_mapper_uses_notify_action_as_step_notify_action() -> N
                         value=NotifyActionValue(
                             message="Authorize the app",
                             action=ActionOpenUrlValue(
+                                uid="action-open-1",
                                 type="open_url",
                                 label="Open authorization",
                                 url="https://example.com/oauth/start",
@@ -392,6 +393,7 @@ def test_event_transcript_mapper_uses_notify_action_as_step_notify_action() -> N
     assert items[0].step_type == "notify"
     assert items[0].message == "Authorize the app"
     assert items[0].action == ActionOpenUrlItem(
+        uid="action-open-1",
         type="open_url",
         label="Open authorization",
         message=None,
@@ -657,6 +659,43 @@ def test_event_transcript_mapper_uses_config_invalid_notice_template() -> None:
     assert items[0].format == OutputFormat.MARKDOWN
 
 
+def test_event_transcript_mapper_uses_llm_request_failed_notice_template() -> None:
+    mapper = EventTranscriptMapper(
+        strings=TuiStrings(
+            agent_llm_request_failed_notice_title="Provider request failed",
+            agent_llm_request_failed_notice_template="## {title}\n\n{message}",
+        )
+    )
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="support_agent",
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="LLM request failed",
+                        value=AgentOutputValue(
+                            data={
+                                "message": "Invalid API key.",
+                                "stop_reason": "llm_request_failed",
+                            }
+                        ),
+                        body_ref=None,
+                    )
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert isinstance(items[0], AgentSystemNoticeItem)
+    assert items[0].text == "## Provider request failed\n\nInvalid API key."
+    assert items[0].format == OutputFormat.MARKDOWN
+
+
 def test_event_transcript_mapper_renders_waiting_output() -> None:
     mapper = EventTranscriptMapper()
 
@@ -800,6 +839,7 @@ def test_event_transcript_mapper_keeps_run_finished_action() -> None:
                 payload=RunFinishedPayload(
                     status="SUCCEEDED",
                     action=ActionRunValue(
+                        uid="action-run-1",
                         type="run",
                         label="Open follow-up",
                         arg="--file ./flows/followup.yaml",
@@ -815,6 +855,7 @@ def test_event_transcript_mapper_keeps_run_finished_action() -> None:
     assert isinstance(items[0], RunFinishedItem)
     assert items[0].status == "succeeded"
     assert isinstance(items[0].action, ActionRunItem)
+    assert items[0].action.uid == "action-run-1"
     assert items[0].action.label == "Open follow-up"
     assert items[0].action.arg == "--file ./flows/followup.yaml"
     assert items[0].action.params == "--val pepe"

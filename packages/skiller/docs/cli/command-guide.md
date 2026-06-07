@@ -105,7 +105,7 @@ Command contract: [`commands/run.md`](./commands/run.md).
 Internal agent:
 
 ```bash
-skiller run ant
+skiller run mono
 ```
 
 External file:
@@ -417,7 +417,7 @@ skiller webhook receive github-ci build-42 --json '{"status": "ok"}'
 ### User flow
 
 ```bash
-skiller run ant
+skiller run mono
 skiller status <run_id>
 skiller input receive <run_id> --text "hola"
 skiller status <run_id>

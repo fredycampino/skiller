@@ -1,0 +1,17 @@
+name: tui_notify_run_action
+description: "TUI flow for notify run action behavior"
+version: "0.1"
+start: offer_run_action
+
+inputs: {}
+
+steps:
+  - notify: offer_run_action
+    format: markdown
+    message: "Run a child flow from this notify action."
+    action:
+      type: run
+      label: "Run child flow"
+      arg: "--file apps/tui/tests/flows/runaction/child.yaml"
+      params: "--arg message=hello-from-notify-action"
+      auto: false

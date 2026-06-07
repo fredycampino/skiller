@@ -39,6 +39,7 @@ class NotifyActionStatus(StrEnum):
 
 @dataclass(frozen=True)
 class ActionBaseValue:
+    uid: str
     type: str
     label: str
 
@@ -214,6 +215,7 @@ class InputReceivedPayload:
 
 @dataclass(frozen=True)
 class ActionDonePayload:
+    uid: str
     type: str
     status: NotifyActionStatus
 

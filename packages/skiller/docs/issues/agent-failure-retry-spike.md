@@ -2,8 +2,8 @@
 
 ## Context
 
-`llmconfig` now creates the MiniMax agent config and secret placeholder, then asks
-the user to edit the secret file and type `ok`.
+A provider setup flow can create the MiniMax agent config and secret placeholder,
+then ask the user to edit the secret file and type `ok`.
 
 After `ok`, the flow runs a basic agent step:
 
@@ -21,7 +21,7 @@ After `ok`, the flow runs a basic agent step:
 The goal is to verify that the configured provider, model, base URL, and API key
 actually work before telling the user the setup is ready.
 
-## Current Behavior
+## Previous Behavior
 
 If the MiniMax request succeeds, the flow advances to `done` and the run finishes
 as `SUCCEEDED`.
@@ -38,8 +38,14 @@ Example failure:
 Agent 'verify_minimax' LLM request failed: OpenAI request failed: Error code: 401
 ```
 
-This is technically correct for the current agent step contract. Fatal agent
-errors fail the run and do not advance through `next`.
+This matched the previous agent step contract. Fatal agent errors failed the run
+and did not advance through `next`.
+
+## Implemented Direction
+
+`llm_request_failed` is now treated as a recoverable agent stop. The agent step
+records normal output with `data.stop_reason = "llm_request_failed"` and follows
+`next`, so onboarding flows can route the user back to edit credentials.
 
 ## Problem
 

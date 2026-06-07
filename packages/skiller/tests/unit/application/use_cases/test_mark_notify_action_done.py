@@ -5,7 +5,7 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneStatus,
     MarkNotifyActionDoneUseCase,
 )
-from skiller.domain.action.action_model import ActionStatus, ActionType, OpenUrlAction
+from skiller.domain.action.action_model import ActionStatus, ActionType, OpenUrlAction, RunAction
 from skiller.domain.event.event_model import (
     ActionDonePayload,
     RuntimeEventDraft,
@@ -61,13 +61,14 @@ def test_mark_notify_action_done_emits_action_done_event() -> None:
     events = _FakeEvents()
     use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
 
-    result = use_case.execute(_request("auth_link"))
+    result = use_case.execute(_request("auth-link-action"))
 
     assert result.status == MarkNotifyActionDoneStatus.DONE
     assert result.changed is True
     execution = run.context.step_executions["auth_link"]
     assert isinstance(execution.output, NotifyOutput)
     assert execution.output.action == OpenUrlAction(
+        uid="auth-link-action",
         label="Open authorization",
         url="https://example.com/oauth/start",
     )
@@ -78,6 +79,7 @@ def test_mark_notify_action_done_emits_action_done_event() -> None:
     assert event.type == RuntimeEventType.ACTION_DONE
     assert event.step_id == "auth_link"
     assert event.step_type == "notify"
+    assert event.payload.uid == "auth-link-action"
     assert event.payload.type == ActionType.OPEN_URL
     assert event.payload.status == ActionStatus.DONE
 
@@ -93,6 +95,7 @@ def test_mark_notify_action_done_is_idempotent() -> None:
                 step_id="auth_link",
                 step_type="notify",
                 payload=ActionDonePayload(
+                    uid="auth-link-action",
                     type=ActionType.OPEN_URL,
                     status=ActionStatus.DONE,
                 ),
@@ -101,15 +104,16 @@ def test_mark_notify_action_done_is_idempotent() -> None:
     )
     use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
 
-    result = use_case.execute(_request("auth_link"))
+    result = use_case.execute(_request("auth-link-action"))
 
     assert result.status == MarkNotifyActionDoneStatus.DONE
     assert result.changed is False
+    assert result.step_id == "auth_link"
     assert store.updated_runs == []
     assert len(events.events) == 1
 
 
-def test_mark_notify_action_done_returns_step_not_found() -> None:
+def test_mark_notify_action_done_returns_action_not_found() -> None:
     run = _build_run()
     store = _FakeStore(run)
     events = _FakeEvents()
@@ -117,14 +121,15 @@ def test_mark_notify_action_done_returns_step_not_found() -> None:
 
     result = use_case.execute(_request("missing"))
 
-    assert result.status == MarkNotifyActionDoneStatus.STEP_NOT_FOUND
+    assert result.status == MarkNotifyActionDoneStatus.ACTION_NOT_FOUND
     assert result.changed is False
-    assert result.error == "Step 'missing' not found in run 'run-1'"
+    assert result.step_id is None
+    assert result.error == "Action 'missing' not found in run 'run-1'"
     assert store.updated_runs == []
     assert events.events == []
 
 
-def test_mark_notify_action_done_returns_not_action_for_regular_notify() -> None:
+def test_mark_notify_action_done_returns_action_not_found_for_regular_notify() -> None:
     context = RunContext(
         inputs={},
         step_executions={
@@ -141,11 +146,49 @@ def test_mark_notify_action_done_returns_not_action_for_regular_notify() -> None
 
     result = use_case.execute(_request("show"))
 
-    assert result.status == MarkNotifyActionDoneStatus.NOT_ACTION
+    assert result.status == MarkNotifyActionDoneStatus.ACTION_NOT_FOUND
     assert result.changed is False
-    assert result.error == "Step 'show' is not a notify action"
+    assert result.step_id is None
+    assert result.error == "Action 'show' not found in run 'run-1'"
     assert store.updated_runs == []
     assert events.events == []
+
+
+def test_mark_notify_action_done_emits_run_action_done_event() -> None:
+    context = RunContext(
+        inputs={},
+        step_executions={
+            "run_followup": StepExecution(
+                step_type=StepType.NOTIFY,
+                output=NotifyOutput(
+                    text="Run follow-up",
+                    message="Run follow-up",
+                    action=RunAction(
+                        uid="run-followup-action",
+                        label="Run follow-up",
+                        arg="support_agent",
+                    ),
+                ),
+            )
+        },
+    )
+    run = _build_run_with_context(context)
+    store = _FakeStore(run)
+    events = _FakeEvents()
+    use_case = MarkNotifyActionDoneUseCase(store=store, events=events)
+
+    result = use_case.execute(_request("run-followup-action"))
+
+    assert result.status == MarkNotifyActionDoneStatus.DONE
+    assert result.changed is True
+    assert result.step_id == "run_followup"
+    event = events.events[0]
+    assert event.step_id == "run_followup"
+    assert event.payload == ActionDonePayload(
+        uid="run-followup-action",
+        type=ActionType.RUN,
+        status=ActionStatus.DONE,
+    )
 
 
 def _build_run() -> Run:
@@ -158,6 +201,7 @@ def _build_run() -> Run:
                     text="Authorize the app",
                     message="Authorize the app",
                     action=OpenUrlAction(
+                        uid="auth-link-action",
                         label="Open authorization",
                         url="https://example.com/oauth/start",
                     ),
@@ -168,8 +212,8 @@ def _build_run() -> Run:
     return _build_run_with_context(context)
 
 
-def _request(step_id: str) -> MarkNotifyActionDoneInput:
-    return MarkNotifyActionDoneInput(run_id="run-1", step_id=step_id)
+def _request(action_uid: str) -> MarkNotifyActionDoneInput:
+    return MarkNotifyActionDoneInput(run_id="run-1", action_uid=action_uid)
 
 
 def _build_run_with_context(context: RunContext) -> Run:

@@ -1,0 +1,27 @@
+name: cleanup_success_cli_e2e
+description: "CLI e2e for on_success cleanup after wait_input loop"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+on_success:
+  cleanup: true
+
+steps:
+  - wait_input: ask_user
+    prompt: "Type text, or type exit to finish"
+    next: decide_input
+
+  - switch: decide_input
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+    default: echo_message
+
+  - notify: echo_message
+    message: '{{output_value("ask_user").payload.text}}'
+    next: ask_user
+
+  - notify: done
+    message: "Done."

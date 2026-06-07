@@ -19,6 +19,26 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.3 - 2026-06-07
+
+### Added
+- Add run action retrieval and projection support for STUI.
+- Add cleanup resolution for terminal run flows.
+- Add dedicated SQLite run and wait store ports backed by datasource modules.
+- Add Minimax and Codex auth agent flows plus Mono system prompt support.
+
+### Changed
+- Refine notify action handling across runtime, CLI adapters, and STUI view models.
+- Reorganize bundled agent configurations and flow documentation.
+- Move agent step execution mapping into a dedicated application mapper.
+
+### Fixed
+- Improve recoverable agent LLM failure handling and shell command policy coverage.
+- Keep run action state synchronized in the TUI transcript and console screen.
+
+### Notes
+- Includes PR #59 and PR #60.
+
 ## 0.1.0-beta.2 - 2026-06-03
 
 ### Added

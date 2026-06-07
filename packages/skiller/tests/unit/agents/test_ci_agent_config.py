@@ -10,6 +10,7 @@ def test_ci_agent_uses_shell_and_files() -> None:
 
     agent_step = next(step for step in agent["steps"] if "agent" in step)
 
+    assert agent_step["agent"] == "ci_agent"
     assert agent_step["tools"] == [
         "shell",
         "files",

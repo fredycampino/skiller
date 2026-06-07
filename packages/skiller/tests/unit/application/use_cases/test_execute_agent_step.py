@@ -10,6 +10,9 @@ from skiller.application.agent.config.step_config_reader import (
     AGENT_RUNTIME_SYSTEM,
     AgentStepConfigReader,
 )
+from skiller.application.agent.mapper.agent_step_execution_mapper import (
+    AgentStepExecutionMapper,
+)
 from skiller.application.agent.tools.tool_manager import PreparedTool, ToolPrepareResult
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -545,6 +548,7 @@ def _build_use_case(
             skill_runner=_FakeSkillRunner(),
             tool_manager=resolved_tool_manager,
         ),
+        execution_mapper=AgentStepExecutionMapper(),
     )
 
 
@@ -1067,9 +1071,11 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
     ]
 
 
-def test_execute_agent_step_fails_when_llm_fails() -> None:
+def test_execute_agent_step_advances_when_llm_request_fails() -> None:
+    store = _FakeStore()
+    context = RunContext(inputs={}, step_executions={})
     use_case = _build_use_case(
-        store=_FakeStore(),
+        store=store,
         context_store=_FakeAgentContextStore(),
         llm=_FakeLLM(
             response=LLMResponse(
@@ -1081,17 +1087,37 @@ def test_execute_agent_step_fails_when_llm_fails() -> None:
         ),
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Agent 'support_agent' LLM request failed: invalid params",
-    ):
-        use_case.execute(
-            CurrentStep(
-                run_id="run-1",
-                step_index=0,
-                step_id="support_agent",
-                step_type=StepType.AGENT,
-                step={"system": "Be useful.", "task": "Hi"},
-                context=RunContext(inputs={}, step_executions={}),
-            )
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="support_agent",
+            step_type=StepType.AGENT,
+            step={
+                "system": "Be useful.",
+                "task": "Hi",
+                "next": "send_reply",
+            },
+            context=context,
         )
+    )
+
+    assert result.status == StepExecutionStatus.NEXT
+    assert result.next_step_id == "send_reply"
+    assert result.execution is not None
+    assert isinstance(result.execution.output.data, AgentStopOutputData)
+    assert result.execution.output.data.stop_reason == AgentStopReason.LLM_REQUEST_FAILED
+    assert result.execution.output.data.context_id
+    assert (
+        result.execution.output.data.message
+        == "Agent 'support_agent' LLM request failed: invalid params (error_code=2013)"
+    )
+    assert context.step_executions["support_agent"] == result.execution
+    assert store.updated == [
+        {
+            "run_id": "run-1",
+            "status": RunStatus.RUNNING,
+            "current": "send_reply",
+            "context": context,
+        }
+    ]

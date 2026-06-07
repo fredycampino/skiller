@@ -368,7 +368,11 @@ def test_run_finished_view_renders_action_as_muted_second_line() -> None:
         item=RunFinishedItem(
             run_id="run-1",
             status="succeeded",
-            action=ActionRunItem(type="run", label="Open follow-up"),
+            action=ActionRunItem(
+                uid="action-run-1",
+                type="run",
+                label="Open follow-up",
+            ),
         )
     )
 

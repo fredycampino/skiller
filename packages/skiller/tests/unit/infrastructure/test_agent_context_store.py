@@ -16,11 +16,11 @@ from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
-from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
+from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
-from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
 
@@ -41,7 +41,7 @@ def _store(db_path) -> AgentContextStore:
 
 def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     db_path = tmp_path / "agent-context.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -129,7 +129,7 @@ def test_agent_context_store_persists_delta_markers(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-position-token-reset.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -184,7 +184,7 @@ def test_agent_context_store_keeps_delta_series_markers(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-position-token-delta.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -228,7 +228,7 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-final-start.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -297,7 +297,7 @@ def test_agent_context_store_lists_window_entries_across_marker_pages(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-pages.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -336,7 +336,7 @@ def test_agent_context_store_stops_after_oversized_latest_entry(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-oversized-latest.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -373,7 +373,7 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "agent-context-window-negative-delta.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -422,7 +422,7 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
 
 def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
     db_path = tmp_path / "agent-context-tools.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -511,7 +511,7 @@ def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path)
 
 def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
     db_path = tmp_path / "agent-context-next-turn.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -556,7 +556,7 @@ def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
 
 def test_agent_context_store_returns_context_stats(tmp_path) -> None:
     db_path = tmp_path / "agent-context-stats.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -626,7 +626,7 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
 
 def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
     db_path = tmp_path / "agent-context-last-final-usage.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",
@@ -688,7 +688,7 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
 
 def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path) -> None:
     db_path = tmp_path / "agent-context-last-usage-marker.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
         "internal",

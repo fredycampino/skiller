@@ -6,10 +6,10 @@ from typing import Any
 from skiller.domain.wait.external_event_store_port import ExternalEventStorePort
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
-class SqliteExternalEventStore(SqliteRepository, ExternalEventStorePort):
+class SqliteExternalEventStore(SqliteConnectionSource, ExternalEventStorePort):
     PENDING_STATUS = "pending"
     CONSUMED_STATUS = "consumed"
 

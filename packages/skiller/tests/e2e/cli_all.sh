@@ -71,6 +71,8 @@ run_cli "cli_notify_link.sh" ./cli_notify_link.sh
 echo
 run_cli "cli_run_end_action.sh" ./cli_run_end_action.sh
 echo
+run_cli "cli_cleanup.sh" ./cli_cleanup.sh
+echo
 run_cli "cli_assign.sh" ./cli_assign.sh "dependency timeout"
 echo
 run_cli "cli_switch.sh" ./cli_switch.sh "retry"

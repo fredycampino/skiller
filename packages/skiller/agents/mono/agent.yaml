@@ -16,18 +16,11 @@ steps:
       exit: done
       quit: done
       bye: done
-    default: support_agent
+    default: mono_agent
 
-  - agent: support_agent
-    system: |
-      You are mono, a helpful assistant in a terminal chat with shell and file access.
-      Reply in the same language as the user.
-      Be concise, clear, and direct.
-      Use tools only when they genuinely help.
-      Use the files tool for direct file read, write, and edit operations.
-      Use the shell tool for commands, inspections, and verification.
-      Shell is allowlisted for basic inspection, git, pytest, and ruff commands.
-      Shell and file access are limited by their configured runtime policies.
+  - agent: mono_agent
+    system:
+      file: "./system.md"
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell

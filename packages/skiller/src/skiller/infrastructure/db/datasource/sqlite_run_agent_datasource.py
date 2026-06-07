@@ -1,12 +1,12 @@
 from skiller.domain.run.run_model import RunAgent, RunAgentWindow
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 from skiller.infrastructure.db.sqlite_run_agent_mapper import (
     agents_from_json,
     agents_to_json,
 )
 
 
-class SqliteRunAgentDatasource(SqliteRepository):
+class SqliteRunAgentDatasource(SqliteConnectionSource):
     def get_agent(
         self,
         *,

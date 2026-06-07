@@ -275,11 +275,11 @@ step is no longer present in the new definition.
 
 ### `ACTION_DONE`
 
-`ACTION_DONE` is emitted when `skiller action done <run_id> <step_id>` records
+`ACTION_DONE` is emitted when `skiller action done <run_id> <action_uid>` records
 that a notify action is done.
 
-Idempotent calls for an action with an existing `ACTION_DONE` event do not emit
-another event.
+Idempotent calls for an action uid with an existing `ACTION_DONE` event do not
+emit another event.
 
 ```json
 {
@@ -292,6 +292,7 @@ another event.
   "agent_sequence": null,
   "created_at": "2026-05-12T10:30:21Z",
   "payload": {
+    "uid": "action-uuid",
     "type": "open_url",
     "status": "done"
   }
@@ -383,6 +384,7 @@ With run action:
     "status": "FAILED",
     "error": "LLM step 'answer' returned invalid JSON",
     "action": {
+      "uid": "action-uuid",
       "type": "run",
       "label": "Debug failure",
       "arg": "--file ./flows/debug.yaml",

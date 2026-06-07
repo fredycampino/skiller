@@ -165,9 +165,9 @@ def test_action_open_url_view_resets_opened_state_when_action_changes() -> None:
             view.set_state(
                 NotifyActionState(
                     run_id="run-2",
-                    step_id="other_link",
                     message=LONG_NOTIFY_ACTION_MESSAGE,
                     action=ActionOpenUrlItem(
+                        uid="action-open-2",
                         type="open_url",
                         label="Open other link",
                         url="https://example.com/other",
@@ -185,9 +185,9 @@ def test_action_open_url_view_resets_opened_state_when_action_changes() -> None:
 def _action_state() -> NotifyActionState:
     return NotifyActionState(
         run_id="run-1",
-        step_id="auth_link",
         message=LONG_NOTIFY_ACTION_MESSAGE,
         action=ActionOpenUrlItem(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             url="https://example.com/oauth/start",

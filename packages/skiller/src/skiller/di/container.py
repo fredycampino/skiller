@@ -2,6 +2,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from skiller.application.action.action_mapper import ActionMapper
+from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.output_truncator import OutputTruncator
@@ -15,6 +17,9 @@ from skiller.application.agent.event.agent_event_draft_builder import (
 )
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
+from skiller.application.agent.mapper.agent_step_execution_mapper import (
+    AgentStepExecutionMapper,
+)
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
@@ -83,6 +88,7 @@ from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
+from skiller.application.use_cases.run.resolve_cleanup import ResolveCleanupUseCase
 from skiller.application.use_cases.run.resolve_end_action import ResolveEndActionUseCase
 from skiller.application.use_cases.run.resolve_end_action_config import (
     ResolveEndActionConfigParser,
@@ -102,18 +108,21 @@ from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 from skiller.infrastructure.config.settings import Settings, get_settings
-from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
+from skiller.infrastructure.db.datasource.sqlite_run_agent_datasource import (
+    SqliteRunAgentDatasource,
+)
+from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
-from skiller.infrastructure.db.sqlite_run_agent_datasource import SqliteRunAgentDatasource
 from skiller.infrastructure.db.sqlite_run_agent_store import SqliteRunAgentStore
 from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
-from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
-from skiller.infrastructure.db.sqlite_wait_store import SqliteWaitStore
+from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
@@ -146,8 +155,9 @@ def build_runtime_container(
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
-    store = SqliteStateStore(cfg.db_path)
-    wait_store = SqliteWaitStore(cfg.db_path)
+    store = SqliteRunStorePort(cfg.db_path)
+    wait_datasource = SqliteWaitDatasource(cfg.db_path)
+    wait_store = SqliteWaitStorePort(wait_datasource)
     external_event_store = SqliteExternalEventStore(cfg.db_path)
     runtime_event_store = SqliteRuntimeEventStore(cfg.db_path)
     agent_context_datasource = SqliteAgentContextDatasource(cfg.db_path)
@@ -188,6 +198,7 @@ def build_runtime_container(
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender(cfg)
     tool_manager = _build_agent_tool_manager(agent_tools)
+    action_uid_factory = ActionUidFactory()
 
     bootstrap_runtime_use_case = BootstrapRuntimeUseCase(
         store=runtime_bootstrap,
@@ -281,13 +292,17 @@ def build_runtime_container(
             skill_runner=skill_runner,
             tool_manager=tool_manager,
         ),
+        execution_mapper=AgentStepExecutionMapper(),
     )
     execute_assign_step_use_case = ExecuteAssignStepUseCase(store=store)
     execute_mcp_step_use_case = ExecuteMcpStepUseCase(
         store=store,
         mcp=mcp,
     )
-    execute_notify_step_use_case = ExecuteNotifyStepUseCase(store=store)
+    execute_notify_step_use_case = ExecuteNotifyStepUseCase(
+        store=store,
+        action_mapper=ActionMapper(action_uid_factory),
+    )
     execute_send_step_use_case = ExecuteSendStepUseCase(
         store=store,
         channel_sender=channel_sender,
@@ -332,14 +347,16 @@ def build_runtime_container(
     )
     resolve_end_action_use_case = ResolveEndActionUseCase(
         store=store,
-        config_parser=ResolveEndActionConfigParser(skill_runner),
+        config_parser=ResolveEndActionConfigParser(skill_runner, action_uid_factory),
     )
+    resolve_cleanup_use_case = ResolveCleanupUseCase(store)
     run_executor = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         sync_snapshot_use_case=sync_snapshot_use_case,
         resolve_end_action_use_case=resolve_end_action_use_case,
+        resolve_cleanup_use_case=resolve_cleanup_use_case,
         render_current_step_use_case=render_current_step_use_case,
         render_mcp_config_use_case=render_mcp_config_use_case,
         execute_agent_step_use_case=execute_agent_step_use_case,

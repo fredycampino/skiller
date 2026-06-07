@@ -86,3 +86,52 @@ def test_default_installation_state_port_reads_configured_db_path(
 
     assert state.runtime_db_exists is True
     assert state.agent_config_exists is False
+
+
+def test_default_installation_state_port_reads_development_env_db_path(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    configured_db = workspace / "dev-runtime.db"
+    workspace.mkdir()
+    configured_db.write_text("", encoding="utf-8")
+    (workspace / "runtime.db").write_text("", encoding="utf-8")
+    (workspace / ".env.development").write_text(
+        "AGENT_DB_PATH=dev-runtime.db\n",
+        encoding="utf-8",
+    )
+    port = DefaultInstallationStatePort(
+        home=home,
+        cwd=workspace,
+        environment={},
+    )
+
+    state = port.read()
+
+    assert state.runtime_db_exists is True
+    assert port._runtime_db_path() == configured_db
+
+
+def test_default_installation_state_port_real_env_overrides_development_env_db_path(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    real_env_db = workspace / "real-env.db"
+    workspace.mkdir()
+    real_env_db.write_text("", encoding="utf-8")
+    (workspace / ".env.development").write_text(
+        "AGENT_DB_PATH=dev-runtime.db\n",
+        encoding="utf-8",
+    )
+    port = DefaultInstallationStatePort(
+        home=home,
+        cwd=workspace,
+        environment={"AGENT_DB_PATH": "real-env.db"},
+    )
+
+    state = port.read()
+
+    assert state.runtime_db_exists is True
+    assert port._runtime_db_path() == real_env_db

@@ -326,7 +326,7 @@ class ConsoleScreen(App[str]):
         notify_action = self.state.notify_action
         self.viewmodel.open_notify_action_link(
             run_id=notify_action.run_id,
-            step_id=notify_action.step_id,
+            action_uid=notify_action.action.uid,
             url=notify_action.action.url,
         )
         self._prompt_view().focus_prompt()
@@ -337,7 +337,7 @@ class ConsoleScreen(App[str]):
         notify_action = self.state.notify_action
         self.viewmodel.done_notify_action(
             run_id=notify_action.run_id,
-            step_id=notify_action.step_id,
+            action_uid=notify_action.action.uid,
         )
         self._prompt_view().focus_prompt()
 

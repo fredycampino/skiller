@@ -23,6 +23,7 @@ def test_notify_open_url_action_serializes_and_restores_typed_data() -> None:
             text="Authorize the app",
             message="Authorize the app",
             action=OpenUrlAction(
+                uid="action-open-url-1",
                 label="Open authorization",
                 message="Continue in the browser.",
                 url="https://example.com/oauth/start",
@@ -39,9 +40,10 @@ def test_notify_open_url_action_serializes_and_restores_typed_data() -> None:
         "value": {
             "message": "Authorize the app",
             "format": "simple",
-            "action": {
-                "type": "open_url",
-                "label": "Open authorization",
+                "action": {
+                    "uid": "action-open-url-1",
+                    "type": "open_url",
+                    "label": "Open authorization",
                 "message": "Continue in the browser.",
                 "url": "https://example.com/oauth/start",
                 "auto": True,
@@ -58,6 +60,7 @@ def test_notify_run_action_serializes_and_restores_typed_data() -> None:
             text="Debug failure",
             message="Debug failure",
             action=RunAction(
+                uid="action-run-1",
                 label="Debug failure",
                 arg="--file ./flows/debug.yaml",
                 params="--mood nice --path .",
@@ -74,9 +77,10 @@ def test_notify_run_action_serializes_and_restores_typed_data() -> None:
         "value": {
             "message": "Debug failure",
             "format": "simple",
-            "action": {
-                "type": "run",
-                "label": "Debug failure",
+                "action": {
+                    "uid": "action-run-1",
+                    "type": "run",
+                    "label": "Debug failure",
                 "arg": "--file ./flows/debug.yaml",
                 "params": "--mood nice --path .",
                 "auto": True,

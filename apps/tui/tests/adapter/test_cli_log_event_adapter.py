@@ -175,6 +175,7 @@ def test_cli_log_event_adapter_parses_run_finished_action_payload() -> None:
                 "payload": {
                     "status": "SUCCEEDED",
                     "action": {
+                        "uid": "action-run-1",
                         "type": "run",
                         "label": "Open follow-up",
                         "arg": "--file ./flows/followup.yaml",
@@ -193,6 +194,7 @@ def test_cli_log_event_adapter_parses_run_finished_action_payload() -> None:
     assert event.payload == RunFinishedPayload(
         status="SUCCEEDED",
         action=ActionRunValue(
+            uid="action-run-1",
             type="run",
             label="Open follow-up",
             arg="--file ./flows/followup.yaml",
@@ -215,6 +217,7 @@ def test_cli_log_event_adapter_parses_action_done_payload() -> None:
                 "agent_sequence": None,
                 "created_at": "2026-05-12T10:30:16Z",
                 "payload": {
+                    "uid": "action-open-1",
                     "type": "open_url",
                     "status": "done",
                 },
@@ -226,9 +229,33 @@ def test_cli_log_event_adapter_parses_action_done_payload() -> None:
     assert event.step_id == "auth_link"
     assert event.step_type == "notify"
     assert event.payload == ActionDonePayload(
+        uid="action-open-1",
         type="open_url",
         status=NotifyActionStatus.DONE,
     )
+
+
+def test_cli_log_event_adapter_rejects_action_done_without_uid() -> None:
+    with pytest.raises(RuntimeError, match="action uid is required"):
+        _mapped_event(
+            [
+                {
+                    "sequence": 11,
+                    "id": "event-11",
+                    "run_id": "run-1",
+                    "type": "ACTION_DONE",
+                    "step_id": "auth_link",
+                    "step_type": "notify",
+                    "agent_sequence": None,
+                    "created_at": "2026-05-12T10:30:16Z",
+                    "payload": {
+                        "uid": " ",
+                        "type": "open_url",
+                        "status": "done",
+                    },
+                }
+            ]
+        )
 
 
 def test_cli_log_event_adapter_parses_step_success_payload() -> None:
@@ -349,6 +376,7 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
                             "message": "Authorize the app",
                             "format": "markdown",
                             "action": {
+                                "uid": "action-open-1",
                                 "type": "open_url",
                                 "label": "Open authorization",
                                 "message": "Open the auth URL.",
@@ -368,6 +396,7 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
         message="Authorize the app",
         format=NotifyOutputFormat.MARKDOWN,
         action=ActionOpenUrlValue(
+            uid="action-open-1",
             type="open_url",
             label="Open authorization",
             message="Open the auth URL.",
@@ -375,6 +404,39 @@ def test_cli_log_event_adapter_maps_notify_action_value() -> None:
             auto=True,
         ),
     )
+
+
+def test_cli_log_event_adapter_rejects_notify_action_without_uid() -> None:
+    with pytest.raises(RuntimeError, match="uid"):
+        _mapped_event(
+            [
+                {
+                    "sequence": 10,
+                    "id": "event-1",
+                    "run_id": "run-1",
+                    "type": "STEP_SUCCESS",
+                    "step_id": "auth_link",
+                    "step_type": "notify",
+                    "agent_sequence": None,
+                    "created_at": "2026-05-12T10:30:15Z",
+                    "payload": {
+                        "output": {
+                            "text": "Authorize the app",
+                            "value": {
+                                "message": "Authorize the app",
+                                "format": "markdown",
+                                "action": {
+                                    "type": "open_url",
+                                    "label": "Open authorization",
+                                    "url": "https://example.com/oauth/start",
+                                },
+                            },
+                            "body_ref": None,
+                        },
+                    },
+                }
+            ]
+        )
 
 
 def test_cli_log_event_adapter_maps_run_notify_action() -> None:
@@ -396,6 +458,7 @@ def test_cli_log_event_adapter_maps_run_notify_action() -> None:
                             "message": "Run follow-up",
                             "format": "markdown",
                             "action": {
+                                "uid": "action-run-1",
                                 "type": "run",
                                 "label": "Run flow",
                                 "arg": "ci",
@@ -415,6 +478,7 @@ def test_cli_log_event_adapter_maps_run_notify_action() -> None:
         message="Run follow-up",
         format=NotifyOutputFormat.MARKDOWN,
         action=ActionRunValue(
+            uid="action-run-1",
             type="run",
             label="Run flow",
             arg="ci",
@@ -443,6 +507,7 @@ def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
                             "message": "Custom action",
                             "format": "markdown",
                             "action": {
+                                "uid": "action-custom-1",
                                 "type": "custom",
                                 "label": "Do custom",
                                 "message": "Custom action.",
@@ -461,6 +526,7 @@ def test_cli_log_event_adapter_preserves_unknown_notify_action() -> None:
         message="Custom action",
         format=NotifyOutputFormat.MARKDOWN,
         action=ActionBaseValue(
+            uid="action-custom-1",
             type="custom",
             label="Do custom",
         ),

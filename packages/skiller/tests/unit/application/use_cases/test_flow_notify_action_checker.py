@@ -30,6 +30,30 @@ def test_flow_notify_action_checker_accepts_open_url_action() -> None:
     assert errors == []
 
 
+def test_flow_notify_action_checker_accepts_run_action() -> None:
+    errors = []
+
+    FlowNotifyActionChecker().check(
+        step=ParsedFlowStep(
+            index=0,
+            step_id="run_followup",
+            step_type="notify",
+            body={
+                "action": {
+                    "type": "run",
+                    "label": "Run follow-up",
+                    "arg": "support_agent",
+                    "params": "--source stui",
+                    "auto": True,
+                }
+            },
+        ),
+        errors=errors,
+    )
+
+    assert errors == []
+
+
 def test_flow_notify_action_checker_reports_non_object_action() -> None:
     errors = []
 
@@ -46,7 +70,7 @@ def test_flow_notify_action_checker_reports_non_object_action() -> None:
     assert [item.code for item in errors] == ["FLOW_NOTIFY_ACTION_INVALID"]
 
 
-def test_flow_notify_action_checker_reports_invalid_action_fields() -> None:
+def test_flow_notify_action_checker_reports_unsupported_action_type() -> None:
     errors = []
 
     FlowNotifyActionChecker().check(
@@ -56,7 +80,30 @@ def test_flow_notify_action_checker_reports_invalid_action_fields() -> None:
             step_type="notify",
             body={
                 "action": {
-                    "type": "run",
+                    "type": "unknown",
+                    "label": "Run",
+                }
+            },
+        ),
+        errors=errors,
+    )
+
+    assert [item.code for item in errors] == [
+        "FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED",
+    ]
+
+
+def test_flow_notify_action_checker_reports_invalid_open_url_action_fields() -> None:
+    errors = []
+
+    FlowNotifyActionChecker().check(
+        step=ParsedFlowStep(
+            index=0,
+            step_id="auth_link",
+            step_type="notify",
+            body={
+                "action": {
+                    "type": "open_url",
                     "label": "",
                     "message": ["bad"],
                     "url": "mailto:test@example.com",
@@ -68,9 +115,37 @@ def test_flow_notify_action_checker_reports_invalid_action_fields() -> None:
     )
 
     assert [item.code for item in errors] == [
-        "FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED",
         "FLOW_NOTIFY_ACTION_LABEL_MISSING",
+        "FLOW_NOTIFY_ACTION_AUTO_INVALID",
         "FLOW_NOTIFY_ACTION_MESSAGE_INVALID",
         "FLOW_NOTIFY_ACTION_URL_UNSUPPORTED",
+    ]
+
+
+def test_flow_notify_action_checker_reports_invalid_run_action_fields() -> None:
+    errors = []
+
+    FlowNotifyActionChecker().check(
+        step=ParsedFlowStep(
+            index=0,
+            step_id="run_followup",
+            step_type="notify",
+            body={
+                "action": {
+                    "type": "run",
+                    "label": "",
+                    "arg": "",
+                    "params": ["bad"],
+                    "auto": "true",
+                }
+            },
+        ),
+        errors=errors,
+    )
+
+    assert [item.code for item in errors] == [
+        "FLOW_NOTIFY_ACTION_LABEL_MISSING",
         "FLOW_NOTIFY_ACTION_AUTO_INVALID",
+        "FLOW_NOTIFY_ACTION_ARG_MISSING",
+        "FLOW_NOTIFY_ACTION_PARAMS_INVALID",
     ]

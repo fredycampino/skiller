@@ -37,6 +37,7 @@ class AgentStepStopReason(StrEnum):
     INTERRUPTED = "interrupted"
     MAX_TURNS_EXHAUSTED = "max_turns_exhausted"
     CONFIG_INVALID = "config_invalid"
+    LLM_REQUEST_FAILED = "llm_request_failed"
 
 
 class RunSnapshotStatus(StrEnum):
@@ -183,6 +184,7 @@ class StepNotifyOutputItem(TranscriptItem):
 
 @dataclass(frozen=True)
 class ActionItem:
+    uid: str
     type: str
     label: str
 
@@ -216,8 +218,7 @@ class StepNotifyActionItem(TranscriptItem):
 @dataclass(frozen=True)
 class NotifyActionDoneItem(TranscriptItem):
     run_id: str
-    step_id: str
-    step_type: str
+    action_uid: str
     type: str
     status: str
 
@@ -340,7 +341,6 @@ class ViewStatusState:
 @dataclass(frozen=True)
 class NotifyActionState:
     run_id: str
-    step_id: str
     message: str
     action: ActionOpenUrlItem
 

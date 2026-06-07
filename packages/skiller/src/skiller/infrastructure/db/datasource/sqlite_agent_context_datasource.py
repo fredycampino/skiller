@@ -22,12 +22,12 @@ from skiller.domain.agent.agent_stats_model import (
     AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm_model import LLMUsage
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 _WINDOW_ENTRY_PAGE_SIZE = 100
 
 
-class SqliteAgentContextDatasource(SqliteRepository):
+class SqliteAgentContextDatasource(SqliteConnectionSource):
     def append_entry(
         self,
         *,

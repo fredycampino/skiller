@@ -2,10 +2,11 @@
 set -euo pipefail
 
 content_text="${1:-hello-shell-e2e}"
-tmpdir="$(mktemp -d)"
-trap 'rm -rf "${tmpdir}"' EXIT
 
 cd "$(dirname "$0")/../../../.."
+
+tmpdir="$(mktemp -d ./.tmp-shell-e2e.XXXXXX)"
+trap 'rm -rf "${tmpdir}"' EXIT
 
 script_path="${tmpdir}/script.sh"
 output_file="${tmpdir}/shell-e2e.txt"

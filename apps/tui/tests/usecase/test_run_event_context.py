@@ -25,3 +25,21 @@ def test_activate_run_preserves_current_mode() -> None:
     assert context.run_name == "ant"
     assert context.mode == RunMode.CHAT
     assert context.status == RunStatus.WAITING_INPUT
+
+
+def test_activate_run_clears_done_actions() -> None:
+    context = RunEventContext(
+        run_id="run-1",
+        run_name="run",
+        mode=RunMode.CHAT,
+        status=RunStatus.RUNNING,
+        actions_done={"action-1"},
+    )
+
+    context.activate_run(
+        "run-2",
+        run_name="next",
+        status=RunStatus.RUNNING,
+    )
+
+    assert context.actions_done == set()

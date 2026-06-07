@@ -3,11 +3,11 @@ import json
 from skiller.domain.run.run_model import Run
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
 from skiller.domain.shared.steering_port import SteeringPort
-from skiller.infrastructure.db.sqlite_repository import SqliteRepository
+from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
 
 
-class SqliteAgentSteeringStore(SqliteRepository, SteeringPort):
+class SqliteAgentSteeringStore(SqliteConnectionSource, SteeringPort):
     def get_run(self, run_id: str) -> Run | None:
         with self._connect() as conn:
             row = conn.execute(

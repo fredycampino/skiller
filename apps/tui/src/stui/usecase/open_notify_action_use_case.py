@@ -24,12 +24,19 @@ class OpenNotifyActionUseCase:
         *,
         state: ConsoleScreenState,
         run_id: str,
-        step_id: str,
+        action_uid: str,
         url: str,
     ) -> OpenNotifyActionResult:
-        ack = self.notify_action_port.open(run_id=run_id, step_id=step_id, url=url)
+        ack = self.notify_action_port.open(
+            run_id=run_id,
+            action_uid=action_uid,
+            url=url,
+        )
         if ack.status == NotifyActionAckStatus.ACCEPTED:
-            done_ack = self.notify_action_port.done(run_id=run_id, step_id=step_id)
+            done_ack = self.notify_action_port.done(
+                run_id=run_id,
+                action_uid=action_uid,
+            )
             if done_ack.status == NotifyActionAckStatus.ACCEPTED:
                 state.set_notify_action()
                 return OpenNotifyActionResult(state=state)

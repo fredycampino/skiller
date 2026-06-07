@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Mark a notify action as done",
     )
     action_done_parser.add_argument("run_id")
-    action_done_parser.add_argument("step_id")
+    action_done_parser.add_argument("action_uid")
 
     status_parser = sub.add_parser("status", help="Get run status")
     status_parser.add_argument("run_id")
@@ -1013,7 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "OK" else 1
 
     if args.command == "action" and args.action_command == "done":
-        result = controller.action_done(args.run_id, args.step_id)
+        result = controller.action_done(args.run_id, args.action_uid)
         print(json.dumps(result, indent=2))
         return 0 if result["done"] else 1
 

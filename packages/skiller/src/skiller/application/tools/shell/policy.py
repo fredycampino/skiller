@@ -63,6 +63,8 @@ class ShellCommandPolicy:
 
         working_directory = Path(effective_cwd)
         for candidate in self._extract_path_candidates(normalized):
+            if candidate == "/dev/null":
+                continue
             resolved = self._resolve_candidate_path(candidate, cwd=working_directory)
             if resolved is None:
                 continue

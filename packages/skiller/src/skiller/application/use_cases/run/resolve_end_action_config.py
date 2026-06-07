@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.domain.action.action_model import (
     EndActionTrigger,
     RunAction,
@@ -16,8 +17,9 @@ class ResolveEndActionConfig:
 
 
 class ResolveEndActionConfigParser:
-    def __init__(self, runner: RunnerPort) -> None:
+    def __init__(self, runner: RunnerPort, uid_factory: ActionUidFactory) -> None:
         self.runner = runner
+        self.uid_factory = uid_factory
 
     def parse(
         self,
@@ -37,9 +39,11 @@ class ResolveEndActionConfigParser:
         rendered_action = self.runner.render(raw_action, context.to_dict())
         if not isinstance(rendered_action, dict):
             return ResolveEndActionConfig(action=None)
+        action_payload = dict(rendered_action)
+        action_payload["uid"] = self.uid_factory.new_uid()
 
         try:
-            action = action_from_dict(rendered_action)
+            action = action_from_dict(action_payload)
         except ValueError:
             return ResolveEndActionConfig(action=None)
 

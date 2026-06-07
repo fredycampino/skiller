@@ -7,6 +7,10 @@ from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepResult,
 )
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigStatus
+from skiller.application.use_cases.run.resolve_cleanup import (
+    ResolveCleanupInput,
+    ResolveCleanupResult,
+)
 from skiller.application.use_cases.run.resolve_end_action import (
     ResolveEndActionInput,
     ResolveEndActionResult,
@@ -118,6 +122,15 @@ class _FakeResolveEndActionUseCase:
         return ResolveEndActionResult(action=self.action)
 
 
+class _FakeResolveCleanupUseCase:
+    def __init__(self) -> None:
+        self.calls: list[ResolveCleanupInput] = []
+
+    def execute(self, request: ResolveCleanupInput) -> ResolveCleanupResult:
+        self.calls.append(request)
+        return ResolveCleanupResult(cleanup=False, cleaned=False)
+
+
 class _FakeStepUseCase:
     def __init__(
         self,
@@ -204,12 +217,14 @@ def _build_service(
     append_runtime_event_use_case = _FakeAppendRuntimeEventUseCase()
     sync_snapshot_use_case = _FakeSyncSnapshotUseCase()
     resolve_end_action_use_case = _FakeResolveEndActionUseCase(end_action)
+    resolve_cleanup_use_case = _FakeResolveCleanupUseCase()
     service = RunExecutor(
         complete_run_use_case=complete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         sync_snapshot_use_case=sync_snapshot_use_case,
         resolve_end_action_use_case=resolve_end_action_use_case,
+        resolve_cleanup_use_case=resolve_cleanup_use_case,
         render_current_step_use_case=_FakeRenderCurrentStepUseCase(render_results),
         render_mcp_config_use_case=_FakeRenderMcpConfigUseCase(mcp_render_result),
         execute_agent_step_use_case=_FakeStepUseCase(agent_results),
@@ -227,6 +242,7 @@ def _build_service(
     )
     service.append_runtime_event_use_case = append_runtime_event_use_case
     service.resolve_end_action_use_case = resolve_end_action_use_case
+    service.resolve_cleanup_use_case = resolve_cleanup_use_case
     return service, complete_run_use_case, fail_run_use_case
 
 
@@ -398,6 +414,9 @@ def test_worker_completes_run_when_renderer_reports_done() -> None:
     assert service.resolve_end_action_use_case.calls == [
         ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
     ]
+    assert service.resolve_cleanup_use_case.calls == [
+        ResolveCleanupInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    ]
     assert service.append_runtime_event_use_case.calls == [
         {
             "run_id": "run-1",
@@ -414,6 +433,7 @@ def test_worker_attaches_on_success_action_to_run_finished() -> None:
     service, complete_run_use_case, fail_run_use_case = _build_service(
         render_results=[RenderCurrentStepResult(status=CurrentStepStatus.DONE)],
         end_action=RunAction(
+            uid="end-action-success",
             label="Open follow-up",
             arg="--file ./flows/followup.yaml",
             params="--val pepe",
@@ -429,6 +449,9 @@ def test_worker_attaches_on_success_action_to_run_finished() -> None:
     assert service.resolve_end_action_use_case.calls == [
         ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
     ]
+    assert service.resolve_cleanup_use_case.calls == [
+        ResolveCleanupInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    ]
     assert service.append_runtime_event_use_case.calls == [
         {
             "run_id": "run-1",
@@ -439,6 +462,7 @@ def test_worker_attaches_on_success_action_to_run_finished() -> None:
             "payload": {
                 "status": "SUCCEEDED",
                 "action": {
+                    "uid": "end-action-success",
                     "type": "run",
                     "label": "Open follow-up",
                     "arg": "--file ./flows/followup.yaml",
@@ -683,6 +707,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
         ],
         notify_error=ValueError("notify failed"),
         end_action=RunAction(
+            uid="end-action-error",
             label="Debug failure",
             arg="--file ./flows/debug.yaml",
             params=None,
@@ -698,6 +723,9 @@ def test_worker_fails_when_step_executor_raises() -> None:
     assert fail_run_use_case.calls == [{"run_id": "run-1", "error": "notify failed"}]
     assert service.resolve_end_action_use_case.calls == [
         ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_ERROR)
+    ]
+    assert service.resolve_cleanup_use_case.calls == [
+        ResolveCleanupInput(run_id="run-1", trigger=EndActionTrigger.ON_ERROR)
     ]
     assert service.append_runtime_event_use_case.calls == [
         {
@@ -728,6 +756,7 @@ def test_worker_fails_when_step_executor_raises() -> None:
                 "status": "FAILED",
                 "error": "notify failed",
                 "action": {
+                    "uid": "end-action-error",
                     "type": "run",
                     "label": "Debug failure",
                     "arg": "--file ./flows/debug.yaml",

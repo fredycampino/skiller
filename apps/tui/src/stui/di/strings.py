@@ -22,6 +22,8 @@ class TuiStrings:
     agent_max_turns_exhausted_notice: str = "Turn limit reached"
     agent_config_invalid_notice_title: str = "Invalid agent config"
     agent_config_invalid_notice_template: str = "{title}\n\n{message}"
+    agent_llm_request_failed_notice_title: str = "LLM request failed"
+    agent_llm_request_failed_notice_template: str = "{title}\n\n{message}"
     agent_context_stats_title: str = "Agent Context"
     run_snapshot_updated_notice_template: str = "Run snapshot updated: {ref}"
     run_snapshot_failed_notice_template: str = "Run snapshot sync failed: {error}"

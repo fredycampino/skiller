@@ -26,7 +26,8 @@ The checker returns `FLOW_*` error codes for YAML flow validation.
 | `FLOW_STEPS_EMPTY` | `steps` exists but is empty | `FLOW_STEPS_EMPTY: flow requires at least one step` |
 | `FLOW_START_STEP_NOT_FOUND` | `start` does not reference an existing `step_id` | `FLOW_START_STEP_NOT_FOUND: start references unknown step_id (start={start_step_id})` |
 | `FLOW_END_ACTION_INVALID` | `on_success` or `on_error` exists but is not an object | `FLOW_END_ACTION_INVALID: end action config must be an object (trigger={trigger})` |
-| `FLOW_END_ACTION_ACTION_INVALID` | `on_success.action` or `on_error.action` is missing or is not an object | `FLOW_END_ACTION_ACTION_INVALID: end action requires action object (trigger={trigger})` |
+| `FLOW_END_ACTION_ACTION_INVALID` | `on_success` or `on_error` has neither an action object nor `cleanup: true` | `FLOW_END_ACTION_ACTION_INVALID: end action requires action object or cleanup true (trigger={trigger})` |
+| `FLOW_END_ACTION_CLEANUP_INVALID` | root end action `cleanup` exists but is not boolean | `FLOW_END_ACTION_CLEANUP_INVALID: end action cleanup must be boolean (trigger={trigger})` |
 | `FLOW_END_ACTION_TYPE_UNSUPPORTED` | root end action type is not `run` | `FLOW_END_ACTION_TYPE_UNSUPPORTED: end action type must be run (trigger={trigger})` |
 | `FLOW_END_ACTION_LABEL_MISSING` | root end action has no non-empty `label` | `FLOW_END_ACTION_LABEL_MISSING: end action requires non-empty label (trigger={trigger})` |
 | `FLOW_END_ACTION_ARG_MISSING` | root end action has no non-empty `arg` | `FLOW_END_ACTION_ARG_MISSING: end action requires non-empty arg (trigger={trigger})` |

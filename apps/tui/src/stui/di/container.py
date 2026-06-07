@@ -30,6 +30,7 @@ from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
+from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
@@ -51,7 +52,6 @@ from stui.usecase.project_transcript_use_case import (
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
-from stui.usecase.run_finished_action_use_case import RunFinishedActionUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -163,7 +163,7 @@ def build_tui_container(
             events_port=resolved_events_port,
             context=run_event_context,
         ),
-        run_finished_action=RunFinishedActionUseCase(),
+        get_run_action=GetRunActionUseCase(context=run_event_context),
         start_console=StartConsoleUseCase(
             installation_state_port=resolved_installation_state_port,
             run_port=resolved_run_port,

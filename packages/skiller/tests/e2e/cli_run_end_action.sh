@@ -41,15 +41,17 @@ assert len(finished_events) == 1, finished_events
 event = finished_events[0]
 assert event["step_id"] is None, event
 assert event["step_type"] is None, event
-assert event["payload"] == {
-    "status": "SUCCEEDED",
-    "action": {
-        "type": "run",
-        "label": "Open follow-up",
-        "arg": "--file ./flows/followup.yaml",
-        "params": "--val pepe",
-        "auto": True,
-    },
+payload = event["payload"]
+assert payload["status"] == "SUCCEEDED", event
+action = payload["action"]
+assert isinstance(action["uid"], str) and action["uid"], action
+assert action == {
+    "uid": action["uid"],
+    "type": "run",
+    "label": "Open follow-up",
+    "arg": "--file ./flows/followup.yaml",
+    "params": "--val pepe",
+    "auto": True,
 }, event
 '
 

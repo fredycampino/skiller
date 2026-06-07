@@ -24,9 +24,9 @@ class DoneNotifyActionUseCase:
         *,
         state: ConsoleScreenState,
         run_id: str,
-        step_id: str,
+        action_uid: str,
     ) -> DoneNotifyActionResult:
-        ack = self.notify_action_port.done(run_id=run_id, step_id=step_id)
+        ack = self.notify_action_port.done(run_id=run_id, action_uid=action_uid)
         if ack.status == NotifyActionAckStatus.ACCEPTED:
             state.set_notify_action()
             return DoneNotifyActionResult(state=state)

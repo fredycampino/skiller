@@ -1,0 +1,23 @@
+name: onboarding/intro
+description: "First-use intro after LLM provider setup"
+version: "0.1"
+start: welcome
+
+inputs: {}
+
+
+steps:
+  - notify: welcome
+    format: markdown
+    message: |
+      # Skiller is ready
+
+      Your LLM provider is configured.
+
+      Start an agentic flow with:
+
+      ```text
+      /run mono
+      ```
+
+      You can also type `/` to see available commands.

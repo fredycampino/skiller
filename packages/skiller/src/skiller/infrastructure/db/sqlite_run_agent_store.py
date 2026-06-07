@@ -1,6 +1,6 @@
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_model import RunAgent, RunAgentWindow
-from skiller.infrastructure.db.sqlite_run_agent_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_run_agent_datasource import (
     SqliteRunAgentDatasource,
 )
 

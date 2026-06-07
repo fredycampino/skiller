@@ -16,9 +16,9 @@ steps:
       exit: done
       quit: done
       bye: done
-    default: qa_agent
+    default: kawa_agent
 
-  - agent: qa_agent
+  - agent: kawa_agent
     system:
       file: "./system.md"
     task: '{{output_value("ask_user").payload.text}}'

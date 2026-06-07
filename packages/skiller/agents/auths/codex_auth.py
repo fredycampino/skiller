@@ -50,14 +50,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--credentials-file",
-        default=os.environ.get(
-            "SKILLER_OPENAI_AUTH_CREDENTIALS_FILE",
-            str(default_credentials_file()),
-        ),
+        default=str(default_credentials_file()),
         help="Credentials path. Default: %(default)s",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("credentials-file", help="Print the resolved credentials file path.")
     subparsers.add_parser("prepare", help="Prepare authorization and print the URL.")
     subparsers.add_parser(
         "start-callback-server",
@@ -89,7 +87,9 @@ def main() -> int:
 
     try:
         credentials_file = Path(args.credentials_file).expanduser()
-        if args.command == "prepare":
+        if args.command == "credentials-file":
+            print(credentials_file)
+        elif args.command == "prepare":
             prepare_authorization(credentials_file=credentials_file)
         elif args.command == "start-callback-server":
             start_callback_server(credentials_file=credentials_file)
@@ -119,10 +119,7 @@ def prepare_authorization(*, credentials_file: Path) -> None:
     state = secrets.token_urlsafe(24)
     verifier = token_urlsafe(64)
     challenge = code_challenge(verifier)
-    authorization_url = build_authorization_url(
-        state=state,
-        challenge=challenge,
-    )
+    authorization_url = build_authorization_url(state=state, challenge=challenge)
     pending_payload = {
         "state": state,
         "code_verifier": verifier,
@@ -133,7 +130,9 @@ def prepare_authorization(*, credentials_file: Path) -> None:
     }
     write_json(pending_file(credentials_file), pending_payload)
     callback_file(credentials_file).unlink(missing_ok=True)
+    server_file(credentials_file).unlink(missing_ok=True)
     server_ready_file(credentials_file).unlink(missing_ok=True)
+    server_log_file(credentials_file).unlink(missing_ok=True)
     print(authorization_url)
 
 
@@ -144,6 +143,7 @@ def start_callback_server(*, credentials_file: Path) -> None:
     ready_file = server_ready_file(credentials_file)
     ready_file.unlink(missing_ok=True)
     log_file = server_log_file(credentials_file)
+    log_file.unlink(missing_ok=True)
     command = [
         sys.executable,
         str(Path(__file__).resolve()),
@@ -448,13 +448,6 @@ def post_codex_stream(
     return "".join(text_parts)
 
 
-def post_json(url: str, payload: dict[str, Any], *, headers: dict[str, str]) -> dict[str, Any]:
-    try:
-        return read_http_json(build_json_request(url, payload, headers=headers))
-    except HttpStatusError as exc:
-        raise AuthError(f"HTTP {exc.status_code}: {exc.body}") from exc
-
-
 def build_json_request(
     url: str,
     payload: dict[str, Any],
@@ -640,30 +633,69 @@ def cleanup_authorization_files(credentials_file: Path) -> None:
     callback_file(credentials_file).unlink(missing_ok=True)
     server_file(credentials_file).unlink(missing_ok=True)
     server_ready_file(credentials_file).unlink(missing_ok=True)
+    server_log_file(credentials_file).unlink(missing_ok=True)
 
 
 def default_credentials_file() -> Path:
-    return Path.home() / ".skiller" / "secrets" / "openai-auth.json"
+    explicit_path = os.environ.get("SKILLER_OPENAI_CODEX_CREDENTIALS_FILE", "").strip()
+    if explicit_path:
+        return Path(explicit_path).expanduser()
+
+    configured_path = configured_credentials_file()
+    if configured_path is not None:
+        return configured_path
+
+    return Path.home() / ".skiller" / "secrets" / "openai-codex.json"
+
+
+def configured_credentials_file() -> Path | None:
+    config_path = Path(
+        os.environ.get(
+            "AGENT_AGENT_CONFIG_FILE",
+            Path.home() / ".skiller" / "settings" / "agent.json",
+        )
+    ).expanduser()
+    if not config_path.exists():
+        return None
+
+    try:
+        config = read_json(config_path)
+    except AuthError:
+        return None
+
+    providers = config.get("providers")
+    if not isinstance(providers, dict):
+        return None
+
+    codex = providers.get("codex")
+    if not isinstance(codex, dict):
+        return None
+
+    credentials_file = codex.get("credentials_file")
+    if not isinstance(credentials_file, str) or not credentials_file.strip():
+        return None
+
+    return Path(credentials_file).expanduser()
 
 
 def pending_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-auth.pending.json")
+    return credentials_file.with_name("openai-codex.pending.json")
 
 
 def callback_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-auth.callback.json")
+    return credentials_file.with_name("openai-codex.callback.json")
 
 
 def server_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-auth.server.json")
+    return credentials_file.with_name("openai-codex.server.json")
 
 
 def server_ready_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-auth.callback-ready")
+    return credentials_file.with_name("openai-codex.callback-ready")
 
 
 def server_log_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-auth.callback.log")
+    return credentials_file.with_name("openai-codex.callback.log")
 
 
 if __name__ == "__main__":

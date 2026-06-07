@@ -15,13 +15,13 @@ from stui.viewmodel.console_screen_state import (
     ViewStatusKind,
 )
 
-LLM_CONFIG_RUN_ARGS = "llmconfig"
+INITIAL_AUTH_RUN_ARGS = "auths/auth"
 
 
 @dataclass(frozen=True)
 class StartConsoleResult:
     state: ConsoleScreenState
-    started_llmconfig: bool = False
+    started_auth: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,10 +40,8 @@ class StartConsoleUseCase:
         installation_state = self.installation_state_port.read()
         if installation_state.runtime_db_exists:
             return StartConsoleResult(state=state)
-        if installation_state.agent_config_exists:
-            return StartConsoleResult(state=state)
 
-        ack = await asyncio.to_thread(self.run_port.run, LLM_CONFIG_RUN_ARGS)
+        ack = await asyncio.to_thread(self.run_port.run, INITIAL_AUTH_RUN_ARGS)
         if ack.error:
             state.transcript.items.append(
                 DispatchErrorItem(message=f"error: {ack.error.message}")
@@ -65,16 +63,16 @@ class StartConsoleUseCase:
 
         self.context.activate_run(
             ack.run_id,
-            run_name=LLM_CONFIG_RUN_ARGS,
+            run_name=INITIAL_AUTH_RUN_ARGS,
             status=RunStatus.RUNNING,
         )
-        state.load_session(run_id=ack.run_id, run_name=LLM_CONFIG_RUN_ARGS)
+        state.load_session(run_id=ack.run_id, run_name=INITIAL_AUTH_RUN_ARGS)
         state.set_transcript(
             mode=state.transcript.mode,
-            items=[RunAckItem(skill=LLM_CONFIG_RUN_ARGS, run_id=ack.run_id)],
+            items=[RunAckItem(skill=INITIAL_AUTH_RUN_ARGS, run_id=ack.run_id)],
         )
         state.set_autocompletion()
         state.set_prompt(mode=PromptMode.DEFAULT)
         state.set_status(kind=ViewStatusKind.RUNNING)
         self.events_port.subscribe(run_id=ack.run_id, listener=observer)
-        return StartConsoleResult(state=state, started_llmconfig=True)
+        return StartConsoleResult(state=state, started_auth=True)

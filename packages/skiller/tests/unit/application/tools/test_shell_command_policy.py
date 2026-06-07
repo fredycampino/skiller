@@ -137,6 +137,49 @@ def test_shell_command_policy_rejects_command_path_outside_allowed_paths(
         )
 
 
+def test_shell_command_policy_allows_dev_null_output_redirection() -> None:
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(Path("/workspace"),),
+        )
+    )
+
+    policy.validate_command(
+        command="printf ok >/dev/null 2>&1",
+        effective_cwd="/workspace",
+    )
+
+
+def test_shell_command_policy_allows_dev_null_input_redirection() -> None:
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(Path("/workspace"),),
+        )
+    )
+
+    policy.validate_command(
+        command="cat < /dev/null",
+        effective_cwd="/workspace",
+    )
+
+
+def test_shell_command_policy_rejects_neighboring_dev_path() -> None:
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(Path("/workspace"),),
+        )
+    )
+
+    with pytest.raises(ValueError, match="shell command path escapes allowed_paths"):
+        policy.validate_command(
+            command="printf ok > /dev/random",
+            effective_cwd="/workspace",
+        )
+
+
 def test_shell_command_policy_expands_home_in_allowed_paths(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

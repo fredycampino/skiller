@@ -31,8 +31,9 @@ assert payload["status"] == "WAITING", payload
 assert payload["wait_type"] == "input", payload
 '
 
-PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller logs "${run_id}" \
-| python3 -c '
+action_uid="$(
+  PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller logs "${run_id}" \
+  | python3 -c '
 import json
 import sys
 
@@ -45,17 +46,20 @@ assert len(notify_events) == 1, notify_events
 value = notify_events[0]["payload"]["output"]["value"]
 assert value["format"] == "markdown", value
 action = value["action"]
+assert isinstance(action["uid"], str) and action["uid"], action
 assert action["type"] == "open_url", action
 assert action["label"] == "Open authorization", action
 assert action["message"] == "Continue authorization in the browser.", action
 assert action["url"] == "https://www.google.com/", action
 assert action["auto"] is True, action
+print(action["uid"])
 '
+)"
 
 done_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller action done \
     "${run_id}" \
-    auth_link
+    "${action_uid}"
 )"
 
 printf '%s\n' "${done_output}" | python3 -c '
@@ -66,6 +70,8 @@ payload = json.load(sys.stdin)
 assert payload["status"] == "DONE", payload
 assert payload["done"] is True, payload
 assert payload["changed"] is True, payload
+assert payload["action_uid"] == "'"${action_uid}"'", payload
+assert payload["step_id"] == "auth_link", payload
 '
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller logs "${run_id}" \
@@ -79,7 +85,11 @@ assert len(action_done_events) == 1, action_done_events
 event = action_done_events[0]
 assert event["step_id"] == "auth_link", event
 assert event["step_type"] == "notify", event
-assert event["payload"] == {"type": "open_url", "status": "done"}, event
+assert event["payload"] == {
+    "uid": "'"${action_uid}"'",
+    "type": "open_url",
+    "status": "done",
+}, event
 '
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller input receive \

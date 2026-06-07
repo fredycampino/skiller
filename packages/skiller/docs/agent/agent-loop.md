@@ -71,7 +71,7 @@ The agent loop has three non-error terminal shapes:
 | `max_turns_exhausted` | `AGENT_MAX_TURNS_EXHAUSTED` | no | `data.stop_reason = "max_turns_exhausted"` and `data.message` contains the stop explanation |
 | `config_invalid` | none | no | `data.stop_reason = "config_invalid"` and `data.message` contains the validation error |
 
-Technical failures are not successful terminal outcomes:
+Technical failures:
 
 - `invalid_final_message`
   - Cause: the LLM returned an empty final answer when a final answer was required.
@@ -80,7 +80,8 @@ Technical failures are not successful terminal outcomes:
 - `llm_request_failed`
   - Cause: LLM port returned `ok = false`.
   - Context effect: no final assistant message.
-  - Runtime effect: agent step raises; runtime records step/run failure.
+  - Runtime effect: agent step records normal output with
+    `data.stop_reason = "llm_request_failed"` and follows `next`.
 - `tool_execution_failed`
   - Cause: tool preparation returned `request_exception` or `policy_exception`.
   - Context effect: no final assistant message.
@@ -109,8 +110,10 @@ reasons.
   response.
 - `request_invalid` and `policy_blocked` are agent-correctable and are persisted
   as failed `tool_result` entries.
-- `request_exception` and `policy_exception` are technical failures and
-  terminate the agent step.
+- `llm_request_failed` is recoverable by the flow through the agent step output
+  and `next`.
+- `request_exception`, `policy_exception`, and invalid final messages are
+  technical failures and terminate the agent step.
 - Interrupt is consumed inside the tool loop, not before the LLM call.
 - Interrupt and max-turn exhaustion do not persist final `assistant_message`
   entries.

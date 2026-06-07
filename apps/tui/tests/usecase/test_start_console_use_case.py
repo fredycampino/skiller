@@ -84,15 +84,22 @@ def test_start_console_use_case_skips_when_runtime_db_exists() -> None:
         result = await use_case.execute(FakeObserver(), state=state)
 
         assert result.state is state
-        assert result.started_llmconfig is False
+        assert result.started_auth is False
         assert run_port.called_with == []
 
     asyncio.run(run())
 
 
-def test_start_console_use_case_skips_when_agent_config_exists() -> None:
+def test_start_console_use_case_runs_auth_when_only_agent_config_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_to_thread(monkeypatch)
+
     async def run() -> None:
         state = ConsoleScreenState(session_key="main")
+        events_port = FakeEventsPort()
+        observer = FakeObserver()
+        context = _run_context()
         run_port = FakeRunPort(_dispatch())
         use_case = _use_case(
             installation_state=InstallationState(
@@ -100,18 +107,22 @@ def test_start_console_use_case_skips_when_agent_config_exists() -> None:
                 agent_config_exists=True,
             ),
             run_port=run_port,
+            events_port=events_port,
+            context=context,
         )
 
-        result = await use_case.execute(FakeObserver(), state=state)
+        result = await use_case.execute(observer, state=state)
 
         assert result.state is state
-        assert result.started_llmconfig is False
-        assert run_port.called_with == []
+        assert result.started_auth is True
+        assert run_port.called_with == ["auths/auth"]
+        assert events_port.subscribe_calls == ["run-1234"]
+        assert context.run_id == "run-1234"
 
     asyncio.run(run())
 
 
-def test_start_console_use_case_runs_llmconfig_for_first_install(
+def test_start_console_use_case_runs_auth_for_first_install(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_to_thread(monkeypatch)
@@ -135,26 +146,26 @@ def test_start_console_use_case_runs_llmconfig_for_first_install(
         result = await use_case.execute(observer, state=state)
 
         assert result.state is state
-        assert result.started_llmconfig is True
-        assert run_port.called_with == ["llmconfig"]
+        assert result.started_auth is True
+        assert run_port.called_with == ["auths/auth"]
         assert events_port.subscribe_calls == ["run-1234"]
         assert events_port.current_listener is observer
         assert context.run_id == "run-1234"
-        assert context.run_name == "llmconfig"
+        assert context.run_name == "auths/auth"
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
         assert state.session_key == "run-1234"
-        assert state.run_name == "llmconfig"
+        assert state.run_name == "auths/auth"
         assert state.view_status.kind == ViewStatusKind.RUNNING
         assert len(state.transcript.items) == 1
         assert isinstance(state.transcript.items[0], RunAckItem)
-        assert state.transcript.items[0].skill == "llmconfig"
+        assert state.transcript.items[0].skill == "auths/auth"
         assert state.transcript.items[0].run_id == "run-1234"
 
     asyncio.run(run())
 
 
-def test_start_console_use_case_records_llmconfig_dispatch_error(
+def test_start_console_use_case_records_auth_dispatch_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_to_thread(monkeypatch)
@@ -174,13 +185,13 @@ def test_start_console_use_case_records_llmconfig_dispatch_error(
         result = await use_case.execute(FakeObserver(), state=state)
 
         assert result.state is state
-        assert result.started_llmconfig is False
+        assert result.started_auth is False
         assert context.status == RunStatus.FAILED
         assert state.session_key == "main"
         assert state.view_status.kind == ViewStatusKind.ERROR
-        assert state.view_status.message == "agent not found: llmconfig"
+        assert state.view_status.message == "agent not found: auths/auth"
         assert isinstance(state.transcript.items[-1], DispatchErrorItem)
-        assert state.transcript.items[-1].message == "error: agent not found: llmconfig"
+        assert state.transcript.items[-1].message == "error: agent not found: auths/auth"
 
     asyncio.run(run())
 
@@ -232,6 +243,6 @@ def _dispatch_error() -> RunDispatch:
         worker_pid=0,
         error=RunDispatchError(
             kind=RunDispatchErrorKind.RUN_NOT_FOUND,
-            message="agent not found: llmconfig",
+            message="agent not found: auths/auth",
         ),
     )

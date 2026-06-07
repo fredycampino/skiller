@@ -20,16 +20,16 @@ from skiller.domain.event.event_model import (
     StepStartedPayload,
 )
 from skiller.domain.run.run_context_model import RunContext
+from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
-from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
 
 pytestmark = pytest.mark.unit
 
 
 def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> None:
     db_path = tmp_path / "runtime-events-sequence.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440030"
@@ -84,7 +84,7 @@ def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> N
 
 def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
     db_path = tmp_path / "runtime-agent-events.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440031"
@@ -146,7 +146,7 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
 
 def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
     db_path = tmp_path / "runtime-action-done-events.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440032"
@@ -165,6 +165,7 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
             step_id="auth_link",
             step_type="notify",
             payload=ActionDonePayload(
+                uid="auth-link-action",
                 type=ActionType.OPEN_URL,
                 status=ActionStatus.DONE,
             ),
@@ -179,10 +180,12 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
     assert events[0].step_id == "auth_link"
     assert events[0].step_type == "notify"
     assert events[0].payload == ActionDonePayload(
+        uid="auth-link-action",
         type=ActionType.OPEN_URL,
         status=ActionStatus.DONE,
     )
     assert events[0].model_dump(mode="json")["payload"] == {
+        "uid": "auth-link-action",
         "type": "open_url",
         "status": "done",
     }
@@ -190,7 +193,7 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
 
 def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
     db_path = tmp_path / "runtime-run-end-action-events.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440042"
@@ -210,6 +213,7 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
                 status="FAILED",
                 error="run failed",
                 action=RunAction(
+                    uid="end-action-1",
                     label="Debug failure",
                     arg="--file ./flows/debug.yaml",
                     params="--val pepe",
@@ -230,6 +234,7 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
         status="FAILED",
         error="run failed",
         action=RunAction(
+            uid="end-action-1",
             label="Debug failure",
             arg="--file ./flows/debug.yaml",
             params="--val pepe",
@@ -240,6 +245,7 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
         "status": "FAILED",
         "error": "run failed",
         "action": {
+            "uid": "end-action-1",
             "type": "run",
             "label": "Debug failure",
             "arg": "--file ./flows/debug.yaml",
@@ -251,7 +257,7 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
 
 def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path) -> None:
     db_path = tmp_path / "runtime-agent-lifecycle-events.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440032"
@@ -293,7 +299,7 @@ def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path
 
 def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> None:
     db_path = tmp_path / "runtime-assistant-message.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440033"
@@ -344,7 +350,7 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
 
 def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path) -> None:
     db_path = tmp_path / "runtime-final-assistant-message-context.db"
-    run_store = SqliteStateStore(str(db_path))
+    run_store = SqliteRunStorePort(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440034"

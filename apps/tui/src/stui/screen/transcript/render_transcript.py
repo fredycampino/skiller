@@ -49,6 +49,7 @@ from stui.viewmodel.console_screen_state import (
     RunWaitingInputItem,
     RunWaitingWebhookItem,
     StepErrorItem,
+    StepNotifyActionItem,
     StepNotifyOutputItem,
     StepOutputItem,
     StepShellOutputItem,
@@ -268,6 +269,16 @@ class RenderTranscript:
             return AgentSystemNoticeView(item=item)
         if isinstance(item, StepErrorItem):
             return StepErrorView(item=item)
+        if isinstance(item, StepNotifyActionItem):
+            message = item.message or f"{item.action.type} {item.action.label}"
+            return StepNotifyOutputView(
+                item=StepNotifyOutputItem(
+                    sequence=item.sequence,
+                    run_id=item.run_id,
+                    step_type=item.step_type,
+                    message=message,
+                )
+            )
         if isinstance(item, StepNotifyOutputItem):
             return StepNotifyOutputView(item=item)
         if isinstance(item, StepOutputItem):

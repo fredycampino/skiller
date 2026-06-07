@@ -16,7 +16,7 @@ from skiller.domain.agent.agent_stats_model import (
 )
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
-from skiller.infrastructure.db.sqlite_agent_context_datasource import (
+from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
 

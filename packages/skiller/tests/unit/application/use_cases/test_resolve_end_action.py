@@ -1,5 +1,6 @@
 import pytest
 
+from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.application.use_cases.run.resolve_end_action import (
     ResolveEndActionInput,
     ResolveEndActionUseCase,
@@ -37,6 +38,15 @@ class _FakeRunner:
         return rendered
 
 
+class _FakeActionUidFactory(ActionUidFactory):
+    def new_uid(self) -> str:
+        return "end-action-uid"
+
+
+def _config_parser() -> ResolveEndActionConfigParser:
+    return ResolveEndActionConfigParser(_FakeRunner(), _FakeActionUidFactory())
+
+
 def test_resolve_end_action_returns_on_success_run_action() -> None:
     run = _build_run(
         {
@@ -53,7 +63,7 @@ def test_resolve_end_action_returns_on_success_run_action() -> None:
     )
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+        config_parser=_config_parser(),
     )
 
     result = use_case.execute(
@@ -61,6 +71,7 @@ def test_resolve_end_action_returns_on_success_run_action() -> None:
     )
 
     assert result.action == RunAction(
+        uid="end-action-uid",
         label="Open result",
         arg="--file ./flows/result.yaml",
         params="--id abc",
@@ -84,7 +95,7 @@ def test_resolve_end_action_returns_on_error_run_action() -> None:
     )
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+        config_parser=_config_parser(),
     )
 
     result = use_case.execute(
@@ -92,6 +103,7 @@ def test_resolve_end_action_returns_on_error_run_action() -> None:
     )
 
     assert result.action == RunAction(
+        uid="end-action-uid",
         label="Debug failure",
         arg="--file ./flows/debug.yaml",
         params="--val pepe",
@@ -113,7 +125,7 @@ def test_resolve_end_action_ignores_open_url_action() -> None:
     )
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+        config_parser=_config_parser(),
     )
 
     result = use_case.execute(
@@ -127,7 +139,7 @@ def test_resolve_end_action_ignores_missing_or_invalid_action() -> None:
     run = _build_run({"on_success": {"action": {"type": "run", "label": "Debug"}}})
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+        config_parser=_config_parser(),
     )
 
     result = use_case.execute(
@@ -140,7 +152,7 @@ def test_resolve_end_action_ignores_missing_or_invalid_action() -> None:
 def test_resolve_end_action_ignores_missing_run() -> None:
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(None),
-        config_parser=ResolveEndActionConfigParser(_FakeRunner()),
+        config_parser=_config_parser(),
     )
 
     result = use_case.execute(

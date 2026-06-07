@@ -30,10 +30,12 @@ from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
+from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
-from skiller.infrastructure.db.sqlite_state_store import SqliteStateStore
+from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
 pytestmark = pytest.mark.unit
@@ -75,6 +77,7 @@ def _notify_action_execution() -> StepExecution:
             text="Authorize the app",
             message="Authorize the app",
             action=OpenUrlAction(
+                uid="auth-link-action",
                 label="Open authorization",
                 url="https://example.com/oauth/start",
             ),
@@ -95,7 +98,7 @@ def _wait_input_execution(
 
 def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
     db_path = tmp_path / "persisted-results.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
@@ -126,7 +129,7 @@ def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
 
 def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-when.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
@@ -157,7 +160,7 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
 
 def test_get_run_uses_persisted_notify_action(tmp_path) -> None:
     db_path = tmp_path / "persisted-notify-action.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
@@ -187,7 +190,7 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
     tmp_path,
 ) -> None:
     db_path = tmp_path / "persisted-context.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     initial_item = SteeringAgentInterrupt()
 
@@ -222,7 +225,7 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
 
 def test_create_run_uses_explicit_run_id(tmp_path) -> None:
     db_path = tmp_path / "explicit-id.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     explicit_run_id = "550e8400-e29b-41d4-a716-446655440003"
 
@@ -243,7 +246,7 @@ def test_create_run_uses_explicit_run_id(tmp_path) -> None:
 
 def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
     db_path = tmp_path / "duplicate-id.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     snapshot = {"start": "show_message", "steps": [{"notify": "show_message"}]}
     context = RunContext(inputs={}, step_executions={})
@@ -257,7 +260,7 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
 
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     db_path = tmp_path / "persisted-input.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
@@ -347,7 +350,8 @@ def test_runtime_bootstrap_creates_normalized_waits_and_external_events_schema(
 
 def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
     db_path = tmp_path / "terminal-status-expires-waits.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
+    wait_store = SqliteWaitStorePort(SqliteWaitDatasource(str(db_path)))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
@@ -357,7 +361,7 @@ def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440012",
     )
-    wait_id = store.create_wait(
+    wait_id = wait_store.create_wait(
         run_id,
         step_id="listen_whatsapp",
         wait_type=WaitType.CHANNEL,
@@ -369,7 +373,7 @@ def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
 
     store.update_run(run_id, status=RunStatus.CANCELLED, current="listen_whatsapp")
 
-    active_wait = store.get_active_wait(
+    active_wait = wait_store.get_active_wait(
         run_id,
         "listen_whatsapp",
         wait_type=WaitType.CHANNEL,
@@ -394,7 +398,8 @@ def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
 
 def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     db_path = tmp_path / "delete-run.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
+    wait_store = SqliteWaitStorePort(SqliteWaitDatasource(str(db_path)))
     external_event_store = SqliteExternalEventStore(str(db_path))
     runtime_event_store = SqliteRuntimeEventStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
@@ -419,7 +424,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
             payload=RunCreatedPayload(ref="skill", source="internal"),
         )
     )
-    store.create_wait(
+    wait_store.create_wait(
         run_id,
         step_id="wait",
         wait_type=WaitType.CHANNEL,
@@ -428,7 +433,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
         match_type=MatchType.CHANNEL_KEY,
         match_key="chat-1",
     )
-    store.create_wait(
+    wait_store.create_wait(
         other_run_id,
         step_id="wait",
         wait_type=WaitType.CHANNEL,
@@ -525,7 +530,7 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
 
 def test_delete_run_returns_false_for_missing_run(tmp_path) -> None:
     db_path = tmp_path / "delete-missing-run.db"
-    store = SqliteStateStore(str(db_path))
+    store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     deleted = store.delete_run("missing-run")

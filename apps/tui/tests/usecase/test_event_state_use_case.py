@@ -230,6 +230,49 @@ def test_event_state_step_success_sets_running_status() -> None:
     assert context.status == RunStatus.RUNNING
 
 
+def test_event_state_projects_waiting_after_recoverable_agent_failure() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    use_case = _use_case(context=context)
+
+    use_case.execute(
+        FakeObserver(),
+        state=state,
+        events=[
+            _event(
+                LogEventType.STEP_SUCCESS,
+                sequence=2,
+                step_id="verify_minimax",
+                step_type="agent",
+                payload=StepSuccessPayload(
+                    output=OutputPayload(
+                        text="LLM request failed",
+                        value=AgentOutputValue(
+                            data={
+                                "message": "Invalid API key.",
+                                "stop_reason": "llm_request_failed",
+                            }
+                        ),
+                        body_ref=None,
+                    ),
+                    next_step_id="route_minimax_validation",
+                ),
+            ),
+            _event(
+                LogEventType.RUN_WAITING,
+                sequence=3,
+                step_id="select_validation_action",
+                step_type="wait_input",
+                payload=_run_waiting_payload("Choose 1 or 2"),
+            ),
+        ],
+    )
+
+    assert state.view_status.kind == ViewStatusKind.WAITING
+    assert state.prompt.waiting_prompt == "Choose 1 or 2"
+    assert context.status == RunStatus.WAITING_INPUT
+
+
 @pytest.mark.parametrize(
     (
         "event_type",

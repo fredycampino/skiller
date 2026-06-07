@@ -1,0 +1,235 @@
+name: auths/minimax
+description: "Configure MiniMax credentials for Skiller agents"
+version: "0.1"
+start: check_minimax_config
+
+inputs: {}
+
+on_success:
+  cleanup: true
+  action:
+    type: run
+    label: Continue onboarding
+    arg: onboarding/intro
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_minimax_config
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      secrets_dir="$HOME/.skiller/secrets"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+
+      if [ -s "$config_file" ] && [ -s "$secret_file" ]; then
+        api_key="$(tr -d '[:space:]' < "$secret_file")"
+        if [ "${#api_key}" -lt 100 ]; then
+          printf '%s' invalid
+          exit 0
+        fi
+
+        printf '%s' ready
+        exit 0
+      fi
+
+      printf '%s' missing
+    cwd: .
+    timeout: 15
+    check: true
+    next: route_minimax_config
+
+  - switch: route_minimax_config
+    value: '{{output_value("check_minimax_config").stdout}}'
+    cases:
+      ready: verify_minimax
+      invalid: clear_invalid_minimax_secret
+    default: explain_minimax
+
+  - notify: explain_minimax
+    format: markdown
+    message: |
+      # MiniMax setup
+
+      Paste your MiniMax API key in the next prompt.
+
+      Skiller will save it in the configured MiniMax API key file.
+
+      If no file is configured, Skiller uses:
+
+      ```text
+      ~/.skiller/secrets/minimax_api_key
+      ```
+
+      The setup run will clean its persisted context after it finishes.
+    next: ask_api_key
+
+  - wait_input: ask_api_key
+    prompt: "Paste your MiniMax API key"
+    next: validate_api_key_shape
+
+  - shell: validate_api_key_shape
+    command: |
+      set -eu
+
+      api_key='{{output_value("ask_api_key").payload.text}}'
+      api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
+
+      if [ "${#api_key}" -lt 100 ]; then
+        printf '%s' invalid
+        exit 0
+      fi
+
+      printf '%s' valid
+    cwd: .
+    timeout: 15
+    check: true
+    next: route_api_key_shape
+
+  - switch: route_api_key_shape
+    value: '{{output_value("validate_api_key_shape").stdout}}'
+    cases:
+      valid: write_minimax_config
+    default: clear_invalid_minimax_secret
+
+  - shell: clear_invalid_minimax_secret
+    command: |
+      set -eu
+
+      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      rm -f "$secret_file"
+      printf '%s' cleared
+    cwd: .
+    timeout: 15
+    check: true
+    next: invalid_api_key_shape
+
+  - notify: invalid_api_key_shape
+    message: "That does not look like a MiniMax API key. Paste the full key."
+    next: ask_api_key
+
+  - shell: write_minimax_config
+    command: |
+      set -eu
+
+      api_key='{{output_value("ask_api_key").payload.text}}'
+      api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
+      if [ -z "$api_key" ]; then
+        printf '%s\n' "MiniMax API key is required." >&2
+        exit 1
+      fi
+
+      settings_dir="$HOME/.skiller/settings"
+      secrets_dir="$HOME/.skiller/secrets"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+
+      mkdir -p "$(dirname "$config_file")" "$(dirname "$secret_file")"
+
+      umask 077
+      printf '%s\n' "$api_key" > "$secret_file"
+
+      CONFIG_FILE="$config_file" SECRET_FILE="$secret_file" python3 - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      secret_file = os.environ["SECRET_FILE"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      llm = config.setdefault("llm", {})
+      llm["default_provider"] = "minimax"
+      providers = config.setdefault("providers", {})
+      providers["minimax"] = {
+          "model": "MiniMax-M2.7",
+          "timeout_seconds": 60,
+          "window_width_tokens": 80000,
+          "api_key_file": secret_file,
+      }
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "MiniMax config saved."
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Secret: $secret_file"
+    cwd: .
+    timeout: 15
+    check: true
+    next: verify_minimax
+
+  - agent: verify_minimax
+    system: |
+      You are a configuration check agent.
+      Reply with one short sentence.
+    task: "Say that the MiniMax agent configuration works."
+    tools: []
+    max_turns: 1
+    next: route_minimax_validation
+
+  - switch: route_minimax_validation
+    value: '{{output_value("verify_minimax").data.stop_reason}}'
+    cases:
+      final: done
+    default: clear_failed_minimax_secret
+
+  - shell: clear_failed_minimax_secret
+    command: |
+      set -eu
+
+      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      rm -f "$secret_file"
+      printf '%s' cleared
+    cwd: .
+    timeout: 15
+    check: true
+    next: validation_error
+
+  - notify: validation_error
+    format: markdown
+    message: |
+      MiniMax validation failed. The saved key was removed.
+
+      Choose an option:
+
+      1. Paste a new MiniMax API key
+      2. Exit
+    next: select_validation_action
+
+  - wait_input: select_validation_action
+    prompt: "Choose 1 to paste a new key, or 2 to exit."
+    next: route_validation_action
+
+  - switch: route_validation_action
+    value: '{{output_value("select_validation_action").payload.text}}'
+    cases:
+      "1": ask_api_key
+      retry: ask_api_key
+      Retry: ask_api_key
+      try again: ask_api_key
+      "2": exit_setup
+      exit: exit_setup
+      Exit: exit_setup
+      quit: exit_setup
+    default: invalid_validation_action
+
+  - notify: invalid_validation_action
+    message: "Invalid option. Type 1 to paste a new MiniMax API key or 2 to exit."
+    next: select_validation_action
+
+  - notify: done
+    message: "MiniMax responded. Agent configuration is ready."
+
+  - notify: exit_setup
+    message: "MiniMax setup closed."

@@ -81,8 +81,17 @@ infrastructure/llm/codex/codex_llm_port.py
 Datasources are infrastructure-only helpers for technical storage or external payload access. A
 datasource is not a domain port and must not be injected into application code.
 
+DB datasources live under the DB datasource directory:
+
 ```text
-packages/skiller/src/skiller/infrastructure/<area>/<tech>_<concept>_datasource.py
+packages/skiller/src/skiller/infrastructure/db/datasource/<tech>_<concept>_datasource.py
+```
+
+Provider-specific datasources may live under the provider directory when that infrastructure area
+is already organized by provider:
+
+```text
+packages/skiller/src/skiller/infrastructure/<area>/<provider>/<concept>_datasource.py
 ```
 
 The class name must be the PascalCase technology plus the PascalCase concept plus `Datasource`.
@@ -104,10 +113,10 @@ Rules:
 Examples:
 
 ```text
-infrastructure/db/sqlite_agent_context_datasource.py
+infrastructure/db/datasource/sqlite_agent_context_datasource.py
   -> SqliteAgentContextDatasource
 
-infrastructure/db/sqlite_run_agent_datasource.py
+infrastructure/db/datasource/sqlite_run_agent_datasource.py
   -> SqliteRunAgentDatasource
 
 infrastructure/llm/codex/codex_credentials_datasource.py

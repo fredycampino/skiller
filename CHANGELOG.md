@@ -19,6 +19,17 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.5 - 2026-06-08
+
+### Changed
+- Refresh README introduction and Mono agent description.
+
+### Fixed
+- Handle interrupted tool calls and context-window limits more reliably.
+
+### Notes
+- Includes PR #64 and PR #65.
+
 ## 0.1.0-beta.4 - 2026-06-08
 
 ### Changed

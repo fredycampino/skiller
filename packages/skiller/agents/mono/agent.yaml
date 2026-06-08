@@ -7,7 +7,7 @@ inputs: {}
 
 steps:
   - wait_input: ask_user
-    prompt: "Write a file task or message. Type exit, quit, or bye to stop."
+    prompt: "Write a task or message. Type exit, quit, or bye to stop."
     next: decide_exit
 
   - switch: decide_exit

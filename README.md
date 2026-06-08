@@ -1,43 +1,75 @@
 # Skiller.run
 
-**A lightweight runtime for agentic workflows.**
+**A runtime for agentic workflows.**
 
-Define YAML flows with agents, tools, waits, channels, webhooks, and control steps.
-
-Skiller runs them as durable executions with persistent state, safe resume, and full observability logs.
+Skiller runs agentic flows as durable executions with persistent state, safe resume, and full observability logs.
 
 ## What It Does
 
-- Run long-lived agents and flows described in YAML
-- Resume runs from persisted waiting states
-- Observe and manage persisted runs
+- Runs durable YAML flows that can include agents
+- Pauses and resumes flows from persisted waiting states
+- Provides CLI to observe and manage persisted runs
+- Includes a TUI for chatting with agents, launching flows, and managing runs
+
+```yaml
+name: mono
+description: "Terminal agent chat with shell and file access"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "Write a task or message. Type exit, quit, or bye to stop."
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: mono_agent
+
+  - agent: mono_agent
+    system:
+      file: "./system.md"
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - shell
+      - files
+    max_turns: 50
+    next: ask_user
+
+  - assign: done
+    values:
+      status: "closed"
+```
 
 ## Install
+For regular CLI usage, install it with `pipx`:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
+pipx install skiller
 ```
 
-## Usage
+## STUI for chat and launch runs
 
-### CLI to run agents and flows
-
-Use `skiller` when you want the direct command-line runtime.
-
-Run the bundled terminal agent:
+Use `skiller` when you want an interactive terminal UI to chat, launch runs, and
+manage persisted runs.
 
 ```bash
-skiller run mono
+skiller
 ```
+
+### Use CLI to run flows
 
 Run a YAML flow definition:
 
 ```bash
 skiller run --file <path>
 ```
-
 Inspect and manage runs:
 
 ```bash
@@ -45,49 +77,6 @@ skiller status <run_id>
 skiller logs <run_id>
 skiller delete <run_id>
 ```
-
-`delete` removes the run and database rows tied to it, including runtime events,
-waits, external event records, deduplication receipts for those events, and
-persisted output bodies.
-
-Resume a waiting run:
-
-```bash
-skiller input receive <run_id> --text "hello"
-skiller resume <run_id>
-```
-
-### STUI for chat and launch runs
-
-Use `stui` when you want an interactive terminal UI to chat, launch runs, and
-manage persisted runs.
-
-```bash
-stui
-```
-
-## Configuration
-
-Agent configuration is selected in this order:
-
-1. `AGENT_AGENT_CONFIG_FILE`
-2. `agent.json` next to the selected `agent.yaml`
-3. `~/.skiller/settings/agent.json`
-
-General runtime configuration lives in:
-
-```text
-~/.skiller/settings/config.json
-```
-
-When present in the current working directory, `.env.development` is loaded
-after real environment variables and before JSON config files. This repo uses it
-to point local development runs at `dev-runtime.db`.
-
-See:
-
-- [`packages/skiller/docs/agent/agent-config.md`](packages/skiller/docs/agent/agent-config.md)
-- [`packages/skiller/docs/config/config.md`](packages/skiller/docs/config/config.md)
 
 ## Flow Steps
 

@@ -389,8 +389,10 @@ def test_agent_tool_execution_persists_prepare_failure_as_tool_result() -> None:
 
 def test_agent_tool_execution_returns_terminal_prepare_exception_without_tool_result() -> None:
     context_store = _FakeAgentContextStore()
+    runtime_events = _FakeRuntimeEventStore()
     executor = _build_executor(
         context_store=context_store,
+        runtime_event_store=runtime_events,
         tool_manager=_RequestExceptionToolManager(),
     )
 
@@ -409,6 +411,7 @@ def test_agent_tool_execution_returns_terminal_prepare_exception_without_tool_re
     assert [item["entry_type"] for item in context_store.appended] == [
         AgentContextEntryType.TOOL_CALL,
     ]
+    assert [event["type"] for event in runtime_events.calls] == ["tool_call"]
 
 
 def _build_executor(

@@ -64,6 +64,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             return ToolExecutionResults(items=[])
 
         state = _ToolExecutionState(request=request)
+        should_persist_tool_calls = (
+            request.response.has_text_content
+            or request.response.usage is not None
+        )
         tool_call_count = len(request.response.tool_calls)
         if tool_call_count > request.max_tool_calls:
             self.context_publisher.publish_tool_limit_feedback(
@@ -79,24 +83,6 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                     )
                 ]
         )
-
-        should_persist_tool_calls = (
-            request.response.has_text_content
-            or request.response.usage is not None
-        )
-        if should_persist_tool_calls:
-            assistant_message_entry = self.context_publisher.publish_tool_calls_assistant_message(
-                context=request.context,
-                turn_id=request.turn_id,
-                text=request.response.content or "",
-                usage=request.response.usage,
-            )
-            if request.response.has_text_content:
-                self.event_publisher.emit_assistant_message(
-                    entry=assistant_message_entry,
-                    config=request.event_config,
-                )
-            state.parent_sequence = assistant_message_entry.sequence
 
         for raw_tool_call in request.response.tool_calls:
             # User interrupt stops the current tool loop immediately.
@@ -127,10 +113,32 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 state.add(result)
                 continue
 
+            tool_name = _tool_name(raw_tool_call)
+            assistant_message_entry = None
+            should_publish_assistant_message = (
+                should_persist_tool_calls and state.parent_sequence is None
+            )
+            if should_publish_assistant_message:
+                assistant_message_entry = (
+                    self.context_publisher.publish_tool_calls_assistant_message(
+                        context=request.context,
+                        turn_id=request.turn_id,
+                        text=request.response.content or "",
+                        usage=request.response.usage,
+                    )
+                )
+                state.parent_sequence = assistant_message_entry.sequence
+
+            if assistant_message_entry is not None and request.response.has_text_content:
+                self.event_publisher.emit_assistant_message(
+                    entry=assistant_message_entry,
+                    config=request.event_config,
+                )
+
             agent_tool_call = AgentToolCall(
                 turn_id=request.turn_id,
                 tool_call_id=raw_tool_call.id,
-                tool=_tool_name(raw_tool_call),
+                tool=tool_name,
                 parent_sequence=state.parent_sequence,
                 args=parsed_args,
             )
@@ -143,7 +151,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 config=request.event_config,
             )
 
-            runtime_config = request.runtime_configs.get(agent_tool_call.tool)
+            runtime_config = request.runtime_configs.get(tool_name)
             prepare_result = self.tool_manager.prepare(
                 AgentToolRequest(
                     run_id=request.context.run_id,
@@ -229,8 +237,8 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             if tool_result.status == ToolResultStatus.INTERRUPTED:
                 state.add(
                     ToolExecutionResult(
-                        tool_call_id=agent_tool_call.tool_call_id,
-                        tool=agent_tool_call.tool,
+                        tool_call_id=raw_tool_call.id,
+                        tool=tool_name,
                         status=ToolExecutionStatus.INTERRUPTED,
                     )
                 )

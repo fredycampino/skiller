@@ -93,16 +93,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
-            rows = conn.execute(
-                """
-                SELECT *
-                FROM agent_context_entries
-                WHERE context_id = ?
-                ORDER BY sequence ASC
-                """,
-                (context_id,),
-            ).fetchall()
-        return [_build_entry(row) for row in rows]
+            return self._list_entries(conn, context_id=context_id)
 
     def list_window_entries(
         self,
@@ -112,6 +103,11 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
     ) -> list[AgentContextEntry]:
         with self._connect() as conn:
             ensure_agent_context_schema(conn)
+            marker = self._last_usage_marker(conn, context_id=context_id)
+            if marker is None:
+                return self._list_entries(conn, context_id=context_id)
+
+            active_window_start_sequence = marker.window_start_sequence
             entries: list[AgentContextEntry] = []
             total_tokens = 0
             before_sequence: int | None = None
@@ -125,16 +121,23 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                     break
 
                 for row in rows:
-                    delta_tokens = _optional_int(row["delta_tokens"]) or 0
-                    if delta_tokens < 0:
-                        delta_tokens = 0
-                    if (
-                        entries
-                        and total_tokens + delta_tokens > window_width_tokens
+                    row_sequence = int(row["sequence"])
+                    usage_exceeds_window = False
+                    if _is_window_usage_row(
+                        row,
+                        active_window_start_sequence=active_window_start_sequence,
                     ):
-                        return list(reversed(entries))
+                        delta_tokens = _positive_delta_tokens(row)
+                        if entries and total_tokens + delta_tokens > window_width_tokens:
+                            return list(reversed(entries))
+                        total_tokens += delta_tokens
+                        usage_exceeds_window = total_tokens > window_width_tokens
+
                     entries.append(_build_entry(row))
-                    total_tokens += delta_tokens
+                    if usage_exceeds_window:
+                        return list(reversed(entries))
+                    if row_sequence <= active_window_start_sequence:
+                        return list(reversed(entries))
 
                 before_sequence = int(rows[-1]["sequence"])
         return list(reversed(entries))
@@ -175,19 +178,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 if marker is not None
                 else int(totals["start_sequence"])
             )
-            current_tokens = 0
-            if marker is not None:
-                current_row = conn.execute(
-                    """
-                    SELECT COALESCE(SUM(delta_tokens), 0) AS current_tokens
-                    FROM agent_context_entries
-                    WHERE context_id = ?
-                      AND sequence >= ?
-                    """,
-                    (context_id, window_start_sequence),
-                ).fetchone()
-                if current_row is not None:
-                    current_tokens = int(current_row["current_tokens"])
+            current_tokens = marker.prompt_tokens if marker is not None else 0
 
         return AgentContextObservedStats(
             entries=int(totals["entries"]),
@@ -236,6 +227,23 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         if row is None or row["max_sequence"] is None:
             return 1
         return int(row["max_sequence"]) + 1
+
+    def _list_entries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+    ) -> list[AgentContextEntry]:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM agent_context_entries
+            WHERE context_id = ?
+            ORDER BY sequence ASC
+            """,
+            (context_id,),
+        ).fetchall()
+        return [_build_entry(row) for row in rows]
 
     def _last_usage_marker(
         self,
@@ -348,6 +356,24 @@ def _empty_observed_stats() -> AgentContextObservedStats:
             current_tokens=0,
         ),
     )
+
+
+def _is_window_usage_row(
+    row: sqlite3.Row,
+    *,
+    active_window_start_sequence: int,
+) -> bool:
+    return (
+        row["usage_json"] is not None
+        and _optional_int(row["window_start_sequence"]) == active_window_start_sequence
+    )
+
+
+def _positive_delta_tokens(row: sqlite3.Row) -> int:
+    delta_tokens = _optional_int(row["delta_tokens"]) or 0
+    if delta_tokens < 0:
+        return 0
+    return delta_tokens
 
 
 def _build_entry(row: sqlite3.Row) -> AgentContextEntry:

@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.6 - 2026-06-09
+
+### Added
+- Add `flow.dir` template support for flow-local helper files.
+- Add Android simulator QA scripts for STUI testing.
+
+### Changed
+- Batch STUI transcript rendering to reduce refresh work.
+- Update bundled auth flows to resolve helper scripts from the current flow directory.
+
+### Notes
+- Includes PR #67.
+
 ## 0.1.0-beta.5 - 2026-06-08
 
 ### Changed

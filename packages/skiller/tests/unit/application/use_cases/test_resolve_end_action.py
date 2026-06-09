@@ -26,7 +26,17 @@ class _FakeStore:
 
 
 class _FakeRunner:
-    def render(self, step, context):  # noqa: ANN001, ANN201
+    def __init__(self) -> None:
+        self.render_calls: list[dict[str, object]] = []
+
+    def render(self, step, context, *, flow):  # noqa: ANN001, ANN201
+        self.render_calls.append(
+            {
+                "step": step,
+                "context": context,
+                "flow": flow,
+            }
+        )
         rendered = dict(step)
         inputs = context.get("inputs", {})
         if isinstance(inputs, dict):
@@ -47,6 +57,11 @@ def _config_parser() -> ResolveEndActionConfigParser:
     return ResolveEndActionConfigParser(_FakeRunner(), _FakeActionUidFactory())
 
 
+def _config_parser_with_runner() -> tuple[ResolveEndActionConfigParser, _FakeRunner]:
+    runner = _FakeRunner()
+    return ResolveEndActionConfigParser(runner, _FakeActionUidFactory()), runner
+
+
 def test_resolve_end_action_returns_on_success_run_action() -> None:
     run = _build_run(
         {
@@ -61,9 +76,10 @@ def test_resolve_end_action_returns_on_success_run_action() -> None:
             }
         }
     )
+    config_parser, runner = _config_parser_with_runner()
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=_config_parser(),
+        config_parser=config_parser,
     )
 
     result = use_case.execute(
@@ -77,6 +93,7 @@ def test_resolve_end_action_returns_on_success_run_action() -> None:
         params="--id abc",
         auto=True,
     )
+    assert runner.render_calls[0]["flow"] is run
 
 
 def test_resolve_end_action_returns_on_error_run_action() -> None:
@@ -93,9 +110,10 @@ def test_resolve_end_action_returns_on_error_run_action() -> None:
             }
         }
     )
+    config_parser, runner = _config_parser_with_runner()
     use_case = ResolveEndActionUseCase(
         store=_FakeStore(run),
-        config_parser=_config_parser(),
+        config_parser=config_parser,
     )
 
     result = use_case.execute(
@@ -109,6 +127,7 @@ def test_resolve_end_action_returns_on_error_run_action() -> None:
         params="--val pepe",
         auto=True,
     )
+    assert runner.render_calls[0]["flow"] is run
 
 
 def test_resolve_end_action_ignores_open_url_action() -> None:

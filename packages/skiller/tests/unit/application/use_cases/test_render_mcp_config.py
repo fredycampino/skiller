@@ -7,6 +7,7 @@ from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
@@ -25,18 +26,30 @@ class _FakeStore:
         return self._run
 
 
-class _FakeSkillRunner:
-    def __init__(self, skill: object) -> None:
-        self._skill = skill
+class _FakeFlowRunner:
+    def __init__(self, flow: object) -> None:
+        self._flow = flow
         self.render_calls: list[dict[str, object]] = []
         self.load_calls: list[tuple[str, str]] = []
 
     def load(self, source: str, ref: str):  # noqa: ANN202
         self.load_calls.append((source, ref))
-        return self._skill
+        return self._flow
 
-    def render(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
-        self.render_calls.append({"step": step, "context": context})
+    def render(
+        self,
+        step: dict[str, object],
+        context: dict[str, object],
+        *,
+        flow: FlowReference,
+    ) -> dict[str, object]:
+        self.render_calls.append(
+            {
+                "step": step,
+                "context": context,
+                "flow": flow,
+            }
+        )
         return self._render_value(dict(step), context)
 
     def _render_value(self, value: object, context: dict[str, object]) -> object:
@@ -117,7 +130,7 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
             }
         ]
     }
-    skill_runner = _FakeSkillRunner(
+    flow_runner = _FakeFlowRunner(
         {
             "mcp": [
                 {
@@ -131,9 +144,8 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
             ]
         }
     )
-    use_case = RenderMcpConfigUseCase(
-        store=_FakeStore(_build_run(snapshot)), skill_runner=skill_runner
-    )
+    run = _build_run(snapshot)
+    use_case = RenderMcpConfigUseCase(store=_FakeStore(run), flow_runner=flow_runner)
 
     result = use_case.execute(
         CurrentStep(
@@ -156,14 +168,15 @@ def test_render_mcp_config_returns_rendered_stdio_config() -> None:
         cwd="/tmp",
         env={"FILES_ALLOWED_ROOTS": "/tmp/work"},
     )
-    assert skill_runner.render_calls
-    assert skill_runner.load_calls == []
+    assert flow_runner.render_calls
+    assert flow_runner.render_calls[0]["flow"] is run
+    assert flow_runner.load_calls == []
 
 
 def test_render_mcp_config_rejects_non_mcp_step() -> None:
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(_build_run()),
-        skill_runner=_FakeSkillRunner({"mcp": []}),
+        flow_runner=_FakeFlowRunner({"mcp": []}),
     )
 
     result = use_case.execute(
@@ -186,7 +199,7 @@ def test_render_mcp_config_rejects_missing_declared_server() -> None:
     run = _build_run({"mcp": [{"name": "other-mcp", "transport": "stdio", "command": "/bin/true"}]})
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {"mcp": [{"name": "other-mcp", "transport": "stdio", "command": "/bin/true"}]}
         ),
     )
@@ -204,7 +217,7 @@ def test_render_mcp_config_rejects_missing_declared_server() -> None:
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
     assert result.mcp_config is None
-    assert result.error == "MCP server 'local-mcp' not declared in skill 'local_mcp'"
+    assert result.error == "MCP server 'local-mcp' not declared in flow 'local_mcp'"
 
 
 def test_render_mcp_config_returns_rendered_http_config() -> None:
@@ -221,7 +234,7 @@ def test_render_mcp_config_returns_rendered_http_config() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {
                 "mcp": [
                     {
@@ -271,7 +284,7 @@ def test_render_mcp_config_returns_rendered_http_config_with_headers() -> None:
     run.context.inputs["token"] = "secret-token"
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {
                 "mcp": [
                     {
@@ -331,7 +344,7 @@ def test_render_mcp_config_resolves_http_config_from_secret_files(tmp_path: Path
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.snapshot),
+        flow_runner=_FakeFlowRunner(run.snapshot),
     )
 
     result = use_case.execute(
@@ -376,7 +389,7 @@ def test_render_mcp_config_resolves_header_from_env(monkeypatch: pytest.MonkeyPa
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.snapshot),
+        flow_runner=_FakeFlowRunner(run.snapshot),
     )
 
     result = use_case.execute(
@@ -416,7 +429,7 @@ def test_render_mcp_config_renders_http_url_template() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {
                 "mcp": [
                     {
@@ -461,7 +474,7 @@ def test_render_mcp_config_requires_explicit_transport() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {
                 "mcp": [
                     {
@@ -540,7 +553,7 @@ def test_render_mcp_config_rejects_invalid_mcp_shapes(
     run = _build_run({"mcp": [raw_config]})
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner({"mcp": [raw_config]}),
+        flow_runner=_FakeFlowRunner({"mcp": [raw_config]}),
     )
 
     result = use_case.execute(
@@ -562,7 +575,7 @@ def test_render_mcp_config_rejects_non_list_mcp_block() -> None:
     run = _build_run({"mcp": {"name": "local-mcp"}})  # type: ignore[arg-type]
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner({"mcp": {"name": "local-mcp"}}),
+        flow_runner=_FakeFlowRunner({"mcp": {"name": "local-mcp"}}),
     )
 
     result = use_case.execute(
@@ -577,7 +590,7 @@ def test_render_mcp_config_rejects_non_list_mcp_block() -> None:
     )
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
-    assert result.error == "Invalid MCP configuration for skill 'local_mcp'. Expected a list."
+    assert result.error == "Invalid MCP configuration for flow 'local_mcp'. Expected a list."
 
 
 def test_render_mcp_config_rejects_unresolved_template() -> None:
@@ -594,7 +607,7 @@ def test_render_mcp_config_rejects_unresolved_template() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(
+        flow_runner=_FakeFlowRunner(
             {
                 "mcp": [
                     {
@@ -639,7 +652,7 @@ def test_render_mcp_config_rejects_missing_header_env() -> None:
     )
     use_case = RenderMcpConfigUseCase(
         store=_FakeStore(run),
-        skill_runner=_FakeSkillRunner(run.snapshot),
+        flow_runner=_FakeFlowRunner(run.snapshot),
     )
 
     result = use_case.execute(

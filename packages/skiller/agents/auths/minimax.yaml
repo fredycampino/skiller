@@ -24,7 +24,7 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
       if [ -s "$config_file" ] && [ -s "$secret_file" ]; then
         api_key="$(tr -d '[:space:]' < "$secret_file")"
@@ -100,7 +100,7 @@ steps:
     command: |
       set -eu
 
-      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
       rm -f "$secret_file"
       printf '%s' cleared
     cwd: .
@@ -126,7 +126,7 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$secret_file")"
 
@@ -188,7 +188,7 @@ steps:
     command: |
       set -eu
 
-      secret_file="$(python3 packages/skiller/agents/auths/minimax_auth.py api-key-file)"
+      secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
       rm -f "$secret_file"
       printf '%s' cleared
     cwd: .

@@ -70,12 +70,16 @@ Its `ShellToolRuntimeConfig` is injected by the runtime container with the defau
 The step YAML only controls the execution request fields documented above: `command`, `cwd`, `env`, `timeout`, `check`, and `next`.
 `cwd` and explicit command path arguments must stay inside the configured
 `allowed_paths`.
+Relative paths in `command` are resolved by the shell from `cwd`, not from the
+flow file directory. Use `{{flow.dir}}` for helper files shipped next to the
+current flow.
 
 Template access:
 
 ```text
 {{output_value("run_tests").stdout}}
 {{output_value("run_tests").exit_code}}
+{{flow.dir}}
 ```
 
 Use `output_value(...)` instead of reading `step_executions.<step_id>.output.value...` directly.

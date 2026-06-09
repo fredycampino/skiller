@@ -122,6 +122,7 @@ Templates may read:
 {{step_executions.<step_id>.output.text}}
 {{output_value("<step_id>")}}
 {{step_executions.<step_id>.evaluation}}
+{{flow.dir}}
 ```
 
 Notes:

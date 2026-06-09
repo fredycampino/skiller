@@ -35,7 +35,11 @@ class GetWaitingMetadataUseCase:
         except ValueError:
             return None
 
-        step = self.skill_runner.render(parsed_step.body, run.context.to_dict())
+        step = self.skill_runner.render(
+            parsed_step.body,
+            run.context.to_dict(),
+            flow=run,
+        )
         if not isinstance(step, dict):
             return None
 

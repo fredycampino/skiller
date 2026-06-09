@@ -149,7 +149,7 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
-    render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, flow_runner=skill_runner)
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,
         runner=build_agent_runner(

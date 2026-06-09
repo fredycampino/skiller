@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.step.runner_port import RunnerPort
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
@@ -75,9 +76,27 @@ class FilesystemSkillRunner(RunnerPort):
             file_ref=file_ref,
         )
 
-    def render(self, step: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    def render(
+        self,
+        step: dict[str, Any],
+        context: dict[str, Any],
+        *,
+        flow: FlowReference,
+    ) -> dict[str, Any]:
         rendered = deepcopy(step)
         render_context = dict(context)
+        flow_context = render_context.get("flow", {})
+        if not isinstance(flow_context, dict):
+            flow_context = {}
+
+        flow_context = dict(flow_context)
+        flow_context["dir"] = str(
+            self._resolve_base_path(
+                source=flow.source,
+                ref=flow.ref,
+            ).resolve()
+        )
+        render_context["flow"] = flow_context
         render_context.setdefault("env", dict(os.environ))
         return self._render_value(rendered, render_context)
 

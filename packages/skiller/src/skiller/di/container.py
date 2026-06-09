@@ -242,7 +242,7 @@ def build_runtime_container(
     )
 
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
-    render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, skill_runner=skill_runner)
+    render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, flow_runner=skill_runner)
     agent_feedback = AgentRunnerFeedback()
     agent_context_publisher = AgentContextPublisher(
         agent_context_store,

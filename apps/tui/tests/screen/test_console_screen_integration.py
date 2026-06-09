@@ -869,6 +869,51 @@ def test_console_screen_routes_scroll_keys_to_transcript_when_runs_table_is_hidd
     asyncio.run(run())
 
 
+def test_console_screen_batches_transcript_replacement() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.transcript.items.extend(
+            [UserInputItem(text=f"message {index}") for index in range(20)]
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        batch_entries: list[str] = []
+        original_batch_update = app.batch_update
+
+        def record_batch_update():  # noqa: ANN202
+            context = original_batch_update()
+
+            class BatchContext:
+                def __enter__(self) -> None:
+                    batch_entries.append("enter")
+                    context.__enter__()
+
+                def __exit__(self, *args: object) -> None:
+                    batch_entries.append("exit")
+                    context.__exit__(*args)
+
+            return BatchContext()
+
+        app.batch_update = record_batch_update  # type: ignore[method-assign]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+
+            transcript = app.query_one("#transcript-log", TranscriptLog)
+            rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
+
+            assert len(batch_entries) >= 2
+            assert batch_entries.count("enter") == batch_entries.count("exit")
+            assert batch_entries.index("enter") < batch_entries.index("exit")
+            assert any("› message 0" in line for line in rendered_lines)
+            assert any("› message 19" in line for line in rendered_lines)
+
+    asyncio.run(run())
+
+
 def test_console_screen_renders_agent_markdown_without_literal_markers() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(

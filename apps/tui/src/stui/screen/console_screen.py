@@ -450,19 +450,20 @@ class ConsoleScreen(App[str]):
 
     def _refresh_transcript(self, *, new_state: ConsoleScreenState) -> None:
         transcript = self._transcript_log()
-        transcript.clear()
         renderables = self._render_transcript.render(
             items=new_state.transcript.items,
             mode=new_state.transcript.mode,
             theme=self.ui_theme,
             prompt_placeholder="",
         )
-        for index, renderable in enumerate(renderables):
-            transcript.write(
-                renderable,
-                expand=True,
-                scroll_end=index == len(renderables) - 1,
-            )
+        with self.batch_update():
+            transcript.clear()
+            for index, renderable in enumerate(renderables):
+                transcript.write(
+                    renderable,
+                    expand=True,
+                    scroll_end=index == len(renderables) - 1,
+                )
 
     def _refresh_runs_table(self, *, new_state: ConsoleScreenState) -> None:
         if (

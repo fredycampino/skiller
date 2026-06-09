@@ -34,8 +34,7 @@ class ResolveEndActionUseCase:
             return ResolveEndActionResult(action=None)
 
         config = self.config_parser.parse(
-            snapshot=run.snapshot,
-            context=run.context,
+            run=run,
             trigger=request.trigger,
         )
         if config.action is None:

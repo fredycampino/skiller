@@ -21,8 +21,8 @@ steps:
     command: |
       set -eu
 
-      credentials_file="$(python3 packages/skiller/agents/auths/codex_auth.py credentials-file)"
-      if verify_output="$(python3 packages/skiller/agents/auths/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}" 2>&1)"; then
+      credentials_file="$(python3 "{{flow.dir}}/codex_auth.py" credentials-file)"
+      if verify_output="$(python3 "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}" 2>&1)"; then
         printf '%s' ready
         exit 0
       fi
@@ -65,14 +65,14 @@ steps:
     next: prepare_authorization
 
   - shell: prepare_authorization
-    command: python3 packages/skiller/agents/auths/codex_auth.py prepare
+    command: python3 "{{flow.dir}}/codex_auth.py" prepare
     cwd: .
     timeout: 15
     check: true
     next: start_callback_server
 
   - shell: start_callback_server
-    command: python3 packages/skiller/agents/auths/codex_auth.py start-callback-server
+    command: python3 "{{flow.dir}}/codex_auth.py" start-callback-server
     cwd: .
     timeout: 15
     check: true
@@ -89,14 +89,14 @@ steps:
     next: wait_authorization_callback
 
   - shell: wait_authorization_callback
-    command: python3 packages/skiller/agents/auths/codex_auth.py wait-callback
+    command: python3 "{{flow.dir}}/codex_auth.py" wait-callback
     cwd: .
     timeout: 960
     check: true
     next: exchange_authorization_code
 
   - shell: exchange_authorization_code
-    command: python3 packages/skiller/agents/auths/codex_auth.py exchange-token
+    command: python3 "{{flow.dir}}/codex_auth.py" exchange-token
     cwd: .
     timeout: 60
     check: true
@@ -109,7 +109,7 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      credentials_file="$(python3 packages/skiller/agents/auths/codex_auth.py credentials-file)"
+      credentials_file="$(python3 "{{flow.dir}}/codex_auth.py" credentials-file)"
 
       mkdir -p "$(dirname "$config_file")" "$secrets_dir"
 
@@ -150,14 +150,14 @@ steps:
     next: require_credentials
 
   - shell: require_credentials
-    command: python3 packages/skiller/agents/auths/codex_auth.py status --require
+    command: python3 "{{flow.dir}}/codex_auth.py" status --require
     cwd: .
     timeout: 15
     check: true
     next: verify_credentials
 
   - shell: verify_credentials
-    command: python3 packages/skiller/agents/auths/codex_auth.py verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
+    command: python3 "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
     cwd: .
     timeout: 120
     check: true

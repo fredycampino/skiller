@@ -1,12 +1,33 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 import pytest
 
 from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
 
 pytestmark = pytest.mark.unit
+
+
+@dataclass(frozen=True)
+class _FlowReference:
+    source: str
+    ref: str
+
+
+def _build_render_runner(tmp_path) -> tuple[FilesystemSkillRunner, _FlowReference]:  # noqa: ANN001
+    agents_dir = tmp_path / "agents"
+    agent_dir = agents_dir / "demo"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "agent.yaml").write_text(
+        "name: demo\nstart: check\nsteps: []\n",
+        encoding="utf-8",
+    )
+    return FilesystemSkillRunner(skills_dir=str(agents_dir)), _FlowReference(
+        source="internal",
+        ref="demo",
+    )
 
 
 def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
@@ -135,8 +156,8 @@ def test_load_rejects_invalid_source_or_extension(source: str, ref: str) -> None
         runner.load(source, ref)
 
 
-def test_render_step_preserves_type_for_full_template_value() -> None:
-    runner = FilesystemSkillRunner(skills_dir="skills")
+def test_render_step_preserves_type_for_full_template_value(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
 
     rendered = runner.render(
         {
@@ -165,6 +186,7 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
                 }
             }
         },
+        flow=flow,
     )
 
     assert rendered["values"]["copied_object"] == {
@@ -175,10 +197,13 @@ def test_render_step_preserves_type_for_full_template_value() -> None:
     assert rendered["values"]["text"] == "severity=low"
 
 
-def test_render_step_can_resolve_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_step_can_resolve_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:  # noqa: ANN001
     monkeypatch.setenv("AGENT_GITHUB_MCP_URL", "https://api.github.example/mcp")
     monkeypatch.setenv("AGENT_GITHUB_MCP_TOKEN", "secret-token")
-    runner = FilesystemSkillRunner(skills_dir="skills")
+    runner, flow = _build_render_runner(tmp_path)
 
     rendered = runner.render(
         {
@@ -194,14 +219,55 @@ def test_render_step_can_resolve_env_values(monkeypatch: pytest.MonkeyPatch) -> 
             ]
         },
         {"inputs": {}, "step_executions": {}},
+        flow=flow,
     )
 
     assert rendered["mcp"][0]["url"] == "https://api.github.example/mcp"
     assert rendered["mcp"][0]["headers"]["Authorization"] == "Bearer secret-token"
 
 
-def test_render_step_can_resolve_output_value_from_persisted_output() -> None:
+def test_render_step_can_resolve_internal_flow_directory(tmp_path) -> None:  # noqa: ANN001
+    agents_dir = tmp_path / "agents"
+    agent_dir = agents_dir / "auths" / "minimax"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "agent.yaml").write_text(
+        "name: auths/minimax\nstart: check_minimax_config\nsteps: []\n",
+        encoding="utf-8",
+    )
+    runner = FilesystemSkillRunner(skills_dir=str(agents_dir))
+
+    rendered = runner.render(
+        {
+            "command": 'python3 "{{flow.dir}}/minimax_auth.py" api-key-file',
+        },
+        {"inputs": {}, "step_executions": {}},
+        flow=_FlowReference(source="internal", ref="auths/minimax"),
+    )
+
+    assert rendered["command"] == f'python3 "{agent_dir}/minimax_auth.py" api-key-file'
+
+
+def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa: ANN001
+    flow_file = tmp_path / "external.yaml"
+    flow_file.write_text(
+        "name: external\nstart: check\nsteps: []\n",
+        encoding="utf-8",
+    )
     runner = FilesystemSkillRunner(skills_dir="skills")
+
+    rendered = runner.render(
+        {
+            "command": 'python3 "{{flow.dir}}/helper.py" check',
+        },
+        {"inputs": {}, "step_executions": {}},
+        flow=_FlowReference(source="file", ref=str(flow_file)),
+    )
+
+    assert rendered["command"] == f'python3 "{tmp_path}/helper.py" check'
+
+
+def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
 
     rendered = runner.render(
         {
@@ -227,14 +293,15 @@ def test_render_step_can_resolve_output_value_from_persisted_output() -> None:
                 }
             }
         },
+        flow=flow,
     )
 
     assert rendered["message"] == "existing_tunnels=tunnel-a\ntunnel-b"
     assert rendered["stderr"] == "tunnel-a\ntunnel-b"
 
 
-def test_render_step_raises_clear_error_when_output_value_path_is_missing() -> None:
-    runner = FilesystemSkillRunner(skills_dir="skills")
+def test_render_step_raises_clear_error_when_output_value_path_is_missing(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
 
     with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):
         runner.render(
@@ -255,11 +322,12 @@ def test_render_step_raises_clear_error_when_output_value_path_is_missing() -> N
                     }
                 }
             },
+            flow=flow,
         )
 
 
-def test_render_step_rejects_direct_output_value_access() -> None:
-    runner = FilesystemSkillRunner(skills_dir="skills")
+def test_render_step_rejects_direct_output_value_access(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
 
     with pytest.raises(ValueError, match="FLOW_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"):
         runner.render(
@@ -280,4 +348,5 @@ def test_render_step_rejects_direct_output_value_access() -> None:
                     }
                 }
             },
+            flow=flow,
         )

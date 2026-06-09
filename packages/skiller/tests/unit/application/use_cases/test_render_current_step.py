@@ -3,6 +3,7 @@ import pytest
 from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepUseCase,
 )
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.step.current_step_model import CurrentStepStatus
@@ -31,8 +32,20 @@ class _FakeSkillRunner:
         self.load_calls.append((source, ref))
         return self._skill
 
-    def render(self, step: dict[str, object], context: dict[str, object]) -> dict[str, object]:
-        self.render_calls.append({"step": step, "context": context})
+    def render(
+        self,
+        step: dict[str, object],
+        context: dict[str, object],
+        *,
+        flow: FlowReference,
+    ) -> dict[str, object]:
+        self.render_calls.append(
+            {
+                "step": step,
+                "context": context,
+                "flow": flow,
+            }
+        )
         rendered = dict(step)
         rendered["rendered"] = True
         return rendered
@@ -126,6 +139,7 @@ def test_returns_ready_with_rendered_step() -> None:
     assert result.current_step.context == run.context
     assert result.current_step.step["rendered"] is True
     assert skill_runner.render_calls[0]["context"] == run.context.to_dict()
+    assert skill_runner.render_calls[0]["flow"] is run
     assert skill_runner.load_calls == []
 
 

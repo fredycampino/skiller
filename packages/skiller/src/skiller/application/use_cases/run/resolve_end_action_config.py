@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Any
 
 from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.domain.action.action_model import (
@@ -7,7 +6,7 @@ from skiller.domain.action.action_model import (
     RunAction,
     action_from_dict,
 )
-from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.run_model import Run
 from skiller.domain.step.runner_port import RunnerPort
 
 
@@ -24,11 +23,10 @@ class ResolveEndActionConfigParser:
     def parse(
         self,
         *,
-        snapshot: dict[str, Any],
-        context: RunContext,
+        run: Run,
         trigger: EndActionTrigger,
     ) -> ResolveEndActionConfig:
-        raw_config = snapshot.get(trigger.value)
+        raw_config = run.snapshot.get(trigger.value)
         if not isinstance(raw_config, dict):
             return ResolveEndActionConfig(action=None)
 
@@ -36,7 +34,11 @@ class ResolveEndActionConfigParser:
         if not isinstance(raw_action, dict):
             return ResolveEndActionConfig(action=None)
 
-        rendered_action = self.runner.render(raw_action, context.to_dict())
+        rendered_action = self.runner.render(
+            raw_action,
+            run.context.to_dict(),
+            flow=run,
+        )
         if not isinstance(rendered_action, dict):
             return ResolveEndActionConfig(action=None)
         action_payload = dict(rendered_action)

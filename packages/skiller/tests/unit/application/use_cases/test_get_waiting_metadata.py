@@ -7,9 +7,34 @@ from skiller.application.use_cases.query.get_waiting_metadata import GetWaitingM
 pytestmark = pytest.mark.unit
 
 
+class _FakeSkillRunner:
+    def __init__(self) -> None:
+        self.render_calls: list[dict[str, object]] = []
+
+    def render(self, step, context, *, flow):  # noqa: ANN001, ANN201
+        self.render_calls.append(
+            {
+                "step": step,
+                "context": context,
+                "flow": flow,
+            }
+        )
+        rendered = dict(step)
+        inputs = context.get("inputs", {})
+        if isinstance(inputs, dict):
+            for key, value in inputs.items():
+                token = "{{inputs." + str(key) + "}}"
+                for field, raw in rendered.items():
+                    if isinstance(raw, str):
+                        rendered[field] = raw.replace(token, str(value))
+        return rendered
+
+
 def test_get_waiting_metadata_returns_webhook_data() -> None:
     run = SimpleNamespace(
         id="run-1",
+        source="internal",
+        ref="demo",
         status="WAITING",
         current="wait_signal",
         snapshot={
@@ -25,12 +50,7 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
     )
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-1" else None)
-    skill_runner = SimpleNamespace(
-        render=lambda step, context: {
-            **step,
-            "key": context["inputs"]["asset"],
-        }
-    )
+    skill_runner = _FakeSkillRunner()
 
     result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-1")
 
@@ -39,11 +59,14 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
         "webhook": "market-signal",
         "key": "btc-usd",
     }
+    assert skill_runner.render_calls[0]["flow"] is run
 
 
 def test_get_waiting_metadata_returns_input_prompt() -> None:
     run = SimpleNamespace(
         id="run-2",
+        source="internal",
+        ref="demo",
         status="WAITING",
         current="ask_user",
         snapshot={
@@ -58,7 +81,7 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
     )
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-2" else None)
-    skill_runner = SimpleNamespace(render=lambda step, context: step)
+    skill_runner = _FakeSkillRunner()
 
     result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-2")
 
@@ -66,11 +89,14 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
         "wait_type": "input",
         "prompt": "Write a short summary",
     }
+    assert skill_runner.render_calls[0]["flow"] is run
 
 
 def test_get_waiting_metadata_returns_channel_data() -> None:
     run = SimpleNamespace(
         id="run-3",
+        source="internal",
+        ref="demo",
         status="WAITING",
         current="listen_whatsapp",
         snapshot={
@@ -86,7 +112,7 @@ def test_get_waiting_metadata_returns_channel_data() -> None:
     )
 
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-3" else None)
-    skill_runner = SimpleNamespace(render=lambda step, context: step)
+    skill_runner = _FakeSkillRunner()
 
     result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-3")
 
@@ -95,3 +121,4 @@ def test_get_waiting_metadata_returns_channel_data() -> None:
         "channel": "whatsapp",
         "key": "all",
     }
+    assert skill_runner.render_calls[0]["flow"] is run

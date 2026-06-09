@@ -24,9 +24,9 @@ class RenderMcpConfigResult:
 
 
 class RenderMcpConfigUseCase:
-    def __init__(self, store: RunStorePort, skill_runner: RunnerPort) -> None:
+    def __init__(self, store: RunStorePort, flow_runner: RunnerPort) -> None:
         self.store = store
-        self.skill_runner = skill_runner
+        self.flow_runner = flow_runner
 
     def execute(self, next_step: CurrentStep) -> RenderMcpConfigResult:
         if next_step.step_type != StepType.MCP:
@@ -42,23 +42,27 @@ class RenderMcpConfigUseCase:
         if run is None:
             return self._invalid(f"Run '{next_step.run_id}' not found")
 
-        skill = run.snapshot
-        if not isinstance(skill, dict):
-            return self._invalid(f"Invalid skill format for '{run.ref}'. Expected an object.")
+        flow = run.snapshot
+        if not isinstance(flow, dict):
+            return self._invalid(f"Invalid flow format for '{run.ref}'. Expected an object.")
 
-        raw_declared = skill.get("mcp", [])
+        raw_declared = flow.get("mcp", [])
         if not isinstance(raw_declared, list):
             return self._invalid(
-                f"Invalid MCP configuration for skill '{run.ref}'. Expected a list."
+                f"Invalid MCP configuration for flow '{run.ref}'. Expected a list."
             )
 
         raw_config = self._find_server_config(raw_declared, server_name)
         if raw_config is None:
             return self._invalid(
-                f"MCP server '{server_name}' not declared in skill '{run.ref}'"
+                f"MCP server '{server_name}' not declared in flow '{run.ref}'"
             )
 
-        rendered = self.skill_runner.render(raw_config, next_step.context.to_dict())
+        rendered = self.flow_runner.render(
+            raw_config,
+            next_step.context.to_dict(),
+            flow=run,
+        )
         if not isinstance(rendered, dict):
             return self._invalid(f"Invalid rendered MCP configuration for server '{server_name}'")
 

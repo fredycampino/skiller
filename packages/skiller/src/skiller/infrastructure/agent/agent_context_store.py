@@ -160,6 +160,17 @@ class AgentContextStore(
     ) -> AgentContextUsageMarker | None:
         return self.datasource.get_last_usage_marker(context_id=context_id)
 
+    def estimate_window_tokens(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> int:
+        return self.datasource.estimate_window_tokens(
+            context_id=context_id,
+            start_sequence=start_sequence,
+        )
+
     def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         return self.datasource.get_observed_stats(context_id=context_id)
 

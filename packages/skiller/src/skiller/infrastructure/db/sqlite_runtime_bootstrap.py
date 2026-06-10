@@ -2,9 +2,6 @@ import sqlite3
 from pathlib import Path
 
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
-from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
-    ensure_agent_context_schema,
-)
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 SQLITE_RUNTIME_DB_VERSION = 7
@@ -182,6 +179,23 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS agent_context_entries (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          context_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          entry_type TEXT NOT NULL,
+          message_type TEXT NULL,
+          window_start_sequence INTEGER NULL,
+          delta_tokens INTEGER NULL,
+          window_base INTEGER NULL,
+          payload_json TEXT NOT NULL,
+          usage_json TEXT NULL,
+          source_step_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(run_id) REFERENCES runs(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_runs_status_updated_at ON runs(status, updated_at);
         CREATE INDEX IF NOT EXISTS idx_log_events_run_sequence
           ON log_events(run_id, sequence);
@@ -206,6 +220,7 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
             status,
             created_at
           );
+        CREATE INDEX IF NOT EXISTS idx_agent_context_entries_context
+          ON agent_context_entries(context_id, sequence);
         """
     )
-    ensure_agent_context_schema(conn)

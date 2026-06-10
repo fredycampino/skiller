@@ -24,8 +24,6 @@ from skiller.domain.agent.agent_stats_model import (
 from skiller.domain.agent.llm_model import LLMUsage
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
-_WINDOW_ENTRY_PAGE_SIZE = 100
-
 
 class SqliteAgentContextDatasource(SqliteConnectionSource):
     def append_entry(
@@ -42,7 +40,6 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         source_step_id: str,
     ) -> AgentContextEntry:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
             sequence = self._next_sequence(conn, context_id=context_id)
             entry_id = str(uuid.uuid4())
             conn.execute(
@@ -92,7 +89,6 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
             return self._list_entries(conn, context_id=context_id)
 
     def list_window_entries(
@@ -102,45 +98,24 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         window_width_tokens: int,
     ) -> list[AgentContextEntry]:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
-            marker = self._last_usage_marker(conn, context_id=context_id)
-            if marker is None:
-                return self._list_entries(conn, context_id=context_id)
-
-            active_window_start_sequence = marker.window_start_sequence
-            entries: list[AgentContextEntry] = []
-            total_tokens = 0
-            before_sequence: int | None = None
-            while True:
-                rows = self._window_entry_page(
-                    conn,
-                    context_id=context_id,
-                    before_sequence=before_sequence,
-                )
-                if not rows:
-                    break
-
-                for row in rows:
-                    row_sequence = int(row["sequence"])
-                    usage_exceeds_window = False
-                    if _is_window_usage_row(
-                        row,
-                        active_window_start_sequence=active_window_start_sequence,
-                    ):
-                        delta_tokens = _positive_delta_tokens(row)
-                        if entries and total_tokens + delta_tokens > window_width_tokens:
-                            return list(reversed(entries))
-                        total_tokens += delta_tokens
-                        usage_exceeds_window = total_tokens > window_width_tokens
-
-                    entries.append(_build_entry(row))
-                    if usage_exceeds_window:
-                        return list(reversed(entries))
-                    if row_sequence <= active_window_start_sequence:
-                        return list(reversed(entries))
-
-                before_sequence = int(rows[-1]["sequence"])
-        return list(reversed(entries))
+            start_sequence = self.window_start_sequence(
+                conn,
+                context_id=context_id,
+                window_width_tokens=window_width_tokens,
+            )
+            if start_sequence == 0:
+                return []
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM agent_context_entries
+                WHERE context_id = ?
+                  AND sequence >= ?
+                ORDER BY sequence ASC
+                """,
+                (context_id, start_sequence),
+            ).fetchall()
+        return [_build_entry(row) for row in rows]
 
     def get_last_usage_marker(
         self,
@@ -148,8 +123,30 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         context_id: str,
     ) -> AgentContextUsageMarker | None:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
             return self._last_usage_marker(conn, context_id=context_id)
+
+    def estimate_window_tokens(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COALESCE(
+                  SUM(CASE WHEN delta_tokens > 0 THEN delta_tokens ELSE 0 END),
+                  0
+                ) AS estimated_tokens
+                FROM agent_context_entries
+                WHERE context_id = ?
+                  AND sequence >= ?
+                """,
+                (context_id, start_sequence),
+            ).fetchone()
+        if row is None:
+            return 0
+        return int(row["estimated_tokens"])
 
     def get_observed_stats(
         self,
@@ -157,7 +154,6 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         context_id: str,
     ) -> AgentContextObservedStats:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
             totals = conn.execute(
                 """
                 SELECT COUNT(*) AS entries,
@@ -192,7 +188,6 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
 
     def next_turn_id(self, *, context_id: str) -> str:
         with self._connect() as conn:
-            ensure_agent_context_schema(conn)
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS turn_entries
@@ -281,69 +276,73 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
             )
         return None
 
-    def _window_entry_page(
+    def window_start_sequence(
         self,
         conn: sqlite3.Connection,
         *,
         context_id: str,
-        before_sequence: int | None,
-    ) -> list[sqlite3.Row]:
-        if before_sequence is None:
-            return conn.execute(
-                """
-                SELECT *
-                FROM agent_context_entries
-                WHERE context_id = ?
-                ORDER BY sequence DESC
-                LIMIT ?
-                """,
-                (context_id, _WINDOW_ENTRY_PAGE_SIZE),
-            ).fetchall()
-
-        return conn.execute(
+        window_width_tokens: int,
+    ) -> int:
+        row = conn.execute(
             """
-            SELECT *
-            FROM agent_context_entries
-            WHERE context_id = ?
-              AND sequence < ?
-            ORDER BY sequence DESC
-            LIMIT ?
+            WITH usage_rows AS (
+              SELECT sequence,
+                     CASE
+                       WHEN delta_tokens > 0 THEN delta_tokens
+                       ELSE 0
+                     END AS delta_tokens
+              FROM agent_context_entries
+              WHERE context_id = ?
+                AND usage_json IS NOT NULL
+            ),
+            first_entry AS (
+              SELECT MIN(sequence) AS sequence
+              FROM agent_context_entries
+              WHERE context_id = ?
+            ),
+            running AS (
+              SELECT sequence,
+                     SUM(delta_tokens) OVER (
+                       ORDER BY sequence DESC
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                     ) AS running_tokens
+              FROM usage_rows
+            ),
+            selected_usage AS (
+              SELECT MIN(sequence) AS sequence
+              FROM running
+              WHERE running_tokens <= ?
+            ),
+            fallback_usage AS (
+              SELECT MAX(sequence) AS sequence
+              FROM usage_rows
+            ),
+            previous_usage AS (
+              SELECT MAX(usage_rows.sequence) AS sequence
+              FROM usage_rows, selected_usage
+              WHERE selected_usage.sequence IS NOT NULL
+                AND usage_rows.sequence < selected_usage.sequence
+            )
+            SELECT COALESCE(
+              CASE
+                WHEN selected_usage.sequence IS NULL THEN fallback_usage.sequence
+                ELSE (
+                  SELECT MIN(sequence)
+                  FROM agent_context_entries
+                  WHERE context_id = ?
+                    AND sequence > COALESCE(previous_usage.sequence, 0)
+                )
+              END,
+              first_entry.sequence,
+              0
+            ) AS start_sequence
+            FROM selected_usage, fallback_usage, previous_usage, first_entry
             """,
-            (context_id, before_sequence, _WINDOW_ENTRY_PAGE_SIZE),
-        ).fetchall()
-
-
-def ensure_agent_context_schema(conn: sqlite3.Connection) -> None:
-    _create_agent_context_entries(conn)
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_agent_context_entries_context
-          ON agent_context_entries(context_id, sequence)
-        """,
-    )
-
-
-def _create_agent_context_entries(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS agent_context_entries (
-          id TEXT PRIMARY KEY,
-          run_id TEXT NOT NULL,
-          context_id TEXT NOT NULL,
-          sequence INTEGER NOT NULL,
-          entry_type TEXT NOT NULL,
-          message_type TEXT NULL,
-          window_start_sequence INTEGER NULL,
-          delta_tokens INTEGER NULL,
-          window_base INTEGER NULL,
-          payload_json TEXT NOT NULL,
-          usage_json TEXT NULL,
-          source_step_id TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY(run_id) REFERENCES runs(id)
-        )
-        """,
-    )
+            (context_id, context_id, window_width_tokens, context_id),
+        ).fetchone()
+        if row is None:
+            return 0
+        return int(row["start_sequence"])
 
 
 def _empty_observed_stats() -> AgentContextObservedStats:
@@ -355,17 +354,6 @@ def _empty_observed_stats() -> AgentContextObservedStats:
             end_sequence=0,
             current_tokens=0,
         ),
-    )
-
-
-def _is_window_usage_row(
-    row: sqlite3.Row,
-    *,
-    active_window_start_sequence: int,
-) -> bool:
-    return (
-        row["usage_json"] is not None
-        and _optional_int(row["window_start_sequence"]) == active_window_start_sequence
     )
 
 

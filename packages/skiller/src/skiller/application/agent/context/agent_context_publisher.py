@@ -219,15 +219,16 @@ class AgentContextPublisher:
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )
-        if last_marker.window_start_sequence != window_start_sequence:
-            return _ResponseMarker(
-                delta_tokens=prompt_tokens,
-                window_start_sequence=window_start_sequence,
-                window_base=True,
+        if last_marker.window_start_sequence != window_start_sequence or window_base:
+            estimated_tokens = self.agent_context_store.estimate_window_tokens(
+                context_id=context.context_id,
+                start_sequence=window_start_sequence,
             )
-        if window_base:
+            delta_tokens = prompt_tokens - estimated_tokens
+            if delta_tokens < 0:
+                delta_tokens = 0
             return _ResponseMarker(
-                delta_tokens=prompt_tokens,
+                delta_tokens=delta_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )

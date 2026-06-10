@@ -224,6 +224,82 @@ def test_agent_context_store_keeps_delta_series_markers(
     assert next_final.window_base is False
 
 
+def test_agent_context_store_estimates_window_tokens_from_start_sequence(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-estimate.db"
+    run_store = SqliteRunStorePort(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Task",
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Older",
+        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        delta_tokens=90,
+        window_start_sequence=1,
+        window_base=True,
+    )
+    start = store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Current start",
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-2",
+        text="Current base",
+        usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
+        delta_tokens=25,
+        window_start_sequence=start.sequence,
+        window_base=True,
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-3",
+        text="Corrupt negative",
+        usage=LLMUsage(prompt_tokens=110, completion_tokens=5, total_tokens=115),
+        delta_tokens=-5,
+        window_start_sequence=start.sequence,
+        window_base=False,
+    )
+    store.append_tool_call(
+        context=AGENT_CONTEXT,
+        tool_call=AgentToolCall(
+            turn_id="turn-3",
+            parent_sequence=None,
+            tool_call_id="call-1",
+            tool="notify",
+            args={"message": "ok"},
+        ),
+    )
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-4",
+        text="Tail",
+        usage=LLMUsage(prompt_tokens=130, completion_tokens=5, total_tokens=135),
+        delta_tokens=10,
+        window_start_sequence=start.sequence,
+        window_base=False,
+    )
+
+    assert store.estimate_window_tokens(
+        context_id=CONTEXT_ID,
+        start_sequence=start.sequence,
+    ) == 35
+
+
 def test_agent_context_store_returns_stats_from_latest_usage_marker(
     tmp_path,
 ) -> None:
@@ -293,10 +369,10 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
     assert stats.window.current_tokens == 45
 
 
-def test_agent_context_store_keeps_current_window_entries_across_old_series_marker(
+def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
     tmp_path,
 ) -> None:
-    db_path = tmp_path / "agent-context-window-old-series-marker.db"
+    db_path = tmp_path / "agent-context-window-start-query.db"
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
@@ -306,7 +382,8 @@ def test_agent_context_store_keeps_current_window_entries_across_old_series_mark
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
     )
-    store = _store(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    store = AgentContextStore(datasource)
 
     store.append_user_message(
         context=AGENT_CONTEXT,
@@ -325,10 +402,10 @@ def test_agent_context_store_keeps_current_window_entries_across_old_series_mark
         context=AGENT_CONTEXT,
         text="Current start",
     )
-    old_series_inside_window = store.append_final_assistant_message(
+    store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
-        text="Old series marker inside current window",
+        text="Old series inside current window",
         usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
         delta_tokens=40,
         window_start_sequence=1,
@@ -338,7 +415,7 @@ def test_agent_context_store_keeps_current_window_entries_across_old_series_mark
         context=AGENT_CONTEXT,
         text="Current tail",
     )
-    latest = store.append_final_assistant_message(
+    store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Current base",
@@ -348,17 +425,56 @@ def test_agent_context_store_keeps_current_window_entries_across_old_series_mark
         window_base=True,
     )
 
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=50,
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        start_sequence = datasource.window_start_sequence(
+            conn,
+            context_id=CONTEXT_ID,
+            window_width_tokens=50,
+        )
+
+    assert start_sequence == current_tail.sequence
+
+
+def test_sqlite_agent_context_datasource_window_start_sequence_keeps_oversized_latest(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-window-start-oversized.db"
+    run_store = SqliteRunStorePort(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    store = AgentContextStore(datasource)
+
+    store.append_user_message(
+        context=AGENT_CONTEXT,
+        text="Older task",
+    )
+    latest = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Oversized",
+        usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
+        delta_tokens=80,
+        window_start_sequence=1,
+        window_base=True,
     )
 
-    assert [entry.sequence for entry in entries] == [
-        current_start.sequence,
-        old_series_inside_window.sequence,
-        current_tail.sequence,
-        latest.sequence,
-    ]
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        start_sequence = datasource.window_start_sequence(
+            conn,
+            context_id=CONTEXT_ID,
+            window_width_tokens=50,
+        )
+
+    assert start_sequence == latest.sequence
 
 
 def test_agent_context_store_stops_at_active_window_start_without_base_marker(
@@ -479,82 +595,6 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
     assert stats.window.start_sequence == current_start.sequence
     assert stats.window.end_sequence == latest.sequence
     assert stats.window.current_tokens == 30
-
-
-def test_agent_context_store_lists_window_entries_across_marker_pages(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-pages.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    for index in range(120):
-        sequence = index + 1
-        store.append_final_assistant_message(
-            context=AGENT_CONTEXT,
-            turn_id=f"turn-{sequence}",
-            text=f"Final {sequence}",
-            usage=LLMUsage(
-                prompt_tokens=sequence,
-                completion_tokens=1,
-                total_tokens=sequence + 1,
-            ),
-            delta_tokens=1,
-            window_start_sequence=1,
-            window_base=sequence == 1,
-        )
-
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=105,
-    )
-
-    assert [entry.sequence for entry in entries] == list(range(16, 121))
-
-
-def test_agent_context_store_stops_after_oversized_latest_entry(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-oversized-latest.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Older task",
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Latest oversized final",
-        usage=LLMUsage(prompt_tokens=80, completion_tokens=1, total_tokens=81),
-        delta_tokens=80,
-        window_start_sequence=1,
-        window_base=True,
-    )
-
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=50,
-    )
-
-    assert [entry.sequence for entry in entries] == [2]
 
 
 def test_agent_context_store_ignores_negative_delta_when_selecting_window(

@@ -143,6 +143,49 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
     }
 
 
+def test_agent_context_publisher_uses_window_estimate_for_base_delta() -> None:
+    store = _FakeAgentContextStore(
+        marker=AgentContextUsageMarker(
+            sequence=249,
+            prompt_tokens=80_048,
+            delta_tokens=317,
+            window_start_sequence=1,
+            window_base=False,
+        ),
+        estimated_tokens=77_636,
+    )
+    run_agent_store = _FakeRunAgentStore()
+    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
+        agent_id="agent-1",
+        context_id="ctx-1",
+        window_start_sequence=3,
+        window_base=True,
+    )
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    request = _tool_request()
+
+    publisher.publish_tool_calls_assistant_message(
+        context=request.context,
+        turn_id="turn-153",
+        text="Create branch",
+        usage=LLMUsage(
+            prompt_tokens=81_624,
+            completion_tokens=194,
+            total_tokens=81_818,
+        ),
+    )
+
+    assert store.estimate_calls == [
+        {
+            "context_id": "ctx-1",
+            "start_sequence": 3,
+        }
+    ]
+    assert store.calls[-1]["delta_tokens"] == 3_988
+    assert store.calls[-1]["window_start_sequence"] == 3
+    assert store.calls[-1]["window_base"] is True
+
+
 def test_agent_context_publisher_attaches_agent_context_once() -> None:
     store = _FakeAgentContextStore()
     run_agent_store = _FakeRunAgentStore()
@@ -190,8 +233,16 @@ def _tool_request() -> ToolExecutionRequest:
 
 
 class _FakeAgentContextStore(AgentContextStorePort):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        marker: AgentContextUsageMarker | None = None,
+        estimated_tokens: int = 0,
+    ) -> None:
         self.calls: list[dict[str, object]] = []
+        self.marker = marker
+        self.estimated_tokens = estimated_tokens
+        self.estimate_calls: list[dict[str, object]] = []
 
     def init_db(self) -> None:
         raise NotImplementedError
@@ -375,7 +426,21 @@ class _FakeAgentContextStore(AgentContextStorePort):
         context_id: str,
     ) -> AgentContextUsageMarker | None:
         _ = context_id
-        return None
+        return self.marker
+
+    def estimate_window_tokens(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> int:
+        self.estimate_calls.append(
+            {
+                "context_id": context_id,
+                "start_sequence": start_sequence,
+            }
+        )
+        return self.estimated_tokens
 
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id

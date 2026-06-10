@@ -748,6 +748,18 @@ class _FakeAgentContextStore:
         _ = context_id
         return None
 
+    def estimate_window_tokens(self, *, context_id: str, start_sequence: int) -> int:
+        entries = [
+            entry
+            for entry in self.entries
+            if entry.context_id == context_id and entry.sequence >= start_sequence
+        ]
+        return sum(
+            entry.delta_tokens
+            for entry in entries
+            if entry.delta_tokens is not None and entry.delta_tokens > 0
+        )
+
 
 class _FakeRunAgentStore:
     def get_agent(self, *, run_id: str, agent_id: str) -> RunAgent | None:

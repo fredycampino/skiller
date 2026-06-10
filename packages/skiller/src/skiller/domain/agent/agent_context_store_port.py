@@ -70,4 +70,11 @@ class AgentContextStorePort(Protocol):
         context_id: str,
     ) -> AgentContextUsageMarker | None: ...
 
+    def estimate_window_tokens(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> int: ...
+
     def next_turn_id(self, *, context_id: str) -> str: ...

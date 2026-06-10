@@ -19,6 +19,15 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.7 - 2026-06-10
+
+### Fixed
+- Fix agent context window token accounting when the active context window moves.
+- Move agent context table ownership into the runtime SQLite bootstrap.
+
+### Notes
+- Includes PR #69.
+
 ## 0.1.0-beta.6 - 2026-06-09
 
 ### Added

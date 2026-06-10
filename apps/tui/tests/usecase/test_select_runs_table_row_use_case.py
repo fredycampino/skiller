@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from apps.tui.tests.support import FakeSessionStorePort
 from stui.port.event_models import LogEvent
 from stui.port.event_port import LogEventsListener
 from stui.port.run_port import (
@@ -12,6 +13,7 @@ from stui.port.run_port import (
     RunRuntimeStatusKind,
     RunRuntimeWaitType,
 )
+from stui.port.session_store_port import StoredSession
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.usecase.select_runs_table_row_use_case import SelectRunsTableRowUseCase
 from stui.viewmodel.console_screen_state import (
@@ -187,8 +189,14 @@ def test_runs_selection_loads_waiting_run_in_chat_mode() -> None:
     observer = FakeLogEventsListener()
     run_port = FakeRunPort(_waiting_status(wait_type=RunRuntimeWaitType.INPUT))
     events_port = FakeEventsPort()
+    session_store = FakeSessionStorePort()
 
-    result = _use_case(run_port=run_port, events_port=events_port, context=context).execute(
+    result = _use_case(
+        run_port=run_port,
+        events_port=events_port,
+        context=context,
+        session_store=session_store,
+    ).execute(
         observer,
         state=state,
         prompt_text="/runs",
@@ -206,6 +214,7 @@ def test_runs_selection_loads_waiting_run_in_chat_mode() -> None:
     assert context.mode == RunMode.CHAT
     assert context.status == RunStatus.WAITING_INPUT
     assert events_port.subscribe_calls == ["run-1234"]
+    assert session_store.written == [StoredSession(run_id="run-1234", run_name="ant")]
 
 
 def test_same_run_selection_preserves_transcript_items() -> None:
@@ -282,10 +291,12 @@ def _use_case(
     run_port: FakeRunPort,
     events_port: FakeEventsPort,
     context: RunEventContext,
+    session_store: FakeSessionStorePort | None = None,
 ) -> SelectRunsTableRowUseCase:
     return SelectRunsTableRowUseCase(
         run_port=run_port,
         events_port=events_port,
+        session_store_port=session_store or FakeSessionStorePort(),
         context=context,
     )
 

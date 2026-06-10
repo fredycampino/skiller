@@ -140,17 +140,19 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             height: auto;
             width: 100%;
             margin: 1 0 0 0;
-            padding: 0 1;
-            border: round {theme.color_prompt_border};
+            padding: 0;
+            border: none;
             background: {theme.color_ansi_default};
-            color: {theme.color_text_primary};
+            color: {theme.color_text_muted};
+            content-align: right bottom;
         }}
 
         #agent-context-stats-content {{
             height: auto;
             width: 100%;
-            color: {theme.color_text_primary};
+            color: {theme.color_text_muted};
             background: {theme.color_ansi_default};
+            content-align: right bottom;
         }}
 
         #notify-action-message {{

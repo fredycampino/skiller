@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime
 
 from rich.console import Group
@@ -12,6 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Static, TextArea
 
+from stui.app_version import format_app_version
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.runs_port import RunsPortItem
@@ -556,7 +558,8 @@ def run_console_screen(
     theme: TuiTheme = DEFAULT_TUI_THEME,
     strings: TuiStrings = DEFAULT_TUI_STRINGS,
 ) -> str:
-    container = build_tui_container(theme=theme, strings=strings)
+    resolved_strings = _resolve_runtime_strings(strings)
+    container = build_tui_container(theme=theme, strings=resolved_strings)
     viewmodel = container.build_viewmodel(session_key=session_key)
 
     class ThemedConsoleScreen(ConsoleScreen):
@@ -569,6 +572,12 @@ def run_console_screen(
     )
     result = app.run(mouse=False)
     return result or session_key
+
+
+def _resolve_runtime_strings(strings: TuiStrings) -> TuiStrings:
+    if strings.intro_hint:
+        return strings
+    return replace(strings, intro_hint=format_app_version())
 
 
 def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:

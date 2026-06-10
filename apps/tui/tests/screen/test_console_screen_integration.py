@@ -702,11 +702,15 @@ def test_run_console_screen_disables_textual_mouse(monkeypatch: pytest.MonkeyPat
         def build_viewmodel(self, *, session_key: str) -> object:
             return viewmodel
 
+    resolved_strings: list[object] = []
+
     def fake_build_tui_container(
         *,
         theme: object,
         strings: object,
     ) -> FakeContainer:
+        _ = theme
+        resolved_strings.append(strings)
         return FakeContainer()
 
     def fake_run(
@@ -721,12 +725,19 @@ def test_run_console_screen_disables_textual_mouse(monkeypatch: pytest.MonkeyPat
         "build_tui_container",
         fake_build_tui_container,
     )
+    monkeypatch.setattr(
+        console_screen_module,
+        "format_app_version",
+        lambda: "v0.1.0-beta.8",
+    )
     monkeypatch.setattr(ConsoleScreen, "run", fake_run)
 
     result = console_screen_module.run_console_screen(session_key="main")
 
     assert result == "main"
     assert run_calls == [{"mouse": False}]
+    assert isinstance(resolved_strings[0], TuiStrings)
+    assert resolved_strings[0].intro_hint == "v0.1.0-beta.8"
 
 
 def test_console_screen_escape_interrupts_running_chat_agent() -> None:

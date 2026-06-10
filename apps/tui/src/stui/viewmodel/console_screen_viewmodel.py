@@ -41,9 +41,17 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._on_event = callback
 
     async def on_start(self) -> None:
-        result = await self._use_cases.start_console.execute(self, state=self.state)
-        self.state = result.state
+        start_result = await self._use_cases.start_console.execute(self, state=self.state)
+        self.state = start_result.state
+        resumed = False
+        if not start_result.started_auth:
+            resume_result = self._use_cases.resume_console.execute(self, state=self.state)
+            self.state = resume_result.state
+            resumed = resume_result.resumed
         self._emit_state()
+        if start_result.started_auth or resumed:
+            self._schedule_refresh_agent_context_stats()
+            self._schedule_refresh_footer_context()
 
     def notify(self, events: list[LogEvent]) -> None:
         result = self._use_cases.event_state.execute(
@@ -67,6 +75,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state = notify_action_result.state
 
         self._emit_state()
+        self._schedule_refresh_agent_context_stats()
         self._schedule_refresh_footer_context()
         command = run_action_result.command
         if command is not None:
@@ -98,6 +107,22 @@ class ConsoleScreenViewModel(LogEventsListener):
             state=self.state,
             run_id=run_id,
             action_uid=action_uid,
+        )
+        self.state = result.state
+        self._emit_state()
+
+    def _schedule_refresh_agent_context_stats(self) -> None:
+        if self.state.agent_context_stats is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self._refresh_agent_context_stats())
+
+    async def _refresh_agent_context_stats(self) -> None:
+        result = await self._use_cases.refresh_agent_context_stats.execute(
+            state=self.state,
         )
         self.state = result.state
         self._emit_state()

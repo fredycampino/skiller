@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 import stui.usecase.run_command_use_case as run_command_use_case_module
+from apps.tui.tests.support import FakeSessionStorePort
 from stui.port.event_models import LogEvent
 from stui.port.run_port import (
     RunDispatch,
@@ -12,6 +13,7 @@ from stui.port.run_port import (
     RunDispatchErrorKind,
     RunRuntimeStatusKind,
 )
+from stui.port.session_store_port import StoredSession
 from stui.usecase.normalize_command_use_case import NormalizeCommandUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
@@ -72,7 +74,13 @@ def test_run_command_use_case_missing_agent_records_error(
         port = FakeRunPort(_dispatch_error())
         events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
+        session_store = FakeSessionStorePort()
+        use_case = RunCommandUseCase(
+            run_port=port,
+            events_port=events_port,
+            session_store_port=session_store,
+            context=context,
+        )
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
 
@@ -111,7 +119,13 @@ def test_run_command_use_case_dispatch_success_loads_run(
         port = FakeRunPort(_dispatch())
         events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
+        session_store = FakeSessionStorePort()
+        use_case = RunCommandUseCase(
+            run_port=port,
+            events_port=events_port,
+            session_store_port=session_store,
+            context=context,
+        )
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
 
@@ -137,6 +151,7 @@ def test_run_command_use_case_dispatch_success_loads_run(
         assert state.prompt.text == ""
         assert state.prompt.cursor_position == 0
         assert state.transcript.items == []
+        assert session_store.written == [StoredSession(run_id="run-1234", run_name="chat")]
 
     asyncio.run(run())
 
@@ -150,7 +165,13 @@ def test_run_command_use_case_unexpected_status_records_error(
         port = FakeRunPort(_dispatch(status=RunRuntimeStatusKind.RUNNING))
         events_port = FakeEventsPort()
         context = _run_context()
-        use_case = RunCommandUseCase(run_port=port, events_port=events_port, context=context)
+        session_store = FakeSessionStorePort()
+        use_case = RunCommandUseCase(
+            run_port=port,
+            events_port=events_port,
+            session_store_port=session_store,
+            context=context,
+        )
         state = ConsoleScreenState(session_key="main")
         observer = FakeObserver()
         events_port.current_run_id = "old-run"
@@ -184,10 +205,12 @@ def test_run_command_use_case_unsubscribes_existing_observer(
     async def run() -> None:
         port = FakeRunPort(_dispatch())
         events_port = FakeEventsPort()
+        session_store = FakeSessionStorePort()
         use_case = RunCommandUseCase(
             run_port=port,
             events_port=events_port,
-            context=_run_context()
+            session_store_port=session_store,
+            context=_run_context(),
         )
         observer = FakeObserver()
         events_port.current_run_id = "old-run"
@@ -213,9 +236,11 @@ def test_run_command_use_case_keeps_current_mode(
 
     async def run() -> None:
         context = _run_context()
+        session_store = FakeSessionStorePort()
         use_case = RunCommandUseCase(
             run_port=FakeRunPort(_dispatch()),
             events_port=FakeEventsPort(),
+            session_store_port=session_store,
             context=context,
         )
 

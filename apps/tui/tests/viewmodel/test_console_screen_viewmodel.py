@@ -14,6 +14,12 @@ from apps.tui.tests.support import (
     patched_to_thread,
 )
 from stui.di.strings import TuiStrings
+from stui.port.agent_port import (
+    AgentContextStats,
+    AgentContextWindowStats,
+    AgentStatsResult,
+    AgentStatsStatus,
+)
 from stui.port.event_models import (
     ActionOpenUrlValue,
     ActionRunValue,
@@ -47,6 +53,9 @@ from stui.port.runs_port import RunsPortItem
 from stui.port.waiting_port import WaitingInputAck, WaitingInputStatus
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
+)
+from stui.usecase import (
+    refresh_agent_context_stats_use_case as refresh_agent_context_stats_use_case_module,
 )
 from stui.usecase import (
     submit_waiting_input_use_case as submit_waiting_input_use_case_module,
@@ -557,6 +566,75 @@ def test_notify_updates_agent_status_context() -> None:
     )
 
     assert viewmodel._run_event_context.agent_id == "support_agent"  # noqa: SLF001
+
+
+def test_notify_refreshes_visible_agent_context_stats() -> None:
+    async def run() -> None:
+        agent_port = FakeAgentPort(
+            stats=AgentStatsResult(
+                status=AgentStatsStatus.OK,
+                run_id="run-1234",
+                agent_id="support_agent",
+                context_id="ctx-1234",
+                context=AgentContextStats(
+                    entries=1001,
+                    estimated_tokens=4000,
+                    window=AgentContextWindowStats(
+                        start_sequence=100,
+                        end_sequence=1100,
+                        current_tokens=4000,
+                        limit_tokens=80000,
+                        capacity_tokens=100000,
+                    ),
+                ),
+            )
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+            waiting_port=FakeWaitingPort(),
+            agent_port=agent_port,
+        )
+        viewmodel._run_event_context.run_id = "run-1234"  # noqa: SLF001
+        viewmodel._run_event_context.agent_id = "support_agent"  # noqa: SLF001
+        viewmodel.state.set_agent_context_stats(
+            AgentContextStatsState(
+                entries=24,
+                estimated_tokens=2618,
+                start_sequence=1,
+                end_sequence=24,
+                current_tokens=2618,
+                limit_tokens=80000,
+                capacity_tokens=100000,
+            )
+        )
+
+        viewmodel.notify(
+            [
+                _event(
+                    LogEventType.STEP_STARTED,
+                    step_id="support_agent",
+                    step_type="agent",
+                    payload=StepStartedPayload(),
+                )
+            ]
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert agent_port.stats_called_with == [("run-1234", "support_agent")]
+        assert viewmodel.state.agent_context_stats == AgentContextStatsState(
+            entries=1001,
+            estimated_tokens=4000,
+            start_sequence=100,
+            end_sequence=1100,
+            current_tokens=4000,
+            limit_tokens=80000,
+            capacity_tokens=100000,
+        )
+
+    with patched_to_thread(refresh_agent_context_stats_use_case_module):
+        asyncio.run(run())
 
 
 def test_open_notify_action_link_calls_use_case() -> None:

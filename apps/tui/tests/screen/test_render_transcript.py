@@ -13,6 +13,7 @@ from stui.screen.transcript.agent_final_assistant_message_view import (
 from stui.screen.transcript.agent_tool_call_view import AgentToolCallView
 from stui.screen.transcript.agent_tool_result_view import AgentToolResultView
 from stui.screen.transcript.info_view import InfoView
+from stui.screen.transcript.intro_view import IntroView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_system_notice_view import RunSystemNoticeView
@@ -40,6 +41,26 @@ from stui.viewmodel.console_screen_state import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_intro_view_renders_title_body_and_version_hint() -> None:
+    view = IntroView(
+        strings=TuiStrings(
+            intro_title="Skiller.run stui",
+            intro_body="Run agentics workflows.",
+            intro_hint="v0.1.0-beta.8",
+        )
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    lines = [line.rstrip() for line in console.export_text().splitlines()]
+    assert lines[:3] == [
+        "Skiller.run stui",
+        "Run agentics workflows.",
+        "v0.1.0-beta.8",
+    ]
 
 
 def test_active_tool_marks_call_when_call_is_latest_view() -> None:

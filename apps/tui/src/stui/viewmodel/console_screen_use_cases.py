@@ -24,7 +24,11 @@ from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
+from stui.usecase.refresh_agent_context_stats_use_case import (
+    RefreshAgentContextStatsUseCase,
+)
 from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
+from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
@@ -52,12 +56,14 @@ class ConsoleScreenUseCases:
     open_notify_action: OpenNotifyActionUseCase
     prompt_enter: PromptEnterUseCase
     agent_usage: ProjectAgentUsageUseCase
+    refresh_agent_context_stats: RefreshAgentContextStatsUseCase
     refresh_footer_context: RefreshFooterContextUseCase
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
     get_run_action: GetRunActionUseCase
     start_console: StartConsoleUseCase
+    resume_console: ResumeConsoleUseCase
     submit_waiting_input: SubmitWaitingInputUseCase
     toggle_agent_stats: ToggleAgentStatsUseCase
     unsupported_input: UnsupportedInputUseCase

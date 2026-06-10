@@ -6,8 +6,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class TuiStrings:
     intro_title: str = "Skiller.run stui"
-    intro_body: str = "Run agents, flows and tools."
-    intro_hint: str = "Use / to see the commands"
+    intro_body: str = "Run agentics workflows."
+    intro_hint: str = ""
     unsupported_input_message: str = "Use /run <agent> to execute an agent."
     runs_table_empty_message: str = "No runs yet. Use /run to execute your flows."
     runs_table_navigation_hint: str = "↑↓ · Enter · Esc"

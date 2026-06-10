@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from apps.tui.tests.support import FakeSessionStorePort
 from stui.port.event_models import (
     AgentOutputValue,
     ErrorPayload,
@@ -323,6 +324,26 @@ def test_event_state_projects_terminal_and_observer_status(
     assert context.status == expected_context_status
 
 
+def test_event_state_clears_stored_session_when_run_finishes() -> None:
+    state = ConsoleScreenState()
+    context = _context()
+    session_store = FakeSessionStorePort()
+    use_case = _use_case(context=context, session_store=session_store)
+
+    use_case.execute(
+        FakeObserver(),
+        state=state,
+        events=[
+            _event(
+                LogEventType.RUN_FINISHED,
+                payload=RunFinishedPayload(status="succeeded"),
+            )
+        ],
+    )
+
+    assert session_store.clear_calls == 1
+
+
 def test_event_state_interrupts_running_run_on_observer_error() -> None:
     state = ConsoleScreenState()
     context = _context()
@@ -371,11 +392,13 @@ def _use_case(
     context: RunEventContext,
     agent_port: FakeAgentPort | None = None,
     events_port: FakeEventsPort | None = None,
+    session_store: FakeSessionStorePort | None = None,
 ) -> EventStateUseCase:
     return EventStateUseCase(
         context=context,
         agent_port=agent_port or FakeAgentPort(),
         events_port=events_port or FakeEventsPort(),
+        session_store_port=session_store or FakeSessionStorePort(),
         transcript_mapper=EventTranscriptMapper(),
     )
 

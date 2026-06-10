@@ -12,7 +12,6 @@ from stui.viewmodel.console_screen_state import FooterContextState
 DEFAULT_BAR_WIDTH = 24
 TOKEN_FILLED = "━"
 TOKEN_EMPTY = "─"
-TOKEN_CURRENT_MARKER = "┴"
 TOKEN_LIMIT_MARKER = "▾"
 
 
@@ -104,10 +103,7 @@ def _append_token_bar(
         if index == limit_marker_index:
             text.append(TOKEN_LIMIT_MARKER, style=theme.color_text_secondary)
             continue
-        if index == current_marker_index:
-            text.append(TOKEN_CURRENT_MARKER, style=token_style)
-            continue
-        if index < current_marker_index:
+        if index <= current_marker_index:
             text.append(TOKEN_FILLED, style=token_style)
             continue
         text.append(TOKEN_EMPTY, style=theme.color_text_muted)

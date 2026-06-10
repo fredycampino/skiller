@@ -8,6 +8,7 @@ from stui.port.run_port import (
     RunPort,
     RunRuntimeStatusKind,
 )
+from stui.port.session_store_port import SessionStorePort, StoredSession
 from stui.usecase.normalize_command_use_case import Command
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -37,6 +38,7 @@ class RunCommandUseCase:
 
     run_port: RunPort
     events_port: EventsPort
+    session_store_port: SessionStorePort
     context: RunEventContext
 
     async def execute(
@@ -77,6 +79,9 @@ class RunCommandUseCase:
             status=RunStatus.RUNNING,
         )
         state.load_session(run_id=ack.run_id, run_name=raw_args)
+        self.session_store_port.write(
+            StoredSession(run_id=ack.run_id, run_name=raw_args)
+        )
         state.set_transcript(mode=state.transcript.mode)
         state.set_autocompletion()
         state.set_prompt(mode=PromptMode.DEFAULT)

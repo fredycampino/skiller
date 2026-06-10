@@ -14,6 +14,7 @@ from stui.port.event_models import (
     WaitInputOutputValue,
 )
 from stui.port.event_port import EventsPort, LogEventsListener
+from stui.port.session_store_port import SessionStorePort
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -35,6 +36,7 @@ class EventStateUseCase:
     context: RunEventContext
     agent_port: AgentPort
     events_port: EventsPort
+    session_store_port: SessionStorePort
     transcript_mapper: EventTranscriptMapper
 
     def execute(
@@ -161,9 +163,11 @@ class EventStateUseCase:
             if normalized_status == "succeeded":
                 state.set_status(kind=ViewStatusKind.HIDDEN)
                 self.context.status = RunStatus.SUCCESS
+                self.session_store_port.clear()
                 return
             state.set_status(kind=ViewStatusKind.ERROR, message=normalized_status or "failed")
             self.context.status = RunStatus.FAILED
+            self.session_store_port.clear()
 
 
 def _waiting_prompt(output: OutputPayload) -> str:

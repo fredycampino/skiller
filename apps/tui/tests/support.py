@@ -20,6 +20,7 @@ from stui.port.run_port import (
     RunRuntimeStatus,
 )
 from stui.port.runs_port import RunsPortItem
+from stui.port.session_store_port import StoredSession
 from stui.viewmodel.console_screen_viewmodel import (
     ConsoleScreenViewModel,
 )
@@ -39,12 +40,14 @@ def build_viewmodel(
     runs_port=None,
     agent_port=None,
     installation_state_port=None,
+    session_store_port=None,
     strings: TuiStrings | None = None,
 ) -> ConsoleScreenViewModel:
     resolved_events_port = events_port or FakeEventsPort()
     resolved_installation_state_port = (
         installation_state_port or FakeInstallationStatePort()
     )
+    resolved_session_store_port = session_store_port or FakeSessionStorePort()
     if strings is None:
         container = build_tui_container(
             run_port=run_port,
@@ -54,6 +57,7 @@ def build_viewmodel(
             notify_action_port=notify_action_port,
             agent_port=agent_port,
             installation_state_port=resolved_installation_state_port,
+            session_store_port=resolved_session_store_port,
         )
         return container.build_viewmodel(session_key=session_key)
 
@@ -66,6 +70,7 @@ def build_viewmodel(
         notify_action_port=notify_action_port,
         agent_port=agent_port,
         installation_state_port=resolved_installation_state_port,
+        session_store_port=resolved_session_store_port,
     )
     return container.build_viewmodel(session_key=session_key)
 
@@ -199,6 +204,24 @@ class FakeEventsPort:
         self.unsubscribe_call_count += 1
         self.current_listener = None
         self.current_run_id = ""
+
+
+class FakeSessionStorePort:
+    def __init__(self, session: StoredSession | None = None) -> None:
+        self.session = session
+        self.written: list[StoredSession] = []
+        self.clear_calls = 0
+
+    def read(self) -> StoredSession | None:
+        return self.session
+
+    def write(self, session: StoredSession) -> None:
+        self.session = session
+        self.written.append(session)
+
+    def clear(self) -> None:
+        self.session = None
+        self.clear_calls += 1
 
 
 class FakeInstallationStatePort:

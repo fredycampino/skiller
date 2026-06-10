@@ -12,12 +12,12 @@ from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.viewmodel.console_screen_state import AgentContextStatsState
 
 DEFAULT_BAR_WIDTH = 24
-TURNS_FILLED = "■"
-TURNS_EMPTY = "□"
-TOKEN_FILLED = "━"
-TOKEN_EMPTY = "─"
-TOKEN_CURRENT_MARKER = "┴"
-TOKEN_LIMIT_MARKER = "▾"
+MIN_BAR_WIDTH = 8
+MAX_BAR_WIDTH = 24
+RANGE_BOUNDARY = "▪"
+RANGE_EMPTY = "─"
+RANGE_FILLED = "━"
+RANGE_START_MARKER = "▾"
 
 
 class AgentContextStatsView(Vertical):
@@ -56,11 +56,11 @@ class AgentContextStatsView(Vertical):
         if self._state is None:
             content.update("")
             return
+        _ = self._strings
         bar_width = content.size.width or DEFAULT_BAR_WIDTH
         rendered = _render_context_stats(
             self._state,
             theme=self._theme,
-            strings=self._strings,
             bar_width=bar_width,
         )
         content.update(rendered)
@@ -70,127 +70,72 @@ def _render_context_stats(
     state: AgentContextStatsState,
     *,
     theme: TuiTheme,
-    strings: TuiStrings,
     bar_width: int,
 ) -> Text:
-    text = Text(strings.agent_context_stats_title, style=theme.color_text_primary)
-    text.append("\n\n")
-    text.append(
-        f"truncate {_truncated_turns(state)}/{_total_turns(state)}",
-        style=theme.color_text_secondary,
-    )
+    width = _bar_width(bar_width)
+    start_index = _start_marker_index(state, bar_width=width)
+    label_line = _label_line(state, bar_width=width, start_index=start_index)
+    text = Text(label_line, style=theme.color_text_muted)
     text.append("\n")
-    _append_turns_bar(text, state, theme=theme, bar_width=bar_width)
-    text.append("\n\n")
-    token_header = _token_header(state, bar_width=bar_width)
-    text.append(token_header, style=theme.color_text_secondary)
-    text.append("\n")
-    _append_token_bar(text, state, theme=theme, bar_width=bar_width)
-    text.append("\n")
-    token_limit_marker = _token_limit_marker(state, bar_width=bar_width)
-    text.append(token_limit_marker, style=theme.color_text_muted)
+    _append_range_bar(text, state, theme=theme, bar_width=width, start_index=start_index)
     return text
 
 
-def _append_turns_bar(
+def _append_range_bar(
     text: Text,
     state: AgentContextStatsState,
     *,
     theme: TuiTheme,
     bar_width: int,
+    start_index: int,
 ) -> None:
-    width = max(bar_width, 1)
-    total = max(_total_turns(state), 1)
-    truncated = _truncated_turns(state)
-    truncated_width = min(width, int((truncated / total) * width))
-    text.append(TURNS_EMPTY * truncated_width, style=theme.color_text_muted)
-    text.append(TURNS_FILLED * (width - truncated_width), style=theme.color_text_secondary)
-
-
-def _append_token_bar(
-    text: Text,
-    state: AgentContextStatsState,
-    *,
-    theme: TuiTheme,
-    bar_width: int,
-) -> None:
-    width = max(bar_width, 1)
-    current_marker_index = _token_current_marker_index(state, bar_width=bar_width)
-    limit_marker_index = _token_limit_marker_index(state, bar_width=bar_width)
-    token_style = _token_style(state, theme=theme)
+    width = _bar_width(bar_width)
+    end_index = width - 1
     for index in range(width):
-        if index == limit_marker_index:
-            text.append(TOKEN_LIMIT_MARKER, style=theme.color_text_secondary)
+        if index == 0 or index == end_index:
+            text.append(RANGE_BOUNDARY, style=theme.color_text_muted)
             continue
-        if index == current_marker_index:
-            text.append(TOKEN_CURRENT_MARKER, style=token_style)
+        if index == start_index:
+            text.append(RANGE_START_MARKER, style=theme.color_text_muted)
             continue
-        if index < current_marker_index:
-            text.append(TOKEN_FILLED, style=token_style)
+        if index > start_index:
+            text.append(RANGE_FILLED, style=theme.color_text_muted)
             continue
-        text.append(TOKEN_EMPTY, style=theme.color_text_muted)
+        text.append(RANGE_EMPTY, style=theme.color_text_muted)
 
 
-def _token_header(state: AgentContextStatsState, *, bar_width: int) -> str:
-    current = _format_tokens(state.current_tokens)
-    capacity = _format_limit_tokens(state.capacity_tokens)
-    gap = max(1, bar_width - len(current) - len(capacity))
-    return f"{current}{' ' * gap}{capacity}"
+def _label_line(
+    state: AgentContextStatsState,
+    *,
+    bar_width: int,
+    start_index: int,
+) -> str:
+    width = _bar_width(bar_width)
+    start_label = str(max(state.start_sequence, 0))
+    end_label = str(max(state.end_sequence, 0))
+    line = [" "] * width
+    _place_label(line, label=start_label, center_index=start_index)
+    _place_label(line, label=end_label, center_index=width - 1)
+    return "".join(line).rstrip()
 
 
-def _token_limit_marker(state: AgentContextStatsState, *, bar_width: int) -> str:
-    label = f"limit {_format_limit_tokens(state.limit_tokens)}"
-    marker_index = _token_limit_marker_index(state, bar_width=bar_width)
-    prefix_width = max(0, marker_index - len("limit "))
-    return f"{' ' * prefix_width}{label}"
+def _bar_width(bar_width: int) -> int:
+    return min(MAX_BAR_WIDTH, max(MIN_BAR_WIDTH, bar_width))
 
 
-def _token_limit_marker_index(state: AgentContextStatsState, *, bar_width: int) -> int:
-    width = max(bar_width, 1)
-    capacity = max(state.capacity_tokens, 1)
-    limit = max(state.limit_tokens, 0)
-    marker_position = ceil((limit / capacity) * width) - 1
-    return min(width - 1, max(0, marker_position))
+def _place_label(line: list[str], *, label: str, center_index: int) -> None:
+    if not line or not label:
+        return
+    start = center_index - (len(label) // 2)
+    start = min(max(start, 0), max(0, len(line) - len(label)))
+    for offset, character in enumerate(label):
+        line[start + offset] = character
 
 
-def _token_current_marker_index(state: AgentContextStatsState, *, bar_width: int) -> int:
-    width = max(bar_width, 1)
-    capacity = max(state.capacity_tokens, 1)
-    current = max(state.current_tokens, 0)
-    marker_position = ceil((current / capacity) * width) - 1
-    return min(width - 1, max(0, marker_position))
-
-
-def _truncated_turns(state: AgentContextStatsState) -> int:
-    return max(state.start_sequence - 1, 0)
-
-
-def _total_turns(state: AgentContextStatsState) -> int:
-    return state.entries + _truncated_turns(state)
-
-
-def _token_percent(state: AgentContextStatsState) -> int:
-    limit = max(state.limit_tokens, 1)
-    current = max(state.current_tokens, 0)
-    return min(999, round((current / limit) * 100))
-
-
-def _token_style(state: AgentContextStatsState, *, theme: TuiTheme) -> str:
-    percent = _token_percent(state)
-    if percent >= 90:
-        return theme.color_text_error
-    if percent >= 70:
-        return theme.color_text_warning
-    return theme.color_text_secondary
-
-
-def _format_tokens(value: int) -> str:
-    if value < 1000:
-        return str(value)
-    if value % 1000 == 0:
-        return f"{value // 1000}k"
-    return f"{value / 1000:.1f}k"
-
-
-def _format_limit_tokens(value: int) -> str:
-    return _format_tokens(value).replace("k", "K")
+def _start_marker_index(state: AgentContextStatsState, *, bar_width: int) -> int:
+    width = _bar_width(bar_width)
+    end_sequence = max(state.end_sequence, 1)
+    start_sequence = max(state.start_sequence, 1)
+    interior_width = max(width - 2, 1)
+    marker_position = ceil((start_sequence / end_sequence) * interior_width)
+    return min(width - 2, max(1, marker_position))

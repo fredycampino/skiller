@@ -16,6 +16,10 @@ from stui.adapter.default_runs_port import DefaultRunsPort
 from stui.adapter.default_waiting_port import DefaultWaitingPort
 from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
 from stui.adapter.events.logs_event_observer import LogsEventObserver
+from stui.adapter.file_session_store_adapter import (
+    FileSessionStoreAdapter,
+    default_session_store_path,
+)
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.agent_port import AgentPort
 from stui.port.event_port import EventsPort
@@ -23,6 +27,7 @@ from stui.port.installation_state_port import InstallationStatePort
 from stui.port.notify_action_port import NotifyActionPort
 from stui.port.run_port import RunPort
 from stui.port.runs_port import RunsPort
+from stui.port.session_store_port import SessionStorePort
 from stui.port.waiting_port import WaitingPort
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.usecase.agent_status_use_case import AgentStatusUseCase
@@ -50,7 +55,11 @@ from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
+from stui.usecase.refresh_agent_context_stats_use_case import (
+    RefreshAgentContextStatsUseCase,
+)
 from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
+from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.usecase.select_runs_table_row_use_case import (
@@ -81,6 +90,7 @@ class TuiContainer:
     notify_action_port: NotifyActionPort
     agent_port: AgentPort
     installation_state_port: InstallationStatePort
+    session_store_port: SessionStorePort
     run_event_context: RunEventContext
     use_cases: ConsoleScreenUseCases
 
@@ -103,6 +113,7 @@ def build_tui_container(
     notify_action_port: NotifyActionPort | None = None,
     agent_port: AgentPort | None = None,
     installation_state_port: InstallationStatePort | None = None,
+    session_store_port: SessionStorePort | None = None,
     cli_invoker: CliInvoker | None = None,
 ) -> TuiContainer:
     resolved_cli_invoker = cli_invoker or CliInvoker()
@@ -128,6 +139,9 @@ def build_tui_container(
     resolved_installation_state_port = (
         installation_state_port or DefaultInstallationStatePort()
     )
+    resolved_session_store_port = session_store_port or FileSessionStoreAdapter(
+        path=default_session_store_path(),
+    )
     run_event_context = RunEventContext(
         run_id="",
         run_name="",
@@ -147,6 +161,7 @@ def build_tui_container(
             context=run_event_context,
             agent_port=resolved_agent_port,
             events_port=resolved_events_port,
+            session_store_port=resolved_session_store_port,
             transcript_mapper=EventTranscriptMapper(strings=strings),
         ),
         done_notify_action=DoneNotifyActionUseCase(
@@ -156,6 +171,10 @@ def build_tui_container(
             notify_action_port=resolved_notify_action_port,
         ),
         agent_usage=ProjectAgentUsageUseCase(),
+        refresh_agent_context_stats=RefreshAgentContextStatsUseCase(
+            agent_port=resolved_agent_port,
+            context=run_event_context,
+        ),
         refresh_footer_context=RefreshFooterContextUseCase(
             agent_port=resolved_agent_port,
             context=run_event_context,
@@ -166,6 +185,7 @@ def build_tui_container(
         run_command=RunCommandUseCase(
             run_port=resolved_run_port,
             events_port=resolved_events_port,
+            session_store_port=resolved_session_store_port,
             context=run_event_context,
         ),
         get_run_action=GetRunActionUseCase(context=run_event_context),
@@ -175,9 +195,16 @@ def build_tui_container(
             events_port=resolved_events_port,
             context=run_event_context,
         ),
+        resume_console=ResumeConsoleUseCase(
+            run_port=resolved_run_port,
+            events_port=resolved_events_port,
+            session_store_port=resolved_session_store_port,
+            context=run_event_context,
+        ),
         select_runs_table_row=SelectRunsTableRowUseCase(
             run_port=resolved_run_port,
             events_port=resolved_events_port,
+            session_store_port=resolved_session_store_port,
             context=run_event_context,
         ),
         submit_waiting_input=SubmitWaitingInputUseCase(
@@ -202,6 +229,7 @@ def build_tui_container(
         notify_action_port=resolved_notify_action_port,
         agent_port=resolved_agent_port,
         installation_state_port=resolved_installation_state_port,
+        session_store_port=resolved_session_store_port,
         run_event_context=run_event_context,
         use_cases=use_cases,
     )

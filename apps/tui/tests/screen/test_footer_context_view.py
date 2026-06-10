@@ -25,8 +25,9 @@ def test_render_footer_context_shows_model_tokens_capacity_and_bar() -> None:
     plain = rendered.plain
     assert plain.startswith("gpt-5.5\n59.5k")
     assert "100K" in plain
-    assert "┴" in plain
+    assert "┴" not in plain
     assert "▾" in plain
+    assert plain.splitlines()[2] == "━━━━━━━━━━━━━━━━━━─────▾──────"
 
 
 def test_render_footer_context_uses_fallback_without_context() -> None:

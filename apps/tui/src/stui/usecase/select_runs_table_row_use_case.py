@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from stui.port.event_port import EventsPort, LogEventsListener
 from stui.port.run_port import RunPort
+from stui.port.session_store_port import SessionStorePort, StoredSession
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
@@ -32,6 +33,7 @@ class SelectRunsTableRowUseCase:
 
     run_port: RunPort
     events_port: EventsPort
+    session_store_port: SessionStorePort
     context: RunEventContext
 
     def execute(
@@ -69,6 +71,7 @@ class SelectRunsTableRowUseCase:
             transcript_items = list(state.transcript.items)
 
         state.load_session(run_id=run_id, run_name=run_name)
+        self.session_store_port.write(StoredSession(run_id=run_id, run_name=run_name))
         state.set_transcript(mode=state.transcript.mode, items=transcript_items)
         state.set_autocompletion()
         state.set_prompt(

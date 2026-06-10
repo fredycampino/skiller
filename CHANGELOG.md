@@ -19,6 +19,18 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.8 - 2026-06-10
+
+### Added
+- Add a dedicated STUI footer context status view with compact token usage and capacity bar.
+
+### Changed
+- Make the STUI footer responsive across wide and narrow terminals.
+- Keep footer context status separate from the Ctrl+T agent context stats panel.
+
+### Notes
+- Includes PR #71.
+
 ## 0.1.0-beta.7 - 2026-06-10
 
 ### Fixed

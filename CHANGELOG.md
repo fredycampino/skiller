@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.9 - 2026-06-10
+
+### Added
+- Add STUI session persistence so the console can resume the last active run.
+- Add the installed package version to the STUI intro.
+
+### Changed
+- Replace the STUI agent context stats panel with a compact muted range bar.
+- Refresh visible agent context stats alongside footer context updates.
+
+### Notes
+- Includes PR #73.
+
 ## 0.1.0-beta.8 - 2026-06-10
 
 ### Added

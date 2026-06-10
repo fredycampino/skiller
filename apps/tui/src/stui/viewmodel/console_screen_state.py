@@ -333,6 +333,14 @@ class AgentContextStatsState:
 
 
 @dataclass
+class FooterContextState:
+    model: str
+    current_tokens: int
+    limit_tokens: int
+    capacity_tokens: int
+
+
+@dataclass
 class ViewStatusState:
     kind: ViewStatusKind = ViewStatusKind.HIDDEN
     message: str = ""
@@ -354,6 +362,7 @@ class ConsoleScreenState:
     runs_table: RunsTableState = field(default_factory=RunsTableState)
     agent_usage: AgentUsageState | None = None
     agent_context_stats: AgentContextStatsState | None = None
+    footer_context: FooterContextState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
     notify_action: NotifyActionState | None = None
@@ -416,6 +425,12 @@ class ConsoleScreenState:
         agent_context_stats: AgentContextStatsState | None = None,
     ) -> None:
         self.agent_context_stats = agent_context_stats
+
+    def set_footer_context(
+        self,
+        footer_context: FooterContextState | None = None,
+    ) -> None:
+        self.footer_context = footer_context
 
     def set_notify_action(
         self,

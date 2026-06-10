@@ -4,8 +4,8 @@ import pytest
 
 from stui.port.runs_port import RunsPortItem
 from stui.screen.console_screen import (
-    _build_footer_left_text,
     _build_footer_right_text,
+    _build_footer_usage_text,
     _format_agent_tokens,
     _format_run_updated_at,
     _resolve_run_row_status,
@@ -61,7 +61,7 @@ def test_format_agent_tokens_uses_compact_k_units() -> None:
     assert _format_agent_tokens(3155) == "3.2k"
 
 
-def test_build_footer_left_text_shows_usage_when_available() -> None:
+def test_build_footer_usage_text_shows_usage_when_available() -> None:
     state = ConsoleScreenState(
         agent_usage=AgentUsageState(
             model="MiniMax-M2.5",
@@ -69,11 +69,11 @@ def test_build_footer_left_text_shows_usage_when_available() -> None:
         )
     )
 
-    assert _build_footer_left_text(state=state) == "MiniMax-M2.5\n3.2k"
+    assert _build_footer_usage_text(state=state) == "MiniMax-M2.5\n3.2k"
 
 
-def test_build_footer_left_text_falls_back_to_commands_hint() -> None:
-    assert _build_footer_left_text(state=ConsoleScreenState()) == "/ for commands"
+def test_build_footer_usage_text_falls_back_to_commands_hint() -> None:
+    assert _build_footer_usage_text(state=ConsoleScreenState()) == "/ for commands"
 
 
 def test_build_footer_right_text_shows_run_id_and_compact_run_name() -> None:

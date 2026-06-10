@@ -24,6 +24,7 @@ from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
+from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
@@ -51,6 +52,7 @@ class ConsoleScreenUseCases:
     open_notify_action: OpenNotifyActionUseCase
     prompt_enter: PromptEnterUseCase
     agent_usage: ProjectAgentUsageUseCase
+    refresh_footer_context: RefreshFooterContextUseCase
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase

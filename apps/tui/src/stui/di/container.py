@@ -50,6 +50,7 @@ from stui.usecase.project_transcript_use_case import (
     ProjectTranscriptUseCase,
 )
 from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
+from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.usecase.select_runs_table_row_use_case import (
@@ -155,6 +156,10 @@ def build_tui_container(
             notify_action_port=resolved_notify_action_port,
         ),
         agent_usage=ProjectAgentUsageUseCase(),
+        refresh_footer_context=RefreshFooterContextUseCase(
+            agent_port=resolved_agent_port,
+            context=run_event_context,
+        ),
         notify_action=ProjectNotifyActionUseCase(),
         transcript=ProjectTranscriptUseCase(),
         prompt_enter=PromptEnterUseCase(),

@@ -67,6 +67,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state = notify_action_result.state
 
         self._emit_state()
+        self._schedule_refresh_footer_context()
         command = run_action_result.command
         if command is not None:
             asyncio.create_task(self._execute_run_action(command, run_action_result))
@@ -97,6 +98,20 @@ class ConsoleScreenViewModel(LogEventsListener):
             state=self.state,
             run_id=run_id,
             action_uid=action_uid,
+        )
+        self.state = result.state
+        self._emit_state()
+
+    def _schedule_refresh_footer_context(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self._refresh_footer_context())
+
+    async def _refresh_footer_context(self) -> None:
+        result = await self._use_cases.refresh_footer_context.execute(
+            state=self.state,
         )
         self.state = result.state
         self._emit_state()
@@ -348,6 +363,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         )
         state.set_agent_usage(self.state.agent_usage)
         state.set_agent_context_stats(self.state.agent_context_stats)
+        state.set_footer_context(self.state.footer_context)
         state.set_autocompletion(self.state.autocompletion)
         state.set_notify_action(self.state.notify_action)
         return state

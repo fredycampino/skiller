@@ -355,23 +355,57 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
         }}
 
         #footer {{
-            height: 2;
+            height: auto;
+            width: 100%;
             margin: {theme.footer_margin_top} {footer_margin_x} 0 {footer_margin_x};
             padding: 0;
             color: {theme.color_text_secondary};
             text-style: dim;
             background: {theme.color_ansi_default};
+            overflow: hidden;
         }}
 
-        #footer-left {{
+        #footer-wide {{
+            height: 3;
+            width: 100%;
+            overflow: hidden;
+        }}
+
+        #footer-wide-context {{
             width: 1fr;
-            height: 2;
+            min-width: 0;
+            height: 3;
+            overflow: hidden;
         }}
 
-        #footer-right {{
+        #footer-wide-session {{
             width: auto;
+            max-width: 70%;
+            min-width: 0;
             height: 2;
             text-align: right;
+            overflow: hidden;
+        }}
+
+        #footer-narrow {{
+            layout: vertical;
+            height: 5;
+            width: 100%;
+            overflow: hidden;
+        }}
+
+        #footer-narrow-session {{
+            width: 100%;
+            min-width: 0;
+            height: 2;
+            overflow: hidden;
+        }}
+
+        #footer-narrow-context {{
+            width: 100%;
+            min-width: 0;
+            height: 3;
+            overflow: hidden;
         }}
 
         #slash-autocomplete {{

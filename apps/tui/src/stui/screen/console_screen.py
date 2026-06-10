@@ -18,6 +18,7 @@ from stui.port.runs_port import RunsPortItem
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
+from stui.screen.footer_context_view import FooterContextView
 from stui.screen.markdown import MarkdownView
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
@@ -33,6 +34,8 @@ from stui.screen.transcript_log import TranscriptLog
 from stui.viewmodel.console_screen_event import InspectRunContextEvent
 from stui.viewmodel.console_screen_state import ConsoleScreenState
 from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
+
+_NARROW_FOOTER_WIDTH = 80
 
 
 class ConsoleScreen(App[str]):
@@ -105,16 +108,41 @@ class ConsoleScreen(App[str]):
                 ),
                 id="status-row",
             ),
-            PromptView(theme=self.ui_theme),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
-            Horizontal(
-                Static(_build_footer_left_text(state=self.state), id="footer-left"),
-                Static(
-                    _build_footer_right_text(
-                        state=self.state,
-                        empty_icon=self.ui_theme.session_empty_icon,
+            PromptView(theme=self.ui_theme),
+            Container(
+                Horizontal(
+                    FooterContextView(
+                        state=self.state.footer_context,
+                        theme=self.ui_theme,
+                        fallback_text=_build_footer_usage_text(state=self.state),
+                        max_bar_width=30,
+                        id="footer-wide-context",
                     ),
-                    id="footer-right",
+                    Static(
+                        _build_footer_right_text(
+                            state=self.state,
+                            empty_icon=self.ui_theme.session_empty_icon,
+                        ),
+                        id="footer-wide-session",
+                    ),
+                    id="footer-wide",
+                ),
+                Vertical(
+                    Static(
+                        _build_footer_right_text(
+                            state=self.state,
+                            empty_icon=self.ui_theme.session_empty_icon,
+                        ),
+                        id="footer-narrow-session",
+                    ),
+                    FooterContextView(
+                        state=self.state.footer_context,
+                        theme=self.ui_theme,
+                        fallback_text=_build_footer_usage_text(state=self.state),
+                        id="footer-narrow-context",
+                    ),
+                    id="footer-narrow",
                 ),
                 id="footer",
             ),
@@ -353,17 +381,28 @@ class ConsoleScreen(App[str]):
 
     def _refresh_footer(self, *, new_state: ConsoleScreenState) -> None:
         try:
-            footer_left = self.query_one("#footer-left", Static)
-            footer_right = self.query_one("#footer-right", Static)
+            footer_wide = self.query_one("#footer-wide", Horizontal)
+            footer_narrow = self.query_one("#footer-narrow", Vertical)
+            wide_context = self.query_one("#footer-wide-context", FooterContextView)
+            wide_session = self.query_one("#footer-wide-session", Static)
+            narrow_session = self.query_one("#footer-narrow-session", Static)
+            narrow_context = self.query_one("#footer-narrow-context", FooterContextView)
         except NoMatches:
             return
-        footer_left.update(_build_footer_left_text(state=new_state))
-        footer_right.update(
-            _build_footer_right_text(
-                state=new_state,
-                empty_icon=self.ui_theme.session_empty_icon,
-            )
+
+        usage_text = _build_footer_usage_text(state=new_state)
+        session_text = _build_footer_right_text(
+            state=new_state,
+            empty_icon=self.ui_theme.session_empty_icon,
         )
+        wide_context.set_state(new_state.footer_context, fallback_text=usage_text)
+        wide_session.update(session_text)
+        narrow_session.update(session_text)
+        narrow_context.set_state(new_state.footer_context, fallback_text=usage_text)
+
+        is_narrow = self.size.width < _NARROW_FOOTER_WIDTH
+        footer_wide.display = not is_narrow
+        footer_narrow.display = is_narrow
 
     def _refresh_notify_action(self, *, new_state: ConsoleScreenState) -> None:
         try:
@@ -572,7 +611,7 @@ def _format_agent_tokens(value: int) -> str:
     return f"{value / 1000:.1f}k"
 
 
-def _build_footer_left_text(*, state: ConsoleScreenState) -> str:
+def _build_footer_usage_text(*, state: ConsoleScreenState) -> str:
     if state.agent_usage is None:
         return "/ for commands"
     return (

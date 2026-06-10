@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+import pytest
+
+from stui.screen.footer_context_view import _render_footer_context
+from stui.screen.theme import DEFAULT_TUI_THEME
+from stui.viewmodel.console_screen_state import FooterContextState
+
+pytestmark = pytest.mark.unit
+
+
+def test_render_footer_context_shows_model_tokens_capacity_and_bar() -> None:
+    rendered = _render_footer_context(
+        state=FooterContextState(
+            model="gpt-5.5",
+            current_tokens=59500,
+            limit_tokens=80000,
+            capacity_tokens=100000,
+        ),
+        fallback_text="/ for commands",
+        theme=DEFAULT_TUI_THEME,
+        bar_width=30,
+    )
+
+    plain = rendered.plain
+    assert plain.startswith("gpt-5.5\n59.5k")
+    assert "100K" in plain
+    assert "┴" in plain
+    assert "▾" in plain
+
+
+def test_render_footer_context_uses_fallback_without_context() -> None:
+    rendered = _render_footer_context(
+        state=None,
+        fallback_text="gpt-5.5\n59.5k",
+        theme=DEFAULT_TUI_THEME,
+        bar_width=30,
+    )
+
+    assert rendered.plain == "gpt-5.5\n59.5k"

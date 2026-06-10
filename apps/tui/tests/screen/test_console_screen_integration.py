@@ -40,6 +40,8 @@ from stui.viewmodel.console_screen_state import (
     AgentContextStatsState,
     AgentStepFinalOutputItem,
     AgentStepStopReason,
+    AgentUsageState,
+    FooterContextState,
     InfoItem,
     NotifyActionState,
     OutputFormat,
@@ -347,22 +349,75 @@ def test_console_screen_submits_decoded_multiline_paste_text() -> None:
     asyncio.run(run())
 
 
-def test_console_screen_shows_command_hint_and_session_id_in_footer() -> None:
+def test_console_screen_limits_wide_footer_context_bar_width() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
-            session_key="f8784230-f23d-4b34-b8d1-fb025bb44787",
+            session_key="main",
             run_port=NeverCalledRunPort(),
             waiting_port=NeverCalledWaitingPort(),
             runs_port=FakeRunsPort(),
         )
+        viewmodel.state.set_footer_context(
+            FooterContextState(
+                model="gpt-5.5",
+                current_tokens=59500,
+                limit_tokens=80000,
+                capacity_tokens=100000,
+            )
+        )
         app = ConsoleScreen(viewmodel=viewmodel)
-        async with app.run_test(size=(80, 24)) as pilot:
+        async with app.run_test(size=(140, 24)) as pilot:
             await pilot.pause()
 
-            footer_left = app.query_one("#footer-left", Static)
-            footer_right = app.query_one("#footer-right", Static)
-            assert footer_left.content == "/ for commands"
-            assert footer_right.content == "f8784230-f23d-4b34-b8d1-fb025bb44787"
+            footer_context = app.query_one("#footer-wide-context", Static)
+            lines = str(footer_context.render()).splitlines()
+            assert len(lines[2]) == 30
+
+    asyncio.run(run())
+
+
+def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.load_session(
+            run_id="0a76a0b2-8a37-4cb3-80ac-c319d1dfcba3",
+            run_name="stui.yaml",
+        )
+        viewmodel.state.agent_usage = AgentUsageState(
+            model="gpt-5.5",
+            total_tokens=79200,
+        )
+        viewmodel.state.set_footer_context(
+            FooterContextState(
+                model="gpt-5.5",
+                current_tokens=79200,
+                limit_tokens=80000,
+                capacity_tokens=100000,
+            )
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(60, 24)) as pilot:
+            await pilot.pause()
+
+            footer_wide = app.query_one("#footer-wide")
+            footer_narrow = app.query_one("#footer-narrow")
+            footer_session = app.query_one("#footer-narrow-session", Static)
+            footer_context = app.query_one("#footer-narrow-context", Static)
+            assert footer_wide.display is False
+            assert footer_narrow.display is True
+            assert footer_session.content == (
+                "0a76a0b2-8a37-4cb3-80ac-c319d1dfcba3\nstui.yaml"
+            )
+            rendered_context = str(footer_context.render())
+            assert len(rendered_context.splitlines()[2]) == footer_context.size.width
+            assert footer_session.region.y < footer_context.region.y
+            assert footer_session.region.bottom == footer_context.region.y
+            assert footer_session.region.width == footer_context.region.width
 
     asyncio.run(run())
 
@@ -381,8 +436,8 @@ def test_console_screen_shows_icon_when_session_is_main() -> None:
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            footer_right = app.query_one("#footer-right", Static)
-            assert footer_right.content == "◌"
+            footer_session = app.query_one("#footer-wide-session", Static)
+            assert footer_session.content == "◌"
 
     asyncio.run(run())
 
@@ -401,15 +456,17 @@ def test_console_screen_shows_running_status_after_run_command() -> None:
             await pilot.pause()
 
             status = app.query_one("#status", ScreenStatusView)
-            footer_right = app.query_one("#footer-right", Static)
+            footer = app.query_one("#footer")
+            footer_session = app.query_one("#footer-wide-session", Static)
             prompt_row = app.query_one("#prompt-row")
             assert app.state.view_status.kind == ViewStatusKind.RUNNING
             assert "Running" in str(status.render())
-            assert footer_right.content == "run-1234\nchat"
-            assert footer_right.size.height == 2
+            assert footer_session.content == "run-1234\nchat"
+            assert footer_session.size.height == 2
             assert status.display is True
             assert status.size.height >= 1
             assert status.region.bottom == prompt_row.region.y
+            assert prompt_row.region.bottom <= footer.region.y
 
     with patched_to_thread(run_command_use_case_module):
         asyncio.run(run())
@@ -442,6 +499,7 @@ def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
 
         async with app.run_test(size=(80, 24)) as pilot:
             status = app.query_one("#status", Static)
+            footer = app.query_one("#footer")
             prompt_row = app.query_one("#prompt-row")
             message = app.query_one("#notify-action-message", Static)
             view = app.query_one("#notify-action", ActionOpenUrlView)
@@ -454,6 +512,7 @@ def test_console_screen_routes_notify_action_link_to_viewmodel() -> None:
             assert view.size.width >= 28
             assert status.region.bottom == view.region.bottom
             assert status.region.bottom == prompt_row.region.y
+            assert prompt_row.region.bottom <= footer.region.y
             assert view.region.right == prompt_row.region.right
             assert message.size.height > 1
             assert open_link.region.y > message.region.bottom

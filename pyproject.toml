@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skiller"
-version = "0.1.0-beta.9"
+version = "0.1.0-beta.10"
 description = "Skiller.run agentic workflows."
 readme = "README.md"
 requires-python = ">=3.11"

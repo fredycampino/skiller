@@ -19,6 +19,20 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.10 - 2026-06-11
+
+### Changed
+- Normalize STUI backgrounds and Markdown code block styling for more consistent terminal rendering.
+- Improve STUI theme accent, warning, success, and error colors.
+
+### Fixed
+- Prevent stale agent interrupts after valid input resumes a waiting run.
+- Accept `NOT_RUNNING` interrupt responses in STUI.
+- Avoid overlapping STUI context sequence labels.
+
+### Notes
+- Includes PR #75.
+
 ## 0.1.0-beta.9 - 2026-06-10
 
 ### Added

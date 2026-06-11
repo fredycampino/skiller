@@ -2,13 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pygments.styles import get_style_by_name
 from rich.console import RenderableType
 from rich.markdown import Markdown
+from rich.syntax import PygmentsSyntaxTheme
 from rich.theme import Theme
 
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 
-PYGMENTS_CODE_THEME = "nord"
+CODE_BLOCK_BACKGROUND = "#2A2F37"
+_NORD_STYLE = get_style_by_name("nord")
+
+
+class StuiNordStyle(_NORD_STYLE):
+    background_color = CODE_BLOCK_BACKGROUND
+
+
+PYGMENTS_CODE_THEME = PygmentsSyntaxTheme(StuiNordStyle)
 
 
 @dataclass(frozen=True)
@@ -23,7 +33,7 @@ class MarkdownView:
                 # Pygments theme for fenced code blocks.
                 code_theme=PYGMENTS_CODE_THEME,
                 # Base style for regular Markdown text.
-                style=self.theme.color_ansi_default,
+                style=self.theme.color_text_primary,
             ),
             rich_theme=self._rich_markdown_theme(),
         )
@@ -33,7 +43,10 @@ class MarkdownView:
             {
                 "markdown.h2": f"{self.theme.color_text_primary} bold",
                 "markdown.h3": f"{self.theme.color_text_primary} bold",
-                "markdown.code": f"{self.theme.color_text_inline_code} on default",
+                "markdown.code": (
+                    f"{self.theme.color_text_inline_code} "
+                    f"on {self.theme.color_background}"
+                ),
                 "markdown.table.header": f"{self.theme.color_text_primary} bold",
                 "markdown.table.border": self.theme.color_text_muted,
             }

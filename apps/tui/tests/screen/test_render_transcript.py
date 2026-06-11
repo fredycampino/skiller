@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.text import Text
 
 from stui.di.strings import TuiStrings
-from stui.screen.markdown import MarkdownView
+from stui.screen.markdown import CODE_BLOCK_BACKGROUND, MarkdownView
 from stui.screen.theme import DEFAULT_TUI_THEME
 from stui.screen.transcript.agent_final_assistant_message_view import (
     AgentFinalAssistantMessageView,
@@ -482,7 +482,18 @@ def test_run_system_notice_view_renders_snapshot_failed_with_strings() -> None:
     assert console.export_text().rstrip() == "! Snapshot KO: Could not sync snapshot 'mono'"
 
 
-def test_render_markdown_inline_code_has_no_background() -> None:
+def test_markdown_fenced_code_uses_theme_background() -> None:
+    console = Console(width=80, record=True, force_terminal=True, color_system="truecolor")
+
+    console.print(MarkdownView("```python\nprint(1)\n```", theme=DEFAULT_TUI_THEME).render())
+
+    rendered = console.export_text(styles=True)
+    assert CODE_BLOCK_BACKGROUND == "#2A2F37"
+    assert CODE_BLOCK_BACKGROUND != DEFAULT_TUI_THEME.color_background
+    assert "48;2;42;47;55m" in rendered
+
+
+def test_render_markdown_inline_code_uses_theme_background() -> None:
     console = Console(width=80, record=True)
 
     console.print(MarkdownView("Run `pwd` now.", theme=DEFAULT_TUI_THEME).render())
@@ -490,3 +501,4 @@ def test_render_markdown_inline_code_has_no_background() -> None:
     rendered = console.export_text(styles=True)
     assert "pwd" in rendered
     assert "40m" not in rendered
+    assert "48;2;40;44;52m" in rendered

@@ -10,6 +10,7 @@ from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     runtime_event_payload_to_dict,
 )
+from skiller.domain.run.steering_model import SteeringAgentInterrupt
 from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 
@@ -66,12 +67,26 @@ class _FakeStore:
         return "event-1"
 
 
+class _FakeSteering:
+    def __init__(self) -> None:
+        self.pop_calls: list[tuple[str, object]] = []
+
+    def append(self, run_id: str, item: object) -> None:
+        _ = run_id
+        _ = item
+
+    def pop(self, run_id: str, item_type: object) -> list[object]:
+        self.pop_calls.append((run_id, item_type))
+        return []
+
+
 def test_handle_input_rejects_missing_text() -> None:
     store = _FakeStore(run=None)
     use_case = HandleInputUseCase(
         run_store=store,
         external_event_store=store,
         runtime_event_store=store,
+        steering=_FakeSteering(),
     )
 
     result = use_case.execute(HandleInputInput(run_id="run-1", text=""))
@@ -87,16 +102,19 @@ def test_handle_input_rejects_when_current_step_is_not_wait_input() -> None:
         snapshot={"steps": [{"notify": "show_message"}]},
     )
     store = _FakeStore(run=run)
+    steering = _FakeSteering()
     use_case = HandleInputUseCase(
         run_store=store,
         external_event_store=store,
         runtime_event_store=store,
+        steering=steering,
     )
 
     result = use_case.execute(HandleInputInput(run_id="run-1", text="hello"))
 
     assert result.accepted is False
     assert result.error == "Run 'run-1' current step 'show_message' is not wait_input"
+    assert steering.pop_calls == [("run-1", SteeringAgentInterrupt)]
 
 
 def test_handle_input_persists_event_for_wait_input_step() -> None:
@@ -106,10 +124,12 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
         snapshot={"steps": [{"wait_input": "ask_user"}]},
     )
     store = _FakeStore(run=run)
+    steering = _FakeSteering()
     use_case = HandleInputUseCase(
         run_store=store,
         external_event_store=store,
         runtime_event_store=store,
+        steering=steering,
     )
 
     result = use_case.execute(HandleInputInput(run_id="run-1", text="database timeout"))
@@ -117,6 +137,7 @@ def test_handle_input_persists_event_for_wait_input_step() -> None:
     assert result.accepted is True
     assert result.run_ids == ["run-1"]
     assert result.event_id == "input-1"
+    assert steering.pop_calls == [("run-1", SteeringAgentInterrupt)]
     assert store.created_external_events == [
         {
             "source_type": SourceType.INPUT,

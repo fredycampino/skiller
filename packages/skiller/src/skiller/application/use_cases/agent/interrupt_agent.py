@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.run.steering_model import SteeringAgentInterrupt, SteeringItem
 from skiller.domain.shared.steering_port import SteeringPort
@@ -10,6 +11,7 @@ class InterruptAgentStatus(str, Enum):
     ENQUEUED = "ENQUEUED"
     INVALID_RUN_ID = "INVALID_RUN_ID"
     RUN_NOT_FOUND = "RUN_NOT_FOUND"
+    NOT_RUNNING = "NOT_RUNNING"
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,12 @@ class InterruptAgentUseCase:
                 status=InterruptAgentStatus.RUN_NOT_FOUND,
                 run_id=normalized,
                 error=f"Run '{normalized}' not found",
+            )
+        if run.status != RunStatus.RUNNING.value:
+            return InterruptAgentResult(
+                status=InterruptAgentStatus.NOT_RUNNING,
+                run_id=normalized,
+                error=f"Run '{normalized}' is not running",
             )
 
         item = SteeringAgentInterrupt()

@@ -18,7 +18,7 @@ class CliAgentInterruptRejected(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_id: str
-    status: Literal["INVALID_RUN_ID", "RUN_NOT_FOUND"]
+    status: Literal["INVALID_RUN_ID", "RUN_NOT_FOUND", "NOT_RUNNING"]
     enqueued: Literal[False]
     error: str
 

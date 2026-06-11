@@ -110,26 +110,12 @@ def _label_line(
     bar_width: int,
     start_index: int,
 ) -> str:
-    width = _bar_width(bar_width)
-    start_label = str(max(state.start_sequence, 0))
-    end_label = str(max(state.end_sequence, 0))
-    line = [" "] * width
-    _place_label(line, label=start_label, center_index=start_index)
-    _place_label(line, label=end_label, center_index=width - 1)
-    return "".join(line).rstrip()
+    _ = bar_width, start_index
+    return f"{max(state.start_sequence, 0)}-{max(state.end_sequence, 0)}"
 
 
 def _bar_width(bar_width: int) -> int:
     return min(MAX_BAR_WIDTH, max(MIN_BAR_WIDTH, bar_width))
-
-
-def _place_label(line: list[str], *, label: str, center_index: int) -> None:
-    if not line or not label:
-        return
-    start = center_index - (len(label) // 2)
-    start = min(max(start, 0), max(0, len(line) - len(label)))
-    for offset, character in enumerate(label):
-        line[start + offset] = character
 
 
 def _start_marker_index(state: AgentContextStatsState, *, bar_width: int) -> int:

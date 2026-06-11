@@ -32,13 +32,13 @@ class _FakeSteering:
         return []
 
 
-def _build_run() -> Run:
+def _build_run(*, status: str = "RUNNING") -> Run:
     return Run(
         id="run-1",
         source="internal",
         ref="demo",
         snapshot={"start": "agent", "steps": []},
-        status="RUNNING",
+        status=status,
         current="agent",
         context=RunContext(inputs={}, step_executions={}),
         created_at="2026-05-05T10:00:00Z",
@@ -80,4 +80,16 @@ def test_interrupt_agent_returns_not_found_when_run_is_missing() -> None:
 
     assert result.status == InterruptAgentStatus.RUN_NOT_FOUND
     assert result.error == "Run 'missing-run' not found"
+    assert steering.append_calls == []
+
+
+def test_interrupt_agent_rejects_non_running_run() -> None:
+    store = _FakeStore(_build_run(status="WAITING"))
+    steering = _FakeSteering()
+    use_case = InterruptAgentUseCase(store=store, steering=steering)
+
+    result = use_case.execute("run-1")
+
+    assert result.status == InterruptAgentStatus.NOT_RUNNING
+    assert result.error == "Run 'run-1' is not running"
     assert steering.append_calls == []

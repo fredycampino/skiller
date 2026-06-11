@@ -68,6 +68,28 @@ def test_cli_agent_adapter_maps_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.message == "error: run not found"
 
 
+def test_cli_agent_adapter_maps_not_running_interrupt() -> None:
+    adapter = CliAgentAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=1,
+                stdout=(
+                    '{"run_id":"run-1234","status":"NOT_RUNNING",'
+                    '"enqueued":false,"error":"run is not running"}'
+                ),
+                stderr="",
+            )
+        )
+    )
+
+    result = adapter.interrupt("run-1234")
+
+    assert result.status == CommandAckStatus.ERROR
+    assert result.run_id == "run-1234"
+    assert result.message == "error: run is not running"
+
+
 def test_cli_agent_adapter_reads_agent_stats() -> None:
     invoker = FakeInvoker(
         subprocess.CompletedProcess(

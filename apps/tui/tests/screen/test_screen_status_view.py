@@ -12,6 +12,7 @@ from stui.viewmodel.console_screen_state import (
 pytestmark = pytest.mark.unit
 
 
+
 def test_screen_status_view_renders_waiting_with_prompt_in_brackets() -> None:
     view = ScreenStatusView()
     view._state = ViewStatusState(kind=ViewStatusKind.WAITING)

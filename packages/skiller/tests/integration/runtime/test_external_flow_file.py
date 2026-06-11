@@ -272,6 +272,7 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
 def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
     runtime_event_store = SqliteRuntimeEventStore(store.db_path)
     external_event_store = SqliteExternalEventStore(store.db_path)
+    agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     wait_store = SqliteWaitStorePort(SqliteWaitDatasource(store.db_path))
     webhook_registry = SqliteWebhookRegistry(store.db_path)
     return WaitApplicationService(
@@ -279,6 +280,7 @@ def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
             run_store=store,
             external_event_store=external_event_store,
             runtime_event_store=runtime_event_store,
+            steering=agent_steering_store,
         ),
         handle_channel_use_case=HandleChannelUseCase(
             external_event_store=external_event_store,

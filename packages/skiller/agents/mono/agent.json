@@ -1,6 +1,6 @@
 {
   "loop": {
-    "max_turns": 20,
+    "max_turns": 50,
     "max_tool_calls": 10
   },
   "tools": {

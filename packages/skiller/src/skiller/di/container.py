@@ -218,6 +218,7 @@ def build_runtime_container(
         run_store=store,
         external_event_store=external_event_store,
         runtime_event_store=runtime_event_store,
+        steering=agent_steering_store,
     )
     handle_channel_use_case = HandleChannelUseCase(
         external_event_store=external_event_store,

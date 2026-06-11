@@ -32,8 +32,7 @@ def test_agent_context_stats_view_renders_compact_muted_window_range() -> None:
             lines = rendered.splitlines()
             assert view.display is True
             assert len(lines) == 2
-            assert "100" in lines[0]
-            assert "1100" in lines[0]
+            assert lines[0] == "100-1100"
             assert len(lines[1]) == 24
             assert lines[1].startswith("▪")
             assert lines[1].endswith("▪")

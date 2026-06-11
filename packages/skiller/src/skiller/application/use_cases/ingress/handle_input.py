@@ -8,6 +8,8 @@ from skiller.domain.event.event_model import (
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.run.steering_model import SteeringAgentInterrupt
+from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.step.run_step_model import find_run_step
 from skiller.domain.step.step_type import StepType
 from skiller.domain.wait.external_event_store_port import ExternalEventStorePort
@@ -35,10 +37,12 @@ class HandleInputUseCase:
         run_store: RunStorePort,
         external_event_store: ExternalEventStorePort,
         runtime_event_store: RuntimeEventStorePort,
+        steering: SteeringPort,
     ) -> None:
         self.run_store = run_store
         self.external_event_store = external_event_store
         self.runtime_event_store = runtime_event_store
+        self.steering = steering
 
     def execute(self, request: HandleInputInput) -> HandleInputResult:
         run_id = request.run_id
@@ -57,6 +61,7 @@ class HandleInputUseCase:
                 run_ids=[],
                 error=f"Run '{run_id}' is not waiting",
             )
+        self.steering.pop(run_id, SteeringAgentInterrupt)
         if not run.current:
             return HandleInputResult(
                 accepted=False,

@@ -12,6 +12,7 @@ authors = [{ name = "Team" }]
 dependencies = [
   "pydantic>=2.8.0",
   "PyYAML>=6.0.1",
+  "boto3>=1.43.0",
   "fastapi>=0.115.0",
   "uvicorn>=0.30.0",
   "fastmcp>=2.10.0",
@@ -27,7 +28,6 @@ dev = [
 ]
 
 [project.scripts]
-agent = "skiller.interfaces.cli.main:main"
 skiller = "skiller.interfaces.cli.main:main"
 stui = "stui.app:main"
 

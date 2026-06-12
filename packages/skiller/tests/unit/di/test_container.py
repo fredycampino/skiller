@@ -6,6 +6,8 @@ import pytest
 from skiller.di.container import build_runtime_container
 from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
@@ -17,6 +19,8 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentNullProvider,
 )
 from skiller.infrastructure.config.settings_model import Settings
+from skiller.infrastructure.llm.bedrock import bedrock_llm_port
+from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import CodexCredentials
 from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
 from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
@@ -49,6 +53,27 @@ class _FakeCodexCredentialsDatasource:
             source="skiller-openai-auth",
             token_type="bearer",
         )
+
+
+class _FakeBedrockClient:
+    def converse(self, **kwargs: object) -> dict[str, object]:
+        _ = kwargs
+        return {}
+
+
+class _FakeBedrockSession:
+    def __init__(self, *, profile_name: str) -> None:
+        _ = profile_name
+
+    def client(self, service_name: str, **kwargs: object) -> _FakeBedrockClient:
+        _ = service_name
+        _ = kwargs
+        return _FakeBedrockClient()
+
+
+class _FakeBedrockConfig:
+    def __init__(self, *, read_timeout: float) -> None:
+        _ = read_timeout
 
 
 @pytest.mark.parametrize(
@@ -88,6 +113,15 @@ class _FakeCodexCredentialsDatasource:
             ),
             CodexLLMPort,
         ),
+        (
+            AgentBedrockProvider(
+                model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+                profile="claude-bedrock",
+                timeout_seconds=30,
+                window_width_tokens=100_000,
+            ),
+            BedrockLLMPort,
+        ),
     ],
 )
 def test_llm_client_factory_creates_expected_client(
@@ -96,6 +130,12 @@ def test_llm_client_factory_creates_expected_client(
     expected_type: type[object],
 ) -> None:
     monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeOpenAIClient)
+    monkeypatch.setattr(bedrock_llm_port, "_load_boto3_session_class", lambda: _FakeBedrockSession)
+    monkeypatch.setattr(
+        bedrock_llm_port,
+        "_load_botocore_config_class",
+        lambda: _FakeBedrockConfig,
+    )
     monkeypatch.setattr(
         "skiller.di.llm_client_factory.CodexCredentialsDatasource",
         lambda: _FakeCodexCredentialsDatasource(),

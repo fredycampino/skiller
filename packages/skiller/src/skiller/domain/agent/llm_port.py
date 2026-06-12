@@ -2,6 +2,7 @@ from typing import Protocol, TypeAlias, TypeVar
 
 from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
     CodexLLMRequest,
     LLMRequest,
     MiniMaxLLMRequest,
@@ -15,5 +16,8 @@ class LLMPort(Protocol[RequestT]):
 
 
 ResolvedLLMPort: TypeAlias = (
-    LLMPort[LLMRequest] | LLMPort[MiniMaxLLMRequest] | LLMPort[CodexLLMRequest]
+    LLMPort[LLMRequest]
+    | LLMPort[MiniMaxLLMRequest]
+    | LLMPort[CodexLLMRequest]
+    | LLMPort[BedrockLLMRequest]
 )

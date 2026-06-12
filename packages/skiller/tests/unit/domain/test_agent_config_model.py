@@ -9,6 +9,8 @@ from skiller.domain.agent.agent_config_model import (
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
@@ -99,6 +101,7 @@ def test_agent_llm_models_define_model_context_window_tokens() -> None:
     assert AgentCodexLLMModel.GPT_5_3_CODEX.model_context_window_tokens == 400_000
     assert AgentCodexLLMModel.GPT_5_4.model_context_window_tokens == 1_050_000
     assert AgentCodexLLMModel.GPT_5_5.model_context_window_tokens == 1_050_000
+    assert AgentBedrockLLMModel.CLAUDE_OPUS_4_6.model_context_window_tokens == 200_000
 
 
 def test_agent_llm_providers_require_typed_model_enum() -> None:
@@ -121,6 +124,27 @@ def test_agent_llm_providers_require_typed_model_enum() -> None:
             credentials_file="/tmp/openai-codex.json",
             model=AgentMiniMaxLLMModel.M2_5,
             timeout_seconds=120.0,
+            window_width_tokens=1_000_000,
+        )
+
+    with pytest.raises(
+        TypeError,
+        match="Bedrock LLM provider model must be an AgentBedrockLLMModel",
+    ):
+        AgentBedrockProvider(
+            profile="claude-bedrock",
+            model=AgentMiniMaxLLMModel.M2_5,
+            timeout_seconds=30.0,
+            window_width_tokens=1_000_000,
+        )
+
+
+def test_bedrock_provider_requires_profile() -> None:
+    with pytest.raises(ValueError, match="Bedrock LLM provider requires profile"):
+        AgentBedrockProvider(
+            profile="   ",
+            model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            timeout_seconds=30.0,
             window_width_tokens=1_000_000,
         )
 

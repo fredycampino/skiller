@@ -15,6 +15,7 @@ from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidationErrorCode,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
     AgentFakeLLMModel,
     AgentLLMProviderType,
     AgentMiniMaxLLMModel,
@@ -135,6 +136,27 @@ def test_json_agent_config_rejects_codex_without_credentials_file(tmp_path) -> N
     _write_config(config_path, llm=_codex_llm(credentials_file=None))
 
     with pytest.raises(ValueError, match="LLM provider requires credentials_file"):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_reads_bedrock_provider(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_bedrock_llm(profile="claude-bedrock"))
+
+    config = _provider(config_path=config_path, env={}).get_config()
+    provider = config.llm.default()
+
+    assert config.llm.default_provider == AgentLLMProviderType.BEDROCK
+    assert provider.type == AgentLLMProviderType.BEDROCK
+    assert provider.profile == "claude-bedrock"
+    assert provider.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
+
+
+def test_json_agent_config_rejects_bedrock_without_profile(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_bedrock_llm(profile=None))
+
+    with pytest.raises(ValueError, match="LLM provider requires profile"):
         _provider(config_path=config_path, env={}).get_config()
 
 
@@ -444,6 +466,23 @@ def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
         "llm": {"default_provider": "codex"},
         "providers": {
             "codex": provider,
+        },
+    }
+
+
+def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
+    provider: dict[str, object] = {
+        "model": "us.anthropic.claude-opus-4-6-v1",
+        "timeout_seconds": 120,
+        "window_width_tokens": 200_000,
+    }
+    if profile is not None:
+        provider["profile"] = profile
+
+    return {
+        "llm": {"default_provider": "bedrock"},
+        "providers": {
+            "bedrock": provider,
         },
     }
 

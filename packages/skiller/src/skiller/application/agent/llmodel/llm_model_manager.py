@@ -2,6 +2,7 @@ from dataclasses import replace
 from typing import overload
 
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockProvider,
     AgentCodexProvider,
     AgentFakeProvider,
     AgentLLMProvider,
@@ -11,7 +12,12 @@ from skiller.domain.agent.agent_llm_provider_model import (
 from skiller.domain.agent.llm_client_resolver import LLMClientResolver
 from skiller.domain.agent.llm_model import LLMResponse
 from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
-from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
+from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
+    CodexLLMRequest,
+    LLMRequest,
+    MiniMaxLLMRequest,
+)
 
 
 class LLMModelManager:
@@ -35,6 +41,11 @@ class LLMModelManager:
                 raise RuntimeError("Codex LLM provider requires CodexLLMRequest")
             client = self.client(provider)
             response = client.generate(request)
+        elif isinstance(provider, AgentBedrockProvider):
+            if not isinstance(request, BedrockLLMRequest):
+                raise RuntimeError("Bedrock LLM provider requires BedrockLLMRequest")
+            client = self.client(provider)
+            response = client.generate(request)
         else:
             client = self.client(provider)
             response = client.generate(request)
@@ -49,6 +60,9 @@ class LLMModelManager:
 
     @overload
     def client(self, provider: AgentCodexProvider) -> LLMPort[CodexLLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentBedrockProvider) -> LLMPort[BedrockLLMRequest]: ...
 
     @overload
     def client(self, provider: AgentFakeProvider | AgentNullProvider) -> LLMPort[LLMRequest]: ...

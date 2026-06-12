@@ -1,0 +1,357 @@
+name: auths/bedrock
+description: "Configure AWS Bedrock profile for Skiller agents"
+version: "0.1"
+start: check_bedrock_config
+
+inputs: {}
+
+on_success:
+  cleanup: true
+  action:
+    type: run
+    label: Continue onboarding
+    arg: onboarding/intro
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_bedrock_config
+    command: |
+      set -eu
+      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
+      if [ -z "$runtime_python" ]; then
+        skiller_bin="$(command -v skiller || true)"
+        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
+          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
+        fi
+      fi
+      if [ -z "$runtime_python" ]; then
+        runtime_python="python3"
+      fi
+
+      profile="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" configured-profile 2>/dev/null || true)"
+      if [ -z "$profile" ]; then
+        printf '%s' missing
+        exit 0
+      fi
+
+      if "$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify --profile "$profile" --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" >/dev/null 2>&1; then
+        printf '%s' ready
+        exit 0
+      fi
+
+      printf '%s' invalid
+    cwd: .
+    timeout: 30
+    check: true
+    next: route_bedrock_config
+
+  - switch: route_bedrock_config
+    value: '{{output_value("check_bedrock_config").stdout}}'
+    cases:
+      ready: credentials_ready
+    default: explain_bedrock
+
+  - notify: explain_bedrock
+    format: markdown
+    message: |
+      # Bedrock setup
+
+      Choose the AWS profile to validate:
+
+      ```text
+      1 Usar profile (skiller-bedrock)
+      2 Usar profile (claude-bedrock)
+      3 Escribir otro profile
+      4 Cancelar
+      ```
+    next: select_profile_option
+
+  - wait_input: select_profile_option
+    prompt: "Choose 1, 2, 3, or 4."
+    next: route_profile_option
+
+  - switch: route_profile_option
+    value: '{{output_value("select_profile_option").payload.text}}'
+    cases:
+      "1": verify_skiller_profile
+      "2": verify_claude_profile
+      "3": ask_custom_profile
+      "4": exit_setup
+    default: invalid_profile_option
+
+  - notify: invalid_profile_option
+    message: "Invalid option. Choose 1, 2, 3, or 4."
+    next: select_profile_option
+
+  - shell: verify_skiller_profile
+    command: |
+      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
+      if [ -z "$runtime_python" ]; then
+        skiller_bin="$(command -v skiller || true)"
+        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
+          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
+        fi
+      fi
+      if [ -z "$runtime_python" ]; then
+        runtime_python="python3"
+      fi
+      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
+        --profile "skiller-bedrock" \
+        --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
+        printf '%s' ready
+      else
+        printf '%s\n' "$verify_output" >&2
+        printf '%s' invalid
+      fi
+    cwd: .
+    timeout: 120
+    check: true
+    next: route_verify_skiller
+
+  - switch: route_verify_skiller
+    value: '{{output_value("verify_skiller_profile").stdout}}'
+    cases:
+      ready: write_bedrock_config_skiller
+    default: validation_error
+
+  - shell: verify_claude_profile
+    command: |
+      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
+      if [ -z "$runtime_python" ]; then
+        skiller_bin="$(command -v skiller || true)"
+        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
+          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
+        fi
+      fi
+      if [ -z "$runtime_python" ]; then
+        runtime_python="python3"
+      fi
+      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
+        --profile "claude-bedrock" \
+        --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
+        printf '%s' ready
+      else
+        printf '%s\n' "$verify_output" >&2
+        printf '%s' invalid
+      fi
+    cwd: .
+    timeout: 120
+    check: true
+    next: route_verify_claude
+
+  - switch: route_verify_claude
+    value: '{{output_value("verify_claude_profile").stdout}}'
+    cases:
+      ready: write_bedrock_config_claude
+    default: validation_error
+
+  - wait_input: ask_custom_profile
+    prompt: "Type your AWS profile name (for example: my-bedrock-profile)"
+    next: verify_custom_profile
+
+  - shell: verify_custom_profile
+    command: |
+      set -eu
+
+      profile='{{output_value("ask_custom_profile").payload.text}}'
+      profile="$(printf '%s' "$profile" | tr -d '[:space:]')"
+      if [ -z "$profile" ]; then
+        printf '%s' invalid
+        exit 0
+      fi
+
+      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
+      if [ -z "$runtime_python" ]; then
+        skiller_bin="$(command -v skiller || true)"
+        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
+          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
+        fi
+      fi
+      if [ -z "$runtime_python" ]; then
+        runtime_python="python3"
+      fi
+      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
+        --profile "$profile" \
+        --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
+        printf '%s' ready
+      else
+        printf '%s\n' "$verify_output" >&2
+        printf '%s' invalid
+      fi
+    cwd: .
+    timeout: 120
+    check: true
+    next: route_verify_custom
+
+  - switch: route_verify_custom
+    value: '{{output_value("verify_custom_profile").stdout}}'
+    cases:
+      ready: write_bedrock_config_custom
+    default: validation_error
+
+  - shell: write_bedrock_config_skiller
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      profile="skiller-bedrock"
+      model="${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
+
+      mkdir -p "$(dirname "$config_file")"
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      model = os.environ["MODEL"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      llm = config.setdefault("llm", {})
+      llm["default_provider"] = "bedrock"
+      providers = config.setdefault("providers", {})
+      providers["bedrock"] = {
+          "model": model,
+          "timeout_seconds": 120,
+          "window_width_tokens": 200000,
+          "profile": profile,
+      }
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock config saved."
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: credentials_ready
+
+  - shell: write_bedrock_config_claude
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      profile="claude-bedrock"
+      model="${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
+
+      mkdir -p "$(dirname "$config_file")"
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      model = os.environ["MODEL"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      llm = config.setdefault("llm", {})
+      llm["default_provider"] = "bedrock"
+      providers = config.setdefault("providers", {})
+      providers["bedrock"] = {
+          "model": model,
+          "timeout_seconds": 120,
+          "window_width_tokens": 200000,
+          "profile": profile,
+      }
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock config saved."
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: credentials_ready
+
+  - shell: write_bedrock_config_custom
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      profile='{{output_value("ask_custom_profile").payload.text}}'
+      profile="$(printf '%s' "$profile" | tr -d '[:space:]')"
+      model="${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
+
+      mkdir -p "$(dirname "$config_file")"
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      model = os.environ["MODEL"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      llm = config.setdefault("llm", {})
+      llm["default_provider"] = "bedrock"
+      providers = config.setdefault("providers", {})
+      providers["bedrock"] = {
+          "model": model,
+          "timeout_seconds": 120,
+          "window_width_tokens": 200000,
+          "profile": profile,
+      }
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock config saved."
+      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: credentials_ready
+
+  - notify: credentials_ready
+    format: markdown
+    message: |
+      Bedrock credentials are valid and global config is updated.
+
+  - notify: validation_error
+    format: markdown
+    message: |
+      Bedrock validation failed for that profile.
+
+      Verify that:
+      - the AWS profile exists in `~/.aws/credentials` and `~/.aws/config`
+      - the profile has Bedrock permissions
+      - the selected Bedrock model/inference profile is available
+    next: explain_bedrock
+
+  - notify: exit_setup
+    message: "Bedrock setup closed."

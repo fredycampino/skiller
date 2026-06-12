@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
     AgentCodexLLMModel,
     AgentLLMModel,
     AgentLLMModelEnum,
@@ -47,3 +48,12 @@ class CodexLLMRequest(LLMRequest):
     def __post_init__(self) -> None:
         if not isinstance(self.model, AgentCodexLLMModel):
             raise TypeError("CodexLLMRequest model must be an AgentCodexLLMModel")
+
+
+@dataclass(frozen=True)
+class BedrockLLMRequest(LLMRequest):
+    model: AgentBedrockLLMModel
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, AgentBedrockLLMModel):
+            raise TypeError("BedrockLLMRequest model must be an AgentBedrockLLMModel")

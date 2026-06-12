@@ -34,7 +34,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-id",
         default=os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1"),
-        help="Bedrock model ID/profile (default: BEDROCK_MODEL_ID or us.anthropic.claude-opus-4-6-v1)",
+        help=(
+            "Bedrock model ID/profile "
+            "(default: BEDROCK_MODEL_ID or us.anthropic.claude-opus-4-6-v1)"
+        ),
     )
     parser.add_argument(
         "--profile",
@@ -65,7 +68,10 @@ def main() -> int:
         import boto3
         from botocore.exceptions import BotoCoreError, ClientError
     except Exception:
-        print("ERROR: boto3/botocore is not installed. Install with: pip install boto3", file=sys.stderr)
+        print(
+            "ERROR: boto3/botocore is not installed. Install with: pip install boto3",
+            file=sys.stderr,
+        )
         return 2
 
     session_kwargs: dict[str, str] = {}

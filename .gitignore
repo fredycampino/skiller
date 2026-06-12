@@ -62,3 +62,5 @@ legacy/
 apps/tui/docs/todo
 .claude
 .cursor
+
+packages/skiller/docs/issues/

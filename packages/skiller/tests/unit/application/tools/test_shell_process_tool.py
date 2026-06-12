@@ -84,6 +84,22 @@ def test_shell_process_tool_rejects_command_outside_allowed_paths() -> None:
     assert result.error == "shell command path escapes allowed_paths"
 
 
+def test_shell_process_tool_rejects_cwd_outside_allowed_paths() -> None:
+    tool = ShellProcessTool(shell="/bin/bash")
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(Path("/workspace"),),
+    )
+
+    result = tool.policy(
+        config=config,
+        request=ShellToolRequest(command="pwd", cwd="/outside/workspace"),
+    )
+
+    assert result.ok is False
+    assert result.error == "shell cwd escapes allowed_paths"
+
+
 def test_shell_process_tool_rejects_command_outside_allowlist() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(

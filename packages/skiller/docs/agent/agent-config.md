@@ -117,8 +117,10 @@ Supported provider/model combinations:
 | `fake` | `model1` | none |
 | `minimax` | `MiniMax-M2.5`, `MiniMax-M2.7` | `api_key`, `api_key_env`, or `api_key_file` |
 | `codex` | `gpt-5.3-codex`, `gpt-5.4`, `gpt-5.5` | `credentials_file` |
+| `bedrock` | `us.anthropic.claude-opus-4-6-v1`, `us.anthropic.claude-opus-4-7`, `us.anthropic.claude-opus-4-8`, `us.anthropic.claude-opus-4-5-20251101-v1:0`, `us.anthropic.claude-opus-4-1-20250805-v1:0`, `us.anthropic.claude-sonnet-4-6`, `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, `us.anthropic.claude-haiku-4-5-20251001-v1:0`, `us.anthropic.claude-fable-5` | `profile` |
 
 The runtime owns fixed implementation details such as protocol, base URL, and Codex headers.
+For Bedrock, use inference profile model IDs (for example `us.anthropic...`) instead of direct model IDs.
 
 ## LLM Env Overrides
 
@@ -160,6 +162,12 @@ The global file should own shared provider credentials and defaults:
       "model": "gpt-5.5",
       "timeout_seconds": 120,
       "window_width_tokens": 100000
+    },
+    "bedrock": {
+      "profile": "claude-bedrock",
+      "model": "us.anthropic.claude-opus-4-6-v1",
+      "timeout_seconds": 120,
+      "window_width_tokens": 200000
     }
   }
 }

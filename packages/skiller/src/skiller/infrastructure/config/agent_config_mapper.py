@@ -12,6 +12,8 @@ from skiller.domain.agent.agent_config_model import (
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
@@ -151,6 +153,13 @@ def _build_provider(
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
+    if provider_type == AgentLLMProviderType.BEDROCK:
+        return AgentBedrockProvider(
+            model=_bedrock_model(raw_model),
+            profile=_required_profile(provider.profile),
+            timeout_seconds=timeout_seconds,
+            window_width_tokens=window_width_tokens,
+        )
 
     raise ValueError(f"Unsupported LLM provider: {provider_type.value}")
 
@@ -203,10 +212,23 @@ def _codex_model(value: str) -> AgentCodexLLMModel:
         raise ValueError(f"Unsupported model='{value}' for provider='codex'") from exc
 
 
+def _bedrock_model(value: str) -> AgentBedrockLLMModel:
+    try:
+        return AgentBedrockLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='bedrock'") from exc
+
+
 def _required_credentials_file(credentials_file: str | None) -> str:
     if credentials_file is None or not credentials_file.strip():
         raise ValueError("LLM provider requires credentials_file")
     return credentials_file
+
+
+def _required_profile(profile: str | None) -> str:
+    if profile is None or not profile.strip():
+        raise ValueError("LLM provider requires profile")
+    return profile
 
 
 def _build_loop_config(

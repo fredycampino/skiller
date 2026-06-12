@@ -1,35 +1,19 @@
 from dataclasses import dataclass
-from enum import Enum
-from typing import ClassVar, Generic, TypeAlias, TypeVar
+from typing import ClassVar, TypeAlias
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
+from skiller.domain.agent.agent_llm_bedrock_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
+)
+from skiller.domain.agent.agent_llm_model_enum import AgentLLMModelEnum
+from skiller.domain.agent.agent_llm_provider import (
+    AgentLLMProviderConfig,
+    AgentLLMProviderType,
+)
 
-DEFAULT_AGENT_LLM_PARALLEL_TOOL_CALLS = True
-DEFAULT_AGENT_LLM_TOOL_CHOICE = LLMToolChoiceMode.AUTO
 MINIMAX_LLM_TEMPERATURE = 1
 MINIMAX_LLM_TOP_P = 1
 MINIMAX_LLM_MAX_OUTPUT_TOKENS = 4096
-
-
-class AgentLLMProviderType(str, Enum):
-    NULL = "null"
-    FAKE = "fake"
-    MINIMAX = "minimax"
-    CODEX = "codex"
-
-
-class AgentLLMModelEnum(str, Enum):
-    model_context_window_tokens: int
-
-    def __new__(
-        cls,
-        value: str,
-        model_context_window_tokens: int,
-    ) -> "AgentLLMModelEnum":
-        item = str.__new__(cls, value)
-        item._value_ = value
-        item.model_context_window_tokens = model_context_window_tokens
-        return item
 
 
 class AgentNullLLMModel(AgentLLMModelEnum):
@@ -56,6 +40,7 @@ AgentLLMModel: TypeAlias = (
     | AgentFakeLLMModel
     | AgentMiniMaxLLMModel
     | AgentCodexLLMModel
+    | AgentBedrockLLMModel
 )
 
 
@@ -65,6 +50,7 @@ def agent_llm_model_from_value(value: str) -> AgentLLMModel:
         AgentFakeLLMModel,
         AgentMiniMaxLLMModel,
         AgentCodexLLMModel,
+        AgentBedrockLLMModel,
     )
     for model_type in model_types:
         try:
@@ -73,25 +59,6 @@ def agent_llm_model_from_value(value: str) -> AgentLLMModel:
             continue
 
     raise ValueError(f"Unsupported LLM model: {value}")
-
-ModelT = TypeVar(
-    "ModelT",
-    AgentNullLLMModel,
-    AgentFakeLLMModel,
-    AgentMiniMaxLLMModel,
-    AgentCodexLLMModel,
-)
-
-
-@dataclass(frozen=True)
-class AgentLLMProviderConfig(Generic[ModelT]):
-    model: ModelT
-    timeout_seconds: float
-    window_width_tokens: int
-
-    parallel_tool_calls: ClassVar[bool] = DEFAULT_AGENT_LLM_PARALLEL_TOOL_CALLS
-    tool_choice: ClassVar[LLMToolChoiceMode] = DEFAULT_AGENT_LLM_TOOL_CHOICE
-
 
 @dataclass(frozen=True)
 class AgentNullProvider(AgentLLMProviderConfig[AgentNullLLMModel]):
@@ -137,7 +104,11 @@ class AgentCodexProvider(AgentLLMProviderConfig[AgentCodexLLMModel]):
 
 
 AgentLLMProvider: TypeAlias = (
-    AgentNullProvider | AgentFakeProvider | AgentMiniMaxProvider | AgentCodexProvider
+    AgentNullProvider
+    | AgentFakeProvider
+    | AgentMiniMaxProvider
+    | AgentCodexProvider
+    | AgentBedrockProvider
 )
 
 

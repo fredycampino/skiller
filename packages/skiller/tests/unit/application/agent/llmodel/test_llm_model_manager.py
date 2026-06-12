@@ -2,6 +2,8 @@ import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
@@ -118,6 +120,15 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 window_width_tokens=100_000,
             ),
             "Codex LLM provider requires CodexLLMRequest",
+        ),
+        (
+            AgentBedrockProvider(
+                model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+                profile="claude-bedrock",
+                timeout_seconds=120,
+                window_width_tokens=100_000,
+            ),
+            "Bedrock LLM provider requires BedrockLLMRequest",
         ),
     ],
 )

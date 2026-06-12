@@ -2,12 +2,14 @@ import pytest
 
 from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
     AgentCodexLLMModel,
     AgentFakeLLMModel,
     AgentMiniMaxLLMModel,
 )
 from skiller.domain.agent.llm_model import LLMUserMessage
 from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
     CodexLLMRequest,
     LLMRequest,
     MiniMaxLLMRequest,
@@ -76,4 +78,22 @@ def test_codex_llm_request_requires_codex_model() -> None:
             messages=(LLMUserMessage("hello"),),
             model=AgentMiniMaxLLMModel.M2_7,
             parallel_tool_calls=True,
+        )
+
+
+def test_bedrock_llm_request_requires_bedrock_model() -> None:
+    request = BedrockLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+    )
+
+    assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
+
+    with pytest.raises(
+        TypeError,
+        match="BedrockLLMRequest model must be an AgentBedrockLLMModel",
+    ):
+        BedrockLLMRequest(
+            messages=(LLMUserMessage("hello"),),
+            model=AgentCodexLLMModel.GPT_5_5,
         )

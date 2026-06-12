@@ -32,7 +32,12 @@ class ShellProcessTool(
     ConfiguredTool[ShellToolRuntimeConfig],
 ):
     name: ClassVar[str] = "shell"
-    description: ClassVar[str] = "Execute a shell command in allowed paths"
+    description: ClassVar[str] = (
+        "This tool shell executes terminal commands; command is required "
+        "({'command':'<comando>'}); if you receive errors by command, "
+        "parameters, or invalid path, look for alternatives and do not retry "
+        "without corrections; you can also ask the user for help."
+    )
 
     def __init__(
         self,

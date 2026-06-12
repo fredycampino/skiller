@@ -9,6 +9,7 @@ from skiller.domain.agent.agent_context_model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockProvider,
     AgentCodexProvider,
     AgentLLMProvider,
     AgentMiniMaxProvider,
@@ -23,6 +24,7 @@ from skiller.domain.agent.llm_model import (
     LLMUserMessage,
 )
 from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
     CodexLLMRequest,
     LLMRequest,
     MiniMaxLLMRequest,
@@ -56,6 +58,12 @@ class AgentPromptBuilder:
                 messages=messages,
                 model=provider.model,
                 parallel_tool_calls=provider.parallel_tool_calls,
+                tools=tools,
+            )
+        if isinstance(provider, AgentBedrockProvider):
+            return BedrockLLMRequest(
+                messages=messages,
+                model=provider.model,
                 tools=tools,
             )
         return LLMRequest(

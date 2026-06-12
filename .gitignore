@@ -60,3 +60,5 @@ packages/skiller/src/skiller/local/channels/whatsapp/bridge/package-lock.json
 legacy/
 
 apps/tui/docs/todo
+.claude
+.cursor

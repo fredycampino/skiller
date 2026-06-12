@@ -18,13 +18,14 @@ steps:
       ```text
       1 Codex
       2 MiniMax
-      3 Configure later
-      4 Exit app
+      3 Bedrock
+      4 Configure later
+      5 Exit app
       ```
     next: select_provider
 
   - wait_input: select_provider
-    prompt: "Choose 1, 2, 3, or 4."
+    prompt: "Choose 1, 2, 3, 4, or 5."
     next: route_provider
 
   - switch: route_provider
@@ -32,8 +33,9 @@ steps:
     cases:
       "1": start_codex
       "2": start_minimax
-      "3": configure_later
-      "4": exit_app
+      "3": start_bedrock
+      "4": configure_later
+      "5": exit_app
     default: invalid_choice
 
   - notify: start_codex
@@ -52,6 +54,15 @@ steps:
       type: run
       label: Start MiniMax setup
       arg: auths/minimax
+      auto: true
+
+  - notify: start_bedrock
+    format: markdown
+    message: Starting Bedrock setup.
+    action:
+      type: run
+      label: Start Bedrock setup
+      arg: auths/bedrock
       auto: true
 
   - notify: configure_later
@@ -73,5 +84,5 @@ steps:
   - notify: invalid_choice
     format: markdown
     message: |
-      Invalid option. Choose `1`, `2`, `3`, or `4`.
+      Invalid option. Choose `1`, `2`, `3`, `4`, or `5`.
     next: select_provider

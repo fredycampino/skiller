@@ -20,6 +20,7 @@ class LLMProviderConfigModel(BaseModel):
     api_key_env: str | None = None
     api_key_file: str | None = None
     credentials_file: str | None = None
+    profile: str | None = None
 
 
 class LLMConfigModel(BaseModel):

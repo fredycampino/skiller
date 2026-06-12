@@ -4,6 +4,8 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
@@ -19,7 +21,12 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
+from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
+    CodexLLMRequest,
+    LLMRequest,
+    MiniMaxLLMRequest,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -355,6 +362,29 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
     assert isinstance(request, CodexLLMRequest)
     assert request.model == AgentCodexLLMModel.GPT_5_5
     assert request.parallel_tool_calls is True
+    assert not hasattr(request, "temperature")
+    assert not hasattr(request, "max_tokens")
+    assert not hasattr(request, "top_p")
+
+
+def test_agent_prompt_builder_returns_bedrock_request() -> None:
+    builder = AgentPromptBuilder()
+    provider = AgentBedrockProvider(
+        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        profile="claude-bedrock",
+        timeout_seconds=120,
+        window_width_tokens=200_000,
+    )
+
+    request = builder.build_request(
+        provider=provider,
+        system="Be useful.",
+        entries=[],
+        tools=(),
+    )
+
+    assert isinstance(request, BedrockLLMRequest)
+    assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
     assert not hasattr(request, "temperature")
     assert not hasattr(request, "max_tokens")
     assert not hasattr(request, "top_p")

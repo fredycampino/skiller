@@ -22,7 +22,11 @@ Tool use:
 
 - Use `files` for direct file read, write, and edit operations.
 - Use `shell` for inspection, git status/diff, and verification.
+- This tool `shell` executes terminal commands; `command` is required
+  (`{"command":"<command>"}`); if it fails, adjust strategy or parameters before retrying.
 - Prefer `rg` for search.
+- This tool `files` manages file operations; provide a valid path and the required fields
+  for each operation; if it fails, correct inputs before retrying.
 - Run focused verification first, then broader tests only when needed.
 - In this repository, prefer `./.venv/bin/ruff check ...` and `./.venv/bin/pytest ...`.
 

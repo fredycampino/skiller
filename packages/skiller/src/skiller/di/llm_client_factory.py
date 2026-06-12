@@ -1,6 +1,7 @@
 from typing import overload
 
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockProvider,
     AgentCodexProvider,
     AgentFakeProvider,
     AgentLLMProvider,
@@ -8,7 +9,13 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentNullProvider,
 )
 from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
-from skiller.domain.agent.llm_request import CodexLLMRequest, LLMRequest, MiniMaxLLMRequest
+from skiller.domain.agent.llm_request import (
+    BedrockLLMRequest,
+    CodexLLMRequest,
+    LLMRequest,
+    MiniMaxLLMRequest,
+)
+from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
@@ -28,6 +35,9 @@ class LLMClientFactory:
     def resolve(self, provider: AgentCodexProvider) -> LLMPort[CodexLLMRequest]: ...
 
     @overload
+    def resolve(self, provider: AgentBedrockProvider) -> LLMPort[BedrockLLMRequest]: ...
+
+    @overload
     def resolve(
         self,
         provider: AgentFakeProvider | AgentNullProvider,
@@ -45,6 +55,8 @@ class LLMClientFactory:
             return self._minimax_client(provider)
         if isinstance(provider, AgentCodexProvider):
             return self._codex_client(provider)
+        if isinstance(provider, AgentBedrockProvider):
+            return self._bedrock_client(provider)
 
         raise RuntimeError(f"Unsupported LLM provider: {provider!r}")
 
@@ -61,4 +73,10 @@ class LLMClientFactory:
             credentials_file=provider.credentials_file,
             timeout_seconds=provider.timeout_seconds,
             credentials_datasource=credentials_datasource,
+        )
+
+    def _bedrock_client(self, provider: AgentBedrockProvider) -> BedrockLLMPort:
+        return BedrockLLMPort(
+            profile=provider.profile,
+            timeout_seconds=provider.timeout_seconds,
         )

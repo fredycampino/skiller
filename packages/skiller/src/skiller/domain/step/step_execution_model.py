@@ -8,6 +8,7 @@ from skiller.domain.action.action_model import (
     action_to_public_dict,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
+    AgentBedrockLLMModel,
     AgentCodexLLMModel,
     AgentFakeLLMModel,
     AgentLLMModel,
@@ -273,6 +274,7 @@ def _optional_model(value: object) -> AgentLLMModel | None:
         AgentFakeLLMModel,
         AgentMiniMaxLLMModel,
         AgentCodexLLMModel,
+        AgentBedrockLLMModel,
     )
     for model_type in model_types:
         try:

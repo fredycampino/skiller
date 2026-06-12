@@ -19,6 +19,20 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.11 - 2026-06-12
+
+### Added
+- Add AWS Bedrock LLM provider support with onboarding and tool usage hints.
+
+### Fixed
+- Return invalid shell `cwd` paths as recoverable `policy_blocked` tool feedback instead of failing the agent step.
+
+### Removed
+- Stop tracking local runtime issue notes under `packages/skiller/docs/issues/`.
+
+### Notes
+- Includes PR #77 and PR #78.
+
 ## 0.1.0-beta.10 - 2026-06-11
 
 ### Changed

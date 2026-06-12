@@ -387,6 +387,40 @@ def test_agent_tool_execution_persists_prepare_failure_as_tool_result() -> None:
     )
 
 
+def test_agent_tool_execution_persists_invalid_shell_cwd_as_tool_result() -> None:
+    process_runner = _FakeProcessRunner()
+    context_store = _FakeAgentContextStore()
+    executor = _build_executor(
+        context_store=context_store,
+        process_runner=process_runner,
+    )
+
+    results = executor.execute(
+        _request_with_tool(
+            "shell",
+            '{"command":"pwd","cwd":"/outside/workspace"}',
+        )
+    )
+
+    assert results == ToolExecutionResults(
+        items=[
+            ToolExecutionResult(
+                tool_call_id="call-1",
+                tool="shell",
+                status=ToolExecutionStatus.EXECUTED,
+            )
+        ]
+    )
+    assert process_runner.requests == []
+    assert [item["entry_type"] for item in context_store.appended] == [
+        AgentContextEntryType.TOOL_CALL,
+        AgentContextEntryType.TOOL_RESULT,
+    ]
+    assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
+    assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
+    assert context_store.appended[-1]["payload"]["error"] == "shell cwd escapes allowed_paths"
+
+
 def test_agent_tool_execution_returns_terminal_prepare_exception_without_tool_result() -> None:
     context_store = _FakeAgentContextStore()
     runtime_events = _FakeRuntimeEventStore()

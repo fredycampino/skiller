@@ -96,8 +96,8 @@ class ShellProcessTool(
         if not isinstance(config, ShellToolRuntimeConfig):
             return ToolPolicyResult.blocked("Tool 'shell' requires shell runtime config")
         command_policy = ShellCommandPolicy(config=config)
-        effective_cwd = command_policy.resolve_cwd(request.cwd)
         try:
+            effective_cwd = command_policy.resolve_cwd(request.cwd)
             command_policy.validate_command(
                 command=request.command,
                 effective_cwd=effective_cwd,

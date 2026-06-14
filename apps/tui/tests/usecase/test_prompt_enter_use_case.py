@@ -36,7 +36,7 @@ def test_prompt_enter_use_case_applies_visible_completion() -> None:
     result = use_case.execute(state=state)
 
     assert result.should_submit is False
-    assert result.submit_text == ""
+    assert result.submit_text == "/runs"
     assert result.state is state
     assert state.prompt.text == "/runs"
     assert state.prompt.cursor_position == 5

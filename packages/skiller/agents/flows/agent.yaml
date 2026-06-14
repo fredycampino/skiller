@@ -1,0 +1,20 @@
+name: flows
+description: "Agentic flow specialist for Skiller"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "Write a task"
+    next: flows_agent
+
+  - agent: flows_agent
+    system:
+      file: "./system.md"
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - shell
+      - files
+    max_turns: 30

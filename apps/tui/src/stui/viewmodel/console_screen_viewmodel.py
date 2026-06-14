@@ -14,7 +14,10 @@ from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_event import InspectRunContextEvent
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
+    DispatchErrorItem,
     PromptMode,
+    UserInputItem,
+    ViewStatusKind,
 )
 from stui.viewmodel.console_screen_use_cases import ConsoleScreenUseCases
 
@@ -195,6 +198,30 @@ class ConsoleScreenViewModel(LogEventsListener):
             self._emit_state()
             return
 
+        if command.kind == CommandKind.AUTH:
+            auth_result = self._use_cases.auth_command.execute(command=command)
+            if auth_result.command is None:
+                self.state.transcript.items.append(UserInputItem(text=command.raw_text))
+                self.state.transcript.items.append(
+                    DispatchErrorItem(message=f"error: {auth_result.error_message}")
+                )
+                self.state.set_status(
+                    kind=ViewStatusKind.ERROR,
+                    message=auth_result.error_message,
+                )
+                self._clear_prompt_state()
+                self._emit_state()
+                return
+
+            result = await self._use_cases.run_command.execute(
+                self,
+                state=self.state,
+                command=auth_result.command,
+            )
+            self.state = result.state
+            self._emit_state()
+            return
+
         if (
             command.kind in {CommandKind.FREE_TEXT, CommandKind.UNKNOWN}
             and self._run_event_context.status == RunStatus.WAITING_INPUT
@@ -226,16 +253,7 @@ class ConsoleScreenViewModel(LogEventsListener):
     def prompt_change(self, *, text: str, cursor_position: int) -> None:
         self.state.prompt.text = text
         self.state.prompt.cursor_position = cursor_position
-        autocompletion = self._use_cases.autocomplete.execute(
-            text=text,
-            cursor_position=cursor_position,
-        )
-        self.state.set_autocompletion(autocompletion)
-        if autocompletion is not None and autocompletion.visible:
-            self.state.runs_table.visible = False
-            self.state.runs_table.command = ""
-            self.state.set_agent_context_stats()
-        self.state.prompt.mode = self._resolve_prompt_mode()
+        self._refresh_prompt_autocompletion()
         self._emit_state()
 
     def move_completion(self, delta: int) -> bool:
@@ -261,6 +279,7 @@ class ConsoleScreenViewModel(LogEventsListener):
             await self.submit(result.submit_text)
             return
 
+        self._refresh_prompt_autocompletion()
         self._emit_state()
 
     def inspect_run_context(self) -> None:
@@ -337,6 +356,18 @@ class ConsoleScreenViewModel(LogEventsListener):
         )
         self.state = result.state
         self._emit_state()
+
+    def _refresh_prompt_autocompletion(self) -> None:
+        autocompletion = self._use_cases.autocomplete.execute(
+            text=self.state.prompt.text,
+            cursor_position=self.state.prompt.cursor_position,
+        )
+        self.state.set_autocompletion(autocompletion)
+        if autocompletion is not None and autocompletion.visible:
+            self.state.runs_table.visible = False
+            self.state.runs_table.command = ""
+            self.state.set_agent_context_stats()
+        self.state.prompt.mode = self._resolve_prompt_mode()
 
     def _resolve_prompt_mode(self) -> PromptMode:
         if self.state.runs_table.visible:

@@ -13,6 +13,7 @@ class TuiTheme:
     color_text_success: str = "#AFDF8F"
     color_text_error: str = "#FF5C72"
     color_text_accent: str = "#79c0ff"
+    color_text_accent_secondary: str = "#B48EAD"
     color_text_selected: str = "white"
     color_text_inline_code: str = "#9b9d9d"
 

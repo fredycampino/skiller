@@ -27,9 +27,18 @@ class PromptEnterUseCase:
         completion_text = selected_item.insert_text or selected_item.label
         if not completion_text:
             completion_text = state.prompt.text[: state.prompt.cursor_position]
-        completion_text = completion_text.rstrip()
 
-        state.prompt.text = completion_text
-        state.prompt.cursor_position = len(completion_text)
+        replace_from = max(0, min(len(state.prompt.text), completion.replace_from))
+        replace_to = max(replace_from, min(len(state.prompt.text), completion.replace_to))
+        state.prompt.text = (
+            state.prompt.text[:replace_from]
+            + completion_text
+            + state.prompt.text[replace_to:]
+        )
+        state.prompt.cursor_position = replace_from + len(completion_text)
         state.set_autocompletion()
-        return PromptEnterResult(state=state, should_submit=False)
+        return PromptEnterResult(
+            state=state,
+            should_submit=selected_item.kind == "param",
+            submit_text=state.prompt.text,
+        )

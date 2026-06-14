@@ -14,10 +14,16 @@ steps:
 
       Your LLM provider is configured.
 
-      Start an agentic flow with:
+      Start by creating your agentic flow.
+
+      In Stui:
 
       ```text
-      /run mono
+      /run flows
       ```
 
-      You can also type `/` to see available commands.
+      CLI example:
+
+      ```bash
+      skiller run flows
+      ```

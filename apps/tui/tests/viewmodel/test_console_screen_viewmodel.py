@@ -721,6 +721,89 @@ def test_prompt_enter_applies_completion_when_visible() -> None:
     asyncio.run(run())
 
 
+def test_prompt_enter_applies_auth_command_completion_and_shows_params() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+            waiting_port=FakeWaitingPort(),
+        )
+
+        viewmodel.prompt_change(text="/a", cursor_position=2)
+
+        await viewmodel.prompt_enter()
+
+        assert viewmodel.state.prompt.text == "/auth "
+        assert viewmodel.state.prompt.cursor_position == 6
+        assert viewmodel.state.autocompletion is not None
+        assert [item.label for item in viewmodel.state.autocompletion.items] == [
+            "codex",
+            "minimax",
+            "bedrock",
+        ]
+
+    asyncio.run(run())
+
+
+def test_prompt_enter_submits_auth_param_completion_when_visible() -> None:
+    run_port = FakeRunPort(
+        CommandAck(
+            status=CommandAckStatus.ACCEPTED,
+            run_id="run-codex",
+            message="created",
+        )
+    )
+
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        viewmodel.prompt_change(text="/auth c", cursor_position=7)
+
+        await viewmodel.prompt_enter()
+
+        assert run_port.called_with == ["auths/codex"]
+        assert viewmodel.state.prompt.text == ""
+        assert viewmodel.state.prompt.cursor_position == 0
+        assert viewmodel.state.autocompletion is None
+        assert viewmodel.state.session_key == "run-codex"
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
+def test_prompt_enter_submits_first_auth_param_completion() -> None:
+    run_port = FakeRunPort(
+        CommandAck(
+            status=CommandAckStatus.ACCEPTED,
+            run_id="run-codex",
+            message="created",
+        )
+    )
+
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        viewmodel.prompt_change(text="/auth ", cursor_position=6)
+
+        await viewmodel.prompt_enter()
+
+        assert run_port.called_with == ["auths/codex"]
+        assert viewmodel.state.prompt.text == ""
+        assert viewmodel.state.prompt.cursor_position == 0
+        assert viewmodel.state.session_key == "run-codex"
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
 def test_prompt_enter_submits_when_completion_is_not_visible() -> None:
     async def run() -> None:
         viewmodel = build_viewmodel(
@@ -834,6 +917,79 @@ def test_console_screen_viewmodel_dispatches_run() -> None:
 
     with patched_to_thread(run_command_use_case_module):
         asyncio.run(run())
+
+
+def test_console_screen_viewmodel_dispatches_auth_menu() -> None:
+    run_port = FakeRunPort(
+        CommandAck(
+            status=CommandAckStatus.ACCEPTED,
+            run_id="run-auth",
+            message="created",
+        )
+    )
+
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.submit("/auth")
+
+        assert run_port.called_with == ["auths/auth"]
+        assert viewmodel.state.run_name == "auths/auth"
+        assert viewmodel.state.session_key == "run-auth"
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_dispatches_auth_provider() -> None:
+    run_port = FakeRunPort(
+        CommandAck(
+            status=CommandAckStatus.ACCEPTED,
+            run_id="run-codex",
+            message="created",
+        )
+    )
+
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.submit("/auth codex")
+
+        assert run_port.called_with == ["auths/codex"]
+        assert viewmodel.state.run_name == "auths/codex"
+        assert viewmodel.state.session_key == "run-codex"
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_rejects_unknown_auth_provider() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.submit("/auth unknown")
+
+        assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
+        assert viewmodel.state.view_status.message == (
+            "Unknown auth provider. Use /auth, /auth codex, /auth minimax, or /auth bedrock."
+        )
+        assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
+        assert viewmodel.state.transcript.items[0].text == "/auth unknown"
+        assert isinstance(viewmodel.state.transcript.items[1], DispatchErrorItem)
+
+    asyncio.run(run())
 
 
 def test_console_screen_viewmodel_opens_runs_table_for_runs_command() -> None:

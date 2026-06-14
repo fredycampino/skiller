@@ -9,6 +9,7 @@ class CommandKind(StrEnum):
     QUIT = "quit"
     RUN = "run"
     RUNS = "runs"
+    AUTH = "auth"
     FREE_TEXT = "free_text"
     UNKNOWN = "unknown"
 
@@ -78,4 +79,6 @@ def _resolve_command_kind(command_name: str) -> CommandKind:
         return CommandKind.RUN
     if command_name == "/runs":
         return CommandKind.RUNS
+    if command_name == "/auth":
+        return CommandKind.AUTH
     return CommandKind.UNKNOWN

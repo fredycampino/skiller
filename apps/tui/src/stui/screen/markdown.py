@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from pygments.styles import get_style_by_name
 from rich.console import RenderableType
-from rich.markdown import Markdown
+from rich.markdown import Heading, Markdown
 from rich.syntax import PygmentsSyntaxTheme
 from rich.theme import Theme
 
@@ -21,6 +21,24 @@ class StuiNordStyle(_NORD_STYLE):
 PYGMENTS_CODE_THEME = PygmentsSyntaxTheme(StuiNordStyle)
 
 
+class StuiHeading(Heading):
+    LEVEL_ALIGN = {
+        "h1": "left",
+        "h2": "left",
+        "h3": "left",
+        "h4": "left",
+        "h5": "left",
+        "h6": "left",
+    }
+
+
+class StuiMarkdown(Markdown):
+    elements = {
+        **Markdown.elements,
+        "heading_open": StuiHeading,
+    }
+
+
 @dataclass(frozen=True)
 class MarkdownView:
     text: str
@@ -28,7 +46,7 @@ class MarkdownView:
 
     def render(self) -> RenderableType:
         return ThemedMarkdown(
-            markdown=Markdown(
+            markdown=StuiMarkdown(
                 self.text,
                 # Pygments theme for fenced code blocks.
                 code_theme=PYGMENTS_CODE_THEME,
@@ -41,6 +59,7 @@ class MarkdownView:
     def _rich_markdown_theme(self) -> Theme:
         return Theme(
             {
+                "markdown.h1": f"{self.theme.color_text_accent_secondary} bold",
                 "markdown.h2": f"{self.theme.color_text_primary} bold",
                 "markdown.h3": f"{self.theme.color_text_primary} bold",
                 "markdown.code": (

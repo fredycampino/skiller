@@ -38,7 +38,7 @@ def test_autocomplete_use_case_hides_non_matching_queries() -> None:
     assert use_case.execute(text="/xzx", cursor_position=4) is None
 
 
-def test_autocomplete_use_case_hides_queries_with_whitespace() -> None:
+def test_autocomplete_use_case_hides_run_queries_with_whitespace() -> None:
     use_case = AutocompleteUseCase()
 
     assert use_case.execute(text="/run chat", cursor_position=9) is None
@@ -61,10 +61,80 @@ def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
     assert [item.label for item in state.items] == [
         "run",
         "runs",
+        "auth",
         "quit",
         "exit",
         "dev",
     ]
+
+
+def test_autocomplete_use_case_suggests_auth_command() -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text="/a", cursor_position=2)
+
+    assert state is not None
+    assert [item.label for item in state.items] == ["auth"]
+    assert state.items[0].description == "Configure authentication"
+    assert state.items[0].insert_text == "/auth "
+
+
+def test_autocomplete_use_case_suggests_auth_provider_params() -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text="/auth ", cursor_position=6)
+
+    assert state is not None
+    assert state.query == ""
+    assert [item.label for item in state.items] == ["codex", "minimax", "bedrock"]
+    assert [item.kind for item in state.items] == ["param", "param", "param"]
+    assert state.replace_from == 6
+    assert state.replace_to == 6
+
+
+@pytest.mark.parametrize(
+    ("text", "label"),
+    [
+        ("/auth c", "codex"),
+        ("/auth m", "minimax"),
+        ("/auth b", "bedrock"),
+    ],
+)
+def test_autocomplete_use_case_filters_auth_provider_params(
+    text: str,
+    label: str,
+) -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text=text, cursor_position=len(text))
+
+    assert state is not None
+    assert [item.label for item in state.items] == [label]
+    assert state.replace_from == 6
+    assert state.replace_to == len(text)
+
+
+def test_autocomplete_use_case_hides_completed_auth_provider_param() -> None:
+    use_case = AutocompleteUseCase()
+
+    assert use_case.execute(text="/auth codex", cursor_position=11) is None
+
+
+def test_autocomplete_use_case_hides_auth_provider_after_extra_space() -> None:
+    use_case = AutocompleteUseCase()
+
+    assert use_case.execute(text="/auth codex ", cursor_position=12) is None
+
+
+def test_autocomplete_use_case_does_not_suggest_auth_params_for_partial_auth_command() -> None:
+    use_case = AutocompleteUseCase()
+
+    state = use_case.execute(text="/a", cursor_position=2)
+
+    assert state is not None
+    assert [item.label for item in state.items] == ["auth"]
+    assert state.replace_from == 0
+    assert state.replace_to == 2
 
 
 def test_autocomplete_use_case_suggests_exit_command() -> None:

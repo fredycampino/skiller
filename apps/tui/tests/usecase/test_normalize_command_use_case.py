@@ -36,6 +36,15 @@ def test_normalize_command_use_case_normalizes_runs_command() -> None:
     assert command.params == ("waiting",)
 
 
+def test_normalize_command_use_case_normalizes_auth_command() -> None:
+    command = NormalizeCommandUseCase().execute(text=" /auth codex ")
+
+    assert command.kind == CommandKind.AUTH
+    assert command.name == "/auth"
+    assert command.params == ("codex",)
+    assert command.args_text == "codex"
+
+
 def test_normalize_command_use_case_classifies_legacy_chat_commands_as_unknown() -> None:
     use_case = NormalizeCommandUseCase()
 

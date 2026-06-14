@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from stui.usecase.agent_status_use_case import AgentStatusUseCase
+from stui.usecase.auth_command_use_case import AuthCommandUseCase
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
@@ -46,6 +47,7 @@ from stui.usecase.unsupported_input_use_case import UnsupportedInputUseCase
 @dataclass(frozen=True)
 class ConsoleScreenUseCases:
     agent_status: AgentStatusUseCase
+    auth_command: AuthCommandUseCase
     autocomplete: AutocompleteUseCase
     interrupt_agent_turn: InterruptAgentTurnUseCase
     move_completion: MoveCompletionUseCase

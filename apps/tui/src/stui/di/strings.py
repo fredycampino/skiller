@@ -8,13 +8,19 @@ class TuiStrings:
     intro_title: str = "Skiller.run stui"
     intro_body: str = "Run agentics workflows."
     intro_hint: str = ""
-    unsupported_input_message: str = "Use /run <agent> to execute an agent."
+    unsupported_input_message: str = (
+        "Use /run <agent> to execute an agent, or /auth to configure auth."
+    )
     runs_table_empty_message: str = "No runs yet. Use /run to execute your flows."
     runs_table_navigation_hint: str = "↑↓ · Enter · Esc"
     waiting_webhook_message: str = "Waiting webhook"
     notify_action_done_label: str = "done"
     autocomplete_run_description: str = "Run an agentic flow"
     autocomplete_runs_description: str = "Show runs"
+    autocomplete_auth_description: str = "Configure authentication"
+    auth_unknown_provider_message: str = (
+        "Unknown auth provider. Use /auth, /auth codex, /auth minimax, or /auth bedrock."
+    )
     autocomplete_quit_description: str = "Exit the TUI"
     autocomplete_exit_description: str = "Exit the TUI"
     autocomplete_dev_description: str = "Show local debug state"

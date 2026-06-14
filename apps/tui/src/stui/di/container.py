@@ -31,6 +31,7 @@ from stui.port.session_store_port import SessionStorePort
 from stui.port.waiting_port import WaitingPort
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.usecase.agent_status_use_case import AgentStatusUseCase
+from stui.usecase.auth_command_use_case import AuthCommandUseCase
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
@@ -150,6 +151,7 @@ def build_tui_container(
     )
     use_cases = ConsoleScreenUseCases(
         agent_status=AgentStatusUseCase(),
+        auth_command=AuthCommandUseCase(strings=strings),
         autocomplete=AutocompleteUseCase(strings=strings),
         interrupt_agent_turn=InterruptAgentTurnUseCase(
             agent_port=resolved_agent_port,

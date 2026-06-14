@@ -68,13 +68,19 @@ steps:
   - notify: configure_later
     format: markdown
     message: |
-      You can configure an LLM provider later with:
+      You can configure an LLM provider later.
+
+      In Stui:
 
       ```text
-      /run auths/auth
+      /auth
       ```
 
-      Type `/` to see available commands.
+      Or directly with the Skiller CLI as:
+
+      ```text
+      skiller run auths/auth
+      ```
 
   - notify: exit_app
     format: markdown

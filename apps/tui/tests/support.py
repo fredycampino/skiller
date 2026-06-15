@@ -14,6 +14,7 @@ from stui.port.agent_port import (
 )
 from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.installation_state_port import InstallationState
+from stui.port.models_port import ModelsPortModelItem, ModelsPortProviderItem
 from stui.port.run_port import (
     CommandAck,
     CommandAckStatus,
@@ -38,6 +39,7 @@ def build_viewmodel(
     waiting_port,
     notify_action_port=None,
     runs_port=None,
+    models_port=None,
     agent_port=None,
     installation_state_port=None,
     session_store_port=None,
@@ -53,6 +55,7 @@ def build_viewmodel(
             run_port=run_port,
             events_port=resolved_events_port,
             runs_port=runs_port,
+            models_port=models_port,
             waiting_port=waiting_port,
             notify_action_port=notify_action_port,
             agent_port=agent_port,
@@ -66,6 +69,7 @@ def build_viewmodel(
         run_port=run_port,
         events_port=resolved_events_port,
         runs_port=runs_port,
+        models_port=models_port,
         waiting_port=waiting_port,
         notify_action_port=notify_action_port,
         agent_port=agent_port,
@@ -127,6 +131,31 @@ class FakeRunsPort:
         if self.error is not None:
             raise self.error
         return list(self.runs)
+
+
+class FakeModelsPort:
+    def __init__(
+        self,
+        models: list[ModelsPortProviderItem] | None = None,
+        error: RuntimeError | None = None,
+    ) -> None:
+        self.models = models or [
+            ModelsPortProviderItem(
+                name="codex",
+                source="global",
+                models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
+            )
+        ]
+        self.error = error
+        self.called = False
+        self.called_with: list[str] = []
+
+    def list_models(self, *, run_id: str) -> list[ModelsPortProviderItem]:
+        self.called = True
+        self.called_with.append(run_id)
+        if self.error is not None:
+            raise self.error
+        return list(self.models)
 
 
 class NeverCalledRunPort:

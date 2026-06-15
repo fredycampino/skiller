@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from stui.adapter.cli_agent_adapter import CliAgentAdapter
 from stui.adapter.cli_invoker import CliInvoker
+from stui.adapter.cli_models_adapter import CliModelsAdapter
 from stui.adapter.cli_notify_action_adapter import CliNotifyActionAdapter
 from stui.adapter.cli_run_adapter import CliRunAdapter
 from stui.adapter.cli_runs_adapter import CliRunsAdapter
@@ -24,6 +25,7 @@ from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.agent_port import AgentPort
 from stui.port.event_port import EventsPort
 from stui.port.installation_state_port import InstallationStatePort
+from stui.port.models_port import ModelsPort
 from stui.port.notify_action_port import NotifyActionPort
 from stui.port.run_port import RunPort
 from stui.port.runs_port import RunsPort
@@ -36,11 +38,14 @@ from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
+from stui.usecase.get_intro_post_command_use_case import GetIntroPostCommandUseCase
 from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
+from stui.usecase.list_models_use_case import ListModelsUseCase
 from stui.usecase.list_runs_use_case import ListRunsUseCase
+from stui.usecase.load_session_from_post_use_case import LoadSessionFromPostUseCase
 from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
@@ -87,6 +92,7 @@ class TuiContainer:
     run_port: RunPort
     events_port: EventsPort
     runs_port: RunsPort
+    models_port: ModelsPort
     waiting_port: WaitingPort
     notify_action_port: NotifyActionPort
     agent_port: AgentPort
@@ -110,6 +116,7 @@ def build_tui_container(
     run_port: RunPort | None = None,
     events_port: EventsPort | None = None,
     runs_port: RunsPort | None = None,
+    models_port: ModelsPort | None = None,
     waiting_port: WaitingPort | None = None,
     notify_action_port: NotifyActionPort | None = None,
     agent_port: AgentPort | None = None,
@@ -131,6 +138,7 @@ def build_tui_container(
     resolved_runs_port = runs_port or DefaultRunsPort(
         command_adapter=CliRunsAdapter(invoker=resolved_cli_invoker),
     )
+    resolved_models_port = models_port or CliModelsAdapter(invoker=resolved_cli_invoker)
     resolved_waiting_port = waiting_port or DefaultWaitingPort(
         command_adapter=CliWaitingAdapter(invoker=resolved_cli_invoker),
     )
@@ -151,12 +159,16 @@ def build_tui_container(
     )
     use_cases = ConsoleScreenUseCases(
         agent_status=AgentStatusUseCase(),
-        auth_command=AuthCommandUseCase(strings=strings),
+        auth_command=AuthCommandUseCase(context=run_event_context, strings=strings),
         autocomplete=AutocompleteUseCase(strings=strings),
         interrupt_agent_turn=InterruptAgentTurnUseCase(
             agent_port=resolved_agent_port,
         ),
         move_completion=MoveCompletionUseCase(),
+        list_models=ListModelsUseCase(
+            models_port=resolved_models_port,
+            context=run_event_context,
+        ),
         list_runs=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command=NormalizeCommandUseCase(),
         event_state=EventStateUseCase(
@@ -190,6 +202,13 @@ def build_tui_container(
             session_store_port=resolved_session_store_port,
             context=run_event_context,
         ),
+        load_session_from_post=LoadSessionFromPostUseCase(
+            run_port=resolved_run_port,
+            events_port=resolved_events_port,
+            session_store_port=resolved_session_store_port,
+            context=run_event_context,
+        ),
+        get_intro_post_command=GetIntroPostCommandUseCase(),
         get_run_action=GetRunActionUseCase(context=run_event_context),
         start_console=StartConsoleUseCase(
             installation_state_port=resolved_installation_state_port,
@@ -227,6 +246,7 @@ def build_tui_container(
         run_port=resolved_run_port,
         events_port=resolved_events_port,
         runs_port=resolved_runs_port,
+        models_port=resolved_models_port,
         waiting_port=resolved_waiting_port,
         notify_action_port=resolved_notify_action_port,
         agent_port=resolved_agent_port,

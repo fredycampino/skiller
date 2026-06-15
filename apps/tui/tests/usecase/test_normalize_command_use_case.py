@@ -36,6 +36,14 @@ def test_normalize_command_use_case_normalizes_runs_command() -> None:
     assert command.params == ("waiting",)
 
 
+def test_normalize_command_use_case_normalizes_models_command() -> None:
+    command = NormalizeCommandUseCase().execute(text=" /models ")
+
+    assert command.kind == CommandKind.MODELS
+    assert command.name == "/models"
+    assert command.params == ()
+
+
 def test_normalize_command_use_case_normalizes_auth_command() -> None:
     command = NormalizeCommandUseCase().execute(text=" /auth codex ")
 

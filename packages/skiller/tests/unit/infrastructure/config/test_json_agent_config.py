@@ -10,6 +10,7 @@ from skiller.application.tools.files import FilesTool, FilesToolRuntimeConfig
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
+from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
@@ -271,6 +272,63 @@ def test_json_agent_config_resolves_config_file_precedence(tmp_path) -> None:
     assert context_config.llm.default_provider == AgentLLMProviderType.NULL
     assert env_config.llm.default_provider == AgentLLMProviderType.MINIMAX
     assert fallback_config.llm.default_provider == AgentLLMProviderType.FAKE
+
+
+def test_json_agent_config_lists_provider_sources(tmp_path) -> None:
+    global_config_path = tmp_path / "global-agent.json"
+    context_config_path = tmp_path / "context-agent.json"
+    _write_config(
+        global_config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+            "providers": {
+                "minimax": {
+                    "api_key": "secret",
+                    "model": "MiniMax-M2.5",
+                    "timeout_seconds": 30,
+                    "window_width_tokens": 1_000_000,
+                },
+                "codex": {
+                    "credentials_file": "/secret/codex.json",
+                    "model": "gpt-5.5",
+                    "timeout_seconds": 120,
+                    "window_width_tokens": 1_000_000,
+                },
+            },
+        },
+    )
+    _write_config(context_config_path, llm=_bedrock_llm(profile="default"))
+
+    sources = _provider(
+        config_path=global_config_path,
+        env={},
+    ).list_provider_sources(config_path=context_config_path)
+
+    assert {
+        item.provider_type: item.source
+        for item in sources
+    } == {
+        AgentLLMProviderType.MINIMAX: AgentConfigProviderSource.GLOBAL,
+        AgentLLMProviderType.CODEX: AgentConfigProviderSource.GLOBAL,
+        AgentLLMProviderType.BEDROCK: AgentConfigProviderSource.LOCAL,
+    }
+
+
+def test_json_agent_config_lists_env_provider_sources(tmp_path) -> None:
+    global_config_path = tmp_path / "global-agent.json"
+    env_config_path = tmp_path / "env-agent.json"
+    _write_config(global_config_path, llm=_minimax_llm(api_key="secret"))
+    _write_config(env_config_path, llm=_codex_llm(credentials_file="/secret/codex.json"))
+
+    sources = _provider(
+        config_path=global_config_path,
+        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
+    ).list_provider_sources()
+
+    assert {
+        item.provider_type: item.source
+        for item in sources
+    } == {AgentLLMProviderType.CODEX: AgentConfigProviderSource.ENV}
 
 
 def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) -> None:

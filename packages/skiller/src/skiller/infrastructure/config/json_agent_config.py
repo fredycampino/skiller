@@ -3,11 +3,16 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from skiller.domain.agent.agent_config_model import AgentConfig
-from skiller.domain.agent.agent_config_port import AgentConfigPort
+from skiller.domain.agent.agent_config_port import (
+    AgentConfigPort,
+    AgentConfigProviderSource,
+    AgentConfigProviderSourceItem,
+)
 from skiller.domain.agent.agent_config_validation_model import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
+from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 
 
@@ -50,6 +55,47 @@ class JsonAgentConfig(AgentConfigPort):
             )
 
         return AgentConfigValidation.valid()
+
+    def list_provider_sources(
+        self,
+        *,
+        config_path: Path | None = None,
+    ) -> tuple[AgentConfigProviderSourceItem, ...]:
+        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
+        if explicit_path:
+            return _provider_sources(
+                payload=_load_json_object(Path(explicit_path).expanduser()),
+                source=AgentConfigProviderSource.ENV,
+            )
+
+        global_config_path = self.config_path_global.expanduser()
+        global_payload = (
+            _load_json_object(global_config_path)
+            if global_config_path.exists()
+            else {}
+        )
+        local_config_path = self._resolve_override_config_path(config_path=config_path)
+        if local_config_path is None:
+            return _provider_sources(
+                payload=global_payload,
+                source=AgentConfigProviderSource.GLOBAL,
+            )
+
+        local_payload = _load_json_object(local_config_path)
+        local_sources = _provider_sources(
+            payload=local_payload,
+            source=AgentConfigProviderSource.LOCAL,
+        )
+        local_provider_types = {item.provider_type for item in local_sources}
+        global_sources = tuple(
+            item
+            for item in _provider_sources(
+                payload=global_payload,
+                source=AgentConfigProviderSource.GLOBAL,
+            )
+            if item.provider_type not in local_provider_types
+        )
+        return local_sources + global_sources
 
     def _load_config(self, *, config_path: Path | None = None) -> dict[str, object]:
         global_config_path = self.config_path_global.expanduser()
@@ -137,3 +183,29 @@ def _override_config(
     merged = dict(base)
     merged.update(override)
     return merged
+
+
+def _provider_sources(
+    *,
+    payload: dict[str, object],
+    source: AgentConfigProviderSource,
+) -> tuple[AgentConfigProviderSourceItem, ...]:
+    providers = payload.get("providers")
+    if not isinstance(providers, dict):
+        return ()
+
+    items: list[AgentConfigProviderSourceItem] = []
+    for provider_id in providers:
+        if not isinstance(provider_id, str):
+            continue
+        try:
+            provider_type = AgentLLMProviderType(provider_id)
+        except ValueError:
+            continue
+        items.append(
+            AgentConfigProviderSourceItem(
+                provider_type=provider_type,
+                source=source,
+            )
+        )
+    return tuple(items)

@@ -16,8 +16,10 @@ class TuiTheme:
     color_text_accent_secondary: str = "#B48EAD"
     color_text_selected: str = "white"
     color_text_inline_code: str = "#9b9d9d"
+    color_code_block_background: str = "#2A2F37"
 
     color_prompt_border: str = "#444444"
+
     cursor: str = ">"
     user_icon: str = "›"
     agent_message_icon: str = "‹"
@@ -230,6 +232,17 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             scrollbar-visibility: hidden;
         }}
 
+        #models-table-area {{
+            display: none;
+            height: 1fr;
+            align: center bottom;
+            width: 100%;
+            margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
         #prompt-row {{
             height: auto;
             width: 100%;
@@ -303,6 +316,108 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             overflow: hidden;
             scrollbar-size: 0 0;
             scrollbar-visibility: hidden;
+        }}
+
+        #models-table {{
+            layout: vertical;
+            height: auto;
+            min-height: 10;
+            width: 100%;
+            padding: 0 2;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_background};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #models-tables-row {{
+            layout: horizontal;
+            height: 12;
+            min-height: 12;
+            max-height: 12;
+            width: 100%;
+            align: left middle;
+            background: {theme.color_background};
+        }}
+
+        #models-providers-table {{
+            height: 12;
+            max-height: 12;
+            width: 32;
+            min-width: 20;
+            margin: 1 2 0 0;
+            border: none;
+            background: {theme.color_background};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #models-status {{
+            height: 1;
+            width: 100%;
+            margin: 0 0 1 0;
+            content-align: center middle;
+            color: {theme.color_text_muted};
+            background: {theme.color_background};
+        }}
+
+        #models-column {{
+            layout: vertical;
+            height: 12;
+            min-height: 12;
+            max-height: 12;
+            width: 1fr;
+            background: {theme.color_background};
+        }}
+
+        #models-models-table {{
+            height: 12;
+            min-height: 12;
+            max-height: 12;
+            width: 100%;
+            border: round {theme.color_code_block_background};
+            background: {theme.color_code_block_background};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+
+        #models-providers-table.models-table-focused > .datatable--cursor {{
+            color: {theme.color_text_accent};
+            background: {theme.color_background} 0%;
+            text-style: bold;
+        }}
+
+        #models-providers-table.models-table-unfocused > .datatable--cursor {{
+            color: {theme.color_text_primary};
+            background: {theme.color_background} 0%;
+            text-style: bold;
+        }}
+
+        #models-models-table.models-table-focused > .datatable--cursor {{
+            color: {theme.color_text_accent};
+            background: {theme.color_code_block_background} 0%;
+            text-style: bold;
+        }}
+
+        #models-models-table.models-table-unfocused > .datatable--cursor {{
+            color: {theme.color_text_primary};
+            background: {theme.color_code_block_background} 0%;
+            text-style: bold;
+        }}
+
+        #models-help {{
+            height: 1;
+            width: 100%;
+            margin: 1 0 0 0;
+            color: {theme.color_text_muted};
+            background: {theme.color_background};
         }}
 
         #runs-table-data {{

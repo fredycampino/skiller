@@ -5,9 +5,9 @@ from enum import StrEnum
 from typing import Any, TypeAlias
 
 from skiller.domain.action.action_model import (
+    Action,
     ActionStatus,
     ActionType,
-    RunAction,
     action_from_dict,
     action_to_public_dict,
 )
@@ -74,7 +74,7 @@ class RunWaitingPayload:
 class RunFinishedPayload:
     status: str
     error: str | None = None
-    action: RunAction | None = None
+    action: Action | None = None
 
 
 @dataclass(frozen=True)
@@ -280,8 +280,6 @@ def runtime_event_payload_from_dict(
         action = None
         if raw_action is not None:
             action = action_from_dict(_dict_value(raw_action))
-            if not isinstance(action, RunAction):
-                raise ValueError("RUN_FINISHED action must be run action")
         error = value.get("error")
         return RunFinishedPayload(
             status=str(value.get("status", "")),

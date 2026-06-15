@@ -37,6 +37,10 @@ class NotifyActionStatus(StrEnum):
     DONE = "done"
 
 
+class ActionPostArg(StrEnum):
+    LOAD_SESSION = "load_session"
+
+
 @dataclass(frozen=True)
 class ActionBaseValue:
     uid: str
@@ -53,12 +57,21 @@ class ActionOpenUrlValue(ActionBaseValue):
 
 @dataclass(frozen=True)
 class ActionRunValue(ActionBaseValue):
-    arg: str = ""
+    arg: str
     params: str | None = None
     auto: bool = False
 
 
-ActionValue: TypeAlias = ActionBaseValue | ActionOpenUrlValue | ActionRunValue
+@dataclass(frozen=True)
+class ActionPostValue(ActionBaseValue):
+    arg: ActionPostArg
+    params: str | None = None
+    auto: bool = False
+
+
+ActionValue: TypeAlias = (
+    ActionBaseValue | ActionOpenUrlValue | ActionRunValue | ActionPostValue
+)
 
 
 @dataclass(frozen=True)

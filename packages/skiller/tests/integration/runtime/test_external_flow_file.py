@@ -77,7 +77,12 @@ from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
 from skiller.application.waits.service import WaitApplicationService
-from skiller.domain.event.event_model import RunWaitingPayload, StepSuccessPayload
+from skiller.domain.action.action_model import PostAction
+from skiller.domain.event.event_model import (
+    RunFinishedPayload,
+    RunWaitingPayload,
+    StepSuccessPayload,
+)
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
@@ -329,6 +334,56 @@ def test_run_external_flow_file_succeeds() -> None:
         events = _event_store(store).list_events(run_result.run_id)
         notify_event = _step_success_event(events, step_id="show_message")
         assert notify_event.payload.output["value"]["message"] == "external ok"
+
+
+def test_external_flow_end_action_renders_input_in_run_finished_payload() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_post_continue.yaml"
+        skill_path.write_text(
+            (
+                "name: external_post_continue\n"
+                "start: done\n"
+                "inputs:\n"
+                "  continue_id: string\n"
+                "on_success:\n"
+                "  cleanup: true\n"
+                "  action:\n"
+                "    type: post\n"
+                "    label: Auth success\n"
+                "    arg: load_session\n"
+                "    params: 'run_id={{inputs.continue_id}}'\n"
+                "    auto: true\n"
+                "steps:\n"
+                "  - notify: done\n"
+                "    message: auth ok\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteRunStorePort(db_path)
+        SqliteRuntimeBootstrap(store.db_path).init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(
+            CreateRunInput(
+                skill_ref=str(skill_path),
+                inputs={"continue_id": "waiting-run-1"},
+                skill_source="file",
+            )
+        )
+
+        assert run_result.status.value == "SUCCEEDED"
+        events = _event_store(store).list_events(run_result.run_id)
+        run_finished_event = next(event for event in events if event.type == "RUN_FINISHED")
+        assert isinstance(run_finished_event.payload, RunFinishedPayload)
+        assert run_finished_event.payload.action == PostAction(
+            uid=run_finished_event.payload.action.uid,
+            label="Auth success",
+            arg="load_session",
+            params="run_id=waiting-run-1",
+            auto=True,
+        )
 
 
 def test_external_notify_can_read_shell_output_value() -> None:

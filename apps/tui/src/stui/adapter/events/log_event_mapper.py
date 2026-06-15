@@ -9,6 +9,8 @@ from stui.port.event_models import (
     ActionBaseValue,
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionPostArg,
+    ActionPostValue,
     ActionRunValue,
     AgentAssistantMessagePayload,
     AgentFinalAssistantMessagePayload,
@@ -91,6 +93,17 @@ class ActionRunValueModel(BaseModel):
 
     uid: str
     type: Literal["run"]
+    label: str
+    arg: str
+    params: str | None = None
+    auto: bool = False
+
+
+class ActionPostValueModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uid: str
+    type: Literal["post"]
     label: str
     arg: str
     params: str | None = None
@@ -567,6 +580,20 @@ def _to_action_value(value: JsonObject, label: str) -> ActionBaseValue:
             arg=run.arg,
             params=run.params,
             auto=run.auto,
+        )
+    if model.type == "post":
+        post = _validate_model(
+            ActionPostValueModel,
+            value,
+            label,
+        )
+        return ActionPostValue(
+            uid=uid,
+            type=post.type,
+            label=post.label,
+            arg=ActionPostArg(post.arg),
+            params=post.params,
+            auto=post.auto,
         )
     return ActionBaseValue(
         uid=uid,

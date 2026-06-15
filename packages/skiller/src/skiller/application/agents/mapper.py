@@ -8,6 +8,10 @@ from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentResult,
     InterruptAgentStatus,
 )
+from skiller.application.use_cases.agent.list_agent_models import (
+    ListAgentModelsResult,
+    ListAgentModelsStatus,
+)
 from skiller.domain.agent.agent_stats_model import AgentStats
 
 
@@ -40,6 +44,34 @@ class AgentServiceMapper:
         if result.stats is not None:
             payload["context_id"] = result.stats.context_id
             payload["context"] = self._context_to_dict(result.stats)
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
+    def to_models_input(self, run_id: str) -> str:
+        return run_id.strip()
+
+    def to_models_dict(self, result: ListAgentModelsResult) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "run_id": result.run_id,
+            "status": result.status.value,
+            "ok": result.status == ListAgentModelsStatus.OK,
+        }
+        if result.providers:
+            payload["providers"] = [
+                {
+                    "name": provider.name,
+                    "source": provider.source.value,
+                    "models": [
+                        {
+                            "name": model.name,
+                            "active": model.active,
+                        }
+                        for model in provider.models
+                    ],
+                }
+                for provider in result.providers
+            ]
         if result.error is not None:
             payload["error"] = result.error
         return payload

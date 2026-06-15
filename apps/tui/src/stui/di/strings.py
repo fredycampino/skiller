@@ -18,6 +18,16 @@ class TuiStrings:
     autocomplete_run_description: str = "Run an agentic flow"
     autocomplete_runs_description: str = "Show runs"
     autocomplete_auth_description: str = "Configure authentication"
+    autocomplete_models_description: str = "Show models"
+    models_table_help: str = "↑↓ select · ←→ switch table · Enter select · Esc close"
+    models_table_no_provider_selected_message: str = "No provider selected"
+    models_table_no_providers_message: str = "No providers available."
+    models_table_no_models_message: str = "No models available."
+    models_table_select_model_title: str = "Select a model"
+    models_table_auth_required_template: str = "Run /auth {provider} to configure"
+    models_table_no_models_for_provider_template: str = "{provider}: no models available"
+    models_table_provider_configured_marker: str = "✓"
+    models_table_active_model_marker: str = "●"
     auth_unknown_provider_message: str = (
         "Unknown auth provider. Use /auth, /auth codex, /auth minimax, or /auth bedrock."
     )

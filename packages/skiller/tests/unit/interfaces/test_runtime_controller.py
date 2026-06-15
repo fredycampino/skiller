@@ -6,6 +6,12 @@ from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.runs.mapper import RunServiceMapper
 from skiller.application.runs.models import RunResult
+from skiller.application.use_cases.agent.list_agent_models import (
+    AgentModelItem,
+    AgentModelsProviderItem,
+    ListAgentModelsResult,
+    ListAgentModelsStatus,
+)
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookResult
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneResult,
@@ -18,6 +24,7 @@ from skiller.application.use_cases.webhook.register_webhook import (
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
+from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
 from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
@@ -32,7 +39,22 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeAgentService:
-    pass
+    def __init__(self) -> None:
+        self.models_run_id = ""
+
+    def list_agent_models(self, run_id: str) -> ListAgentModelsResult:
+        self.models_run_id = run_id
+        return ListAgentModelsResult(
+            status=ListAgentModelsStatus.OK,
+            run_id=run_id,
+            providers=(
+                AgentModelsProviderItem(
+                    name="codex",
+                    source=AgentConfigProviderSource.GLOBAL,
+                    models=(AgentModelItem(name="gpt-5.5", active=True),),
+                ),
+            ),
+        )
 
 
 class _FakeRunService:
@@ -104,10 +126,11 @@ def _controller(
     wait_service: _FakeWaitService,
     run_service: _FakeRunService | None = None,
     query_service: _FakeQueryService | None = None,
+    agent_service: _FakeAgentService | None = None,
 ) -> RuntimeController:
     final_run_service = run_service or _FakeRunService()
     return RuntimeController(
-        agent_service=_FakeAgentService(),
+        agent_service=agent_service or _FakeAgentService(),
         agent_mapper=AgentServiceMapper(),
         run_service=final_run_service,
         run_mapper=RunServiceMapper(),
@@ -151,6 +174,27 @@ def test_controller_maps_create_run_to_typed_service_input() -> None:
     assert run_service.create_request.inputs == {"message": "ok"}
     assert run_service.create_request.skill_source == "internal"
     assert result == {"run_id": "run-1", "status": "CREATED"}
+
+
+def test_controller_maps_agent_models_to_agent_service() -> None:
+    agent_service = _FakeAgentService()
+    controller = _controller(_FakeWaitService(), agent_service=agent_service)
+
+    result = controller.agent_models(" run-1 ")
+
+    assert agent_service.models_run_id == "run-1"
+    assert result == {
+        "run_id": "run-1",
+        "status": "OK",
+        "ok": True,
+        "providers": [
+            {
+                "name": "codex",
+                "source": "global",
+                "models": [{"name": "gpt-5.5", "active": True}],
+            },
+        ],
+    }
 
 
 def test_controller_maps_action_done_to_run_service() -> None:

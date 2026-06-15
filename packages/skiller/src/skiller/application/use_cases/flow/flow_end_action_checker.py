@@ -77,12 +77,14 @@ class FlowEndActionChecker:
         errors: list[FlowCheckError],
     ) -> None:
         raw_type = str(raw_action.get("type", "")).strip()
-        if raw_type != ActionType.RUN.value:
+        supported_types = {ActionType.RUN.value, ActionType.POST.value}
+        if raw_type not in supported_types:
             errors.append(
                 FlowCheckError(
                     code="FLOW_END_ACTION_TYPE_UNSUPPORTED",
                     message="FLOW_END_ACTION_TYPE_UNSUPPORTED: end action type must "
-                    f"be {ActionType.RUN.value} (trigger={trigger.value})",
+                    f"be {ActionType.RUN.value} or {ActionType.POST.value} "
+                    f"(trigger={trigger.value})",
                 )
             )
 

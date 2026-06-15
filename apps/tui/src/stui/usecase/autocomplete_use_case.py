@@ -98,6 +98,12 @@ class AutocompleteUseCase:
                 kind=_COMMAND_KIND,
             ),
             CompletionItem(
+                label="models",
+                description=self.strings.autocomplete_models_description,
+                insert_text="/models",
+                kind=_COMMAND_KIND,
+            ),
+            CompletionItem(
                 label="quit",
                 description=self.strings.autocomplete_quit_description,
                 insert_text="/quit",

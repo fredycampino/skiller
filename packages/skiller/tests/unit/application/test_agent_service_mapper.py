@@ -9,6 +9,13 @@ from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentResult,
     InterruptAgentStatus,
 )
+from skiller.application.use_cases.agent.list_agent_models import (
+    AgentModelItem,
+    AgentModelsProviderItem,
+    ListAgentModelsResult,
+    ListAgentModelsStatus,
+)
+from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
 from skiller.domain.agent.agent_stats_model import (
     AgentContextStats,
     AgentContextWindowStats,
@@ -33,6 +40,41 @@ def test_mapper_serializes_interrupt_result() -> None:
         "status": "ENQUEUED",
         "enqueued": True,
         "item": {"type": "agent_interrupt"},
+    }
+
+
+def test_mapper_serializes_agent_models_result_without_secrets() -> None:
+    mapper = AgentServiceMapper()
+    result = ListAgentModelsResult(
+        status=ListAgentModelsStatus.OK,
+        run_id="run-1",
+        providers=(
+            AgentModelsProviderItem(
+                name="codex",
+                source=AgentConfigProviderSource.GLOBAL,
+                models=(
+                    AgentModelItem(name="gpt-5.5", active=True),
+                    AgentModelItem(name="gpt-5.4", active=False),
+                ),
+            ),
+        ),
+    )
+
+    assert mapper.to_models_input(" run-1 ") == "run-1"
+    assert mapper.to_models_dict(result) == {
+        "run_id": "run-1",
+        "status": "OK",
+        "ok": True,
+        "providers": [
+            {
+                "name": "codex",
+                "source": "global",
+                "models": [
+                    {"name": "gpt-5.5", "active": True},
+                    {"name": "gpt-5.4", "active": False},
+                ],
+            },
+        ],
     }
 
 

@@ -3,6 +3,7 @@ import pytest
 from skiller.domain.action.action_model import (
     ActionStatus,
     ActionType,
+    PostAction,
     RunAction,
 )
 from skiller.domain.event.event_agent_model import (
@@ -250,6 +251,64 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
             "label": "Debug failure",
             "arg": "--file ./flows/debug.yaml",
             "params": "--val pepe",
+            "auto": True,
+        },
+    }
+
+
+def test_runtime_event_store_roundtrips_run_finished_post_action(tmp_path) -> None:
+    db_path = tmp_path / "runtime-run-end-post-action-events.db"
+    run_store = SqliteRunStorePort(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440043"
+    run_store.create_run(
+        "internal",
+        "skill",
+        {"start": "done", "steps": [{"notify": "done"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    event_id = runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=RuntimeEventType.RUN_FINISHED,
+            payload=RunFinishedPayload(
+                status="SUCCEEDED",
+                action=PostAction(
+                    uid="end-action-2",
+                    label="Auth success",
+                    arg="load_session",
+                    params="run_id=waiting-run",
+                    auto=True,
+                ),
+            ),
+        )
+    )
+
+    events = runtime_event_store.list_events(run_id)
+
+    assert len(events) == 1
+    assert events[0].id == event_id
+    assert events[0].payload == RunFinishedPayload(
+        status="SUCCEEDED",
+        action=PostAction(
+            uid="end-action-2",
+            label="Auth success",
+            arg="load_session",
+            params="run_id=waiting-run",
+            auto=True,
+        ),
+    )
+    assert events[0].model_dump(mode="json")["payload"] == {
+        "status": "SUCCEEDED",
+        "action": {
+            "uid": "end-action-2",
+            "type": "post",
+            "label": "Auth success",
+            "arg": "load_session",
+            "params": "run_id=waiting-run",
             "auto": True,
         },
     }

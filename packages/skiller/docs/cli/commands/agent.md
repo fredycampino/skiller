@@ -10,6 +10,7 @@ Controls a running agent and reads persisted agent context diagnostics.
 | --- | --- | --- |
 | `skiller agent interrupt <run_id>` | Enqueues an interrupt for the current agent turn. | Interrupt enqueue result. |
 | `skiller agent stats <run_id> --agent <agent_id>` | Reads persisted context-window stats for one agent in a run. | Agent context stats. |
+| `skiller agent models <run_id>` | Lists model options from the agent config effective for a run. | Provider/model rows. |
 
 ## `interrupt`
 
@@ -138,6 +139,76 @@ Status values:
 - `RUN_NOT_FOUND`: no persisted run exists for `run_id`.
 - `AGENT_NOT_FOUND`: no persisted agent exists for `agent_id` in the run.
 - `AGENT_CONTEXT_NOT_READY`: the agent exists but has no attached context yet.
+
+## `models`
+
+Command:
+
+```bash
+skiller agent models <run_id>
+```
+
+Behavior:
+
+- validates that the run exists
+- reads the agent config effective for that run
+- returns provider/model rows only for public providers (`codex`, `minimax`, `bedrock`)
+- reports each provider config source as `global`, `local`, `env`, or `none`
+- omits internal test providers such as `null` and `fake`
+- does not include credentials, credential paths, profiles, timeouts, or token metadata
+
+Output:
+
+```json
+{
+  "run_id": "run-uuid",
+  "status": "OK",
+  "ok": true,
+  "providers": [
+    {
+      "name": "codex",
+      "source": "global",
+      "models": [
+        {
+          "name": "gpt-5.5",
+          "active": true
+        },
+        {
+          "name": "gpt-5.4",
+          "active": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+Failure output:
+
+```json
+{
+  "run_id": "missing-run",
+  "status": "RUN_NOT_FOUND",
+  "ok": false,
+  "error": "Run 'missing-run' not found"
+}
+```
+
+Fields:
+
+- `run_id`: target run id.
+- `status`: model lookup status.
+- `ok`: whether models were returned.
+- `providers[].name`: provider name.
+- `providers[].source`: provider config source: `global`, `local`, `env`, or `none`.
+- `providers[].models[].name`: supported model name.
+- `providers[].models[].active`: whether the model is the default provider's configured model.
+- `error`: failure reason, present when `ok = false`.
+
+Status values:
+
+- `OK`: models were returned.
+- `RUN_NOT_FOUND`: no persisted run exists for `run_id`.
 
 ## Exit Code
 

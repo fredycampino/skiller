@@ -1,0 +1,27 @@
+name: tui_continue_child
+description: "Child flow that posts the parent run id for continuation"
+version: "0.1"
+start: start_notify
+
+inputs:
+  continue_id: string
+
+on_success:
+  action:
+    type: post
+    label: "Continue parent"
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
+    auto: true
+
+steps:
+  - notify: start_notify
+    message: "Child start"
+    next: wait_before_done
+  
+  - shell: wait_before_done
+    command: "sleep 3"
+    next: done
+
+  - notify: done
+    message: "Child done."

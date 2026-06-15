@@ -4,11 +4,13 @@ import asyncio
 
 import pytest
 
+import stui.usecase.list_models_use_case as list_models_use_case_module
 import stui.usecase.list_runs_use_case as list_runs_use_case_module
 import stui.usecase.run_command_use_case as run_command_use_case_module
 from apps.tui.tests.support import (
     FakeAgentPort,
     FakeEventsPort,
+    FakeModelsPort,
     FakeRunsPort,
     build_viewmodel,
     patched_to_thread,
@@ -703,10 +705,12 @@ def test_move_completion_updates_selected_index() -> None:
 
 def test_prompt_enter_applies_completion_when_visible() -> None:
     async def run() -> None:
+        runs_port = FakeRunsPort()
         viewmodel = build_viewmodel(
             session_key="main",
             run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
             waiting_port=FakeWaitingPort(),
+            runs_port=runs_port,
         )
 
         viewmodel.prompt_change(text="/ru", cursor_position=3)
@@ -714,11 +718,14 @@ def test_prompt_enter_applies_completion_when_visible() -> None:
 
         await viewmodel.prompt_enter()
 
-        assert viewmodel.state.prompt.text == "/runs"
-        assert viewmodel.state.prompt.cursor_position == 5
+        assert runs_port.called_with == [(20, [])]
+        assert viewmodel.state.runs_table.visible is True
+        assert viewmodel.state.prompt.text == ""
+        assert viewmodel.state.prompt.cursor_position == 0
         assert viewmodel.state.autocompletion is None
 
-    asyncio.run(run())
+    with patched_to_thread(list_runs_use_case_module):
+        asyncio.run(run())
 
 
 def test_prompt_enter_applies_auth_command_completion_and_shows_params() -> None:
@@ -1005,11 +1012,35 @@ def test_console_screen_viewmodel_opens_runs_table_for_runs_command() -> None:
 
         assert viewmodel.state.runs_table.visible is True
         assert viewmodel.state.view_status.kind == ViewStatusKind.HIDDEN
-        assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
-        assert viewmodel.state.transcript.items[0].text == "/runs"
+        assert viewmodel.state.transcript.items == []
         assert [item.id for item in viewmodel.state.runs_table.rows] == ["run-1"]
 
     with patched_to_thread(list_runs_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_opens_models_table_for_models_command() -> None:
+    async def run() -> None:
+        models_port = FakeModelsPort()
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+            waiting_port=FakeWaitingPort(),
+            models_port=models_port,
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+
+        await viewmodel.submit("/models")
+
+        assert models_port.called is True
+        assert models_port.called_with == ["run-123"]
+        assert viewmodel.state.models_table.visible is True
+        assert viewmodel.state.runs_table.visible is False
+        assert viewmodel.state.view_status.kind == ViewStatusKind.HIDDEN
+        assert viewmodel.state.transcript.items == []
+        assert [item.name for item in viewmodel.state.models_table.rows] == ["codex"]
+
+    with patched_to_thread(list_models_use_case_module):
         asyncio.run(run())
 
 
@@ -1078,8 +1109,7 @@ def test_console_screen_viewmodel_maps_runs_errors() -> None:
 
         assert viewmodel.state.runs_table.visible is False
         assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
-        assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
-        assert isinstance(viewmodel.state.transcript.items[1], DispatchErrorItem)
+        assert isinstance(viewmodel.state.transcript.items[0], DispatchErrorItem)
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())

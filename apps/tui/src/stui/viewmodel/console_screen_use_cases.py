@@ -7,11 +7,14 @@ from stui.usecase.auth_command_use_case import AuthCommandUseCase
 from stui.usecase.autocomplete_use_case import AutocompleteUseCase
 from stui.usecase.done_notify_action_use_case import DoneNotifyActionUseCase
 from stui.usecase.event_state_use_case import EventStateUseCase
+from stui.usecase.get_intro_post_command_use_case import GetIntroPostCommandUseCase
 from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
+from stui.usecase.list_models_use_case import ListModelsUseCase
 from stui.usecase.list_runs_use_case import ListRunsUseCase
+from stui.usecase.load_session_from_post_use_case import LoadSessionFromPostUseCase
 from stui.usecase.move_completion_use_case import (
     MoveCompletionUseCase,
 )
@@ -51,6 +54,7 @@ class ConsoleScreenUseCases:
     autocomplete: AutocompleteUseCase
     interrupt_agent_turn: InterruptAgentTurnUseCase
     move_completion: MoveCompletionUseCase
+    list_models: ListModelsUseCase
     list_runs: ListRunsUseCase
     normalize_command: NormalizeCommandUseCase
     event_state: EventStateUseCase
@@ -63,6 +67,8 @@ class ConsoleScreenUseCases:
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
+    load_session_from_post: LoadSessionFromPostUseCase
+    get_intro_post_command: GetIntroPostCommandUseCase
     get_run_action: GetRunActionUseCase
     start_console: StartConsoleUseCase
     resume_console: ResumeConsoleUseCase

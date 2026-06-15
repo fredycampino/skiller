@@ -4,10 +4,11 @@ import asyncio
 
 import pytest
 from textual import events
-from textual.widgets import Button, Static, TextArea
+from textual.widgets import Button, DataTable, Static, TextArea
 
 from apps.tui.tests.support import (
     FakeAgentPort,
+    FakeModelsPort,
     FakeRunsPort,
     NeverCalledRunPort,
     NeverCalledWaitingPort,
@@ -28,11 +29,13 @@ from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
+from stui.screen.models_table_view import ModelsTableView
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.transcript_log import TranscriptLog
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
 )
+from stui.usecase import list_models_use_case as list_models_use_case_module
 from stui.usecase import run_command_use_case as run_command_use_case_module
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -84,6 +87,72 @@ def test_console_screen_clears_prompt_after_local_submit() -> None:
             assert isinstance(app.state.transcript.items[1], InfoItem)
 
     asyncio.run(run())
+
+
+def test_console_screen_opens_models_table_from_command() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            models_port=FakeModelsPort(),
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "m", "o", "d", "e", "l", "s", "enter")
+            await pilot.pause()
+
+            models_table = app.query_one("#models-table", ModelsTableView)
+            providers_table = app.query_one("#models-providers-table", DataTable)
+            models_data_table = app.query_one("#models-models-table", DataTable)
+            help_view = app.query_one("#models-help", Static)
+            assert app.state.models_table.visible is True
+            assert models_table.display is True
+            assert providers_table.cursor_type == "row"
+            assert models_data_table.cursor_type == "none"
+            assert "Enter select" in str(help_view.content)
+
+    with patched_to_thread(list_models_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_opens_models_table_from_autocomplete() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            models_port=FakeModelsPort(),
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "m")
+            await pilot.pause()
+
+            autocomplete = app.query_one("#autocomplete", AutoCompleteView)
+            assert autocomplete.is_visible() is True
+            assert autocomplete.selected_item is not None
+            assert autocomplete.selected_item.label == "models"
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            models_table = app.query_one("#models-table", ModelsTableView)
+            providers_table = app.query_one("#models-providers-table", DataTable)
+            models_data_table = app.query_one("#models-models-table", DataTable)
+            help_view = app.query_one("#models-help", Static)
+            assert app.state.models_table.visible is True
+            assert models_table.display is True
+            assert providers_table.cursor_type == "row"
+            assert models_data_table.cursor_type == "none"
+            assert "Enter select" in str(help_view.content)
+
+    with patched_to_thread(list_models_use_case_module):
+        asyncio.run(run())
 
 
 def test_console_screen_exits_on_quit_command() -> None:

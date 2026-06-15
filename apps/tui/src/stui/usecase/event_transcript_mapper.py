@@ -7,6 +7,7 @@ from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.event_models import (
     ActionDonePayload,
     ActionOpenUrlValue,
+    ActionPostValue,
     ActionRunValue,
     ActionValue,
     AgentAssistantMessagePayload,
@@ -35,6 +36,7 @@ from stui.port.event_models import (
 from stui.viewmodel.console_screen_state import (
     ActionItem,
     ActionOpenUrlItem,
+    ActionPostItem,
     ActionRunItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
@@ -403,6 +405,15 @@ def _action_item(action: ActionValue) -> ActionItem:
         )
     if isinstance(action, ActionRunValue):
         return ActionRunItem(
+            uid=action.uid,
+            type=action.type,
+            label=action.label,
+            arg=action.arg,
+            params=action.params,
+            auto=action.auto,
+        )
+    if isinstance(action, ActionPostValue):
+        return ActionPostItem(
             uid=action.uid,
             type=action.type,
             label=action.label,

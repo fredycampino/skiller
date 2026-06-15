@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from stui.port.event_models import ActionPostArg
+from stui.port.models_port import ModelsPortProviderItem
 from stui.port.runs_port import RunsPortItem
 
 
@@ -16,6 +18,7 @@ class PromptMode(StrEnum):
     DEFAULT = "default"
     AUTOCOMPLETION = "autocompletion"
     RUNS_TABLE = "runs_table"
+    MODELS_TABLE = "models_table"
     INTERRUPT_PENDING = "interrupt_pending"
 
 
@@ -198,12 +201,19 @@ class ActionOpenUrlItem(ActionItem):
 
 @dataclass(frozen=True)
 class ActionRunItem(ActionItem):
-    arg: str = ""
+    arg: str
     params: str | None = None
     auto: bool = False
 
 
-ActionTranscriptItem = ActionOpenUrlItem | ActionRunItem | ActionItem
+@dataclass(frozen=True)
+class ActionPostItem(ActionItem):
+    arg: ActionPostArg
+    params: str | None = None
+    auto: bool = False
+
+
+ActionTranscriptItem = ActionOpenUrlItem | ActionRunItem | ActionPostItem | ActionItem
 
 
 @dataclass(frozen=True)
@@ -316,6 +326,13 @@ class RunsTableState:
 
 
 @dataclass
+class ModelsTableState:
+    visible: bool = False
+    command: str = ""
+    rows: tuple[ModelsPortProviderItem, ...] = field(default_factory=tuple)
+
+
+@dataclass
 class AgentUsageState:
     model: str
     total_tokens: int = 0
@@ -360,6 +377,7 @@ class ConsoleScreenState:
     transcript: TranscriptState = field(default_factory=TranscriptState)
     prompt: PromptState = field(default_factory=PromptState)
     runs_table: RunsTableState = field(default_factory=RunsTableState)
+    models_table: ModelsTableState = field(default_factory=ModelsTableState)
     agent_usage: AgentUsageState | None = None
     agent_context_stats: AgentContextStatsState | None = None
     footer_context: FooterContextState | None = None
@@ -416,6 +434,17 @@ class ConsoleScreenState:
         self.runs_table.visible = visible
         self.runs_table.command = command
         self.runs_table.rows = tuple(rows)
+
+    def set_models_table(
+        self,
+        *,
+        visible: bool = False,
+        command: str = "",
+        rows: Sequence[ModelsPortProviderItem] = (),
+    ) -> None:
+        self.models_table.visible = visible
+        self.models_table.command = command
+        self.models_table.rows = tuple(rows)
 
     def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
         self.agent_usage = agent_usage

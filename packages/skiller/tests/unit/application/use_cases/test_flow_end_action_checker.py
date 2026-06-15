@@ -32,6 +32,32 @@ def test_flow_end_action_checker_accepts_run_action() -> None:
     assert errors == []
 
 
+def test_flow_end_action_checker_accepts_post_action() -> None:
+    errors = []
+
+    FlowEndActionChecker().check(
+        flow=FlowRawDefinition(
+            name="demo",
+            start="build_args",
+            steps=(),
+            raw={
+                "on_success": {
+                    "action": {
+                        "type": "post",
+                        "label": "Auth success",
+                        "arg": "load_session",
+                        "params": "run_id={{inputs.continue_id}}",
+                        "auto": True,
+                    }
+                }
+            },
+        ),
+        errors=errors,
+    )
+
+    assert errors == []
+
+
 def test_flow_end_action_checker_accepts_cleanup_without_action() -> None:
     errors = []
 

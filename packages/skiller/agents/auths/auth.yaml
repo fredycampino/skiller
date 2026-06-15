@@ -3,7 +3,8 @@ description: "Choose the initial LLM provider setup flow"
 version: "0.1"
 start: show_menu
 
-inputs: {}
+inputs:
+  continue_id: string
 
 steps:
   - notify: show_menu
@@ -45,6 +46,7 @@ steps:
       type: run
       label: Start Codex setup
       arg: auths/codex
+      params: "--arg continue_id={{inputs.continue_id}}"
       auto: true
 
   - notify: start_minimax
@@ -54,6 +56,7 @@ steps:
       type: run
       label: Start MiniMax setup
       arg: auths/minimax
+      params: "--arg continue_id={{inputs.continue_id}}"
       auto: true
 
   - notify: start_bedrock
@@ -63,6 +66,7 @@ steps:
       type: run
       label: Start Bedrock setup
       arg: auths/bedrock
+      params: "--arg continue_id={{inputs.continue_id}}"
       auto: true
 
   - notify: configure_later

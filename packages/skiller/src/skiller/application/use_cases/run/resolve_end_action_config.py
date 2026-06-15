@@ -2,8 +2,9 @@ from dataclasses import dataclass
 
 from skiller.application.action.action_uid_factory import ActionUidFactory
 from skiller.domain.action.action_model import (
+    Action,
     EndActionTrigger,
-    RunAction,
+    OpenUrlAction,
     action_from_dict,
 )
 from skiller.domain.run.run_model import Run
@@ -12,7 +13,7 @@ from skiller.domain.step.runner_port import RunnerPort
 
 @dataclass(frozen=True)
 class ResolveEndActionConfig:
-    action: RunAction | None
+    action: Action | None
 
 
 class ResolveEndActionConfigParser:
@@ -49,7 +50,7 @@ class ResolveEndActionConfigParser:
         except ValueError:
             return ResolveEndActionConfig(action=None)
 
-        if not isinstance(action, RunAction):
+        if isinstance(action, OpenUrlAction):
             return ResolveEndActionConfig(action=None)
 
         return ResolveEndActionConfig(action=action)

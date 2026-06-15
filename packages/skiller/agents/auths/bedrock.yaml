@@ -3,14 +3,16 @@ description: "Configure AWS Bedrock profile for Skiller agents"
 version: "0.1"
 start: check_bedrock_config
 
-inputs: {}
+inputs:
+  continue_id: string
 
 on_success:
   cleanup: true
   action:
-    type: run
-    label: Continue onboarding
-    arg: onboarding/intro
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
     auto: true
 
 on_error:

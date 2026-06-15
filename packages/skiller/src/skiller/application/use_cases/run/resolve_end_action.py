@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from skiller.application.use_cases.run.resolve_end_action_config import (
     ResolveEndActionConfigParser,
 )
-from skiller.domain.action.action_model import EndActionTrigger, RunAction
+from skiller.domain.action.action_model import Action, EndActionTrigger
 from skiller.domain.run.run_store_port import RunStorePort
 
 
@@ -15,7 +15,7 @@ class ResolveEndActionInput:
 
 @dataclass(frozen=True)
 class ResolveEndActionResult:
-    action: RunAction | None
+    action: Action | None
 
 
 class ResolveEndActionUseCase:

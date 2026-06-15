@@ -1,0 +1,27 @@
+[
+  {
+    "name": "codex",
+    "source": "global",
+    "models": [
+      {"name": "gpt-5.5", "active": true},
+      {"name": "gpt-5.4", "active": false},
+      {"name": "gpt-5.3-codex", "active": false}
+    ]
+  },
+  {
+    "name": "minimax",
+    "source": "global",
+    "models": [
+      {"name": "MiniMax-M2.7", "active": false},
+      {"name": "MiniMax-M2.5", "active": false}
+    ]
+  },
+  {
+    "name": "bedrock",
+    "source": "none",
+    "models": [
+      {"name": "us.anthropic.claude-sonnet-4-6", "active": false},
+      {"name": "us.anthropic.claude-opus-4-6-v1", "active": false}
+    ]
+  }
+]

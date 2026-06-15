@@ -3,14 +3,16 @@ description: "Authorize OpenAI Codex credentials for Skiller agents"
 version: "0.1"
 start: check_codex_credentials
 
-inputs: {}
+inputs:
+  continue_id: string
 
 on_success:
   cleanup: true
   action:
-    type: run
-    label: Continue onboarding
-    arg: onboarding/intro
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
     auto: true
 
 on_error:
@@ -44,7 +46,7 @@ steps:
   - switch: route_codex_credentials
     value: '{{output_value("check_codex_credentials").stdout}}'
     cases:
-      ready: write_codex_config
+      ready: require_credentials
     default: explain_authorization
 
   - notify: explain_authorization
@@ -100,7 +102,7 @@ steps:
     cwd: .
     timeout: 60
     check: true
-    next: write_codex_config
+    next: require_credentials
 
   - shell: write_codex_config
     command: |
@@ -147,7 +149,7 @@ steps:
     cwd: .
     timeout: 15
     check: true
-    next: require_credentials
+    next: credentials_ready
 
   - shell: require_credentials
     command: python3 "{{flow.dir}}/codex_auth.py" status --require
@@ -161,7 +163,7 @@ steps:
     cwd: .
     timeout: 120
     check: true
-    next: credentials_ready
+    next: write_codex_config
 
   - notify: credentials_ready
     format: markdown

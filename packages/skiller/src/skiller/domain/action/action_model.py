@@ -6,6 +6,7 @@ from typing import Any, ClassVar, TypeAlias
 class ActionType(StrEnum):
     OPEN_URL = "open_url"
     RUN = "run"
+    POST = "post"
 
 
 class ActionStatus(StrEnum):
@@ -39,7 +40,14 @@ class RunAction(ActionBase):
     params: str | None = None
 
 
-Action: TypeAlias = OpenUrlAction | RunAction
+@dataclass(frozen=True, kw_only=True)
+class PostAction(ActionBase):
+    type = ActionType.POST
+    arg: str
+    params: str | None = None
+
+
+Action: TypeAlias = OpenUrlAction | RunAction | PostAction
 
 
 def action_to_public_dict(action: Action) -> dict[str, Any]:
@@ -54,16 +62,18 @@ def action_to_public_dict(action: Action) -> dict[str, Any]:
         payload["url"] = action.url
         payload["auto"] = action.auto
         return payload
-    payload = {
-        "uid": action.uid,
-        "type": action.type.value,
-        "label": action.label,
-        "arg": action.arg,
-        "auto": action.auto,
-    }
-    if action.params is not None:
-        payload["params"] = action.params
-    return payload
+    if isinstance(action, RunAction | PostAction):
+        payload = {
+            "uid": action.uid,
+            "type": action.type.value,
+            "label": action.label,
+            "arg": action.arg,
+            "auto": action.auto,
+        }
+        if action.params is not None:
+            payload["params"] = action.params
+        return payload
+    raise TypeError(f"Unsupported action: {type(action).__name__}")
 
 
 def action_from_dict(value: dict[str, Any]) -> Action:
@@ -98,11 +108,12 @@ def action_from_dict(value: dict[str, Any]) -> Action:
 
     raw_arg = value.get("arg")
     if not isinstance(raw_arg, str) or not raw_arg.strip():
-        raise ValueError("run action arg must be non-empty string")
+        raise ValueError(f"{kind.value} action arg must be non-empty string")
     raw_params = value.get("params")
     if raw_params is not None and not isinstance(raw_params, str):
-        raise ValueError("run action params must be string")
-    return RunAction(
+        raise ValueError(f"{kind.value} action params must be string")
+    action_class = RunAction if kind == ActionType.RUN else PostAction
+    return action_class(
         uid=uid,
         label=raw_label.strip(),
         arg=raw_arg.strip(),

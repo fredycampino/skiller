@@ -28,7 +28,7 @@ The checker returns `FLOW_*` error codes for YAML flow validation.
 | `FLOW_END_ACTION_INVALID` | `on_success` or `on_error` exists but is not an object | `FLOW_END_ACTION_INVALID: end action config must be an object (trigger={trigger})` |
 | `FLOW_END_ACTION_ACTION_INVALID` | `on_success` or `on_error` has neither an action object nor `cleanup: true` | `FLOW_END_ACTION_ACTION_INVALID: end action requires action object or cleanup true (trigger={trigger})` |
 | `FLOW_END_ACTION_CLEANUP_INVALID` | root end action `cleanup` exists but is not boolean | `FLOW_END_ACTION_CLEANUP_INVALID: end action cleanup must be boolean (trigger={trigger})` |
-| `FLOW_END_ACTION_TYPE_UNSUPPORTED` | root end action type is not `run` | `FLOW_END_ACTION_TYPE_UNSUPPORTED: end action type must be run (trigger={trigger})` |
+| `FLOW_END_ACTION_TYPE_UNSUPPORTED` | root end action type is not `run` or `post` | `FLOW_END_ACTION_TYPE_UNSUPPORTED: end action type must be run or post (trigger={trigger})` |
 | `FLOW_END_ACTION_LABEL_MISSING` | root end action has no non-empty `label` | `FLOW_END_ACTION_LABEL_MISSING: end action requires non-empty label (trigger={trigger})` |
 | `FLOW_END_ACTION_ARG_MISSING` | root end action has no non-empty `arg` | `FLOW_END_ACTION_ARG_MISSING: end action requires non-empty arg (trigger={trigger})` |
 | `FLOW_END_ACTION_PARAMS_INVALID` | root end action `params` exists but is not a string | `FLOW_END_ACTION_PARAMS_INVALID: end action params must be string (trigger={trigger})` |

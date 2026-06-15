@@ -171,6 +171,8 @@ class FilesystemSkillRunner(RunnerPort):
 
         value = self._resolve_path(context, expression)
         if value is None:
+            if expression.startswith("inputs."):
+                return True, ""
             return False, None
         return True, value
 

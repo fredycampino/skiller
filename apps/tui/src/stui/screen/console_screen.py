@@ -16,12 +16,18 @@ from textual.widgets import Button, DataTable, Static, TextArea
 from stui.app_version import format_app_version
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
+from stui.port.models_port import ModelsPortProviderItem
 from stui.port.runs_port import RunsPortItem
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.footer_context_view import FooterContextView
 from stui.screen.markdown import MarkdownView
+from stui.screen.models_table_view import (
+    ModelsTableModelRow,
+    ModelsTableProviderRow,
+    ModelsTableView,
+)
 from stui.screen.prompt import PromptController, PromptView
 from stui.screen.runs_table_view import (
     RunRowStatus,
@@ -71,6 +77,7 @@ class ConsoleScreen(App[str]):
         self.state = ConsoleScreenState()
         self._render_transcript = RenderTranscript(strings=strings)
         self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
+        self._last_models_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -89,6 +96,15 @@ class ConsoleScreen(App[str]):
                     navigation_hint=self.ui_strings.runs_table_navigation_hint,
                 ),
                 id="runs-table-area",
+            ),
+            Container(
+                ModelsTableView(
+                    id="models-table",
+                    visible=False,
+                    theme=self.ui_theme,
+                    strings=self.ui_strings,
+                ),
+                id="models-table-area",
             ),
             Horizontal(
                 ScreenStatusView(id="status", theme=self.ui_theme),
@@ -160,7 +176,13 @@ class ConsoleScreen(App[str]):
     def on_key(self, event: events.Key) -> None:
         if self._handle_notify_action_focus_key(event):
             return
-        if event.key == "up":
+        if self.state.models_table.visible and event.key == "right":
+            self._models_table().focus_models()
+            event.stop()
+        elif self.state.models_table.visible and event.key == "left":
+            self._models_table().focus_providers()
+            event.stop()
+        elif event.key == "up":
             self.action_transcript_scroll_up()
             event.stop()
         elif event.key == "down":
@@ -216,6 +238,10 @@ class ConsoleScreen(App[str]):
             self._runs_table().action_select_cursor()
             return
 
+        if self.state.models_table.visible:
+            self._models_table().action_select_cursor()
+            return
+
         if normalized_text.lower() in {"/quit", "/exit"}:
             self.exit(self.state.session_key)
             return
@@ -231,6 +257,10 @@ class ConsoleScreen(App[str]):
     async def action_handle_escape(self) -> None:
         if self.state.runs_table.visible:
             self.viewmodel.hide_runs_table()
+            self._prompt_view().focus_prompt()
+            return
+        if self.state.models_table.visible:
+            self.viewmodel.hide_models_table()
             self._prompt_view().focus_prompt()
             return
 
@@ -252,6 +282,8 @@ class ConsoleScreen(App[str]):
     def action_transcript_scroll_up(self) -> None:
         if self.viewmodel.move_completion(-1):
             return
+        if self.state.models_table.visible and self._models_table().move_selection(-1):
+            return
         if self.state.runs_table.visible and self._runs_table().move_selection(-1):
             return
         self._transcript_log().scroll_up(animate=False, force=True, immediate=True)
@@ -263,6 +295,8 @@ class ConsoleScreen(App[str]):
 
     def action_transcript_scroll_down(self) -> None:
         if self.viewmodel.move_completion(1):
+            return
+        if self.state.models_table.visible and self._models_table().move_selection(1):
             return
         if self.state.runs_table.visible and self._runs_table().move_selection(1):
             return
@@ -471,7 +505,8 @@ class ConsoleScreen(App[str]):
     ) -> None:
         self._refresh_transcript(new_state=new_state)
         self._refresh_runs_table(new_state=new_state)
-        self._refresh_runs_visibility(new_state=new_state)
+        self._refresh_models_table(new_state=new_state)
+        self._refresh_table_visibility(new_state=new_state)
         self._refresh_prompt(new_state=new_state)
         self._refresh_status(new_state=new_state)
         self._refresh_notify_action(new_state=new_state)
@@ -521,20 +556,49 @@ class ConsoleScreen(App[str]):
         )
         self._last_runs_snapshot = new_state.runs_table.rows
 
-    def _refresh_runs_visibility(self, *, new_state: ConsoleScreenState) -> None:
+    def _refresh_models_table(self, *, new_state: ConsoleScreenState) -> None:
+        if (
+            self._last_models_snapshot is not None
+            and new_state.models_table.rows == self._last_models_snapshot
+        ):
+            return
+        models_table = self._models_table()
+        models_table.set_rows(
+            [
+                ModelsTableProviderRow(
+                    name=provider.name,
+                    source=provider.source,
+                    models=tuple(
+                        ModelsTableModelRow(name=model.name, active=model.active)
+                        for model in provider.models
+                    ),
+                )
+                for provider in new_state.models_table.rows
+            ]
+        )
+        self._last_models_snapshot = new_state.models_table.rows
+
+    def _refresh_table_visibility(self, *, new_state: ConsoleScreenState) -> None:
         try:
             runs_table_area = self.query_one("#runs-table-area", Container)
             runs_table = self.query_one("#runs-table", RunsTableView)
+            models_table_area = self.query_one("#models-table-area", Container)
+            models_table = self.query_one("#models-table", ModelsTableView)
             status = self.query_one("#status", ScreenStatusView)
         except NoMatches:
             return
 
         runs_table_area.display = new_state.runs_table.visible
         runs_table.display = new_state.runs_table.visible
-        status.display = not new_state.runs_table.visible
+        models_table_area.display = new_state.models_table.visible
+        models_table.display = new_state.models_table.visible
+        status.display = not new_state.runs_table.visible and not new_state.models_table.visible
 
     def _runs_table(self) -> RunsTableView:
         return self.query_one("#runs-table", RunsTableView)
+
+    def _models_table(self) -> ModelsTableView:
+        return self.query_one("#models-table", ModelsTableView)
 
     def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
         return RunsTableRow(

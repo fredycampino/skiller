@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from stui.viewmodel.console_screen_state import ConsoleScreenState
+from stui.viewmodel.console_screen_state import CompletionItem, ConsoleScreenState
+
+_SUBMIT_COMPLETION_COMMANDS = frozenset({"/models", "/runs"})
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,11 @@ class PromptEnterUseCase:
         state.set_autocompletion()
         return PromptEnterResult(
             state=state,
-            should_submit=selected_item.kind == "param",
+            should_submit=_should_submit_completion(selected_item),
             submit_text=state.prompt.text,
         )
+
+
+def _should_submit_completion(selected_item: CompletionItem) -> bool:
+    insert_text = (selected_item.insert_text or "").strip()
+    return selected_item.kind == "param" or insert_text in _SUBMIT_COMPLETION_COMMANDS

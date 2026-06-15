@@ -8,7 +8,7 @@ from skiller.application.use_cases.run.resolve_end_action import (
 from skiller.application.use_cases.run.resolve_end_action_config import (
     ResolveEndActionConfigParser,
 )
-from skiller.domain.action.action_model import EndActionTrigger, RunAction
+from skiller.domain.action.action_model import EndActionTrigger, PostAction, RunAction
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 
@@ -91,6 +91,40 @@ def test_resolve_end_action_returns_on_success_run_action() -> None:
         label="Open result",
         arg="--file ./flows/result.yaml",
         params="--id abc",
+        auto=True,
+    )
+    assert runner.render_calls[0]["flow"] is run
+
+
+def test_resolve_end_action_returns_on_success_post_action() -> None:
+    run = _build_run(
+        {
+            "on_success": {
+                "action": {
+                    "type": "post",
+                    "label": "Auth success",
+                    "arg": "load_session",
+                    "params": "run_id={{inputs.run_key}}",
+                    "auto": True,
+                }
+            }
+        }
+    )
+    config_parser, runner = _config_parser_with_runner()
+    use_case = ResolveEndActionUseCase(
+        store=_FakeStore(run),
+        config_parser=config_parser,
+    )
+
+    result = use_case.execute(
+        ResolveEndActionInput(run_id="run-1", trigger=EndActionTrigger.ON_SUCCESS)
+    )
+
+    assert result.action == PostAction(
+        uid="end-action-uid",
+        label="Auth success",
+        arg="load_session",
+        params="run_id=abc",
         auto=True,
     )
     assert runner.render_calls[0]["flow"] is run

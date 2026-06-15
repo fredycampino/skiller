@@ -6,6 +6,7 @@ from collections.abc import Callable
 from stui.port.event_models import LogEvent
 from stui.port.event_port import LogEventsListener
 from stui.usecase.get_run_action_use_case import GetRunActionResult
+from stui.usecase.load_session_from_post_use_case import LoadSessionFromPostStatus
 from stui.usecase.normalize_command_use_case import (
     Command,
     CommandKind,
@@ -72,17 +73,27 @@ class ConsoleScreenViewModel(LogEventsListener):
         notify_action_result = self._use_cases.notify_action.execute(
             state=agent_usage_result.state,
         )
-        run_action_result = self._use_cases.get_run_action.execute(
+        post_result = self._use_cases.load_session_from_post.execute(
+            self,
             state=notify_action_result.state,
         )
-        self.state = notify_action_result.state
+        run_action_result = self._use_cases.get_run_action.execute(
+            state=post_result.state,
+        )
+        self.state = post_result.state
 
         self._emit_state()
         self._schedule_refresh_agent_context_stats()
         self._schedule_refresh_footer_context()
-        command = run_action_result.command
-        if command is not None:
-            asyncio.create_task(self._execute_run_action(command, run_action_result))
+        if post_result.status == LoadSessionFromPostStatus.INTRO_REQUIRED:
+            intro_result = self._use_cases.get_intro_post_command.execute()
+            asyncio.create_task(self._execute_post_command(intro_result.command))
+            return
+
+        if run_action_result.command is not None:
+            asyncio.create_task(
+                self._execute_run_action(run_action_result.command, run_action_result)
+            )
 
     def open_notify_action_link(
         self,
@@ -144,6 +155,15 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state = result.state
         self._emit_state()
 
+    async def _execute_post_command(self, command: Command) -> None:
+        result = await self._use_cases.run_command.execute(
+            self,
+            state=self.state,
+            command=command,
+        )
+        self.state = result.state
+        self._emit_state()
+
     async def _execute_run_action(
         self,
         command: Command,
@@ -178,6 +198,15 @@ class ConsoleScreenViewModel(LogEventsListener):
                 state=self.state,
                 command=command,
                 limit=20,
+            )
+            self.state = result.state
+            self._emit_state()
+            return
+
+        if command.kind == CommandKind.MODELS:
+            result = await self._use_cases.list_models.execute(
+                state=self.state,
+                command=command,
             )
             self.state = result.state
             self._emit_state()
@@ -327,6 +356,12 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
 
+    def hide_models_table(self) -> None:
+        self.state.models_table.visible = False
+        self.state.models_table.command = ""
+        self.state.prompt.mode = self._resolve_prompt_mode()
+        self._emit_state()
+
     async def interrupt_running_agent_turn(self) -> bool:
         if self._run_event_context.status != RunStatus.RUNNING:
             return False
@@ -366,10 +401,14 @@ class ConsoleScreenViewModel(LogEventsListener):
         if autocompletion is not None and autocompletion.visible:
             self.state.runs_table.visible = False
             self.state.runs_table.command = ""
+            self.state.models_table.visible = False
+            self.state.models_table.command = ""
             self.state.set_agent_context_stats()
         self.state.prompt.mode = self._resolve_prompt_mode()
 
     def _resolve_prompt_mode(self) -> PromptMode:
+        if self.state.models_table.visible:
+            return PromptMode.MODELS_TABLE
         if self.state.runs_table.visible:
             return PromptMode.RUNS_TABLE
         if self._should_keep_interrupt_pending():
@@ -416,6 +455,11 @@ class ConsoleScreenViewModel(LogEventsListener):
             visible=self.state.runs_table.visible,
             command=self.state.runs_table.command,
             rows=self.state.runs_table.rows,
+        )
+        state.set_models_table(
+            visible=self.state.models_table.visible,
+            command=self.state.models_table.command,
+            rows=self.state.models_table.rows,
         )
         state.set_agent_usage(self.state.agent_usage)
         state.set_agent_context_stats(self.state.agent_context_stats)

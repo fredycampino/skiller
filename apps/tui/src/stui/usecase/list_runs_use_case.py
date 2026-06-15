@@ -9,7 +9,6 @@ from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
     PromptMode,
-    UserInputItem,
     ViewStatusKind,
 )
 
@@ -38,7 +37,6 @@ class ListRunsUseCase:
                 statuses=statuses,
             )
         except RuntimeError as exc:
-            state.transcript.items.append(UserInputItem(text=command.raw_text))
             state.transcript.items.append(
                 DispatchErrorItem(message=f"error: {str(exc).strip() or 'runs query failed'}")
             )
@@ -47,7 +45,7 @@ class ListRunsUseCase:
             _reset_prompt(state, mode=PromptMode.DEFAULT)
             return ListRunsResult(state=state)
 
-        state.transcript.items.append(UserInputItem(text=command.raw_text))
+        state.set_models_table()
         state.set_runs_table(
             visible=True,
             command=command.raw_text,

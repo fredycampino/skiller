@@ -393,6 +393,7 @@ def test_run_finished_view_renders_action_as_muted_second_line() -> None:
                 uid="action-run-1",
                 type="run",
                 label="Open follow-up",
+                arg="follow-up",
             ),
         )
     )

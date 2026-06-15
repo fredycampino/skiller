@@ -17,7 +17,6 @@ from stui.usecase.normalize_command_use_case import (
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
-    UserInputItem,
     ViewStatusKind,
 )
 
@@ -41,8 +40,7 @@ def test_list_runs_use_case_returns_query_rows() -> None:
         assert state.runs_table.visible is True
         assert state.view_status.kind == ViewStatusKind.HIDDEN
         assert state.runs_table.rows == tuple(port.runs)
-        assert isinstance(state.transcript.items[0], UserInputItem)
-        assert state.transcript.items[0].text == "/runs waiting"
+        assert state.transcript.items == []
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())
@@ -64,9 +62,8 @@ def test_list_runs_use_case_maps_runtime_errors_to_state() -> None:
         assert state.runs_table.visible is False
         assert state.view_status.kind == ViewStatusKind.ERROR
         assert state.runs_table.rows == ()
-        assert isinstance(state.transcript.items[0], UserInputItem)
-        assert isinstance(state.transcript.items[1], DispatchErrorItem)
-        assert state.transcript.items[1].message == "error: runs command failed"
+        assert isinstance(state.transcript.items[0], DispatchErrorItem)
+        assert state.transcript.items[0].message == "error: runs command failed"
 
     with patched_to_thread(list_runs_use_case_module):
         asyncio.run(run())

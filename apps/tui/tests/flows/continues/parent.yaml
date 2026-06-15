@@ -1,0 +1,20 @@
+name: tui_continue_parent
+description: "Parent flow that waits to be reloaded by a post continue action"
+version: "0.1"
+start: show_child_command
+
+inputs: {}
+
+steps:
+  - notify: show_child_command
+    format: markdown
+    message: |
+      Run this child flow:
+
+      `/run apps/tui/tests/flows/continues/child.yaml --arg continue_id=<parent_run_id>`
+
+      After the child finishes, Stui should return to this parent run.
+    next: wait_for_continue
+
+  - wait_input: wait_for_continue
+    prompt: "Waiting for child continue action."

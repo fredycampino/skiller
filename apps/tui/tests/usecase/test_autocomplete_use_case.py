@@ -62,6 +62,7 @@ def test_autocomplete_use_case_lists_all_supported_commands_for_slash() -> None:
         "run",
         "runs",
         "auth",
+        "models",
         "quit",
         "exit",
         "dev",

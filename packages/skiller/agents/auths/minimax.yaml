@@ -3,14 +3,16 @@ description: "Configure MiniMax credentials for Skiller agents"
 version: "0.1"
 start: check_minimax_config
 
-inputs: {}
+inputs:
+  continue_id: string
 
 on_success:
   cleanup: true
   action:
-    type: run
-    label: Continue onboarding
-    arg: onboarding/intro
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
     auto: true
 
 on_error:
@@ -26,7 +28,7 @@ steps:
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
       secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
-      if [ -s "$config_file" ] && [ -s "$secret_file" ]; then
+      if [ -s "$secret_file" ]; then
         api_key="$(tr -d '[:space:]' < "$secret_file")"
         if [ "${#api_key}" -lt 100 ]; then
           printf '%s' invalid
@@ -46,7 +48,7 @@ steps:
   - switch: route_minimax_config
     value: '{{output_value("check_minimax_config").stdout}}'
     cases:
-      ready: verify_minimax
+      ready: backup_minimax_config
       invalid: clear_invalid_minimax_secret
     default: explain_minimax
 
@@ -93,8 +95,29 @@ steps:
   - switch: route_api_key_shape
     value: '{{output_value("validate_api_key_shape").stdout}}'
     cases:
-      valid: write_minimax_config
+      valid: write_minimax_secret
     default: clear_invalid_minimax_secret
+
+  - shell: write_minimax_secret
+    command: |
+      set -eu
+
+      api_key='{{output_value("ask_api_key").payload.text}}'
+      api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
+      if [ -z "$api_key" ]; then
+        printf '%s\n' "MiniMax API key is required." >&2
+        exit 1
+      fi
+
+      secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      mkdir -p "$(dirname "$secret_file")"
+      umask 077
+      printf '%s\n' "$api_key" > "$secret_file"
+      printf '%s' saved
+    cwd: .
+    timeout: 15
+    check: true
+    next: backup_minimax_config
 
   - shell: clear_invalid_minimax_secret
     command: |
@@ -112,16 +135,32 @@ steps:
     message: "That does not look like a MiniMax API key. Paste the full key."
     next: ask_api_key
 
-  - shell: write_minimax_config
+  - shell: backup_minimax_config
     command: |
       set -eu
 
-      api_key='{{output_value("ask_api_key").payload.text}}'
-      api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
-      if [ -z "$api_key" ]; then
-        printf '%s\n' "MiniMax API key is required." >&2
-        exit 1
+      settings_dir="$HOME/.skiller/settings"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
+      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+
+      mkdir -p "$(dirname "$config_file")" "$(dirname "$backup_file")"
+      rm -f "$backup_file" "$missing_file"
+      if [ -f "$config_file" ]; then
+        cp "$config_file" "$backup_file"
+      else
+        printf '%s' missing > "$missing_file"
       fi
+
+      printf '%s' backed-up
+    cwd: .
+    timeout: 15
+    check: true
+    next: write_minimax_config
+
+  - shell: write_minimax_config
+    command: |
+      set -eu
 
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
@@ -130,8 +169,10 @@ steps:
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$secret_file")"
 
-      umask 077
-      printf '%s\n' "$api_key" > "$secret_file"
+      if [ ! -s "$secret_file" ]; then
+        printf '%s\n' "MiniMax API key is required." >&2
+        exit 1
+      fi
 
       CONFIG_FILE="$config_file" SECRET_FILE="$secret_file" python3 - <<'PY'
       import json
@@ -181,16 +222,39 @@ steps:
   - switch: route_minimax_validation
     value: '{{output_value("verify_minimax").data.stop_reason}}'
     cases:
-      final: done
-    default: clear_failed_minimax_secret
+      final: commit_minimax_config
+    default: restore_failed_minimax_config
 
-  - shell: clear_failed_minimax_secret
+  - shell: commit_minimax_config
     command: |
       set -eu
 
+      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.bak"
+      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      printf '%s' committed
+    cwd: .
+    timeout: 15
+    check: true
+    next: done
+
+  - shell: restore_failed_minimax_config
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
+      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
       secret_file="$(python3 "{{flow.dir}}/minimax_auth.py" api-key-file)"
-      rm -f "$secret_file"
-      printf '%s' cleared
+
+      if [ -f "$backup_file" ]; then
+        cp "$backup_file" "$config_file"
+      elif [ -f "$missing_file" ]; then
+        rm -f "$config_file"
+      fi
+
+      rm -f "$backup_file" "$missing_file" "$secret_file"
+      printf '%s' restored
     cwd: .
     timeout: 15
     check: true

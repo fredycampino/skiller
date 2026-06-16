@@ -19,6 +19,21 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.12 - 2026-06-17
+
+### Added
+- Add the STUI `/auth` command and onboarding flows for provider authentication.
+- Add provider auth continuation and model browsing support.
+
+### Changed
+- Inject tool guidance into agent system prompts so agents see available tool parameters.
+- Clarify files and shell tool contracts, including shell command/path constraints.
+- Keep Codex auth temporary files outside the secrets directory.
+- Improve STUI footer context token bar behavior.
+
+### Notes
+- Includes PR #80, PR #81, and PR #82.
+
 ## 0.1.0-beta.11 - 2026-06-12
 
 ### Added

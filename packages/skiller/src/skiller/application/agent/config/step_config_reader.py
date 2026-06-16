@@ -11,11 +11,14 @@ from skiller.domain.step.run_step_model import AgentStep
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
 
-AGENT_RUNTIME_SYSTEM = """You are Skiller, an assistant operating inside a step-based runtime.
-Reply in the same language as the user.
-Be concise and direct.
-Use tools only when they genuinely help.
-If more tool execution is still needed, stop and ask the user before continuing."""
+AGENT_RUNTIME_SYSTEM = (
+    "You are a friendly assistant operating inside a runtime agent harness "
+    "step-based called Skiller.\n"
+    "Reply in the same language as the user.\n"
+    "Be concise and direct, avoid verbose.\n"
+    "Use tools only when they genuinely help.\n"
+    "The feedback of harness go labeled as [Skiller]"
+)
 
 
 @dataclass(frozen=True)
@@ -48,17 +51,43 @@ class AgentStepConfigReader:
     ) -> AgentRunnerConfig:
         config_path = self._resolve_agent_config_path(current_step)
         config = self.agent_config.get_config(config_path=config_path)
-        system = f"{AGENT_RUNTIME_SYSTEM}\n\n{step.system.strip()}"
         tool_names = list(step.tools)
         tools = self.tool_manager.get_tool_definitions(tool_names)
         config = self._apply_step_overrides(config=config, step=step)
 
         return AgentRunnerConfig(
-            system=system,
+            system=self._build_system_prompt(step=step, tools=tools),
             task=step.task,
             tools=tuple(tools),
             config=config,
         )
+
+    def _build_system_prompt(
+        self,
+        *,
+        step: AgentStep,
+        tools: list[ToolDefinition],
+    ) -> str:
+        parts = [AGENT_RUNTIME_SYSTEM]
+        tool_section = self._build_tools_section(tools)
+        if tool_section:
+            parts.append(tool_section)
+        step_system = step.system.strip()
+        if step_system:
+            parts.append(step_system)
+        return "\n\n".join(parts)
+
+    def _build_tools_section(self, tools: list[ToolDefinition]) -> str:
+        if not tools:
+            return ""
+        lines = ["## Available Tools", ""]
+        for tool in tools:
+            schema = tool.schema().value
+            lines.append(f"- **{tool.name}**: {tool.description}")
+            params = list(schema.get("properties", {}).keys())
+            if params:
+                lines.append(f"  Parameters: {', '.join(params)}")
+        return "\n".join(lines)
 
     def validate_agent_config(self, *, current_step: CurrentStep) -> AgentConfigValidation:
         config_path = self._resolve_agent_config_path(current_step)

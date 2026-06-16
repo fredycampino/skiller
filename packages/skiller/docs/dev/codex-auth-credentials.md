@@ -51,7 +51,7 @@ credentials_ready
 Pending authorization data is stored in:
 
 ```text
-~/.skiller/secrets/openai-codex.pending.json
+~/.skiller/runtime/auth/codex/openai-codex.pending.json
 ```
 
 The pending file contains short-lived authorization state:
@@ -65,16 +65,18 @@ credentials_file
 created_at
 ```
 
-The callback stores temporary callback/server files next to the credentials:
+The callback stores temporary callback/server files in the same runtime auth
+state directory:
 
 ```text
-~/.skiller/secrets/openai-codex.callback.json
-~/.skiller/secrets/openai-codex.server.json
-~/.skiller/secrets/openai-codex.callback-ready
-~/.skiller/secrets/openai-codex.callback.log
+~/.skiller/runtime/auth/codex/openai-codex.callback.json
+~/.skiller/runtime/auth/codex/openai-codex.server.json
+~/.skiller/runtime/auth/codex/openai-codex.callback-ready
+~/.skiller/runtime/auth/codex/openai-codex.callback.log
 ```
 
 These files are cleanup artifacts and must not be required by the runtime LLM.
+The directory can be overridden with `SKILLER_OPENAI_CODEX_AUTH_STATE_DIR`.
 
 ## Final Credentials
 
@@ -175,11 +177,11 @@ If credentials are compromised or revoked, remove local files:
 
 ```bash
 rm -f ~/.skiller/secrets/openai-codex.json
-rm -f ~/.skiller/secrets/openai-codex.pending.json
-rm -f ~/.skiller/secrets/openai-codex.callback.json
-rm -f ~/.skiller/secrets/openai-codex.server.json
-rm -f ~/.skiller/secrets/openai-codex.callback-ready
-rm -f ~/.skiller/secrets/openai-codex.callback.log
+rm -f ~/.skiller/runtime/auth/codex/openai-codex.pending.json
+rm -f ~/.skiller/runtime/auth/codex/openai-codex.callback.json
+rm -f ~/.skiller/runtime/auth/codex/openai-codex.server.json
+rm -f ~/.skiller/runtime/auth/codex/openai-codex.callback-ready
+rm -f ~/.skiller/runtime/auth/codex/openai-codex.callback.log
 ```
 
 Then run the callback auth flow again:

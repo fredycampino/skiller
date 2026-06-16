@@ -15,6 +15,26 @@ from skiller.domain.tool.tool_contract import ToolInput, ToolResultStatus
 pytestmark = pytest.mark.unit
 
 
+def test_files_tool_schema_describes_action_specific_arguments() -> None:
+    tool = FilesTool()
+
+    schema = tool.schema().value
+    properties = schema["properties"]
+
+    assert properties["action"]["description"] == (
+        "Operation and required arguments: "
+        "read: {action, path}; "
+        "write: {action, path, write_text}; "
+        "edit: {action, path, old_text, new_text}"
+    )
+    assert properties["path"]["description"] == "Target file path inside allowed directories."
+    assert properties["write_text"]["description"] == "Text to write for action=write."
+    assert properties["old_text"]["description"] == (
+        "Exact text to replace for edit; must appear once."
+    )
+    assert properties["new_text"]["description"] == "Replacement text for edit."
+
+
 def test_files_tool_maps_read_request() -> None:
     tool = FilesTool()
 
@@ -34,7 +54,7 @@ def test_files_tool_maps_read_request() -> None:
     )
 
 
-def test_files_tool_accepts_empty_write_content() -> None:
+def test_files_tool_accepts_empty_write_text() -> None:
     tool = FilesTool()
 
     result = tool.request(
@@ -42,7 +62,7 @@ def test_files_tool_accepts_empty_write_content() -> None:
             {
                 "action": "write",
                 "path": "notes.txt",
-                "content": "",
+                "write_text": "",
             }
         )
     )
@@ -51,7 +71,7 @@ def test_files_tool_accepts_empty_write_content() -> None:
     assert result.request == FilesToolRequest(
         action=FilesAction.WRITE,
         path="notes.txt",
-        content="",
+        write_text="",
     )
 
 
@@ -91,7 +111,7 @@ def test_files_tool_rejects_invalid_request() -> None:
     )
 
     assert result.ok is False
-    assert result.error == "Tool call 'call-1' requires string content"
+    assert result.error == "Tool call 'call-1' requires string write_text"
 
 
 def test_files_tool_rejects_edit_without_non_empty_old_text() -> None:
@@ -190,7 +210,7 @@ def test_files_tool_writes_and_reads_text(tmp_path) -> None:
         request=FilesToolRequest(
             action=FilesAction.WRITE,
             path="nested/notes.txt",
-            content="hello",
+            write_text="hello",
             effective_path=str(target),
         ),
     )

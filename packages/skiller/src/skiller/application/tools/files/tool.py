@@ -40,11 +40,29 @@ class FilesTool(
                     "action": {
                         "type": "string",
                         "enum": ["read", "write", "edit"],
+                        "description": (
+                            "Operation and required arguments: "
+                            "read: {action, path}; "
+                            "write: {action, path, write_text}; "
+                            "edit: {action, path, old_text, new_text}"
+                        ),
                     },
-                    "path": {"type": "string"},
-                    "content": {"type": "string"},
-                    "old_text": {"type": "string"},
-                    "new_text": {"type": "string"},
+                    "path": {
+                        "type": "string",
+                        "description": "Target file path inside allowed directories.",
+                    },
+                    "write_text": {
+                        "type": "string",
+                        "description": "Text to write for action=write.",
+                    },
+                    "old_text": {
+                        "type": "string",
+                        "description": "Exact text to replace for edit; must appear once.",
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "Replacement text for edit.",
+                    },
                 },
                 "required": ["action", "path"],
                 "additionalProperties": False,
@@ -65,13 +83,13 @@ class FilesTool(
         try:
             action = FilesAction(input.require_string("action"))
             path = input.require_string("path").strip()
-            content = self._optional_raw_string(input, "content")
+            write_text = self._optional_raw_string(input, "write_text")
             old_text = self._optional_raw_string(input, "old_text")
             new_text = self._optional_raw_string(input, "new_text")
 
-            if action == FilesAction.WRITE and content is None:
+            if action == FilesAction.WRITE and write_text is None:
                 raise ValueError(
-                    f"Tool call '{input.tool_call_id}' requires string content"
+                    f"Tool call '{input.tool_call_id}' requires string write_text"
                 )
             if action == FilesAction.EDIT:
                 if old_text is None or not old_text:
@@ -87,7 +105,7 @@ class FilesTool(
                 FilesToolRequest(
                     action=action,
                     path=path,
-                    content=content,
+                    write_text=write_text,
                     old_text=old_text,
                     new_text=new_text,
                 )
@@ -165,12 +183,12 @@ class FilesTool(
         request: FilesToolRequest,
         path: Path,
     ) -> ToolResult:
-        if request.content is None:
-            raise ValueError("write requires content")
+        if request.write_text is None:
+            raise ValueError("write requires write_text")
         if path.exists() and path.is_dir():
             raise ValueError(f"Path is a directory: {request.path}")
 
-        content_bytes = request.content.encode("utf-8")
+        content_bytes = request.write_text.encode("utf-8")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content_bytes)
 

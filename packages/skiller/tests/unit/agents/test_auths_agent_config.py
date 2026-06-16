@@ -1,4 +1,6 @@
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
@@ -13,6 +15,35 @@ def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
     assert steps["require_credentials"]["next"] == "verify_credentials"
     assert steps["verify_credentials"]["next"] == "write_codex_config"
     assert steps["write_codex_config"]["next"] == "credentials_ready"
+
+
+def test_codex_auth_check_does_not_delete_credentials_file() -> None:
+    agent_path = Path("packages/skiller/agents/auths/codex.yaml")
+    agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
+    command = _steps_by_name(agent)["check_codex_credentials"]["command"]
+
+    assert "cleanup-authorization" in command
+    assert "openai-codex.pending.json" not in command
+    assert "openai-codex.callback.json" not in command
+    assert "openai-codex.server.json" not in command
+    assert '"$credentials_file"' not in command
+
+
+def test_codex_auth_temp_files_are_stored_outside_secrets(tmp_path, monkeypatch) -> None:
+    codex_auth = _load_codex_auth_module()
+    state_dir = tmp_path / "runtime" / "auth" / "codex"
+    credentials_file = tmp_path / "secrets" / "openai-codex.json"
+    monkeypatch.setenv("SKILLER_OPENAI_CODEX_AUTH_STATE_DIR", str(state_dir))
+
+    assert codex_auth.pending_file(credentials_file) == state_dir / "openai-codex.pending.json"
+    assert codex_auth.callback_file(credentials_file) == state_dir / "openai-codex.callback.json"
+    assert codex_auth.server_file(credentials_file) == state_dir / "openai-codex.server.json"
+    assert codex_auth.server_ready_file(credentials_file) == (
+        state_dir / "openai-codex.callback-ready"
+    )
+    assert codex_auth.server_log_file(credentials_file) == state_dir / "openai-codex.callback.log"
+    assert state_dir.stat().st_mode & 0o777 == 0o700
+    assert state_dir != credentials_file.parent
 
 
 def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() -> None:
@@ -91,3 +122,13 @@ def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:
         assert isinstance(name, str)
         result[name] = step
     return result
+
+
+def _load_codex_auth_module() -> ModuleType:
+    module_path = Path("packages/skiller/agents/auths/codex_auth.py")
+    spec = importlib.util.spec_from_file_location("codex_auth", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

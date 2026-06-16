@@ -31,6 +31,7 @@ DEFAULT_TIMEOUT_SECONDS = 15 * 60
 USER_AGENT = "skiller-openai-auth/0.1"
 CODEX_USER_AGENT = "pi (skiller)"
 VERIFY_MARKER = "skiller-openai-codex-ok"
+CODEX_AUTH_STATE_DIR_ENV = "SKILLER_OPENAI_CODEX_AUTH_STATE_DIR"
 
 
 class AuthError(Exception):
@@ -57,6 +58,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("credentials-file", help="Print the resolved credentials file path.")
     subparsers.add_parser("prepare", help="Prepare authorization and print the URL.")
+    subparsers.add_parser("cleanup-authorization", help="Remove temporary authorization files.")
     subparsers.add_parser(
         "start-callback-server",
         help="Start the local OAuth callback server in the background.",
@@ -91,6 +93,8 @@ def main() -> int:
             print(credentials_file)
         elif args.command == "prepare":
             prepare_authorization(credentials_file=credentials_file)
+        elif args.command == "cleanup-authorization":
+            cleanup_authorization_files(credentials_file)
         elif args.command == "start-callback-server":
             start_callback_server(credentials_file=credentials_file)
         elif args.command == "serve-callback-server":
@@ -679,23 +683,39 @@ def configured_credentials_file() -> Path | None:
 
 
 def pending_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-codex.pending.json")
+    return auth_state_path("openai-codex.pending.json")
 
 
 def callback_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-codex.callback.json")
+    return auth_state_path("openai-codex.callback.json")
 
 
 def server_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-codex.server.json")
+    return auth_state_path("openai-codex.server.json")
 
 
 def server_ready_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-codex.callback-ready")
+    return auth_state_path("openai-codex.callback-ready")
 
 
 def server_log_file(credentials_file: Path) -> Path:
-    return credentials_file.with_name("openai-codex.callback.log")
+    return auth_state_path("openai-codex.callback.log")
+
+
+def auth_state_path(name: str) -> Path:
+    state_dir = auth_state_dir()
+    return state_dir / name
+
+
+def auth_state_dir() -> Path:
+    explicit_path = os.environ.get(CODEX_AUTH_STATE_DIR_ENV, "").strip()
+    if explicit_path:
+        state_dir = Path(explicit_path).expanduser()
+    else:
+        state_dir = Path.home() / ".skiller" / "runtime" / "auth" / "codex"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_dir.chmod(0o700)
+    return state_dir
 
 
 if __name__ == "__main__":

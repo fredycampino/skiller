@@ -19,10 +19,32 @@ def test_shell_process_tool_schema_defines_string_env_values() -> None:
     tool = ShellProcessTool()
 
     schema = tool.schema().value
+    properties = schema["properties"]
 
-    assert schema["properties"]["env"] == {
+    assert tool.description == (
+        "Execute shell commands constrained by configured allowed_commands and allowed_paths."
+    )
+    assert properties["command"] == {
+        "type": "string",
+        "description": (
+            "Required. Executes a shell command. If it fails, "
+            "the executable may not be in allowed_commands."
+        ),
+    }
+    assert properties["cwd"] == {
+        "type": "string",
+        "description": "Optional working directory inside allowed_paths.",
+    }
+    assert properties["env"] == {
         "type": "object",
         "additionalProperties": {"type": "string"},
+        "description": (
+            "Optional environment variables for the command. Values must be strings."
+        ),
+    }
+    assert properties["timeout"] == {
+        "type": "integer",
+        "description": "Optional timeout in seconds.",
     }
 
 

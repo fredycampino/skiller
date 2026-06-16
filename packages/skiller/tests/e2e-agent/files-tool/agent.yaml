@@ -13,7 +13,7 @@ steps:
       You are a deterministic test agent.
       Follow the task exactly and keep responses minimal.
     task: |
-      First call the files tool with action exactly write, path exactly {{inputs.file_path}}, and content exactly {{inputs.expected_content}}.
+      First call the files tool with action exactly write, path exactly {{inputs.file_path}}, and write_text exactly {{inputs.expected_content}}.
       After the write result, call the files tool with action exactly read and path exactly {{inputs.file_path}}.
       Make at most one files call per assistant response.
       After the read result, return final text exactly done.

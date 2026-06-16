@@ -33,10 +33,7 @@ class ShellProcessTool(
 ):
     name: ClassVar[str] = "shell"
     description: ClassVar[str] = (
-        "This tool shell executes terminal commands; command is required "
-        "({'command':'<comando>'}); if you receive errors by command, "
-        "parameters, or invalid path, look for alternatives and do not retry "
-        "without corrections; you can also ask the user for help."
+        "Execute shell commands constrained by configured allowed_commands and allowed_paths."
     )
 
     def __init__(
@@ -51,13 +48,29 @@ class ShellProcessTool(
             value={
                 "type": "object",
                 "properties": {
-                    "command": {"type": "string"},
-                    "cwd": {"type": "string"},
+                    "command": {
+                        "type": "string",
+                        "description": (
+                            "Required. Executes a shell command. If it fails, "
+                            "the executable may not be in allowed_commands."
+                        ),
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Optional working directory inside allowed_paths.",
+                    },
                     "env": {
                         "type": "object",
                         "additionalProperties": {"type": "string"},
+                        "description": (
+                            "Optional environment variables for the command. "
+                            "Values must be strings."
+                        ),
                     },
-                    "timeout": {"type": "integer"},
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Optional timeout in seconds.",
+                    },
                 },
                 "required": ["command"],
                 "additionalProperties": False,

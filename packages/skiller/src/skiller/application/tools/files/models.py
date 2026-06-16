@@ -14,7 +14,7 @@ class FilesAction(StrEnum):
 class FilesToolRequest(ToolRequest):
     action: FilesAction
     path: str
-    content: str | None = None
+    write_text: str | None = None
     old_text: str | None = None
     new_text: str | None = None
     effective_path: str | None = None

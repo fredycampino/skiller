@@ -74,8 +74,8 @@ if write_call["args"]["action"] != "write":
     raise SystemExit(f"Unexpected first files action: {write_call['args']['action']}")
 if write_call["args"]["path"] != file_path:
     raise SystemExit(f"Unexpected write path: {write_call['args']['path']}")
-if write_call["args"]["content"] != expected_content:
-    raise SystemExit(f"Unexpected write content: {write_call['args']['content']}")
+if write_call["args"]["write_text"] != expected_content:
+    raise SystemExit(f"Unexpected write text: {write_call['args']['write_text']}")
 
 read_call = tool_call_events[1]["payload"]
 if read_call["tool"] != "files":

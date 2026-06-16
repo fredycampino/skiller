@@ -145,17 +145,13 @@ def _token_current_marker_index(state: FooterContextState, *, bar_width: int) ->
     return min(width - 1, max(0, marker_position))
 
 
-def _token_percent(state: FooterContextState) -> int:
-    limit = max(state.limit_tokens, 1)
-    current = max(state.current_tokens, 0)
-    return min(999, round((current / limit) * 100))
-
-
 def _token_style(state: FooterContextState, *, theme: TuiTheme) -> str:
-    percent = _token_percent(state)
-    if percent >= 90:
+    current = max(state.current_tokens, 0)
+    capacity = max(state.capacity_tokens, 1)
+    limit = max(state.limit_tokens, 0)
+    if current * 10 >= capacity * 9:
         return theme.color_text_error
-    if percent >= 70:
+    if current >= limit:
         return theme.color_text_warning
     return theme.color_text_secondary
 

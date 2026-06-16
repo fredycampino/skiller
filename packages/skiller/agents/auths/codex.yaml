@@ -29,14 +29,7 @@ steps:
         exit 0
       fi
 
-      credentials_dir="$(dirname "$credentials_file")"
-      rm -f \
-        "$credentials_file" \
-        "$credentials_dir/openai-codex.pending.json" \
-        "$credentials_dir/openai-codex.callback.json" \
-        "$credentials_dir/openai-codex.server.json" \
-        "$credentials_dir/openai-codex.callback-ready" \
-        "$credentials_dir/openai-codex.callback.log"
+      python3 "{{flow.dir}}/codex_auth.py" cleanup-authorization
       printf '%s' missing
     cwd: .
     timeout: 15

@@ -3,10 +3,7 @@ from pathlib import Path
 import pytest
 from helpers.agent_config import FakeAgentConfigPort, agent_config
 
-from skiller.application.agent.config.step_config_reader import (
-    AGENT_RUNTIME_SYSTEM,
-    AgentStepConfigReader,
-)
+from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
@@ -51,7 +48,10 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
         ),
     )
 
-    assert config.system == f"{AGENT_RUNTIME_SYSTEM}\n\nBe useful."
+    assert "## Available Tools" in config.system
+    assert "**notify**" in config.system
+    assert "**shell**" in config.system
+    assert "Be useful." in config.system
     assert config.task == "Help user"
     assert config.config.loop.max_turns == 3
     assert config.config.loop.max_tool_calls == 2
@@ -84,7 +84,8 @@ def test_agent_step_config_reader_reads_defaults_without_tools() -> None:
     assert config.config.loop.max_turns == 10
     assert config.config.loop.max_tool_calls == 5
     assert config.tools == ()
-    assert config.system == f"{AGENT_RUNTIME_SYSTEM}\n\nBe useful."
+    assert "Be useful." in config.system
+    assert "## Available Tools" not in config.system
 
 
 def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_config() -> None:
@@ -125,9 +126,9 @@ def test_agent_step_config_reader_validates_agent_config_through_port() -> None:
         error=AgentConfigValidationErrorCode.PROVIDER_MODEL_UNSUPPORTED,
         message="bad model",
     )
-    agent_config = _FakeAgentConfigPort(validation=validation)
+    agent_cfg = _FakeAgentConfigPort(validation=validation)
     reader = AgentStepConfigReader(
-        agent_config=agent_config,
+        agent_config=agent_cfg,
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
@@ -136,16 +137,16 @@ def test_agent_step_config_reader_validates_agent_config_through_port() -> None:
     result = reader.validate_agent_config(current_step=_current_step())
 
     assert result == validation
-    assert agent_config.validate_calls == 1
+    assert agent_cfg.validate_calls == 1
 
 
 def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     config_path.write_text("{}", encoding="utf-8")
-    agent_config = FakeAgentConfigPort()
+    agent_cfg = FakeAgentConfigPort()
     skill_runner = _FakeSkillRunner(config_path=config_path)
     reader = AgentStepConfigReader(
-        agent_config=agent_config,
+        agent_config=agent_cfg,
         run_store=_FakeRunStore(source="internal", ref="mono"),
         skill_runner=skill_runner,
         tool_manager=ToolManager(tools=[]),
@@ -161,8 +162,43 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
         ),
     )
 
-    assert agent_config.config_paths == [config_path]
+    assert agent_cfg.config_paths == [config_path]
     assert skill_runner.calls == [("internal", "mono", "agent.json")]
+
+
+def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
+    reader = AgentStepConfigReader(
+        agent_config=FakeAgentConfigPort(
+            agent_config(max_turns=10, max_tool_calls=5),
+        ),
+        run_store=_FakeRunStore(),
+        skill_runner=_FakeSkillRunner(),
+        tool_manager=_FakeToolManager(definitions=(NotifyTool(), ShellProcessTool())),
+    )
+
+    tools = reader.tool_manager.get_tool_definitions(["notify", "shell"])
+    section = reader._build_tools_section(tools)
+
+    assert section.startswith("## Available Tools")
+    assert "**notify**" in section
+    assert "**shell**" in section
+    assert "Parameters: message" in section
+    assert "Parameters: command" in section
+
+
+def test_agent_step_config_reader_builds_tools_section_empty_when_no_tools() -> None:
+    reader = AgentStepConfigReader(
+        agent_config=FakeAgentConfigPort(
+            agent_config(max_turns=10, max_tool_calls=5),
+        ),
+        run_store=_FakeRunStore(),
+        skill_runner=_FakeSkillRunner(),
+        tool_manager=ToolManager(tools=[]),
+    )
+
+    section = reader._build_tools_section([])
+
+    assert section == ""
 
 
 def _current_step() -> CurrentStep:
@@ -208,12 +244,14 @@ class _FakeToolManager:
 
 
 class _FakeAgentConfigPort:
-    def __init__(self, *, validation: AgentConfigValidation) -> None:
-        self.validation = validation
+    def __init__(self, validation: AgentConfigValidation | None = None) -> None:
+        self._validation = validation
         self.validate_calls = 0
+        self.config_paths: list[Path] = []
 
-    def get_config(self, *, config_path: Path | None = None):  # noqa: ANN201
-        _ = config_path
+    def get_config(self, *, config_path: Path | None = None) -> object:  # noqa: ANN201
+        if config_path is not None:
+            self.config_paths.append(config_path)
         raise AssertionError("get_config should not be called")
 
     def validate_config(
@@ -221,7 +259,7 @@ class _FakeAgentConfigPort:
     ) -> AgentConfigValidation:
         _ = config_path
         self.validate_calls += 1
-        return self.validation
+        return self._validation
 
 
 class _FakeSkillRunner:

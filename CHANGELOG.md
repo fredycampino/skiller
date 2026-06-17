@@ -19,6 +19,18 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.14 - 2026-06-17
+
+### Added
+- Add runtime and STUI model selection support.
+- Add STUI resume event cursor support.
+
+### Fixed
+- Remove stale unsupported Codex model reference from agent config tests.
+
+### Notes
+- Includes PR #83.
+
 ## 0.1.0-beta.12 - 2026-06-17
 
 ### Added

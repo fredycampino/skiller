@@ -38,6 +38,22 @@ class CliModelsAdapter:
             raise RuntimeError("models command returned invalid providers")
         return [_parse_provider(item) for item in providers if isinstance(item, dict)]
 
+    def select_model(self, *, run_id: str, provider: str, model: str) -> None:
+        payload = _run_json_command(
+            self.invoker,
+            "agent",
+            "model",
+            run_id,
+            "--provider",
+            provider,
+            "--model",
+            model,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("model command returned invalid payload")
+        if payload.get("ok") is not True:
+            raise RuntimeError(_error_message(payload, fallback="model selection failed"))
+
 
 def _run_json_command(invoker: CliInvoker, *args: str) -> Any:
     completed = invoker.run(*args)
@@ -77,11 +93,14 @@ def _parse_model(payload: dict[str, Any]) -> ModelsPortModelItem:
     )
 
 
-def _error_message(payload: dict[str, Any]) -> str:
+def _error_message(payload: dict[str, Any], *, fallback: str = "models query failed") -> str:
     message = str(payload.get("message", "")).strip()
     if message:
         return message
+    error = str(payload.get("error", "")).strip()
+    if error:
+        return error
     status = str(payload.get("status", "")).strip()
     if status:
-        return f"models query failed: {status}"
-    return "models query failed"
+        return f"{fallback}: {status}"
+    return fallback

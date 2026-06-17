@@ -14,7 +14,6 @@ from stui.port.event_port import (
     LogEventsListener,
     LogEventsObserver,
 )
-from stui.port.run_port import RunPort, RunRuntimeStatus
 
 
 class CliLogEventSource(Protocol):
@@ -31,7 +30,6 @@ class CliLogEventSource(Protocol):
 class LogsEventObserver(LogEventsObserver):
     logs: CliLogEventSource = field(default_factory=CliLogEventAdapter)
     mapper: LogEventMapper = field(default_factory=LogEventMapper)
-    run_port: RunPort | None = None
     _listener: LogEventsListener | None = field(default=None, init=False, repr=False)
     _run_id: str = field(default="", init=False, repr=False)
     _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
@@ -49,6 +47,7 @@ class LogsEventObserver(LogEventsObserver):
         *,
         run_id: str,
         listener: LogEventsListener,
+        after_sequence: int,
         interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
         normalized_run_id = run_id.strip()
@@ -66,7 +65,7 @@ class LogsEventObserver(LogEventsObserver):
 
         last_seen_sequence = self._last_seen_sequence
         if self._run_id != normalized_run_id:
-            last_seen_sequence = 0
+            last_seen_sequence = after_sequence
             self._observer_error_count = 0
         self._stop_current()
         self._run_id = normalized_run_id
@@ -155,25 +154,7 @@ class LogsEventObserver(LogEventsObserver):
         )
 
     def _observer_error_message(self, exc: Exception) -> str:
-        message = f"{type(exc).__name__}: {str(exc).strip() or 'observer error'}"
-        status = self._current_run_status()
-        if status is None:
-            return message
-        return (
-            f"{message} "
-            f"(run_status={status.status.value}, "
-            f"wait_type={status.wait_type.value}, "
-            f"last_event_sequence={status.last_event_sequence}, "
-            f"last_event_type={status.last_event_type or '-'})"
-        )
-
-    def _current_run_status(self) -> RunRuntimeStatus | None:
-        if self.run_port is None or not self._run_id:
-            return None
-        try:
-            return self.run_port.status(self._run_id)
-        except Exception:
-            return None
+        return f"{type(exc).__name__}: {str(exc).strip() or 'observer error'}"
 
 
 def _ends_in_finished(events: list[LogEvent]) -> bool:

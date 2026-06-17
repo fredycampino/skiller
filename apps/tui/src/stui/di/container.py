@@ -68,6 +68,7 @@ from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUse
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
+from stui.usecase.select_model_use_case import SelectModelUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -125,15 +126,16 @@ def build_tui_container(
     cli_invoker: CliInvoker | None = None,
 ) -> TuiContainer:
     resolved_cli_invoker = cli_invoker or CliInvoker()
+    resolved_cli_run_adapter = CliRunAdapter(invoker=resolved_cli_invoker)
     resolved_run_port = run_port or DefaultRunPort(
-        command_adapter=CliRunAdapter(invoker=resolved_cli_invoker),
+        command_adapter=resolved_cli_run_adapter,
     )
     resolved_agent_port = agent_port or CliAgentAdapter(invoker=resolved_cli_invoker)
     resolved_events_port = events_port or DefaultEventsPort(
         event_observer=LogsEventObserver(
             logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
-            run_port=resolved_run_port,
         ),
+        run_adapter=resolved_cli_run_adapter,
     )
     resolved_runs_port = runs_port or DefaultRunsPort(
         command_adapter=CliRunsAdapter(invoker=resolved_cli_invoker),
@@ -200,6 +202,10 @@ def build_tui_container(
             run_port=resolved_run_port,
             events_port=resolved_events_port,
             session_store_port=resolved_session_store_port,
+            context=run_event_context,
+        ),
+        select_model=SelectModelUseCase(
+            models_port=resolved_models_port,
             context=run_event_context,
         ),
         load_session_from_post=LoadSessionFromPostUseCase(

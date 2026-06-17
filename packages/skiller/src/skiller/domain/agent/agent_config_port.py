@@ -34,3 +34,12 @@ class AgentConfigPort(Protocol):
         config_path: Path | None = None,
     ) -> tuple[AgentConfigProviderSourceItem, ...]:
         raise NotImplementedError
+
+    def set_model(
+        self,
+        *,
+        provider_type: AgentLLMProviderType,
+        model: str,
+        config_path: Path | None = None,
+    ) -> None:
+        raise NotImplementedError

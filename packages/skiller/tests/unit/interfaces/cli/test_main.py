@@ -19,6 +19,7 @@ class _FakeController:
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
         self.interrupt_agent_calls: list[str] = []
+        self.agent_model_calls: list[dict[str, str]] = []
         self.agent_stats_calls: list[dict[str, str]] = []
         self.action_done_calls: list[dict[str, str]] = []
         self.delete_run_calls: list[str] = []
@@ -130,6 +131,27 @@ class _FakeController:
                     "capacity_tokens": 100000,
                 },
             },
+        }
+
+    def agent_model(
+        self,
+        run_id: str,
+        provider: str,
+        model: str,
+    ) -> dict[str, object]:
+        self.agent_model_calls.append(
+            {
+                "run_id": run_id,
+                "provider": provider,
+                "model": model,
+            }
+        )
+        return {
+            "run_id": run_id,
+            "provider": provider,
+            "model": model,
+            "status": "OK",
+            "ok": True,
         }
 
     def action_done(self, run_id: str, step_id: str) -> dict[str, object]:
@@ -911,6 +933,44 @@ def test_agent_commands_delegate_to_runtime_controller(
     assert exit_code == 0
     assert getattr(controller, controller_calls)
     assert data["status"] == expected_status
+
+
+def test_agent_model_command_delegates_to_runtime_controller(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(
+        [
+            "agent",
+            "model",
+            "run-1",
+            "--provider",
+            "codex",
+            "--model",
+            "gpt-5.4",
+        ]
+    )
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert controller.agent_model_calls == [
+        {
+            "run_id": "run-1",
+            "provider": "codex",
+            "model": "gpt-5.4",
+        }
+    ]
+    assert data == {
+        "run_id": "run-1",
+        "provider": "codex",
+        "model": "gpt-5.4",
+        "status": "OK",
+        "ok": True,
+    }
 
 
 def _local_process_result() -> SimpleNamespace:

@@ -63,7 +63,10 @@ class ModelsTableView(Vertical):
         self._render_tables()
 
     def set_rows(self, rows: list[ModelsTableProviderRow]) -> None:
-        self._providers = ordered_providers(rows)
+        providers = ordered_providers(rows)
+        if providers != self._providers:
+            self._model_index_by_provider = {}
+        self._providers = providers
         self._provider_index = self._initial_provider_index()
         self._model_index = self._stored_model_index(self.selected_provider)
         if not self._selected_provider_is_available():

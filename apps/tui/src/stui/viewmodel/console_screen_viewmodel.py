@@ -362,6 +362,16 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
 
+    async def select_model(self, *, provider: str, model: str) -> bool:
+        result = await self._use_cases.select_model.execute(
+            state=self.state,
+            provider=provider,
+            model=model,
+        )
+        self.state = result.state
+        self._emit_state()
+        return result.selected
+
     async def interrupt_running_agent_turn(self) -> bool:
         if self._run_event_context.status != RunStatus.RUNNING:
             return False

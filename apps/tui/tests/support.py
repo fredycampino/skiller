@@ -138,6 +138,7 @@ class FakeModelsPort:
         self,
         models: list[ModelsPortProviderItem] | None = None,
         error: RuntimeError | None = None,
+        select_error: RuntimeError | None = None,
     ) -> None:
         self.models = models or [
             ModelsPortProviderItem(
@@ -147,8 +148,10 @@ class FakeModelsPort:
             )
         ]
         self.error = error
+        self.select_error = select_error
         self.called = False
         self.called_with: list[str] = []
+        self.select_called_with: list[tuple[str, str, str]] = []
 
     def list_models(self, *, run_id: str) -> list[ModelsPortProviderItem]:
         self.called = True
@@ -156,6 +159,25 @@ class FakeModelsPort:
         if self.error is not None:
             raise self.error
         return list(self.models)
+
+    def select_model(self, *, run_id: str, provider: str, model: str) -> None:
+        self.select_called_with.append((run_id, provider, model))
+        if self.select_error is not None:
+            raise self.select_error
+        self.models = [
+            ModelsPortProviderItem(
+                name=item.name,
+                source=item.source,
+                models=tuple(
+                    ModelsPortModelItem(
+                        name=model_item.name,
+                        active=item.name == provider and model_item.name == model,
+                    )
+                    for model_item in item.models
+                ),
+            )
+            for item in self.models
+        ]
 
 
 class NeverCalledRunPort:

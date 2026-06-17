@@ -20,6 +20,7 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
     AgentNullLLMModel,
+    agent_llm_model_from_value,
 )
 
 pytestmark = pytest.mark.unit
@@ -98,10 +99,14 @@ def test_agent_llm_models_define_model_context_window_tokens() -> None:
     assert AgentFakeLLMModel.MODEL1.model_context_window_tokens == 100_000
     assert AgentMiniMaxLLMModel.M2_5.model_context_window_tokens == 204_800
     assert AgentMiniMaxLLMModel.M2_7.model_context_window_tokens == 204_800
-    assert AgentCodexLLMModel.GPT_5_3_CODEX.model_context_window_tokens == 400_000
     assert AgentCodexLLMModel.GPT_5_4.model_context_window_tokens == 1_050_000
     assert AgentCodexLLMModel.GPT_5_5.model_context_window_tokens == 1_050_000
     assert AgentBedrockLLMModel.CLAUDE_OPUS_4_6.model_context_window_tokens == 200_000
+
+
+def test_agent_llm_model_rejects_unsupported_codex_model() -> None:
+    with pytest.raises(ValueError, match="Unsupported LLM model: unsupported-codex"):
+        agent_llm_model_from_value("unsupported-codex")
 
 
 def test_agent_llm_providers_require_typed_model_enum() -> None:

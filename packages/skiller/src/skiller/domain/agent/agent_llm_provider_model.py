@@ -30,7 +30,6 @@ class AgentMiniMaxLLMModel(AgentLLMModelEnum):
 
 
 class AgentCodexLLMModel(AgentLLMModelEnum):
-    GPT_5_3_CODEX = ("gpt-5.3-codex", 400_000)
     GPT_5_4 = ("gpt-5.4", 1_050_000)
     GPT_5_5 = ("gpt-5.5", 1_050_000)
 

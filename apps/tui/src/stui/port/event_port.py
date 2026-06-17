@@ -19,6 +19,7 @@ class LogEventsObserver(Protocol):
         *,
         run_id: str,
         listener: LogEventsListener,
+        after_sequence: int,
         interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None: ...
 

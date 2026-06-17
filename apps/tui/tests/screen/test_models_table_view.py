@@ -105,6 +105,38 @@ def test_models_table_view_uses_active_model_as_default_selection() -> None:
     assert view.selected_model.name == "MiniMax-M2.5"
 
 
+def test_models_table_view_uses_refreshed_active_model_selection() -> None:
+    view = ModelsTableView()
+    view.set_rows(_rows())
+
+    assert view.move_provider_selection(1) is True
+    assert view.focus_models() is True
+    assert view.move_model_selection(1) is True
+    assert view.selected_model is not None
+    assert view.selected_model.name == "MiniMax-M2.5"
+
+    view.set_rows([
+        ModelsTableProviderRow(
+            name="codex",
+            source="global",
+            models=(ModelsTableModelRow(name="gpt-5.5"),),
+        ),
+        ModelsTableProviderRow(
+            name="minimax",
+            source="global",
+            models=(
+                ModelsTableModelRow(name="MiniMax-M2.7"),
+                ModelsTableModelRow(name="MiniMax-M2.5", active=True),
+            ),
+        ),
+    ])
+
+    assert view.selected_provider is not None
+    assert view.selected_provider.name == "minimax"
+    assert view.selected_model is not None
+    assert view.selected_model.name == "MiniMax-M2.5"
+
+
 def test_models_table_view_renders_provider_and_models_panel() -> None:
     view = ModelsTableView()
     view.set_rows(_rows())

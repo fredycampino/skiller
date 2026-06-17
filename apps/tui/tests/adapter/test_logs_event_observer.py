@@ -11,11 +11,6 @@ from stui.port.event_models import (
     LogEvent,
     LogEventType,
 )
-from stui.port.run_port import (
-    RunRuntimeStatus,
-    RunRuntimeStatusKind,
-    RunRuntimeWaitType,
-)
 
 pytestmark = pytest.mark.unit
 
@@ -48,14 +43,6 @@ class FakeLogEventsListener:
         return self.max_page
 
 
-class FakeRunPort:
-    def __init__(self, *, status: RunRuntimeStatus | None) -> None:
-        self.status_value = status
-
-    def status(self, _run_id: str) -> RunRuntimeStatus | None:
-        return self.status_value
-
-
 def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -78,7 +65,12 @@ def test_logs_event_observer_polls_incrementally_and_stops_on_waiting(
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         observer = LogsEventObserver(logs=adapter)
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -115,7 +107,12 @@ def test_logs_event_observer_stops_immediately_on_finished(
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         observer = LogsEventObserver(logs=adapter)
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -146,10 +143,42 @@ def test_logs_event_observer_uses_listener_max_page(
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         observer = LogsEventObserver(logs=adapter)
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
 
         assert adapter.called_with[0] == ("run-1", None, 25)
+
+    asyncio.run(run())
+
+
+def test_logs_event_observer_uses_initial_after_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = FakeLogEventAdapter([[_run_finished_event(sequence=5000)]])
+    listener = FakeLogEventsListener(max_page=100)
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def run() -> None:
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        observer = LogsEventObserver(logs=adapter)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=4900,
+            interval_seconds=0.0,
+        )
+        task = observer._task
+        assert task is not None
+        await task
+
+        assert adapter.called_with[0] == ("run-1", 4900, 100)
 
     asyncio.run(run())
 
@@ -177,10 +206,20 @@ def test_logs_event_observer_keeps_cursor_when_resubscribing_same_run(
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         observer = LogsEventObserver(logs=adapter)
 
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
@@ -216,7 +255,12 @@ def test_logs_event_observer_does_not_stop_on_historical_waiting(
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         observer = LogsEventObserver(logs=adapter)
 
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -256,6 +300,7 @@ def test_logs_event_observer_continues_when_resubscribed_during_notify(
             self.observer.subscribe(
                 run_id="run-1",
                 listener=self,
+                after_sequence=events[-1].sequence,
                 interval_seconds=1.0,
             )
 
@@ -273,7 +318,12 @@ def test_logs_event_observer_continues_when_resubscribed_during_notify(
         observer = LogsEventObserver(logs=adapter)
         listener.observer = observer
 
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -300,20 +350,14 @@ def test_logs_event_observer_notifies_observer_loop_error(
         monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
         adapter = FailingLogEventAdapter()
         listener = FakeLogEventsListener()
-        observer = LogsEventObserver(
-            logs=adapter,
-            run_port=FakeRunPort(
-                status=RunRuntimeStatus(
-                    run_id="run-1",
-                    status=RunRuntimeStatusKind.WAITING,
-                    wait_type=RunRuntimeWaitType.INPUT,
-                    last_event_sequence=71,
-                    last_event_type="RUN_WAITING",
-                )
-            ),
-        )
+        observer = LogsEventObserver(logs=adapter)
 
-        observer.subscribe(run_id="run-1", listener=listener, interval_seconds=0.0)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
         task = observer._task
         assert task is not None
 
@@ -324,11 +368,7 @@ def test_logs_event_observer_notifies_observer_loop_error(
         event = listener.events[0]
         assert event.event_type == LogEventType.OBSERVER_LOOP_ERROR
         assert isinstance(event.payload, ErrorPayload)
-        assert event.payload.error == (
-            "RuntimeError: boom "
-            "(run_status=waiting, wait_type=input, "
-            "last_event_sequence=71, last_event_type=RUN_WAITING)"
-        )
+        assert event.payload.error == "RuntimeError: boom"
 
     asyncio.run(run())
 

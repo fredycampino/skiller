@@ -28,6 +28,9 @@ class MockModelsAdapter:
             raise RuntimeError("models mock must contain a list")
         return [_parse_provider(item) for item in payload if isinstance(item, dict)]
 
+    def select_model(self, *, run_id: str, provider: str, model: str) -> None:
+        _ = run_id, provider, model
+
 
 def _parse_provider(payload: dict[str, Any]) -> ModelsPortProviderItem:
     models = payload.get("models", [])

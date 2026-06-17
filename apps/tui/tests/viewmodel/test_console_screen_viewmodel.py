@@ -7,6 +7,7 @@ import pytest
 import stui.usecase.list_models_use_case as list_models_use_case_module
 import stui.usecase.list_runs_use_case as list_runs_use_case_module
 import stui.usecase.run_command_use_case as run_command_use_case_module
+import stui.usecase.select_model_use_case as select_model_use_case_module
 from apps.tui.tests.support import (
     FakeAgentPort,
     FakeEventsPort,
@@ -38,6 +39,7 @@ from stui.port.event_models import (
     WaitInputOutputValue,
     WaitWebhookOutputValue,
 )
+from stui.port.models_port import ModelsPortModelItem, ModelsPortProviderItem
 from stui.port.notify_action_port import (
     NotifyActionAck,
     NotifyActionAckStatus,
@@ -1041,6 +1043,55 @@ def test_console_screen_viewmodel_opens_models_table_for_models_command() -> Non
         assert [item.name for item in viewmodel.state.models_table.rows] == ["codex"]
 
     with patched_to_thread(list_models_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
+    async def run() -> None:
+        models_port = FakeModelsPort(
+            models=[
+                ModelsPortProviderItem(
+                    name="codex",
+                    source="global",
+                    models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
+                ),
+                ModelsPortProviderItem(
+                    name="minimax",
+                    source="global",
+                    models=(
+                        ModelsPortModelItem(name="MiniMax-M2.7"),
+                        ModelsPortModelItem(name="MiniMax-M2.5"),
+                    ),
+                ),
+            ]
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
+            waiting_port=FakeWaitingPort(),
+            models_port=models_port,
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+
+        await viewmodel.submit("/models")
+        selected = await viewmodel.select_model(
+            provider="minimax",
+            model="MiniMax-M2.5",
+        )
+
+        providers = {provider.name: provider for provider in viewmodel.state.models_table.rows}
+        minimax_models = {
+            model.name: model for model in providers["minimax"].models
+        }
+        assert selected is True
+        assert models_port.select_called_with == [
+            ("run-123", "minimax", "MiniMax-M2.5"),
+        ]
+        assert minimax_models["MiniMax-M2.5"].active is True
+        assert viewmodel.state.models_table.visible is True
+        assert viewmodel.state.prompt.mode == PromptMode.MODELS_TABLE
+
+    with patched_to_thread(list_models_use_case_module, select_model_use_case_module):
         asyncio.run(run())
 
 

@@ -12,6 +12,10 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
 )
+from skiller.application.use_cases.agent.select_agent_model import (
+    SelectAgentModelResult,
+    SelectAgentModelStatus,
+)
 from skiller.domain.agent.agent_stats_model import AgentStats
 
 
@@ -51,6 +55,14 @@ class AgentServiceMapper:
     def to_models_input(self, run_id: str) -> str:
         return run_id.strip()
 
+    def to_select_model_input(
+        self,
+        run_id: str,
+        provider: str,
+        model: str,
+    ) -> tuple[str, str, str]:
+        return run_id.strip(), provider.strip(), model.strip()
+
     def to_models_dict(self, result: ListAgentModelsResult) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "run_id": result.run_id,
@@ -72,6 +84,18 @@ class AgentServiceMapper:
                 }
                 for provider in result.providers
             ]
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
+    def to_select_model_dict(self, result: SelectAgentModelResult) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "run_id": result.run_id,
+            "provider": result.provider,
+            "model": result.model,
+            "status": result.status.value,
+            "ok": result.status == SelectAgentModelStatus.OK,
+        }
         if result.error is not None:
             payload["error"] = result.error
         return payload

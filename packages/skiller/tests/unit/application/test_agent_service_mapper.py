@@ -15,6 +15,10 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
 )
+from skiller.application.use_cases.agent.select_agent_model import (
+    SelectAgentModelResult,
+    SelectAgentModelStatus,
+)
 from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
 from skiller.domain.agent.agent_stats_model import (
     AgentContextStats,
@@ -75,6 +79,29 @@ def test_mapper_serializes_agent_models_result_without_secrets() -> None:
                 ],
             },
         ],
+    }
+
+
+def test_mapper_serializes_select_agent_model_result() -> None:
+    mapper = AgentServiceMapper()
+    result = SelectAgentModelResult(
+        status=SelectAgentModelStatus.OK,
+        run_id="run-1",
+        provider="codex",
+        model="gpt-5.4",
+    )
+
+    assert mapper.to_select_model_input(" run-1 ", " codex ", " gpt-5.4 ") == (
+        "run-1",
+        "codex",
+        "gpt-5.4",
+    )
+    assert mapper.to_select_model_dict(result) == {
+        "run_id": "run-1",
+        "provider": "codex",
+        "model": "gpt-5.4",
+        "status": "OK",
+        "ok": True,
     }
 
 

@@ -331,6 +331,102 @@ def test_json_agent_config_lists_env_provider_sources(tmp_path) -> None:
     } == {AgentLLMProviderType.CODEX: AgentConfigProviderSource.ENV}
 
 
+def test_json_agent_config_sets_model_in_single_config_file(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+            "providers": {
+                "minimax": {
+                    "api_key": "secret",
+                    "model": "MiniMax-M2.5",
+                    "timeout_seconds": 30,
+                    "window_width_tokens": 204_800,
+                },
+                "codex": {
+                    "credentials_file": "/secret/codex.json",
+                    "model": "gpt-5.5",
+                    "timeout_seconds": 120,
+                    "window_width_tokens": 1_050_000,
+                },
+            },
+        },
+    )
+
+    _provider(config_path=config_path, env={}).set_model(
+        provider_type=AgentLLMProviderType.CODEX,
+        model="gpt-5.4",
+    )
+
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    config = _provider(config_path=config_path, env={}).get_config()
+    assert payload["llm"]["default_provider"] == "codex"
+    assert payload["providers"]["codex"]["model"] == "gpt-5.4"
+    assert config.llm.default_provider == AgentLLMProviderType.CODEX
+    assert config.llm.default().model.value == "gpt-5.4"
+
+
+def test_json_agent_config_sets_local_default_and_global_provider_model(
+    tmp_path,
+) -> None:
+    global_config_path = tmp_path / "global-agent.json"
+    context_config_path = tmp_path / "context-agent.json"
+    _write_config(
+        global_config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+            "providers": {
+                "minimax": {
+                    "api_key": "secret",
+                    "model": "MiniMax-M2.5",
+                    "timeout_seconds": 30,
+                    "window_width_tokens": 204_800,
+                },
+                "codex": {
+                    "credentials_file": "/secret/codex.json",
+                    "model": "gpt-5.5",
+                    "timeout_seconds": 120,
+                    "window_width_tokens": 1_050_000,
+                },
+            },
+        },
+    )
+    _write_config(
+        context_config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+        },
+    )
+
+    _provider(config_path=global_config_path, env={}).set_model(
+        provider_type=AgentLLMProviderType.CODEX,
+        model="gpt-5.4",
+        config_path=context_config_path,
+    )
+
+    local_payload = json.loads(context_config_path.read_text(encoding="utf-8"))
+    global_payload = json.loads(global_config_path.read_text(encoding="utf-8"))
+    config = _provider(config_path=global_config_path, env={}).get_config(
+        config_path=context_config_path
+    )
+    assert local_payload == {"llm": {"default_provider": "codex"}}
+    assert global_payload["providers"]["codex"]["model"] == "gpt-5.4"
+    assert config.llm.default_provider == AgentLLMProviderType.CODEX
+    assert config.llm.default().model.value == "gpt-5.4"
+
+
+def test_json_agent_config_rejects_set_model_for_unconfigured_provider(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
+
+    with pytest.raises(RuntimeError, match="LLM provider is not configured: codex"):
+        _provider(config_path=config_path, env={}).set_model(
+            provider_type=AgentLLMProviderType.CODEX,
+            model="gpt-5.4",
+        )
+
+
 def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) -> None:
     global_config_path = tmp_path / "global-agent.json"
     context_config_path = tmp_path / "context-agent.json"

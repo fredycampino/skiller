@@ -4,8 +4,7 @@
     "source": "global",
     "models": [
       {"name": "gpt-5.5", "active": true},
-      {"name": "gpt-5.4", "active": false},
-      {"name": "gpt-5.3-codex", "active": false}
+      {"name": "gpt-5.4", "active": false}
     ]
   },
   {

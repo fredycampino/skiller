@@ -239,7 +239,7 @@ class ConsoleScreen(App[str]):
             return
 
         if self.state.models_table.visible:
-            self._models_table().action_select_cursor()
+            await self._select_model_from_table()
             return
 
         if normalized_text.lower() in {"/quit", "/exit"}:
@@ -404,6 +404,22 @@ class ConsoleScreen(App[str]):
             action_uid=notify_action.action.uid,
         )
         self._prompt_view().focus_prompt()
+
+    async def _select_model_from_table(self) -> None:
+        models_table = self._models_table()
+        if not models_table.models_focused:
+            models_table.focus_models()
+            return
+
+        provider = models_table.selected_provider
+        model = models_table.selected_model
+        if provider is None or model is None:
+            return
+
+        await self.viewmodel.select_model(
+            provider=provider.name,
+            model=model.name,
+        )
 
     def _refresh_status(self, *, new_state: ConsoleScreenState) -> None:
         try:

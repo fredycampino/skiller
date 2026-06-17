@@ -49,6 +49,37 @@ def test_cli_models_adapter_maps_runtime_payload() -> None:
     assert list(invoker.called_with or ()) == ["agent", "models", "run-1"]
 
 
+def test_cli_models_adapter_selects_model() -> None:
+    invoker = FakeInvoker(
+        subprocess.CompletedProcess(
+            args=["python", "-m", "skiller"],
+            returncode=0,
+            stdout=(
+                '{"run_id":"run-1","provider":"minimax","model":"MiniMax-M2.5",'
+                '"status":"OK","ok":true}'
+            ),
+            stderr="",
+        )
+    )
+    adapter = CliModelsAdapter(invoker=invoker)
+
+    adapter.select_model(
+        run_id="run-1",
+        provider="minimax",
+        model="MiniMax-M2.5",
+    )
+
+    assert list(invoker.called_with or ()) == [
+        "agent",
+        "model",
+        "run-1",
+        "--provider",
+        "minimax",
+        "--model",
+        "MiniMax-M2.5",
+    ]
+
+
 def test_cli_models_adapter_reports_runtime_failure() -> None:
     adapter = CliModelsAdapter(
         invoker=FakeInvoker(
@@ -63,6 +94,26 @@ def test_cli_models_adapter_reports_runtime_failure() -> None:
 
     with pytest.raises(RuntimeError, match="run not found"):
         adapter.list_models(run_id="missing")
+
+
+def test_cli_models_adapter_reports_model_selection_failure() -> None:
+    adapter = CliModelsAdapter(
+        invoker=FakeInvoker(
+            subprocess.CompletedProcess(
+                args=["python", "-m", "skiller"],
+                returncode=0,
+                stdout='{"status":"MODEL_NOT_SUPPORTED","ok":false,"error":"bad model"}',
+                stderr="",
+            )
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="bad model"):
+        adapter.select_model(
+            run_id="run-1",
+            provider="minimax",
+            model="bad-model",
+        )
 
 
 def test_cli_models_adapter_rejects_invalid_payload() -> None:

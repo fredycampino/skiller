@@ -12,6 +12,10 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
 )
+from skiller.application.use_cases.agent.select_agent_model import (
+    SelectAgentModelResult,
+    SelectAgentModelStatus,
+)
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookResult
 from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneResult,
@@ -41,6 +45,7 @@ pytestmark = pytest.mark.unit
 class _FakeAgentService:
     def __init__(self) -> None:
         self.models_run_id = ""
+        self.select_model_call: dict[str, str] | None = None
 
     def list_agent_models(self, run_id: str) -> ListAgentModelsResult:
         self.models_run_id = run_id
@@ -54,6 +59,25 @@ class _FakeAgentService:
                     models=(AgentModelItem(name="gpt-5.5", active=True),),
                 ),
             ),
+        )
+
+    def select_agent_model(
+        self,
+        *,
+        run_id: str,
+        provider: str,
+        model: str,
+    ) -> SelectAgentModelResult:
+        self.select_model_call = {
+            "run_id": run_id,
+            "provider": provider,
+            "model": model,
+        }
+        return SelectAgentModelResult(
+            status=SelectAgentModelStatus.OK,
+            run_id=run_id,
+            provider=provider,
+            model=model,
         )
 
 
@@ -194,6 +218,26 @@ def test_controller_maps_agent_models_to_agent_service() -> None:
                 "models": [{"name": "gpt-5.5", "active": True}],
             },
         ],
+    }
+
+
+def test_controller_maps_agent_model_to_agent_service() -> None:
+    agent_service = _FakeAgentService()
+    controller = _controller(_FakeWaitService(), agent_service=agent_service)
+
+    result = controller.agent_model(" run-1 ", " codex ", " gpt-5.4 ")
+
+    assert agent_service.select_model_call == {
+        "run_id": "run-1",
+        "provider": "codex",
+        "model": "gpt-5.4",
+    }
+    assert result == {
+        "run_id": "run-1",
+        "provider": "codex",
+        "model": "gpt-5.4",
+        "status": "OK",
+        "ok": True,
     }
 
 

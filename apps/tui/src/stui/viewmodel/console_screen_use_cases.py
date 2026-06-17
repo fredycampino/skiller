@@ -34,6 +34,7 @@ from stui.usecase.refresh_agent_context_stats_use_case import (
 from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
+from stui.usecase.select_model_use_case import SelectModelUseCase
 from stui.usecase.select_runs_table_row_use_case import (
     SelectRunsTableRowUseCase,
 )
@@ -67,6 +68,7 @@ class ConsoleScreenUseCases:
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase
+    select_model: SelectModelUseCase
     load_session_from_post: LoadSessionFromPostUseCase
     get_intro_post_command: GetIntroPostCommandUseCase
     get_run_action: GetRunActionUseCase

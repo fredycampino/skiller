@@ -41,5 +41,8 @@
       ],
       "all": []
     }
+  },
+  "llm": {
+    "default_provider": "codex"
   }
 }

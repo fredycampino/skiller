@@ -17,6 +17,7 @@ from apps.tui.tests.support import (
     patched_to_thread,
 )
 from stui.di.strings import TuiStrings
+from stui.port.models_port import ModelsPortModelItem, ModelsPortProviderItem
 from stui.port.run_port import (
     RunDispatch,
     RunDispatchError,
@@ -37,6 +38,7 @@ from stui.usecase import (
 )
 from stui.usecase import list_models_use_case as list_models_use_case_module
 from stui.usecase import run_command_use_case as run_command_use_case_module
+from stui.usecase import select_model_use_case as select_model_use_case_module
 from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     ActionOpenUrlItem,
@@ -115,6 +117,55 @@ def test_console_screen_opens_models_table_from_command() -> None:
             assert "Enter select" in str(help_view.content)
 
     with patched_to_thread(list_models_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_selects_model_from_models_table() -> None:
+    async def run() -> None:
+        models_port = FakeModelsPort(
+            models=[
+                ModelsPortProviderItem(
+                    name="codex",
+                    source="global",
+                    models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
+                ),
+                ModelsPortProviderItem(
+                    name="minimax",
+                    source="global",
+                    models=(
+                        ModelsPortModelItem(name="MiniMax-M2.7"),
+                        ModelsPortModelItem(name="MiniMax-M2.5"),
+                    ),
+                ),
+            ]
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            models_port=models_port,
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "m", "o", "d", "e", "l", "s", "enter")
+            await pilot.pause()
+
+            await pilot.press("down", "right", "down", "enter")
+            await pilot.pause()
+
+            models_table = app.query_one("#models-table", ModelsTableView)
+            assert models_port.select_called_with == [
+                ("run-123", "minimax", "MiniMax-M2.5"),
+            ]
+            assert models_table.selected_provider is not None
+            assert models_table.selected_provider.name == "minimax"
+            assert models_table.selected_model is not None
+            assert models_table.selected_model.name == "MiniMax-M2.5"
+            assert models_table.selected_model.active is True
+
+    with patched_to_thread(list_models_use_case_module, select_model_use_case_module):
         asyncio.run(run())
 
 

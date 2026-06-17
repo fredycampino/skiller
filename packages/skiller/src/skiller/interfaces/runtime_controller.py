@@ -120,6 +120,19 @@ class RuntimeController:
         result = self.agent_service.list_agent_models(final_run_id)
         return self.agent_mapper.to_models_dict(result)
 
+    def agent_model(self, run_id: str, provider: str, model: str) -> dict[str, Any]:
+        final_run_id, final_provider, final_model = self.agent_mapper.to_select_model_input(
+            run_id,
+            provider,
+            model,
+        )
+        result = self.agent_service.select_agent_model(
+            run_id=final_run_id,
+            provider=final_provider,
+            model=final_model,
+        )
+        return self.agent_mapper.to_select_model_dict(result)
+
     def delete_run(self, run_id: str) -> dict[str, Any]:
         result = self.run_service.delete_run(run_id.strip())
         return self.run_mapper.to_delete_dict(result)

@@ -362,6 +362,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="List agent model options for a run",
     )
     agent_models_parser.add_argument("run_id")
+    agent_model_parser = agent_sub.add_parser(
+        "model",
+        help="Select the active agent model for a run",
+    )
+    agent_model_parser.add_argument("run_id")
+    agent_model_parser.add_argument("--provider", required=True)
+    agent_model_parser.add_argument("--model", required=True)
 
     action_parser = sub.add_parser("action", help="Runtime action operations")
     action_sub = action_parser.add_subparsers(dest="action_command", required=True)
@@ -1019,6 +1026,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agent" and args.agent_command == "models":
         result = controller.agent_models(args.run_id)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "OK" else 1
+
+    if args.command == "agent" and args.agent_command == "model":
+        result = controller.agent_model(args.run_id, args.provider, args.model)
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "OK" else 1
 

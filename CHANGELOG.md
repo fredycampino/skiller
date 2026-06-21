@@ -19,6 +19,20 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.15 - 2026-06-21
+
+### Removed
+- Remove bundled WhatsApp bridge and local pairing/process commands.
+- Remove bundled Cloudflared tunnel support and related CLI/docs/tests.
+- Remove distributed WhatsApp demo flows.
+
+### Changed
+- Keep channel ingress documented as generic local runtime ingress.
+- Disable default outbound channel sender unless injected by a runtime build.
+
+### Notes
+- Includes PR #86.
+
 ## 0.1.0-beta.14 - 2026-06-17
 
 ### Added

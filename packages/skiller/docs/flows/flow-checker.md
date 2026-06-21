@@ -49,7 +49,7 @@ The checker returns `FLOW_*` error codes for YAML flow validation.
 | `FLOW_SEND_CHANNEL_MISSING` | `send` step has no `channel` | `FLOW_SEND_CHANNEL_MISSING: send step requires channel (step={step_id})` |
 | `FLOW_SEND_KEY_MISSING` | `send` step has no `key` | `FLOW_SEND_KEY_MISSING: send step requires key (step={step_id})` |
 | `FLOW_SEND_MESSAGE_MISSING` | `send` step has no `message` | `FLOW_SEND_MESSAGE_MISSING: send step requires message (step={step_id})` |
-| `FLOW_SEND_CHANNEL_UNSUPPORTED` | `send` step uses an unsupported channel | `FLOW_SEND_CHANNEL_UNSUPPORTED: send step supports only whatsapp (step={step_id}, channel={channel})` |
+| `FLOW_SEND_CHANNEL_UNSUPPORTED` | `send` step uses an unsupported channel | `FLOW_SEND_CHANNEL_UNSUPPORTED: send step uses an unsupported channel (step={step_id}, channel={channel})` |
 | `FLOW_SHELL_COMMAND_MISSING` | `shell` step has no `command` | `FLOW_SHELL_COMMAND_MISSING: shell step requires command (step={step_id})` |
 | `FLOW_WAIT_INPUT_PROMPT_MISSING` | `wait_input` step has no `prompt` | `FLOW_WAIT_INPUT_PROMPT_MISSING: wait_input step requires prompt (step={step_id})` |
 | `FLOW_WAIT_WEBHOOK_WEBHOOK_MISSING` | `wait_webhook` step has no `webhook` | `FLOW_WAIT_WEBHOOK_WEBHOOK_MISSING: wait_webhook step requires webhook (step={step_id})` |

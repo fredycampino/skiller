@@ -2,8 +2,7 @@
 
 ## Goal
 
-`FlowReadinessCheckerUseCase` loads a YAML flow definition and verifies whether required
-local runtime services must already be available before run creation.
+`FlowReadinessCheckerUseCase` loads a YAML flow definition and verifies whether required local runtime services must already be available before run creation.
 
 Current scope:
 - `wait_channel`
@@ -37,11 +36,7 @@ If it finds a step with primary header:
 
 then the flow requires the local server.
 
-If it finds a step with primary header:
-- `wait_channel`
-- `send`
-
-and `channel=whatsapp`, then the flow also requires an active WhatsApp bridge.
+If it finds a step that requires outbound channel delivery, then the flow requires a configured channel sender.
 
 If none of those conditions apply, the result is `VALID`.
 
@@ -49,9 +44,11 @@ If a server-requiring step exists:
 - when `ServerStatusPort.is_available()` returns `true`, the result is `VALID`
 - when `ServerStatusPort.is_available()` returns `false`, the result is `INVALID`
 
-If a WhatsApp-requiring step exists:
-- when `ChannelSenderPort.is_available(channel="whatsapp")` returns `true`, the result is `VALID`
+If a channel sender is required:
+- when `ChannelSenderPort.is_available(channel=...)` returns `true`, the result is `VALID`
 - when it returns `false`, the result is `INVALID`
+
+The default runtime channel sender is disabled. Channel `send` flows are not ready out-of-the-box.
 
 The current implementation reports only the first matching step for each requirement type.
 
@@ -69,7 +66,7 @@ The checker returns `FLOW_*` error codes for flow readiness validation.
 ```json
 {
   "code": "FLOW_SERVER_UNAVAILABLE",
-  "message": "FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_channel (step=listen_whatsapp)"
+  "message": "FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_channel (step=listen_channel)"
 }
 ```
 
@@ -79,12 +76,12 @@ For `wait_webhook`, the same code is used and the message changes the step type:
 FLOW_SERVER_UNAVAILABLE: flow requires local server for wait_webhook (step=listen_webhook)
 ```
 
-For WhatsApp channel availability:
+For channel sender availability:
 
 ```json
 {
-  "code": "FLOW_WHATSAPP_UNAVAILABLE",
-  "message": "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge for send (step=reply)"
+  "code": "FLOW_CHANNEL_UNAVAILABLE",
+  "message": "FLOW_CHANNEL_UNAVAILABLE: flow requires configured channel sender for send (step=reply)"
 }
 ```
 
@@ -94,11 +91,11 @@ For WhatsApp channel availability:
 - load the flow definition
 - inspect `steps`
 - check whether the server is available
-- check whether a required channel bridge is available
+- check whether a required channel sender is available
 
 `FlowReadinessCheckerUseCase` does not:
 - validate general flow structure
 - start the server
-- start the channel bridge
+- start or configure the channel sender
 - create a run
 - append runtime events

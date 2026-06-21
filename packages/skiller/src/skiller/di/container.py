@@ -198,7 +198,7 @@ def build_runtime_container(
     shell_runtime_config = _build_shell_runtime_config()
     tool_process_runner = DefaultToolProcessRunner()
     server_status = DefaultServerStatus(cfg)
-    channel_sender = DefaultChannelSender(cfg)
+    channel_sender = DefaultChannelSender()
     tool_manager = _build_agent_tool_manager(agent_tools)
     action_uid_factory = ActionUidFactory()
 

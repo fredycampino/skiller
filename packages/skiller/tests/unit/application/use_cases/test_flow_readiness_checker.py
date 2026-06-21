@@ -224,7 +224,7 @@ def test_returns_invalid_when_wait_channel_flow_has_whatsapp_unavailable() -> No
         FlowReadinessCheckError(
             code="FLOW_WHATSAPP_UNAVAILABLE",
             message=(
-                "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
+                "FLOW_WHATSAPP_UNAVAILABLE: flow requires configured WhatsApp channel sender "
                 "for wait_channel (step=listen_whatsapp)"
             ),
         )
@@ -262,7 +262,7 @@ def test_returns_invalid_when_send_flow_has_whatsapp_unavailable() -> None:
         FlowReadinessCheckError(
             code="FLOW_WHATSAPP_UNAVAILABLE",
             message=(
-                "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
+                "FLOW_WHATSAPP_UNAVAILABLE: flow requires configured WhatsApp channel sender "
                 "for send (step=reply)"
             ),
         )

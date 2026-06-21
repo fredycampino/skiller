@@ -37,9 +37,8 @@ def _registration_payload_source(registration: dict[str, Any]) -> str:
 
 
 def _channel_token_file() -> Path:
-    settings = get_settings()
     home = Path.home()
-    return home / ".skiller" / "whatsapp" / f"channel-token-{settings.whatsapp_bridge_port}.txt"
+    return home / ".skiller" / "channels" / "token.txt"
 
 
 def _load_channel_token() -> str | None:

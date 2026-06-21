@@ -10,13 +10,11 @@ skiller server status
 skiller server stop
 ```
 
-The same server also hosts the internal local-only channel ingress used by providers such as WhatsApp:
+The same server also hosts local channel ingress for externally managed channel integrations:
 - external webhook ingress: `POST /webhooks/{webhook}/{key}`
 - local channel ingress: `POST /channels/{channel}/{key}`
 
-For the current WhatsApp integration:
-- `channel = whatsapp`
-- `key = WhatsApp chat id`
+Skiller does not ship built-in channel integrations. Channel providers must deliver events through the generic channel ingress.
 
 ## State
 

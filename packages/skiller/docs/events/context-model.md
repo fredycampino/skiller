@@ -278,17 +278,16 @@ Config-invalid output:
 
 ```json
 {
-  "text": "Channel message received: whatsapp:172584771580071@lid.",
+  "text": "Channel message received: external:contact-1.",
   "value": {
-    "channel": "whatsapp",
-    "key": "172584771580071@lid",
+    "channel": "external",
+    "key": "contact-1",
     "payload": {
-      "channel": "whatsapp",
       "message_id": "msg-1",
-      "key": "172584771580071@lid",
-      "sender_id": "172584771580071@lid",
-      "sender_name": "Fede",
-      "text": "hola",
+      "key": "contact-1",
+      "sender_id": "contact-1",
+      "sender_name": "Sender",
+      "text": "hello",
       "timestamp": 1775388655
     }
   },

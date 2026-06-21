@@ -10,7 +10,6 @@ readme = "docs/architecture.md"
 requires-python = ">=3.11"
 authors = [{ name = "Team" }]
 dependencies = [
-  "prompt_toolkit>=3.0.36",
   "textual>=0.80.0",
 ]
 

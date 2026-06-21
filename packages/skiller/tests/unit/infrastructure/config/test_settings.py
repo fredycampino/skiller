@@ -14,9 +14,6 @@ _SETTINGS_ENV_NAMES = (
     "AGENT_LOG_LEVEL",
     "AGENT_WEBHOOKS_HOST",
     "AGENT_WEBHOOKS_PORT",
-    "AGENT_WHATSAPP_BRIDGE_HOST",
-    "AGENT_WHATSAPP_BRIDGE_PORT",
-    "AGENT_WHATSAPP_BRIDGE_SEND_TIMEOUT_SECONDS",
 )
 
 
@@ -31,7 +28,6 @@ def test_get_settings_uses_runtime_db_default_when_no_env_file_exists(
     settings = settings_module.get_settings()
 
     assert settings.db_path == "./runtime.db"
-    assert settings.whatsapp_bridge_send_timeout_seconds == 10.0
 
 
 def test_get_settings_loads_development_env_file(
@@ -69,13 +65,6 @@ def test_get_settings_loads_explicit_structured_config(
                     "host": "0.0.0.0",
                     "port": 9002,
                 },
-                "whatsapp": {
-                    "bridge": {
-                        "host": "0.0.0.0",
-                        "port": 9003,
-                        "send_timeout_seconds": 14.5,
-                    }
-                },
             }
         ),
         encoding="utf-8",
@@ -89,9 +78,6 @@ def test_get_settings_loads_explicit_structured_config(
     assert settings.log_level == "DEBUG"
     assert settings.webhooks_host == "0.0.0.0"
     assert settings.webhooks_port == 9002
-    assert settings.whatsapp_bridge_host == "0.0.0.0"
-    assert settings.whatsapp_bridge_port == 9003
-    assert settings.whatsapp_bridge_send_timeout_seconds == 14.5
 
 
 def test_get_settings_environment_overrides_structured_config(

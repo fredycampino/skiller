@@ -272,12 +272,12 @@ def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) ->
 
     rendered = runner.render(
         {
-            "message": 'existing_tunnels={{output_value("inspect_cloudflared").stderr}}',
-            "stderr": '{{output_value("inspect_cloudflared").stderr}}',
+            "message": 'existing_output={{output_value("inspect_shell").stderr}}',
+            "stderr": '{{output_value("inspect_shell").stderr}}',
         },
         {
             "step_executions": {
-                "inspect_cloudflared": {
+                "inspect_shell": {
                     "step_type": "shell",
                     "input": {},
                     "evaluation": {},
@@ -287,7 +287,7 @@ def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) ->
                             "ok": True,
                             "exit_code": 0,
                             "stdout": "",
-                            "stderr": "tunnel-a\ntunnel-b",
+                            "stderr": "line-a\nline-b",
                         },
                         "body_ref": None,
                     },
@@ -297,8 +297,8 @@ def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) ->
         flow=flow,
     )
 
-    assert rendered["message"] == "existing_tunnels=tunnel-a\ntunnel-b"
-    assert rendered["stderr"] == "tunnel-a\ntunnel-b"
+    assert rendered["message"] == "existing_output=line-a\nline-b"
+    assert rendered["stderr"] == "line-a\nline-b"
 
 
 def test_render_step_raises_clear_error_when_output_value_path_is_missing(tmp_path) -> None:  # noqa: ANN001
@@ -307,11 +307,11 @@ def test_render_step_raises_clear_error_when_output_value_path_is_missing(tmp_pa
     with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):
         runner.render(
             {
-                "message": '{{output_value("inspect_cloudflared").missing_field}}',
+                "message": '{{output_value("inspect_shell").missing_field}}',
             },
             {
                 "step_executions": {
-                    "inspect_cloudflared": {
+                    "inspect_shell": {
                         "step_type": "shell",
                         "input": {},
                         "evaluation": {},
@@ -333,11 +333,11 @@ def test_render_step_rejects_direct_output_value_access(tmp_path) -> None:  # no
     with pytest.raises(ValueError, match="FLOW_OUTPUT_VALUE_DIRECT_OUTPUT_ACCESS"):
         runner.render(
             {
-                "message": "{{step_executions.inspect_cloudflared.output.value.stderr}}",
+                "message": "{{step_executions.inspect_shell.output.value.stderr}}",
             },
             {
                 "step_executions": {
-                    "inspect_cloudflared": {
+                    "inspect_shell": {
                         "step_type": "shell",
                         "input": {},
                         "evaluation": {},

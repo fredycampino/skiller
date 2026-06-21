@@ -65,7 +65,7 @@ class FlowReadinessCheckerUseCase:
             return self._invalid(
                 code="FLOW_WHATSAPP_UNAVAILABLE",
                 message=(
-                    "FLOW_WHATSAPP_UNAVAILABLE: flow requires active WhatsApp bridge "
+                    "FLOW_WHATSAPP_UNAVAILABLE: flow requires configured WhatsApp channel sender "
                     f"for {channel_required_step['step_type']} "
                     f"(step={channel_required_step['step_id']})"
                 ),

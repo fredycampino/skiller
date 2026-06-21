@@ -18,9 +18,11 @@ Current semantics:
 
 ## Shape
 
+External systems can deliver channel events through the generic channel ingress.
+
 ```yaml
-- wait_channel: listen_whatsapp
-  channel: whatsapp
+- wait_channel: listen_channel
+  channel: external
   key: all
   next: notify_message
 ```
@@ -30,9 +32,9 @@ Current semantics:
 ```json
 {
   "output": {
-    "text": "Waiting channel: whatsapp:all.",
+    "text": "Waiting channel: external:all.",
     "value": {
-      "channel": "whatsapp",
+      "channel": "external",
       "key": "all",
       "payload": null
     },
@@ -46,17 +48,16 @@ Current semantics:
 ```json
 {
   "output": {
-    "text": "Channel message received: whatsapp:172584771580071@lid.",
+    "text": "Channel message received: external:contact-1.",
     "value": {
-      "channel": "whatsapp",
-      "key": "172584771580071@lid",
+      "channel": "external",
+      "key": "contact-1",
       "payload": {
-        "channel": "whatsapp",
         "message_id": "msg-1",
-        "key": "172584771580071@lid",
-        "sender_id": "172584771580071@lid",
-        "sender_name": "Fede",
-        "text": "hola",
+        "key": "contact-1",
+        "sender_id": "contact-1",
+        "sender_name": "Sender",
+        "text": "hello",
         "timestamp": 1775388655
       }
     },
@@ -68,6 +69,6 @@ Current semantics:
 Template access:
 
 ```text
-{{output_value("listen_whatsapp").payload.text}}
-{{output_value("listen_whatsapp").key}}
+{{output_value("listen_channel").payload.text}}
+{{output_value("listen_channel").key}}
 ```

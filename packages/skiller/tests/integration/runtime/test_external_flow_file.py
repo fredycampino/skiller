@@ -393,14 +393,14 @@ def test_external_notify_can_read_shell_output_value() -> None:
         skill_path.write_text(
             (
                 "name: external_shell_notify\n"
-                "start: inspect_cloudflared\n"
+                "start: inspect_shell\n"
                 "inputs: {}\n"
                 "steps:\n"
-                "  - shell: inspect_cloudflared\n"
+                "  - shell: inspect_shell\n"
                 "    command: python3 -c \"print('x' * 400)\"\n"
-                "    next: summarize_tunnels\n"
-                "  - notify: summarize_tunnels\n"
-                "    message: '{{output_value(\"inspect_cloudflared\").stdout}}'\n"
+                "    next: summarize_output\n"
+                "  - notify: summarize_output\n"
+                "    message: '{{output_value(\"inspect_shell\").stdout}}'\n"
             ),
             encoding="utf-8",
         )
@@ -416,7 +416,7 @@ def test_external_notify_can_read_shell_output_value() -> None:
         run = store.get_run(run_result.run_id)
         assert run_result.status.value == "SUCCEEDED"
         assert run is not None
-        notify_output = run.context.step_executions["summarize_tunnels"].output.to_public_dict()
+        notify_output = run.context.step_executions["summarize_output"].output.to_public_dict()
         assert notify_output["value"]["message"] == ("x" * 400) + "\n"
 
 

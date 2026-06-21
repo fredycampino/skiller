@@ -24,5 +24,3 @@ Status values:
 | `skiller channel` | Channel ingress operations. | experimental |
 | `skiller delete` | Delete a run and associated rows. | dev |
 | `skiller worker` | Local worker process operations. | dev |
-| `skiller cloudflared` | Local cloudflared tunnel operations. | dev |
-| `skiller whatsapp` | Local WhatsApp bridge and pairing operations. | dev |

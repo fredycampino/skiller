@@ -976,7 +976,6 @@ def test_agent_model_command_delegates_to_runtime_controller(
 def _local_process_result() -> SimpleNamespace:
     return SimpleNamespace(
         authenticated=True,
-        cert_path="/virtual/cloudflared/cert.pem",
         endpoint="http://127.0.0.1:8001/health",
         home="/virtual/service-home",
         log_path="/virtual/service.log",
@@ -1023,33 +1022,6 @@ def _local_process_service_class(result: SimpleNamespace):
         (["server", "start"], "WebhookProcessService", "start", "started"),
         (["server", "status"], "WebhookProcessService", "status", "running"),
         (["server", "stop"], "WebhookProcessService", "stop", "stopped"),
-        (["cloudflared", "start"], "CloudflaredProcessService", "start", "started"),
-        (["cloudflared", "status"], "CloudflaredProcessService", "status", "running"),
-        (["cloudflared", "stop"], "CloudflaredProcessService", "stop", "stopped"),
-        (
-            ["cloudflared", "login", "start"],
-            "CloudflaredLoginService",
-            "start",
-            "authenticated",
-        ),
-        (
-            ["cloudflared", "login", "status"],
-            "CloudflaredLoginService",
-            "status",
-            "authenticated",
-        ),
-        (
-            ["cloudflared", "login", "stop"],
-            "CloudflaredLoginService",
-            "stop",
-            "stopped",
-        ),
-        (["whatsapp", "start"], "WhatsAppProcessService", "start", "started"),
-        (["whatsapp", "status"], "WhatsAppProcessService", "status", "running"),
-        (["whatsapp", "stop"], "WhatsAppProcessService", "stop", "stopped"),
-        (["whatsapp", "pair", "start"], "WhatsAppPairService", "start", "paired"),
-        (["whatsapp", "pair", "status"], "WhatsAppPairService", "status", "paired"),
-        (["whatsapp", "pair", "stop"], "WhatsAppPairService", "stop", "stopped"),
     ],
 )
 def test_local_process_commands_dispatch_to_selected_service(
@@ -1072,84 +1044,3 @@ def test_local_process_commands_dispatch_to_selected_service(
     assert exit_code == 0
     assert service_class.calls == [(method, fake_container.settings)]
     assert expected_key in data
-
-
-def test_cloudflared_ensure_forwards_domain(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController()
-    _install_runtime(monkeypatch, fake_container, controller)
-
-    class _FakeCloudflaredEnsureService:
-        calls: list[tuple[str, object]] = []
-
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def ensure(self, *, domain: str) -> SimpleNamespace:
-            self.__class__.calls.append((domain, self.settings))
-            return SimpleNamespace(
-                authenticated=True,
-                tunnel_name="skillerwh",
-                tunnel_id="11111111-1111-1111-1111-111111111111",
-                hostname=f"skillerwh.{domain}",
-                created=True,
-                dns_status="created",
-                config_path="/virtual/cloudflared/config",
-                home="/virtual/cloudflared",
-            )
-
-    monkeypatch.setattr(cli_main, "CloudflaredEnsureService", _FakeCloudflaredEnsureService)
-
-    exit_code = cli_main.main(["cloudflared", "ensure", "--domain", "campino.me"])
-
-    data, _ = _read_json(capsys)
-    assert exit_code == 0
-    assert _FakeCloudflaredEnsureService.calls == [("campino.me", fake_container.settings)]
-    assert data["hostname"] == "skillerwh.campino.me"
-    assert data["dns_status"] == "created"
-
-
-def test_whatsapp_pair_reset_stops_bridge_before_reset(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController()
-    _install_runtime(monkeypatch, fake_container, controller)
-    calls: list[str] = []
-
-    class _FakeWhatsAppProcessService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def stop(self) -> SimpleNamespace:
-            calls.append("stop_bridge")
-            return SimpleNamespace(stopped=True)
-
-    class _FakeWhatsAppPairService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def reset(self) -> SimpleNamespace:
-            calls.append("reset_pair")
-            return SimpleNamespace(
-                reset=True,
-                paired=False,
-                stopped_pairing=False,
-                home="/virtual/whatsapp",
-                session_path="/virtual/whatsapp/session",
-            )
-
-    monkeypatch.setattr(cli_main, "WhatsAppProcessService", _FakeWhatsAppProcessService)
-    monkeypatch.setattr(cli_main, "WhatsAppPairService", _FakeWhatsAppPairService)
-
-    exit_code = cli_main.main(["whatsapp", "pair", "reset"])
-
-    data, _ = _read_json(capsys)
-    assert exit_code == 0
-    assert calls == ["stop_bridge", "reset_pair"]
-    assert data["reset"] is True
-    assert data["stopped_bridge"] is True

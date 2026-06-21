@@ -21,28 +21,28 @@ class _FakeFlowPort:
 def test_flow_checker_accepts_valid_flow_and_uses_flow_port() -> None:
     port = _FakeFlowPort(
         {
-            "name": "cloudflared",
-            "start": "inspect_cloudflared",
+            "name": "diagnostics",
+            "start": "inspect_shell",
             "steps": [
                 {
-                    "shell": "inspect_cloudflared",
-                    "command": "cloudflared tunnel list --output json",
-                    "next": "summarize_tunnels",
+                    "shell": "inspect_shell",
+                    "command": 'python3 -c "print(42)"',
+                    "next": "summarize_output",
                 },
                 {
-                    "notify": "summarize_tunnels",
-                    "message": '{{output_value("inspect_cloudflared").stderr}}',
+                    "notify": "summarize_output",
+                    "message": '{{output_value("inspect_shell").stderr}}',
                 },
             ],
         }
     )
 
     result = FlowCheckerUseCase(flow_port=port).execute(
-        "cloudflared",
+        "diagnostics",
         flow_source="internal",
     )
 
-    assert port.calls == [("internal", "cloudflared")]
+    assert port.calls == [("internal", "diagnostics")]
     assert result.status == FlowCheckStatus.VALID
     assert result.errors == []
 

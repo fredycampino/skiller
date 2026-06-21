@@ -34,31 +34,6 @@ def get_settings() -> Settings:
         webhooks_port=int(
             _setting("AGENT_WEBHOOKS_PORT", env_file, config, ("webhooks", "port"), 8001)
         ),
-        whatsapp_bridge_host=_string_setting(
-            "AGENT_WHATSAPP_BRIDGE_HOST",
-            env_file,
-            config,
-            ("whatsapp", "bridge", "host"),
-            "127.0.0.1",
-        ),
-        whatsapp_bridge_port=int(
-            _setting(
-                "AGENT_WHATSAPP_BRIDGE_PORT",
-                env_file,
-                config,
-                ("whatsapp", "bridge", "port"),
-                8002,
-            )
-        ),
-        whatsapp_bridge_send_timeout_seconds=float(
-            _setting(
-                "AGENT_WHATSAPP_BRIDGE_SEND_TIMEOUT_SECONDS",
-                env_file,
-                config,
-                ("whatsapp", "bridge", "send_timeout_seconds"),
-                10,
-            )
-        ),
     )
 
 

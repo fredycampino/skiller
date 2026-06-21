@@ -46,7 +46,7 @@ User configuration files:
   - agent-specific user config
   - used only when no explicit or flow-local agent config is selected
 - `~/.skiller/settings/local.json`
-  - server, tunnel, and local process config
+  - server and local process config
   - machine-local runtime config
 
 ## Default config.json feature
@@ -72,9 +72,8 @@ Example:
 | --- | --- | --- | --- |
 | global runtime (`runtime.*`) | `config.json` | this document | implemented |
 | webhooks (`webhooks.*`) | `config.json` | `../cli/tool-server.md` | implemented |
-| whatsapp bridge (`whatsapp.bridge.*`) | `config.json` | `../cli/tool-whatsapp.md` | implemented |
 | agent loop (`loop.*`) | `agent.json` | `../agent/agent-config.md`, `../steps/agent.md` | implemented |
 | agent event output (`event_output.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
 | shell tool policy (`tools.shell.*`) | `agent.json` | `../agent/agent-config.md`, `../agent/agent-tools.md` | implemented |
 | llm providers (`llm.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
-| local server / tunnels / local processes | `local.json` | `../cli/tool-server.md`, `../cli/tool-cloudflared.md`, `../cli/tool-whatsapp.md` | implemented |
+| local server / local processes | `local.json` | `../cli/tool-server.md` | implemented |

@@ -72,29 +72,6 @@ If `.env.development` exists in the current working directory, Skiller also read
 it after real environment variables and before JSON config files.
 See [`../config/config.md`](../config/config.md).
 
-### Cloudflared
-
-```bash
-skiller cloudflared login start
-skiller cloudflared login status
-skiller cloudflared login stop
-skiller cloudflared ensure --domain <domain>
-skiller cloudflared start
-skiller cloudflared status
-skiller cloudflared stop
-```
-
-### WhatsApp
-
-```bash
-skiller whatsapp pair start
-skiller whatsapp pair status
-skiller whatsapp pair stop
-
-skiller whatsapp start
-skiller whatsapp status
-skiller whatsapp stop
-```
 
 ## Typical Flows
 
@@ -308,27 +285,6 @@ Detailed guide:
 - [`commands/server.md`](./commands/server.md)
 - [`tool-server.md`](tool-server.md)
 
-### `cloudflared`
-
-Operational commands for the Cloudflare tunnel workflow:
-
-```bash
-skiller cloudflared login start
-skiller cloudflared login status
-skiller cloudflared login stop
-skiller cloudflared ensure --domain <domain>
-skiller cloudflared start
-skiller cloudflared status
-skiller cloudflared stop
-```
-
-Use cases:
-- authenticate `cloudflared` in the effective `HOME`
-- ensure the remote tunnel, DNS route, and local tunnel config exist
-- manage the local connector process with explicit Skiller ownership state
-
-Detailed guide:
-- [`tool-cloudflared.md`](tool-cloudflared.md)
 
 ### `status`
 

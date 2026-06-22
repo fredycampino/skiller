@@ -19,6 +19,21 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.16 - 2026-06-22
+
+### Added
+- Add explicit flows agent JSON package data and tests.
+
+### Changed
+- Make agent configuration contracts explicit across config models, schemas, helpers, and docs.
+- Refresh CLI, flow context, runtime database, and tool development documentation.
+
+### Fixed
+- Align agent event truncation and related tests with explicit config contracts.
+
+### Notes
+- Includes PR #88.
+
 ## 0.1.0-beta.15 - 2026-06-21
 
 ### Removed

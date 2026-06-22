@@ -58,7 +58,7 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
     assert config.tools == (notify_tool, shell_tool)
 
 
-def test_agent_step_config_reader_reads_defaults_without_tools() -> None:
+def test_agent_step_config_reader_reads_base_limits_without_tools() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
             agent_config(

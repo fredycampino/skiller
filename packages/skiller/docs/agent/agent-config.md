@@ -31,8 +31,11 @@ If neither the global config nor an override file exists, config loading fails.
 
 ## Root Shape
 
-`llm` and `providers` are required. The other root fields are optional and use
-mapper/model defaults.
+After global and override files are combined, `llm` and `providers` are
+required. A local override can contain only `llm.default_provider` when the
+global file already provides the referenced provider.
+
+The other root fields are optional and use mapper/model defaults.
 
 ```json
 {
@@ -48,8 +51,8 @@ mapper/model defaults.
     }
   },
   "loop": {
-    "max_turns": 10,
-    "max_tool_calls": 5
+    "max_turns": 30,
+    "max_tool_calls": 10
   },
   "context": {
     "compaction": {
@@ -69,7 +72,8 @@ mapper/model defaults.
 }
 ```
 
-The root field `agent` is explicitly rejected.
+Unknown root fields are ignored, except `agent`, which is explicitly rejected.
+Unknown fields inside known sections are rejected.
 
 ## LLM
 
@@ -143,7 +147,16 @@ Environment model overrides are validated against the supported model list.
 
 ## Global And Agent Overrides
 
-The global file should own shared provider credentials and defaults:
+There are two normal `agent.json` locations.
+
+The global file is user-level config:
+
+```text
+~/.skiller/settings/agent.json
+```
+
+It should own shared provider credentials and defaults. This keeps secrets and
+common model settings outside individual agents:
 
 ```json
 {
@@ -173,7 +186,24 @@ The global file should own shared provider credentials and defaults:
 }
 ```
 
-An agent can switch provider without repeating credentials:
+The local file is agent-level config:
+
+```text
+<flow-directory>/agent.json
+```
+
+For packaged agents, this is normally next to the flow `agent.yaml`, for example:
+
+```text
+packages/skiller/agents/mono/agent.yaml
+packages/skiller/agents/mono/agent.json
+```
+
+The local file is optional. When present, it overrides the global file by root
+section.
+
+A local agent file can switch provider without repeating credentials when the
+selected provider exists in the global `providers` section:
 
 ```json
 {
@@ -183,7 +213,7 @@ An agent can switch provider without repeating credentials:
 }
 ```
 
-An agent can also replace a full root section such as `tools`:
+A local agent file can also replace a full root section such as `tools`:
 
 ```json
 {
@@ -198,16 +228,45 @@ An agent can also replace a full root section such as `tools`:
 }
 ```
 
-Because overrides are root-section based, defining `providers` in an agent file
-replaces the full global `providers` section.
+Root sections are not deep-merged. If the local file defines `tools`, it
+replaces the full global `tools` section. If the local file defines `providers`,
+it replaces the full global `providers` section.
+
+Use this split as the default rule:
+
+- global `agent.json`: credentials, provider definitions, shared defaults
+- local `agent.json`: selected provider, loop limits, tool permissions for that
+  specific agent
+
+## Path Resolution
+
+`agent.json` is not discovered from the process current working directory.
+Only these sources are used:
+
+- the global `~/.skiller/settings/agent.json`
+- `AGENT_AGENT_CONFIG_FILE`, when set
+- the `agent.json` passed by the current flow context, normally next to the
+  current flow `agent.yaml`
+
+Tool path settings are interpreted by each tool:
+
+- `tools.shell.allowed_paths` entries are expanded and resolved when
+  `agent.json` is loaded. Relative entries are resolved against the process
+  current working directory at load time.
+- `tools.files.read`, `tools.files.write`, and `tools.files.all` entries are
+  expanded and resolved when a file request is checked. Relative entries are
+  resolved against the process current working directory at request time.
+
+Use absolute paths for stable global config. Use `.` only when the agent is
+expected to run from the workspace root.
 
 ## Loop
 
 ```json
 {
   "loop": {
-    "max_turns": 10,
-    "max_tool_calls": 5
+    "max_turns": 30,
+    "max_tool_calls": 10
   }
 }
 ```
@@ -219,8 +278,8 @@ Fields:
 
 Defaults:
 
-- `loop.max_turns = 10`
-- `loop.max_tool_calls = 5`
+- `loop.max_turns = 30`
+- `loop.max_tool_calls = 10`
 
 Env overrides:
 
@@ -229,7 +288,7 @@ Env overrides:
 
 Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 
-## Context
+## Context  (only dev)
 
 ```json
 {
@@ -255,7 +314,11 @@ Defaults:
 
 There are no context env overrides in the current mapper.
 
-## Event Output
+## Agent Event Truncation
+
+`event_output` truncates agent message, tool call, and tool result payloads
+written to the runtime event log. It does not change step output values,
+`output_value(...)`, the LLM context, or persisted agent context entries.
 
 ```json
 {
@@ -272,17 +335,17 @@ There are no context env overrides in the current mapper.
 
 Fields:
 
-- `event_output.truncate.enabled`
-- `event_output.truncate.max_text_chars`
-- `event_output.truncate.max_json_chars`
-- `event_output.truncate.max_array_items`
+- `event_output.truncate.enabled`: enables or disables event payload truncation
+- `event_output.truncate.max_text_chars`: max characters kept for text fields
+- `event_output.truncate.max_json_chars`: max characters kept for JSON payloads
+- `event_output.truncate.max_array_items`: max array items kept in event payloads
 
 Defaults:
 
-- `event_output.truncate.enabled = true`
-- `event_output.truncate.max_text_chars = 600`
-- `event_output.truncate.max_json_chars = 4000`
-- `event_output.truncate.max_array_items = 20`
+- `event_output.truncate.enabled = true`: truncation is enabled
+- `event_output.truncate.max_text_chars = 600`: text fields keep up to 600 characters
+- `event_output.truncate.max_json_chars = 4000`: JSON payloads keep up to 4000 characters
+- `event_output.truncate.max_array_items = 20`: arrays keep up to 20 items
 
 Env overrides:
 
@@ -291,27 +354,22 @@ Env overrides:
 - `AGENT_EVENT_OUTPUT_MAX_JSON_CHARS`
 - `AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS`
 
-The event output config is passed to agent event publishing when emitting agent messages, tool calls, and tool results.
+Related event contract: [`./agent-event.md`](./agent-event.md).
 
 ## Tools
 
 `tools` is optional.
 
-The mapper only accepts keys for tools registered in the runtime container. Current registered agent tools:
+`agent.json` can configure only tools that read runtime config. Current
+configurable tools:
 
 - `shell`
-- `notify`
 - `files`
 
-Only tools that implement `ConfiguredTool` read runtime config from `agent.json`.
+### Tool Shell
 
-Current state:
-
-- `shell` supports runtime config
-- `notify` does not read runtime config
-- `files` supports runtime config
-
-Valid shell config:
+`tools.shell` controls what the agent `shell` tool may execute. It restricts the
+working directory, explicit path arguments, and optionally the executable names.
 
 ```json
 {
@@ -326,7 +384,7 @@ Valid shell config:
 }
 ```
 
-Shell config fields:
+Fields:
 
 - `tools.shell.allowed_paths`
 - `tools.shell.allowlist_enabled`
@@ -336,14 +394,20 @@ Shell config fields:
 `allowed_paths` defines the roots where shell `cwd` and explicit command path
 arguments may point.
 
-Shell config defaults:
+Defaults:
 
-- `allowed_paths = ["."]`
+- `allowed_paths = ()`
 - `allowlist_enabled = false`
 - `allow_env_prefix = true`
 - `allowed_commands = ()`
 
-Valid files config:
+When `allowed_paths` is empty, the shell policy uses the process current
+working directory as the effective allowed root.
+
+### Tool Files
+
+`tools.files` controls what the agent `files` tool may read or modify. Read and
+write roots are independent, and `all` grants both permissions.
 
 ```json
 {
@@ -357,41 +421,45 @@ Valid files config:
 }
 ```
 
-Files config fields:
+Fields:
 
 - `tools.files.read`
 - `tools.files.write`
 - `tools.files.all`
 
-Files config defaults:
+Defaults:
 
 - `read = ()`
 - `write = ()`
 - `all = ()`
 
-`tools.files.all` grants both read and write access. `tools.files.read` only grants read access. `tools.files.write` grants write and edit access.
+`tools.files.all` grants both read and write access. `tools.files.read` only
+grants read access. `tools.files.write` grants write and edit access.
 
-Unknown tool config keys fail config mapping. Registered tools that do not implement `ConfiguredTool` do not read runtime config.
+When no files roots are configured, files actions are blocked.
+
+Unknown tool config keys fail config mapping.
 
 There are no tool env overrides in the current mapper.
 
 ## Validation Behavior
 
-Config loading uses the provider and mapper above.
-
-Config loading validates:
+`validate_config` loads the same files and uses the same mapper as normal
+runtime execution. Validation reports these categories:
 
 - missing selected config file
 - invalid JSON
-- invalid schema
-- missing default LLM provider
-- unsupported provider model
-- unsupported provider/client pairing
-- missing API key source
-- missing API key env var
-- missing API key file
-- invalid env override values
-- invalid tool runtime config
+- invalid schema, including unsupported fields inside known sections
+- unsupported provider id
+- missing selected default provider config
+- unsupported provider model, including model env overrides
+- missing required provider credential fields
+- missing MiniMax API key source
+- missing MiniMax `api_key_env` environment variable
+- missing MiniMax `api_key_file`
+- invalid env override values for booleans, positive integers, or positive numbers
+- unknown tool config names
+- invalid tool runtime config fields or value types
 
 ## Related Docs
 

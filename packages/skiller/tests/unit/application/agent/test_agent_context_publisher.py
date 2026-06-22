@@ -6,7 +6,10 @@ from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
-from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
+from skiller.domain.agent.agent_config_model import (
+    AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
+)
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
@@ -226,9 +229,20 @@ def _tool_request() -> ToolExecutionRequest:
         response=LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1),
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
-        event_config=AgentEventOutputConfig(),
+        event_config=_event_output_config(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
+    )
+
+
+def _event_output_config() -> AgentEventOutputConfig:
+    return AgentEventOutputConfig(
+        truncate=AgentEventOutputTruncateConfig(
+            enabled=True,
+            max_text_chars=100,
+            max_json_chars=1000,
+            max_array_items=10,
+        ),
     )
 
 

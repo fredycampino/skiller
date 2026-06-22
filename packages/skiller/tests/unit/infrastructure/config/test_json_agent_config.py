@@ -22,6 +22,9 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentMiniMaxLLMModel,
 )
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
+from skiller.infrastructure.config.agent_config_schema import (
+    DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS,
+)
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 
 pytestmark = pytest.mark.unit
@@ -462,7 +465,7 @@ def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) 
 
     assert config.llm.default_provider == AgentLLMProviderType.FAKE
     assert config.loop.max_turns == 3
-    assert config.loop.max_tool_calls == 5
+    assert config.loop.max_tool_calls == DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
         allowed_paths=(),

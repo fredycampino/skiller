@@ -16,7 +16,12 @@ pytestmark = pytest.mark.unit
 
 def test_agent_event_truncator_truncates_assistant_message_text() -> None:
     truncator = AgentEventTruncator(
-        AgentEventOutputPolicy(max_text_chars=10),
+        AgentEventOutputPolicy(
+            truncate_enabled=True,
+            max_text_chars=10,
+            max_json_chars=1000,
+            max_array_items=10,
+        ),
         OutputTruncator(),
     )
 
@@ -32,7 +37,12 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
 
 def test_agent_event_truncator_truncates_tool_call_args() -> None:
     truncator = AgentEventTruncator(
-        AgentEventOutputPolicy(max_text_chars=8, max_json_chars=70, max_array_items=2),
+        AgentEventOutputPolicy(
+            truncate_enabled=True,
+            max_text_chars=8,
+            max_json_chars=70,
+            max_array_items=2,
+        ),
         OutputTruncator(),
     )
 
@@ -55,7 +65,12 @@ def test_agent_event_truncator_truncates_tool_call_args() -> None:
 
 def test_agent_event_truncator_caps_large_tool_call_json_payload() -> None:
     truncator = AgentEventTruncator(
-        AgentEventOutputPolicy(max_text_chars=100, max_json_chars=30, max_array_items=20),
+        AgentEventOutputPolicy(
+            truncate_enabled=True,
+            max_text_chars=100,
+            max_json_chars=30,
+            max_array_items=20,
+        ),
         OutputTruncator(),
     )
 
@@ -75,7 +90,12 @@ def test_agent_event_truncator_caps_large_tool_call_json_payload() -> None:
 
 def test_agent_event_truncator_truncates_tool_result_fields() -> None:
     truncator = AgentEventTruncator(
-        AgentEventOutputPolicy(max_text_chars=8, max_json_chars=200, max_array_items=2),
+        AgentEventOutputPolicy(
+            truncate_enabled=True,
+            max_text_chars=8,
+            max_json_chars=200,
+            max_array_items=2,
+        ),
         OutputTruncator(),
     )
 

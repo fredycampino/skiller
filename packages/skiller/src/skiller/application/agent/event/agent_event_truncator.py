@@ -15,10 +15,10 @@ from skiller.domain.event.event_agent_model import (
 
 @dataclass(frozen=True)
 class AgentEventOutputPolicy:
-    truncate_enabled: bool = True
-    max_text_chars: int = 600
-    max_json_chars: int = 4000
-    max_array_items: int = 20
+    truncate_enabled: bool
+    max_text_chars: int
+    max_json_chars: int
+    max_array_items: int
 
     @classmethod
     def from_config(cls, config: AgentEventOutputConfig) -> "AgentEventOutputPolicy":

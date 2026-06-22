@@ -1,23 +1,44 @@
-# Config
+# Runtime Config
+
+This document describes the current `config.json` contract used by
+`skiller.infrastructure.config.settings.get_settings()`.
+
+`config.json` is still supported, but its scope is narrow: it configures
+process-level runtime settings. Agent behavior, LLM providers, loop limits, and
+agent tools are configured in [`agent.json`](../agent/agent-config.md).
+
+## Location
+
+Skiller reads runtime config from:
+
+```text
+~/.skiller/settings/config.json
+```
+
+Set `AGENT_CONFIG_FILE` to use an explicit file instead:
+
+```bash
+AGENT_CONFIG_FILE=/path/to/config.json skiller run mono
+```
+
+If `AGENT_CONFIG_FILE` points to a missing file, config loading fails. If the
+global file is missing, Skiller uses defaults.
 
 ## Precedence
 
+Runtime settings are resolved in this order:
+
 ```text
-env -> .env.development -> explicit file -> flow-local file -> global file -> default feature config.json
+environment variables -> .env.development -> config.json -> built-in defaults
 ```
 
-## env variables
-
-Environment variables.
-
-- runtime overrides
-- highest priority
-- useful for CI, local debugging, and one-off runs
+`config.json` does not override real environment variables or values loaded from
+`.env.development`.
 
 ## `.env.development`
 
 When present in the current working directory, `.env.development` provides local
-development defaults after real environment variables and before JSON config files.
+development defaults after real environment variables and before `config.json`.
 
 The repo development default is:
 
@@ -27,53 +48,98 @@ AGENT_DB_PATH=dev-runtime.db
 
 This keeps local development runs away from the installed/global runtime DB.
 
-## User file.json
+## Schema
 
-User configuration files:
+Current supported fields:
 
-- `AGENT_AGENT_CONFIG_FILE`
-  - explicit agent config path
-  - highest priority file source for agent-owned config
-- `agent.json` next to the current flow `agent.yaml`
-  - flow-local agent config
-  - selected instead of the global agent config when present
-- `~/.skiller/settings/config.json`
-  - general
-  - must not contain config owned by other `.json` files
-  - shared runtime settings
-- `~/.skiller/settings/agent.json`
-  - agent only
-  - agent-specific user config
-  - used only when no explicit or flow-local agent config is selected
-- `~/.skiller/settings/local.json`
-  - server and local process config
-  - machine-local runtime config
+```json
+{
+  "runtime": {
+    "db_path": "./runtime.db",
+    "log_level": "INFO"
+  },
+  "webhooks": {
+    "host": "127.0.0.1",
+    "port": 8001
+  }
+}
+```
 
-## Default config.json feature
+Unknown top-level fields are ignored by the runtime settings loader.
 
-The fallback is defined per feature.
+## Runtime Settings
 
-It lives in infrastructure next to the feature `config.py`, which knows how to interpret it.
+### `runtime.db_path`
 
-- versioned fallback shipped with the code
-- used when the user did not override that feature
-- owned by one feature only
+SQLite runtime database path.
 
-Example:
+Environment override:
 
-- `packages/skiller/src/skiller/infrastructure/tools/shell/config.py`
-  - shell config resolver
-- `packages/skiller/src/skiller/infrastructure/tools/shell/config.json`
-  - shell default values
+```bash
+AGENT_DB_PATH=/path/to/runtime.db
+```
 
-## Features
+Default:
 
-| Feature | User file | Docs | Status |
-| --- | --- | --- | --- |
-| global runtime (`runtime.*`) | `config.json` | this document | implemented |
-| webhooks (`webhooks.*`) | `config.json` | `../cli/tool-server.md` | implemented |
-| agent loop (`loop.*`) | `agent.json` | `../agent/agent-config.md`, `../steps/agent.md` | implemented |
-| agent event output (`event_output.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
-| shell tool policy (`tools.shell.*`) | `agent.json` | `../agent/agent-config.md`, `../agent/agent-tools.md` | implemented |
-| llm providers (`llm.*`) | `agent.json` | `../agent/agent-config.md` | implemented |
-| local server / local processes | `local.json` | `../cli/tool-server.md` | implemented |
+```text
+./runtime.db
+```
+
+### `runtime.log_level`
+
+Log level used by the local server process.
+
+Environment override:
+
+```bash
+AGENT_LOG_LEVEL=DEBUG
+```
+
+Default:
+
+```text
+INFO
+```
+
+## Webhook Settings
+
+### `webhooks.host`
+
+Host used by the local webhook/channel server.
+
+Environment override:
+
+```bash
+AGENT_WEBHOOKS_HOST=127.0.0.1
+```
+
+Default:
+
+```text
+127.0.0.1
+```
+
+### `webhooks.port`
+
+Port used by the local webhook/channel server.
+
+Environment override:
+
+```bash
+AGENT_WEBHOOKS_PORT=8001
+```
+
+Default:
+
+```text
+8001
+```
+
+## Not In `config.json`
+
+These settings are intentionally owned by other files:
+
+| Area | File | Docs |
+| --- | --- | --- |
+| agent loop, providers, context, event output, tools | `agent.json` | [`agent-config.md`](../agent/agent-config.md) |
+| flow-local agent overrides | `agent.json` next to `agent.yaml` | [`agent-config.md`](../agent/agent-config.md) |

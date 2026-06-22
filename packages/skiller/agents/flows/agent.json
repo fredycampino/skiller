@@ -1,0 +1,44 @@
+{
+  "loop": {
+    "max_turns": 50,
+    "max_tool_calls": 10
+  },
+  "tools": {
+    "shell": {
+      "allowed_paths": [
+        "."
+      ],
+      "allowlist_enabled": true,
+      "allow_env_prefix": true,
+      "allowed_commands": [
+        "pwd",
+        "ls",
+        "find",
+        "rg",
+        "grep",
+        "head",
+        "tail",
+        "wc",
+        "nl",
+        "cat",
+        "git",
+        "pytest",
+        "ruff",
+        "python",
+        "python3",
+        "skiller",
+        "date"
+      ]
+    },
+    "files": {
+      "read": [
+        ".",
+        "~/.skiller/settings/"
+      ],
+      "write": [
+        "."
+      ],
+      "all": []
+    }
+  }
+}

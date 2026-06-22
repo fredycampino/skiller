@@ -69,10 +69,15 @@ It is a JSON object indexed by `step_id`:
       "model": "fake-llm"
     },
     "output": {
-      "text": "reply",
+      "text": "Final answer.",
+      "text_ref": "data.final",
       "value": {
         "data": {
-          "reply": "reply"
+          "context_id": "default",
+          "final": "Final answer.",
+          "turn_count": 1,
+          "tool_call_count": 0,
+          "stop_reason": "final"
         }
       },
       "body_ref": null
@@ -85,7 +90,7 @@ Templates read this data through `output_value(...)`:
 
 ```text
 {{output_value("ask_user").payload.text}}
-{{output_value("answer").data.reply}}
+{{output_value("answer").data.final}}
 ```
 
 Because the object is indexed by `step_id`, a loop that executes the same `step_id` more than once
@@ -148,7 +153,7 @@ idx_waits_source_match_type_status(source_type, source_name, match_type, match_k
 
 Represents:
 - the generic runtime event stream
-- observability for `/logs`, `watch`, and the TUI transcript
+- observability for logs, attached runs, and transcript consumers
 
 ```text
 +----------------+---------+--------------------------------------+
@@ -172,6 +177,13 @@ Indexes:
 idx_log_events_run_sequence(run_id, sequence)
 idx_log_events_run_type(run_id, event_type)
 idx_log_events_agent_sequence(run_id, agent_sequence)
+```
+
+Constraints:
+
+```text
+UNIQUE(run_id, sequence)
+FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
 ```
 
 ## `external_receipts`
@@ -290,7 +302,7 @@ idx_agent_context_entries_context(context_id, sequence)
 ## Notes
 
 - `runs.step_executions_json` is the source of truth for persisted step execution data.
-- `log_events.body_json` is the observability stream body used by `/logs`, `watch`, and the UI transcript.
+- `log_events.body_json` is the observability stream body used by logs, attached runs, and transcript consumers.
 - `agent_context_entries` is the source of truth for persisted agent memory.
 - `delta_tokens`, `window_start_sequence`, `window_base`, and `usage_json` are populated on measured assistant messages.
 - `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
@@ -304,6 +316,23 @@ idx_agent_context_entries_context(context_id, sequence)
 - `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteRunStorePort`.
 
 ## Run Deletion
+
+`cleanup_run` keeps the run row and terminal lifecycle events while clearing sensitive
+run-owned state:
+
+- inputs
+- step executions
+- steering queue
+- cancellation reason
+- waits
+- external events tied to the run
+- deduplication receipts linked to those external events
+- agent context entries
+
+It keeps:
+
+- RUN_CREATE
+- RUN_FINISHED
 
 `skiller delete <run_id>` deletes the run row and the database rows tied to that run in one
 SQLite transaction:

@@ -115,19 +115,11 @@ steps:
 
 ## Runtime Access
 
-Templates may read:
+Templates in flow definitions may read runtime values such as root inputs,
+previous step outputs, and the current flow directory.
 
-```text
-{{inputs.<name>}}
-{{step_executions.<step_id>.output.text}}
-{{output_value("<step_id>")}}
-{{step_executions.<step_id>.evaluation}}
-{{flow.dir}}
-```
-
-Notes:
-- use `output_value("<step_id>")` to read another step's canonical `output.value`
-- do not read `step_executions.<step_id>.output.value...` directly in templates
+See [`flow-context.md`](flow-context.md) for the supported namespaces, output
+value shapes, and template access rules.
 
 ## Root `mcp`
 
@@ -143,7 +135,7 @@ mcp:
 
 ## Root End Actions
 
-`on_success` and `on_error` may define a run action to expose after the run
+`on_success` and `on_error` may define a run or post action to expose after the run
 finishes. They may also request cleanup after the terminal event is written.
 
 ```yaml
@@ -157,10 +149,22 @@ on_error:
     auto: true
 ```
 
+Post action:
+
+```yaml
+on_success:
+  action:
+    type: post
+    label: "Continue"
+    arg: "auth-session"
+    params: "--provider bedrock"
+    auto: true
+```
+
 Rules:
 - `cleanup` is optional and must be boolean
 - `action` is optional when `cleanup: true` is present
-- when `action` is present, `action.type` must be `run`
+- when `action` is present, `action.type` must be `run` or `post`
 - when `action` is present, `action.label` is required
 - when `action` is present, `action.arg` is required
 - when `action` is present, `action.params` is optional
@@ -190,7 +194,7 @@ steps:
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell
-    max_turns: 10
+    max_turns: 30
     next: ask_user
 ```
 

@@ -28,6 +28,7 @@ from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.domain.agent.agent_config_model import (
     AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
 )
 from skiller.domain.agent.agent_context_model import (
     AgentAssistantMessageType,
@@ -317,7 +318,7 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         response=response,
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
-        event_config=AgentEventOutputConfig(),
+        event_config=_event_output_config(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
     )
@@ -592,7 +593,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
                 ),
             ),
         ),
-        event_config=AgentEventOutputConfig(),
+        event_config=_event_output_config(),
         max_tool_calls=5,
         turn_loop=AgentLoop(max_turns=10),
     )
@@ -863,6 +864,17 @@ class _FakeSteering:
         if item_type in self.pop_results and self.pop_results[item_type]:
             return self.pop_results[item_type].pop(0)
         return self.items.pop(item_type, [])
+
+
+def _event_output_config() -> AgentEventOutputConfig:
+    return AgentEventOutputConfig(
+        truncate=AgentEventOutputTruncateConfig(
+            enabled=True,
+            max_text_chars=600,
+            max_json_chars=4000,
+            max_array_items=20,
+        ),
+    )
 
 
 @dataclass

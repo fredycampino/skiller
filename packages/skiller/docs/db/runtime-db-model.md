@@ -1,4 +1,4 @@
-# Runtime DB Model (SQLite v6)
+# Runtime DB Model (SQLite v7)
 
 This document explains the runtime database model at a high level. For the table columns and
 indexes, see [`schema.md`](schema.md).
@@ -12,7 +12,7 @@ It is not one single event log. It has separate responsibilities:
 | Area | Tables | Purpose |
 | --- | --- | --- |
 | Run state | `runs` | Current state of a run. |
-| Runtime history | `log_events` | Ordered events for logs, watch, and UI consumers. |
+| Runtime history | `log_events` | Ordered events for logs, attached runs, and UI consumers. |
 | External input | `waits`, `external_events`, `external_receipts`, `webhook_registrations` | Wait registration, external payloads, deduplication, and webhook configuration. |
 | Agent memory | `agent_context_entries` | Agent conversation context and context-window markers. |
 
@@ -23,13 +23,16 @@ The most important split is:
 
 ## Versioning
 
-The runtime DB version is `6`.
+The runtime DB version is `7`.
 
 Skiller stores the version with SQLite `PRAGMA user_version`. When the runtime starts:
 - an empty DB is initialized as the current version
-- a non-empty DB with a different version is rejected
+- a DB with the current version is used as-is
+- a non-empty DB with a different version is reset by deleting the SQLite database files and
+  recreating the current schema
 
-This keeps the runtime contract explicit. There is no silent compatibility mode for old schemas.
+This keeps the runtime contract explicit. There is no silent compatibility mode for old schemas or
+automatic data migration between runtime DB versions.
 
 ## Run State
 
@@ -56,7 +59,7 @@ Historical step activity belongs to `log_events`.
 
 It is used by:
 - `skiller logs`
-- `skiller watch`
+- the internal watcher used by attached `skiller run` executions
 - UI transcripts
 - runtime event consumers
 
@@ -110,7 +113,20 @@ Measured assistant messages can carry token markers:
 `delta_tokens` is the prompt-token delta attributed to that measured response. The active
 window start is stored in the run's agent state and copied to measured entries for diagnostics.
 
-## Deletion Boundary
+## Cleanup And Deletion Boundary
+
+`cleanup_run` removes run-owned sensitive state while keeping the run row and terminal lifecycle
+events. It clears:
+- initial inputs
+- step executions
+- steering queue
+- cancellation reason
+- waits
+- external events tied to the run
+- deduplication receipts linked to those external events
+- agent context entries for the run
+
+It keeps `RUN_CREATE` and `RUN_FINISHED` events for the run.
 
 Deleting a run removes data owned by that run:
 - run row

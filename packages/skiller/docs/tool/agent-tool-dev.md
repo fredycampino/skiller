@@ -1,10 +1,11 @@
 # Agent Tool Development
 
-This document explains how to add a new agent tool using the current runtime contracts.
+This document explains how to add and verify a simple agent tool using the
+current runtime contracts.
 
-Current examples:
+Useful built-in references:
 
-- `NotifyTool`: direct in-process tool
+- `FilesTool`: direct in-process tool with policy and runtime config
 - `ShellProcessTool`: process tool with policy and runtime config
 
 ## Runtime Flow
@@ -233,9 +234,25 @@ Rules:
 - Runtime config is loaded by `AgentConfigMapper` using the tools registered in the container.
 - Runtime config is selected at execution time by tool name.
 
-Current configurable tool: `shell`.
+Current configurable tools: `shell`, `files`.
 
-Current non-configurable tool: `notify`.
+For `files`, `agent.json` accepts these path allowlists:
+
+```json
+{
+  "tools": {
+    "files": {
+      "read": ["/path/to/read"],
+      "write": ["/path/to/write"],
+      "all": ["/path/to/read-and-write"]
+    }
+  }
+}
+```
+
+`files` uses policy to reject reads, writes, and edits outside the configured
+directories. Relative file requests are resolved from the current process
+working directory before that policy check.
 
 ## Register The Tool
 
@@ -245,7 +262,7 @@ Add the tool instance to the agent tool tuple in the runtime container.
 my_tool = MyTool()
 agent_tools = (
     shell_tool,
-    notify_tool,
+    files_tool,
     my_tool,
 )
 ```

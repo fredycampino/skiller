@@ -6,7 +6,14 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsStatus,
     ListAgentModelsUseCase,
 )
-from skiller.domain.agent.agent_config_model import AgentConfig
+from skiller.domain.agent.agent_config_model import (
+    AgentConfig,
+    AgentContextCompactionConfig,
+    AgentContextConfig,
+    AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
+    AgentLoopConfig,
+)
 from skiller.domain.agent.agent_config_port import (
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
@@ -27,24 +34,22 @@ pytestmark = pytest.mark.unit
 
 def test_list_agent_models_returns_configured_and_active_model() -> None:
     agent_config = _FakeAgentConfig(
-        AgentConfig(
-            llm=AgentLLMProviderList(
-                default_provider=AgentLLMProviderType.CODEX,
-                providers=(
-                    AgentCodexProvider(
-                        model=AgentCodexLLMModel.GPT_5_5,
-                        timeout_seconds=120,
-                        window_width_tokens=1050000,
-                        credentials_file="/secret/codex.json",
-                    ),
-                    AgentMiniMaxProvider(
-                        model=AgentMiniMaxLLMModel.M2_7,
-                        timeout_seconds=30,
-                        window_width_tokens=204800,
-                        api_key="secret",
-                    ),
+        _agent_config(
+            default_provider=AgentLLMProviderType.CODEX,
+            providers=(
+                AgentCodexProvider(
+                    model=AgentCodexLLMModel.GPT_5_5,
+                    timeout_seconds=120,
+                    window_width_tokens=1050000,
+                    credentials_file="/secret/codex.json",
                 ),
-            )
+                AgentMiniMaxProvider(
+                    model=AgentMiniMaxLLMModel.M2_7,
+                    timeout_seconds=30,
+                    window_width_tokens=204800,
+                    api_key="secret",
+                ),
+            ),
         )
     )
     use_case = ListAgentModelsUseCase(
@@ -158,11 +163,40 @@ def _codex_config() -> AgentConfig:
         window_width_tokens=1050000,
         credentials_file="/secret/codex.json",
     )
+    return _agent_config(
+        default_provider=AgentLLMProviderType.CODEX,
+        providers=(provider,),
+    )
+
+
+def _agent_config(
+    *,
+    default_provider: AgentLLMProviderType,
+    providers: tuple[AgentCodexProvider | AgentMiniMaxProvider, ...],
+) -> AgentConfig:
     return AgentConfig(
         llm=AgentLLMProviderList(
-            default_provider=AgentLLMProviderType.CODEX,
-            providers=(provider,),
-        )
+            default_provider=default_provider,
+            providers=providers,
+        ),
+        loop=AgentLoopConfig(
+            max_turns=2,
+            max_tool_calls=3,
+        ),
+        context=AgentContextConfig(
+            compaction=AgentContextCompactionConfig(
+                enabled=False,
+                max_total_tokens_ratio=0.8,
+            ),
+        ),
+        event_output=AgentEventOutputConfig(
+            truncate=AgentEventOutputTruncateConfig(
+                enabled=True,
+                max_text_chars=100,
+                max_json_chars=1000,
+                max_array_items=10,
+            ),
+        ),
     )
 
 

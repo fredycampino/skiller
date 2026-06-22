@@ -116,6 +116,11 @@ step shape, supported step types, inputs, end actions, and template rules.
 
 See [Flow File Schema](../../docs/flows/flow-schema.md).
 
+Use the runtime context document as the source of truth for template namespaces,
+`output_value(...)`, `flow.dir`, and per-step output value shapes.
+
+See [Flow Runtime Context](../../docs/flows/flow-context.md).
+
 ### Check Your Steps
 
 Use the flow checkers to validate structure and runtime readiness before relying
@@ -123,6 +128,9 @@ on a new or changed agentic flow.
 
 - [Flow File Checker](../../docs/flows/flow-checker.md): validates YAML structure, step graph integrity, required fields by step type, and `output_value(...)` references.
 - [Flow Readiness Checker](../../docs/flows/flow-readiness-checker.md): validates whether local runtime services required by steps such as `wait_channel`, `wait_webhook`, or `send` are available.
+
+Run creation uses these checks before the run is created. For a practical local
+validation, run the flow through the CLI with an isolated runtime DB.
 
 ### Step Type Catalog
 
@@ -152,35 +160,50 @@ Use existing step types and repository patterns before introducing a new pattern
 
 ### Actions
 
-Some steps, especially `notify`, can expose or run actions.
+There are two action surfaces.
 
-Run another agentic flow:
-
-```yaml
-action:
-  type: run
-  label: Start Codex setup
-  arg: auths/codex
-  auto: true
-```
+Notify step actions expose user actions in the transcript. Supported notify
+actions are `open_url` and `run`.
 
 Open a URL:
 
 ```yaml
-action:
-  type: open_url
-  label: Open authorization
-  url: '{{output_value("prepare_authorization").stdout}}'
-  auto: true
+- notify: auth_link
+  message: "Authorize the app"
+  action:
+    type: open_url
+    label: Open authorization
+    url: "https://example.com/oauth/start"
+    auto: true
 ```
 
-Common fields:
+Run another agentic flow:
 
-- `type`: action type, such as `run` or `open_url`.
-- `label`: user-visible action label.
-- `arg`: target flow for `run` actions.
-- `url`: target URL for `open_url` actions.
-- `auto`: whether the action runs automatically.
+```yaml
+- notify: run_followup
+  message: "Run Codex setup."
+  action:
+    type: run
+    label: Start Codex setup
+    arg: auths/codex
+    auto: true
+```
+
+Root end actions expose an action after the run finishes. Supported root end
+actions are `run` and `post`.
+
+```yaml
+on_success:
+  action:
+    type: post
+    label: Continue authorization
+    arg: auth-session
+    params: "--provider bedrock"
+    auto: true
+```
+
+Use [Flow File Schema](../../docs/flows/flow-schema.md) for root end actions
+and [`notify`](../../docs/steps/notify.md) for notify actions.
 
 ### Output References
 
@@ -193,11 +216,24 @@ Common references:
 {{output_value("ask_user").payload.text}}
 {{output_value("shell_step").stdout}}
 {{output_value("agent_step").data.stop_reason}}
+{{flow.dir}}
 ```
 
 Use the output shape produced by the step type. For example, `wait_input` user
 text is read from `.payload.text`, while a `shell` step commonly exposes
 `.stdout`.
+
+Prefer `output_value("<step_id>")` for previous step values. Use
+`step_executions` only for advanced execution-envelope fields such as
+`output.text`, `output.text_ref`, `output.body_ref`, or `evaluation`.
+
+Do not read `step_executions.<step_id>.output.value...` directly.
+
+Use `{{flow.dir}}` for files shipped next to the current flow. Relative shell
+paths are resolved from the shell working directory, not from the flow file
+directory.
+
+See [Flow Runtime Context](../../docs/flows/flow-context.md).
 
 ### User-Facing Copy
 
@@ -244,6 +280,12 @@ export AGENT_DB_PATH="${tmpdir}/runtime.db"
 Then run the flow through the CLI when safe:
 
 ```bash
+skiller run --file path/to/flow.yaml
+```
+
+For a built-in catalog flow, use its catalog id:
+
+```bash
 skiller run flows
 ```
 
@@ -268,7 +310,7 @@ Avoid these mistakes:
 
 - `start` points to a missing step.
 - `next` points to a missing step.
-- `inputs` is missing.
+- a template reads an input that is not declared or not passed at run creation.
 - A `switch` handling user input has no safe fallback.
 - `output_value(...)` references the wrong step or wrong output path.
 - A shell step contains too much business logic.
@@ -294,3 +336,21 @@ Follow:
 - Do not inspect secrets, tokens, or `.env` contents directly.
 - Do not run destructive commands unless explicitly requested.
 - Do not commit, push, tag, publish, or open PRs unless explicitly requested.
+
+## CLI References
+
+Use the CLI quick guide for common run, inspect, resume, webhook, channel, and
+cleanup workflows:
+
+- [CLI Quick Guide](../../docs/cli/quick-guide.md)
+- [CLI Command Catalogue](../../docs/cli/catalogue.md)
+
+Use command-specific docs when exact flags, output, or exit behavior matters:
+
+- [`run`](../../docs/cli/commands/run.md)
+- [`status`](../../docs/cli/commands/status.md)
+- [`logs`](../../docs/cli/commands/logs.md)
+- [`input`](../../docs/cli/commands/input.md)
+- [`webhook`](../../docs/cli/commands/webhook.md)
+- [`channel`](../../docs/cli/commands/channel-exp.md)
+- [`delete`](../../docs/cli/commands/delete.md)

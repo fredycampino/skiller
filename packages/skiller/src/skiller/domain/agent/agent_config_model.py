@@ -6,42 +6,38 @@ from skiller.domain.tool.tool_contract import ToolRuntimeConfigs
 
 @dataclass(frozen=True)
 class AgentLoopConfig:
-    max_turns: int = 10
-    max_tool_calls: int = 5
+    max_turns: int
+    max_tool_calls: int
 
 
 @dataclass(frozen=True)
 class AgentContextCompactionConfig:
-    enabled: bool = False
-    max_total_tokens_ratio: float = 0.8
+    enabled: bool
+    max_total_tokens_ratio: float
 
 
 @dataclass(frozen=True)
 class AgentContextConfig:
-    compaction: AgentContextCompactionConfig = field(
-        default_factory=AgentContextCompactionConfig,
-    )
+    compaction: AgentContextCompactionConfig
 
 
 @dataclass(frozen=True)
 class AgentEventOutputTruncateConfig:
-    enabled: bool = True
-    max_text_chars: int = 600
-    max_json_chars: int = 4000
-    max_array_items: int = 20
+    enabled: bool
+    max_text_chars: int
+    max_json_chars: int
+    max_array_items: int
 
 
 @dataclass(frozen=True)
 class AgentEventOutputConfig:
-    truncate: AgentEventOutputTruncateConfig = field(
-        default_factory=AgentEventOutputTruncateConfig,
-    )
+    truncate: AgentEventOutputTruncateConfig
 
 
 @dataclass(frozen=True)
 class AgentConfig:
     llm: AgentLLMProviderList
-    loop: AgentLoopConfig = field(default_factory=AgentLoopConfig)
-    context: AgentContextConfig = field(default_factory=AgentContextConfig)
-    event_output: AgentEventOutputConfig = field(default_factory=AgentEventOutputConfig)
+    loop: AgentLoopConfig
+    context: AgentContextConfig
+    event_output: AgentEventOutputConfig
     tools: ToolRuntimeConfigs = field(default_factory=ToolRuntimeConfigs)

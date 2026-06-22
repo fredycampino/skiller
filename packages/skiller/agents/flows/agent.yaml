@@ -8,7 +8,15 @@ inputs: {}
 steps:
   - wait_input: ask_user
     prompt: "Write a task"
-    next: flows_agent
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+      quit: done
+      bye: done
+    default: flows_agent
 
   - agent: flows_agent
     system:
@@ -18,3 +26,7 @@ steps:
       - shell
       - files
     max_turns: 30
+    next: ask_user
+
+  - notify: done
+    message: "Flows agent closed."

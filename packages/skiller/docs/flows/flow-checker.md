@@ -44,8 +44,19 @@ The checker returns `FLOW_*` error codes for YAML flow validation.
 |---|---|---|
 | `FLOW_STEP_NEXT_EMPTY` | `next` exists but is empty | `FLOW_STEP_NEXT_EMPTY: next requires non-empty target (step={step_id})` |
 | `FLOW_STEP_NEXT_NOT_FOUND` | `next` references an unknown `step_id` | `FLOW_STEP_NEXT_NOT_FOUND: next references unknown step_id (step={step_id}, next={target_step_id})` |
+| `FLOW_AGENT_SYSTEM_MISSING` | `agent` step has no `system` | `FLOW_AGENT_SYSTEM_MISSING: agent step requires system (step={step_id})` |
+| `FLOW_AGENT_TASK_MISSING` | `agent` step has no `task` | `FLOW_AGENT_TASK_MISSING: agent step requires task (step={step_id})` |
 | `FLOW_NOTIFY_MESSAGE_MISSING` | `notify` step has no `message` | `FLOW_NOTIFY_MESSAGE_MISSING: notify step requires message (step={step_id})` |
 | `FLOW_NOTIFY_FORMAT_UNSUPPORTED` | `notify.format` is not `simple`, `structured`, or `markdown` | `FLOW_NOTIFY_FORMAT_UNSUPPORTED: notify step format must be simple, structured or markdown (step={step_id}, format={format})` |
+| `FLOW_NOTIFY_ACTION_INVALID` | `notify.action` exists but is not an object | `FLOW_NOTIFY_ACTION_INVALID: notify action must be an object (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED` | `notify.action.type` is not `open_url` or `run` | `FLOW_NOTIFY_ACTION_TYPE_UNSUPPORTED: notify action type must be open_url or run (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_LABEL_MISSING` | `notify.action` has no non-empty `label` | `FLOW_NOTIFY_ACTION_LABEL_MISSING: notify action requires non-empty label (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_MESSAGE_INVALID` | `notify.action.message` exists but is not a string | `FLOW_NOTIFY_ACTION_MESSAGE_INVALID: notify action message must be a string (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_URL_MISSING` | `notify.action.type` is `open_url` and has no non-empty `url` | `FLOW_NOTIFY_ACTION_URL_MISSING: notify action requires non-empty url (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_URL_UNSUPPORTED` | `notify.action.url` is neither HTTP(S) nor a full template expression | `FLOW_NOTIFY_ACTION_URL_UNSUPPORTED: notify action url must use http(s) (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_AUTO_INVALID` | `notify.action.auto` exists but is not boolean | `FLOW_NOTIFY_ACTION_AUTO_INVALID: notify action auto must be boolean (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_ARG_MISSING` | `notify.action.type` is `run` and has no non-empty `arg` | `FLOW_NOTIFY_ACTION_ARG_MISSING: notify run action requires non-empty arg (step={step_id})` |
+| `FLOW_NOTIFY_ACTION_PARAMS_INVALID` | `notify.action.params` exists but is not a string | `FLOW_NOTIFY_ACTION_PARAMS_INVALID: notify run action params must be string (step={step_id})` |
 | `FLOW_SEND_CHANNEL_MISSING` | `send` step has no `channel` | `FLOW_SEND_CHANNEL_MISSING: send step requires channel (step={step_id})` |
 | `FLOW_SEND_KEY_MISSING` | `send` step has no `key` | `FLOW_SEND_KEY_MISSING: send step requires key (step={step_id})` |
 | `FLOW_SEND_MESSAGE_MISSING` | `send` step has no `message` | `FLOW_SEND_MESSAGE_MISSING: send step requires message (step={step_id})` |

@@ -38,6 +38,7 @@ packages = ["packages/skiller/src/skiller", "apps/tui/src/stui"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "packages/skiller/agents" = "skiller/agents"
+"packages/skiller/docs" = "skiller/docs"
 
 [tool.pytest.ini_options]
 testpaths = ["packages/skiller/tests", "apps/tui/tests"]

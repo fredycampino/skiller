@@ -3,8 +3,10 @@ from pathlib import Path
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.domain.agent.agent_config_model import (
     AgentConfig,
+    AgentContextCompactionConfig,
     AgentContextConfig,
     AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
 from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
@@ -58,8 +60,20 @@ def agent_config(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,
         ),
-        context=AgentContextConfig(),
-        event_output=AgentEventOutputConfig(),
+        context=AgentContextConfig(
+            compaction=AgentContextCompactionConfig(
+                enabled=False,
+                max_total_tokens_ratio=0.8,
+            ),
+        ),
+        event_output=AgentEventOutputConfig(
+            truncate=AgentEventOutputTruncateConfig(
+                enabled=True,
+                max_text_chars=100,
+                max_json_chars=1000,
+                max_array_items=10,
+            ),
+        ),
         tools=tools or ToolRuntimeConfigs(),
     )
 

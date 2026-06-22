@@ -8,6 +8,9 @@ from skiller.domain.agent.agent_config_model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
+    AgentEventOutputConfig,
+    AgentEventOutputTruncateConfig,
+    AgentLoopConfig,
 )
 from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMProviderList,
@@ -137,28 +140,45 @@ class _FakeContextStats:
 class _FakeAgentConfig:
     def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
         _ = config_path
-        provider = AgentNullProvider(
-            model=AgentNullLLMModel.NULL1,
-            timeout_seconds=30,
-            window_width_tokens=100000,
-        )
-        return AgentConfig(
-            llm=AgentLLMProviderList(
-                default_provider=AgentLLMProviderType.NULL,
-                providers=(provider,),
-            ),
-            context=AgentContextConfig(
-                compaction=AgentContextCompactionConfig(
-                    max_total_tokens_ratio=0.8,
-                ),
-            ),
-        )
+        return _agent_config()
 
 
 class _FakeSkillRunner:
     def resolve_file_path(self, source: str, ref: str, file_ref: str):  # noqa: ANN001
         _ = source, ref, file_ref
         raise FileNotFoundError
+
+
+def _agent_config() -> AgentConfig:
+    provider = AgentNullProvider(
+        model=AgentNullLLMModel.NULL1,
+        timeout_seconds=30,
+        window_width_tokens=100000,
+    )
+    return AgentConfig(
+        llm=AgentLLMProviderList(
+            default_provider=AgentLLMProviderType.NULL,
+            providers=(provider,),
+        ),
+        loop=AgentLoopConfig(
+            max_turns=2,
+            max_tool_calls=3,
+        ),
+        context=AgentContextConfig(
+            compaction=AgentContextCompactionConfig(
+                enabled=False,
+                max_total_tokens_ratio=0.8,
+            ),
+        ),
+        event_output=AgentEventOutputConfig(
+            truncate=AgentEventOutputTruncateConfig(
+                enabled=True,
+                max_text_chars=100,
+                max_json_chars=1000,
+                max_array_items=10,
+            ),
+        ),
+    )
 
 
 def _build_run() -> Run:

@@ -148,7 +148,7 @@ def test_agent_event_publisher_truncates_observable_payloads_before_persistence(
         AgentEventDraftBuilder(),
         OutputTruncator(),
     )
-    event_output = AgentEventOutputConfig()
+    event_output = _event_output(max_text_chars=100)
 
     publisher.emit_tool_call(
         entry=AgentContextEntry(
@@ -205,6 +205,9 @@ class _FakeRuntimeEventStore(RuntimeEventStorePort):
 def _event_output(*, max_text_chars: int) -> AgentEventOutputConfig:
     return AgentEventOutputConfig(
         truncate=AgentEventOutputTruncateConfig(
+            enabled=True,
             max_text_chars=max_text_chars,
+            max_json_chars=1000,
+            max_array_items=10,
         ),
     )

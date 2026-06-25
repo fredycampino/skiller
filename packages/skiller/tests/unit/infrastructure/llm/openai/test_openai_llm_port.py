@@ -4,16 +4,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
-from skiller.domain.agent.agent_llm_provider_model import AgentMiniMaxLLMModel
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolChoiceMode,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
 from skiller.infrastructure.llm.openai import openai_llm_port
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
+from skiller.infrastructure.llm.openai.openai_mapper import DefaultOpenAIMapper
 
 pytestmark = pytest.mark.unit
 
@@ -52,6 +53,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
+        mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
     )
 
     result = llm.generate(
@@ -95,6 +97,7 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
         api_key="",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
+        mapper=DefaultOpenAIMapper(),
     )
 
     result = llm.generate(
@@ -151,6 +154,7 @@ def test_openai_llm_maps_tool_calls_from_openai_response(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
+        mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
     )
 
     result = llm.generate(

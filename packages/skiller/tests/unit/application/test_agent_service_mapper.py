@@ -19,8 +19,8 @@ from skiller.application.use_cases.agent.select_agent_model import (
     SelectAgentModelResult,
     SelectAgentModelStatus,
 )
-from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.config.port import AgentConfigProviderSource
+from skiller.domain.agent.context.stats_model import (
     AgentContextStats,
     AgentContextWindowStats,
     AgentStats,

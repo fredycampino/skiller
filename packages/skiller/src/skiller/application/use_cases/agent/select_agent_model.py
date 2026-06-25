@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from skiller.domain.agent.agent_config_port import AgentConfigPort
-from skiller.domain.agent.agent_llm_bedrock_model import AgentBedrockLLMModel
-from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.config.port import AgentConfigPort
+from skiller.domain.agent.llm.model import AgentLLMProviderType
+from skiller.domain.agent.llm.provider_bedrock import AgentBedrockLLMModel
+from skiller.domain.agent.llm.provider_lmstudio import AgentLMStudioLLMModel
+from skiller.domain.agent.llm.provider_registry import (
     AgentCodexLLMModel,
     AgentMiniMaxLLMModel,
 )
@@ -32,6 +33,7 @@ class SelectAgentModelResult:
 
 _PROVIDER_MODEL_ENUMS = {
     AgentLLMProviderType.MINIMAX: AgentMiniMaxLLMModel,
+    AgentLLMProviderType.LMSTUDIO: AgentLMStudioLLMModel,
     AgentLLMProviderType.CODEX: AgentCodexLLMModel,
     AgentLLMProviderType.BEDROCK: AgentBedrockLLMModel,
 }

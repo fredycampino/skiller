@@ -1,4 +1,4 @@
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextEntry,
@@ -8,13 +8,13 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_context_stats_port import AgentContextStatsPort
-from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
 )
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.context.stats_port import AgentContextStatsPort
+from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,

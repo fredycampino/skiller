@@ -4,11 +4,34 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Mapping, TypeAlias
 
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentLLMModel,
-    AgentLLMModelEnum,
-    AgentLLMProviderType,
-)
+
+class AgentLLMModelEnum(str, Enum):
+    model_context_window_tokens: int
+
+    def __new__(
+        cls,
+        value: str,
+        model_context_window_tokens: int,
+    ) -> "AgentLLMModelEnum":
+        item = str.__new__(cls, value)
+        item._value_ = value
+        item.model_context_window_tokens = model_context_window_tokens
+        return item
+
+
+class LLMToolChoiceMode(str, Enum):
+    AUTO = "auto"
+    NONE = "none"
+    REQUIRED = "required"
+
+
+class AgentLLMProviderType(str, Enum):
+    NULL = "null"
+    FAKE = "fake"
+    MINIMAX = "minimax"
+    LMSTUDIO = "lmstudio"
+    CODEX = "codex"
+    BEDROCK = "bedrock"
 
 
 class LLMMessageRole(str, Enum):
@@ -104,7 +127,7 @@ class LLMUsage:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     provider: AgentLLMProviderType | None = None
-    model: AgentLLMModel | None = None
+    model: AgentLLMModelEnum | None = None
 
     def __post_init__(self) -> None:
         if self.provider is not None:
@@ -116,7 +139,7 @@ class LLMUsage:
 @dataclass(frozen=True)
 class LLMResponse:
     ok: bool
-    model: AgentLLMModel
+    model: AgentLLMModelEnum
     content: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
     finish_reason: str | None = None

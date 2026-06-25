@@ -1,8 +1,8 @@
 import pytest
 
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
 
 pytestmark = pytest.mark.unit
 

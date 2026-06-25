@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
-from skiller.domain.agent.agent_run_identity import AgentRun
-from skiller.domain.agent.agent_run_model import AgentStopReason
-from skiller.domain.agent.llm_model import LLMResponse, LLMUsage
+from skiller.domain.agent.llm.model import LLMResponse, LLMUsage
+from skiller.domain.agent.llm.provider_registry import AgentLLMModel
+from skiller.domain.agent.run.identity import AgentRun
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.tool.tool_execution_model import ToolExecutionResults
 
 

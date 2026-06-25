@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from skiller.domain.agent.agent_config_port import AgentConfigPort
-from skiller.domain.agent.agent_context_stats_port import AgentContextStatsPort
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.config.port import AgentConfigPort
+from skiller.domain.agent.context.stats_model import (
     AgentContextStats,
     AgentContextWindowStats,
     AgentStats,
 )
+from skiller.domain.agent.context.stats_port import AgentContextStatsPort
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort

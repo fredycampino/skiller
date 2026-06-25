@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentCodexLLMModel,
-)
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMToolCall,
     LLMToolCallFunction,
+)
+from skiller.domain.agent.llm.provider_registry import (
+    AgentCodexLLMModel,
 )
 from skiller.infrastructure.llm.codex.codex_mapper import (
     CodexStreamResult,

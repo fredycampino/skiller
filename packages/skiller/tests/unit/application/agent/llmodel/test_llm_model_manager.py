@@ -1,7 +1,12 @@
 import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.model import (
+    LLMResponse,
+    LLMUsage,
+    LLMUserMessage,
+)
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -9,15 +14,12 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProvider,
+    AgentLMStudioLLMModel,
+    AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
 )
-from skiller.domain.agent.llm_model import (
-    LLMResponse,
-    LLMUsage,
-    LLMUserMessage,
-)
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.request import LLMRequest
 
 pytestmark = pytest.mark.unit
 
@@ -111,6 +113,14 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 window_width_tokens=100_000,
             ),
             "MiniMax LLM provider requires MiniMaxLLMRequest",
+        ),
+        (
+            AgentLMStudioProvider(
+                model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+                timeout_seconds=30,
+                window_width_tokens=131_072,
+            ),
+            "LM Studio LLM provider requires LMStudioLLMRequest",
         ),
         (
             AgentCodexProvider(

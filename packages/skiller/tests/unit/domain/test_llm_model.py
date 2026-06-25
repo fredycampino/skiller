@@ -1,7 +1,6 @@
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessageRole,
     LLMResponse,
@@ -11,6 +10,7 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
 
 pytestmark = pytest.mark.unit
 

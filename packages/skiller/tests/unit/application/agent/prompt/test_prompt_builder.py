@@ -2,18 +2,8 @@ import pytest
 
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.domain.agent.agent_context_model import AgentContextEntry, AgentContextEntryType
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentBedrockLLMModel,
-    AgentBedrockProvider,
-    AgentCodexLLMModel,
-    AgentCodexProvider,
-    AgentFakeLLMModel,
-    AgentFakeProvider,
-    AgentMiniMaxLLMModel,
-    AgentMiniMaxProvider,
-)
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.context.model import AgentContextEntry, AgentContextEntryType
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMSystemMessage,
     LLMToolCall,
@@ -21,12 +11,23 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import (
-    BedrockLLMRequest,
-    CodexLLMRequest,
-    LLMRequest,
-    MiniMaxLLMRequest,
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
+    AgentBedrockLLMModel,
+    AgentBedrockProvider,
+    AgentCodexLLMModel,
+    AgentCodexProvider,
+    AgentFakeLLMModel,
+    AgentFakeProvider,
+    AgentLMStudioLLMModel,
+    AgentLMStudioProvider,
+    AgentMiniMaxLLMModel,
+    AgentMiniMaxProvider,
 )
+from skiller.domain.agent.llm.request import LLMRequest
 
 pytestmark = pytest.mark.unit
 
@@ -339,6 +340,27 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
 
     assert isinstance(request, MiniMaxLLMRequest)
     assert request.temperature == 1
+    assert request.max_tokens == 4096
+    assert request.top_p == 1
+
+
+def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
+    builder = AgentPromptBuilder()
+    provider = AgentLMStudioProvider(
+        model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+        timeout_seconds=30,
+        window_width_tokens=131_072,
+    )
+
+    request = builder.build_request(
+        provider=provider,
+        system="Be useful.",
+        entries=[],
+        tools=(),
+    )
+
+    assert isinstance(request, LMStudioLLMRequest)
+    assert request.temperature == 0.2
     assert request.max_tokens == 4096
     assert request.top_p == 1
 

@@ -7,9 +7,9 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
-from skiller.domain.agent.llm_request import CodexLLMRequest
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentials,
     CodexCredentialsDatasource,

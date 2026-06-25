@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMProviderList
+from skiller.domain.agent.llm.provider_registry import AgentLLMProviderList
 from skiller.domain.tool.tool_contract import ToolRuntimeConfigs
 
 

@@ -1,11 +1,11 @@
 from typing import Protocol
 
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentContextEntry,
     AgentContextUsageMarker,
 )
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
 
 

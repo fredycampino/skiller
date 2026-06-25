@@ -1,7 +1,7 @@
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentNullLLMModel
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentNullLLMModel
+from skiller.domain.agent.llm.request import LLMRequest
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
 
 pytestmark = pytest.mark.unit

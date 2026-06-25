@@ -6,11 +6,11 @@ from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
 )
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextEntry,
@@ -20,16 +20,16 @@ from skiller.domain.agent.agent_context_model import (
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.agent_loop_model import AgentLoop
-from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.llm.model import (
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
     LLMUsage,
 )
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.run.identity import AgentContext, AgentRun
+from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.run.run_model import RunAgent
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus, ToolRuntimeConfigs
 from skiller.domain.tool.tool_execution_model import (

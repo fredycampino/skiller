@@ -16,7 +16,7 @@ from skiller.application.use_cases.agent.select_agent_model import (
     SelectAgentModelResult,
     SelectAgentModelStatus,
 )
-from skiller.domain.agent.agent_stats_model import AgentStats
+from skiller.domain.agent.context.stats_model import AgentStats
 
 
 class AgentServiceMapper:

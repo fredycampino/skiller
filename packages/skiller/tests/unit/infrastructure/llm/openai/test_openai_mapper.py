@@ -4,20 +4,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentCodexLLMModel,
-    AgentMiniMaxLLMModel,
-)
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMResponseFormat,
     LLMResponseFormatType,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolChoiceMode,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
+    AgentCodexLLMModel,
+    AgentMiniMaxLLMModel,
+)
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -26,6 +26,7 @@ from skiller.domain.tool.tool_contract import (
     ToolSchema,
 )
 from skiller.infrastructure.llm.openai.openai_mapper import (
+    DefaultOpenAIMapper,
     to_openai_kwargs,
     to_port_llm_response,
 )
@@ -105,6 +106,23 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
         "top_p": 0.9,
         "parallel_tool_calls": True,
     }
+
+
+def test_default_openai_mapper_adds_extra_body() -> None:
+    request = MiniMaxLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentMiniMaxLLMModel.M2_7,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        temperature=1,
+        max_tokens=4096,
+        top_p=1,
+        parallel_tool_calls=True,
+    )
+    mapper = DefaultOpenAIMapper(extra_body={"reasoning_split": True})
+
+    kwargs = mapper.to_kwargs(request)
+
+    assert kwargs["extra_body"] == {"reasoning_split": True}
 
 
 def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:

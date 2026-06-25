@@ -7,7 +7,7 @@ from skiller.application.agent.config.step_config_reader import AgentStepConfigR
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.domain.agent.agent_config_validation_model import (
+from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )

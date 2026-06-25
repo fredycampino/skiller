@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
+from typing import Generic, TypeVar
+
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort
+from skiller.domain.agent.llm.request import LLMRequest
 from skiller.infrastructure.llm.openai.openai_mapper import (
-    to_openai_kwargs,
-    to_port_llm_response,
+    OpenAIMapper,
 )
+
+RequestT = TypeVar("RequestT", bound=LLMRequest)
 
 
 def _load_openai_client_class() -> type[object]:
@@ -15,20 +18,22 @@ def _load_openai_client_class() -> type[object]:
     return OpenAI
 
 
-class OpenAILLMPort(LLMPort[MiniMaxLLMRequest]):
+class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
     def __init__(
         self,
         *,
         api_key: str,
         base_url: str,
         timeout_seconds: float,
+        mapper: OpenAIMapper[RequestT],
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.mapper = mapper
         self.client = self._build_client()
 
-    def generate(self, request: MiniMaxLLMRequest) -> LLMResponse:
+    def generate(self, request: RequestT) -> LLMResponse:
         if not self.api_key.strip():
             return LLMResponse(
                 ok=False,
@@ -37,8 +42,7 @@ class OpenAILLMPort(LLMPort[MiniMaxLLMRequest]):
                 error_code="api_key_missing",
             )
 
-        kwargs = to_openai_kwargs(request)
-        kwargs["extra_body"] = {"reasoning_split": True}
+        kwargs = self.mapper.to_kwargs(request)
 
         try:
             response = self.client.chat.completions.create(**kwargs)
@@ -50,7 +54,7 @@ class OpenAILLMPort(LLMPort[MiniMaxLLMRequest]):
                 error_code="request_failed",
             )
 
-        return to_port_llm_response(response, fallback_model=request.model)
+        return self.mapper.to_response(response, fallback_model=request.model)
 
     def _build_client(self) -> object:
         if not self.api_key.strip():

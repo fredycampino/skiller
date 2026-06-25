@@ -1,4 +1,4 @@
-from skiller.domain.agent.llm_model import LLMToolCall
+from skiller.domain.agent.llm.model import LLMToolCall
 
 
 class AgentRunnerFeedback:

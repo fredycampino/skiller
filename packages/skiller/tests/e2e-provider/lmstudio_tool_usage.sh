@@ -4,17 +4,18 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-profile="${AGENT_BEDROCK_PROFILE:-claude-bedrock}"
-model="${AGENT_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
-timeout_seconds="${AGENT_BEDROCK_TIMEOUT_SECONDS:-120}"
+base_url="${LMSTUDIO_BASE_URL:-http://localhost:1234/v1}"
+api_key="${LMSTUDIO_API_KEY:-lm-studio}"
+model="${LMSTUDIO_MODEL:-google/gemma-4-12b-qat}"
+timeout_seconds="${LMSTUDIO_TIMEOUT_SECONDS:-120}"
 
-if [[ "${RUN_PROVIDER_E2E:-0}" != "1" && "${RUN_BEDROCK_PROVIDER_E2E:-0}" != "1" ]]; then
+if [[ "${RUN_PROVIDER_E2E:-0}" != "1" && "${RUN_LMSTUDIO_PROVIDER_E2E:-0}" != "1" ]]; then
   python3 - <<'PY'
 import json
 
 print(json.dumps({
     "status": "SKIPPED",
-    "reason": "set RUN_PROVIDER_E2E=1 or RUN_BEDROCK_PROVIDER_E2E=1 to run Bedrock provider e2e",
+    "reason": "set RUN_PROVIDER_E2E=1 or RUN_LMSTUDIO_PROVIDER_E2E=1 to run LM Studio provider e2e",
 }, indent=2))
 PY
   exit 0
@@ -25,21 +26,26 @@ if [[ ! -x "${runtime_python}" ]]; then
   exit 1
 fi
 
+LMSTUDIO_BASE_URL="${base_url}" \
+LMSTUDIO_API_KEY="${api_key}" \
+LMSTUDIO_MODEL="${model}" \
+LMSTUDIO_TIMEOUT_SECONDS="${timeout_seconds}" \
 PYTHONPATH=packages/skiller/src \
-AGENT_BEDROCK_PROFILE="${profile}" \
-AGENT_BEDROCK_MODEL="${model}" \
-AGENT_BEDROCK_TIMEOUT_SECONDS="${timeout_seconds}" \
 "${runtime_python}" - <<'PY'
 import json
 import os
 
 from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.llm.provider_bedrock import (
-    AgentBedrockLLMModel,
-    AgentBedrockProvider,
-    BedrockLLMRequest,
+from skiller.domain.agent.llm.model import (
+    LLMSystemMessage,
+    LLMToolChoiceMode,
+    LLMUserMessage,
 )
-from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
+from skiller.domain.agent.llm.provider_lmstudio import (
+    AgentLMStudioLLMModel,
+    AgentLMStudioProvider,
+    LMStudioLLMRequest,
+)
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -73,35 +79,41 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = AgentBedrockLLMModel(os.environ["AGENT_BEDROCK_MODEL"])
-provider = AgentBedrockProvider(
+model = AgentLMStudioLLMModel(os.environ["LMSTUDIO_MODEL"])
+provider = AgentLMStudioProvider(
     model=model,
-    profile=os.environ["AGENT_BEDROCK_PROFILE"],
-    timeout_seconds=float(os.environ["AGENT_BEDROCK_TIMEOUT_SECONDS"]),
+    api_key=os.environ["LMSTUDIO_API_KEY"],
+    base_url=os.environ["LMSTUDIO_BASE_URL"],
+    timeout_seconds=float(os.environ["LMSTUDIO_TIMEOUT_SECONDS"]),
     window_width_tokens=model.model_context_window_tokens,
 )
 client = LLMClientFactory().resolve(provider)
 
-command = "echo skiller-bedrock-tool-usage-ok"
+command = "echo skiller-lmstudio-tool-usage-ok"
 response = client.generate(
-    BedrockLLMRequest(
+    LMStudioLLMRequest(
         model=model,
         messages=(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),
             LLMUserMessage(f"Call the shell tool with command: {command}"),
         ),
         tools=(ShellSmokeTool(),),
+        tool_choice=LLMToolChoiceMode.AUTO,
+        parallel_tool_calls=True,
+        temperature=provider.temperature,
+        max_tokens=provider.max_output_tokens,
+        top_p=provider.top_p,
     )
 )
 
 if not response.ok:
-    raise SystemExit(response.error or "Bedrock tool request failed")
+    raise SystemExit(response.error or "LM Studio tool request failed")
 if len(response.tool_calls) != 1:
-    raise SystemExit("Bedrock response did not include exactly one tool call")
+    raise SystemExit("LM Studio response did not include exactly one tool call")
 if response.usage is None:
-    raise SystemExit("Bedrock tool-call response did not include usage")
+    raise SystemExit("LM Studio tool-call response did not include usage")
 if response.usage.total_tokens is None or response.usage.total_tokens <= 0:
-    raise SystemExit("Bedrock tool-call response usage.total_tokens was empty")
+    raise SystemExit("LM Studio tool-call response usage.total_tokens was empty")
 
 tool_call = response.tool_calls[0]
 if tool_call.function.name != "shell":
@@ -113,7 +125,8 @@ print(
     json.dumps(
         {
             "status": "SUCCEEDED",
-            "provider": "bedrock",
+            "provider": "lmstudio",
+            "base_url": os.environ["LMSTUDIO_BASE_URL"],
             "model": response.model.value,
             "finish_reason": response.finish_reason,
             "tool_calls": len(response.tool_calls),

@@ -1,23 +1,23 @@
 from dataclasses import replace
 from typing import overload
 
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.client_resolver import LLMClientResolver
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockProvider,
     AgentCodexProvider,
     AgentFakeProvider,
     AgentLLMProvider,
+    AgentLMStudioProvider,
     AgentMiniMaxProvider,
     AgentNullProvider,
 )
-from skiller.domain.agent.llm_client_resolver import LLMClientResolver
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort, ResolvedLLMPort
-from skiller.domain.agent.llm_request import (
-    BedrockLLMRequest,
-    CodexLLMRequest,
-    LLMRequest,
-    MiniMaxLLMRequest,
-)
+from skiller.domain.agent.llm.request import LLMRequest
 
 
 class LLMModelManager:
@@ -34,6 +34,11 @@ class LLMModelManager:
         if isinstance(provider, AgentMiniMaxProvider):
             if not isinstance(request, MiniMaxLLMRequest):
                 raise RuntimeError("MiniMax LLM provider requires MiniMaxLLMRequest")
+            client = self.client(provider)
+            response = client.generate(request)
+        elif isinstance(provider, AgentLMStudioProvider):
+            if not isinstance(request, LMStudioLLMRequest):
+                raise RuntimeError("LM Studio LLM provider requires LMStudioLLMRequest")
             client = self.client(provider)
             response = client.generate(request)
         elif isinstance(provider, AgentCodexProvider):
@@ -57,6 +62,9 @@ class LLMModelManager:
 
     @overload
     def client(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentLMStudioProvider) -> LLMPort[LMStudioLLMRequest]: ...
 
     @overload
     def client(self, provider: AgentCodexProvider) -> LLMPort[CodexLLMRequest]: ...

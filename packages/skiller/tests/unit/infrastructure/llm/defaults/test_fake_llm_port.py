@@ -1,8 +1,8 @@
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.request import LLMRequest
 from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
 
 pytestmark = pytest.mark.unit

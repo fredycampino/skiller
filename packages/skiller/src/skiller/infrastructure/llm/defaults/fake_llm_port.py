@@ -1,9 +1,9 @@
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort
+from skiller.domain.agent.llm.provider_registry import (
     AgentFakeLLMModel,
 )
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.request import LLMRequest
 
 FAKE_LLM_RESPONSE_TEXT = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
 

@@ -2,9 +2,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from skiller.application.agent.tools.tool_manager import ToolManager
-from skiller.domain.agent.agent_config_model import AgentConfig
-from skiller.domain.agent.agent_config_port import AgentConfigPort
-from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
+from skiller.domain.agent.config.model import AgentConfig
+from skiller.domain.agent.config.port import AgentConfigPort
+from skiller.domain.agent.config.validation import AgentConfigValidation
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep

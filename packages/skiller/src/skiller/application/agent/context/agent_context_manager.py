@@ -2,12 +2,12 @@ from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentContextEntry,
 )
-from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_model import RunAgentWindow
 

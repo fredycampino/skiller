@@ -5,7 +5,7 @@ import pytest
 
 from skiller.di.container import build_runtime_container
 from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -13,6 +13,8 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProvider,
+    AgentLMStudioLLMModel,
+    AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
     AgentNullLLMModel,
@@ -101,6 +103,14 @@ class _FakeBedrockConfig:
                 api_key="secret-key",
                 timeout_seconds=30,
                 window_width_tokens=100_000,
+            ),
+            OpenAILLMPort,
+        ),
+        (
+            AgentLMStudioProvider(
+                model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+                timeout_seconds=30,
+                window_width_tokens=131_072,
             ),
             OpenAILLMPort,
         ),

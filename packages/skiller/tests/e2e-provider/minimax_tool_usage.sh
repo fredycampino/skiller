@@ -46,13 +46,13 @@ import json
 import os
 
 from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.model import LLMToolChoiceMode
+from skiller.domain.agent.llm.provider_registry import (
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
 )
-from skiller.domain.agent.llm_model import LLMSystemMessage, LLMUserMessage
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
+from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,

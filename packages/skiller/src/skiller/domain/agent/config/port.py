@@ -3,9 +3,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
-from skiller.domain.agent.agent_config_model import AgentConfig
-from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
-from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
+from skiller.domain.agent.config.model import AgentConfig
+from skiller.domain.agent.config.validation import AgentConfigValidation
+from skiller.domain.agent.llm.model import AgentLLMProviderType
 
 
 class AgentConfigProviderSource(str, Enum):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
@@ -9,8 +9,8 @@ from skiller.domain.agent.agent_config_model import (
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
-from skiller.domain.agent.agent_config_validation_model import AgentConfigValidation
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.config.validation import AgentConfigValidation
+from skiller.domain.agent.llm.provider_registry import (
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProviderList,

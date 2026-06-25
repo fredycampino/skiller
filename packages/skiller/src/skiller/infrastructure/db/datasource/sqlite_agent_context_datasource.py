@@ -3,7 +3,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextEntry,
@@ -13,15 +13,15 @@ from skiller.domain.agent.agent_context_model import (
     agent_context_payload_from_dict,
     agent_context_payload_to_dict,
 )
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentLLMModel,
-    agent_llm_model_from_value,
-)
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.provider_registry import (
+    AgentLLMModel,
+    agent_llm_model_from_value,
+)
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 

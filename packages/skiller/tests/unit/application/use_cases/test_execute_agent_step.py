@@ -18,24 +18,21 @@ from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
-from skiller.domain.agent.agent_config_validation_model import (
+from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentContextUsageMarker,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel, AgentLLMProviderType
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.agent_run_model import AgentStopReason
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
     LLMResponse,
@@ -45,7 +42,10 @@ from skiller.domain.agent.llm_model import (
     LLMUsage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel, AgentLLMProviderType
+from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.run.identity import AgentContext
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentBedrockLLMModel
-from skiller.domain.agent.llm_model import LLMToolCall, LLMToolCallFunction, LLMUserMessage
-from skiller.domain.agent.llm_request import BedrockLLMRequest
+from skiller.domain.agent.llm.model import LLMToolCall, LLMToolCallFunction, LLMUserMessage
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentBedrockLLMModel
 from skiller.infrastructure.llm.bedrock import bedrock_llm_port
 from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
 

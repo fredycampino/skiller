@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
-from skiller.domain.agent.agent_context_model import AgentContextEntry
-from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
-from skiller.domain.agent.llm_model import LLMToolCall, LLMUsage
+from skiller.domain.agent.context.model import AgentContextEntry
+from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.llm.model import LLMToolCall, LLMUsage
+from skiller.domain.agent.run.identity import AgentContext, AgentRun
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.tool.tool_execution_model import (
     AgentToolCall,

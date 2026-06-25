@@ -7,17 +7,17 @@ from skiller.application.agent.event.agent_event_draft_builder import (
     AgentEventDraftBuilder,
 )
 from skiller.application.agent.event.agent_event_publisher import AgentEventPublisher
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
 )
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
     AgentToolCallPayload,
 )
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentMessageEventBody,

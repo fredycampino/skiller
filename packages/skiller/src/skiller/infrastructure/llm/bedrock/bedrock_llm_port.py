@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
-from skiller.domain.agent.llm_request import BedrockLLMRequest
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import (
     to_bedrock_kwargs,
     to_port_llm_response,

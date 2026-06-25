@@ -1,4 +1,4 @@
-from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.llm.model import LLMResponse
 
 
 class AgentErrorMapper:

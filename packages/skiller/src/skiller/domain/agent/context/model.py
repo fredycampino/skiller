@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, TypeAlias
 
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.llm.model import LLMUsage
 
 
 class AgentContextEntryType(str, Enum):

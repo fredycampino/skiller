@@ -7,11 +7,11 @@ from skiller.application.use_cases.agent.select_agent_model import (
     SelectAgentModelStatus,
     SelectAgentModelUseCase,
 )
-from skiller.domain.agent.agent_config_port import (
+from skiller.domain.agent.config.port import (
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
 )
-from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
+from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
 
@@ -49,6 +49,41 @@ def test_select_agent_model_updates_config_for_run(tmp_path: Path) -> None:
         _SetModelCall(
             provider_type=AgentLLMProviderType.CODEX,
             model="gpt-5.4",
+            config_path=config_path,
+        )
+    ]
+
+
+def test_select_agent_model_supports_lmstudio(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    config_path.write_text("{}", encoding="utf-8")
+    agent_config = _FakeAgentConfig(
+        sources=(
+            AgentConfigProviderSourceItem(
+                provider_type=AgentLLMProviderType.LMSTUDIO,
+                source=AgentConfigProviderSource.GLOBAL,
+            ),
+        )
+    )
+    use_case = SelectAgentModelUseCase(
+        run_store=_FakeRunStore(_build_run()),
+        agent_config=agent_config,
+        skill_runner=_FakeSkillRunner(config_path=config_path),
+    )
+
+    result = use_case.execute(
+        run_id="run-1",
+        provider="lmstudio",
+        model="google/gemma-4-12b-qat",
+    )
+
+    assert result.status == SelectAgentModelStatus.OK
+    assert result.provider == "lmstudio"
+    assert result.model == "google/gemma-4-12b-qat"
+    assert agent_config.set_model_calls == [
+        _SetModelCall(
+            provider_type=AgentLLMProviderType.LMSTUDIO,
+            model="google/gemma-4-12b-qat",
             config_path=config_path,
         )
     ]

@@ -1,8 +1,9 @@
 import pytest
 
 from skiller.domain.action.action_model import OpenUrlAction, RunAction
-from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel, AgentLLMProviderType
-from skiller.domain.agent.agent_run_model import AgentStopReason
+from skiller.domain.agent.llm.provider_lmstudio import AgentLMStudioLLMModel
+from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel, AgentLLMProviderType
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
     AgentFinalOutputData,
     AgentOutput,
@@ -137,6 +138,47 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
         },
     }
     assert StepExecution.from_dict(persisted) == execution
+
+
+def test_agent_final_output_restores_lmstudio_usage_model() -> None:
+    persisted = {
+        "step_type": "agent",
+        "input": {},
+        "evaluation": {},
+        "output": {
+            "text": "Done.",
+            "text_ref": "data.final",
+            "body_ref": None,
+            "value": {
+                "data": {
+                    "stop_reason": "final",
+                    "context_id": "ctx-1",
+                    "final": "Done.",
+                    "turn_count": 1,
+                    "tool_call_count": 0,
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 25,
+                        "total_tokens": 125,
+                        "provider": "lmstudio",
+                        "model": "google/gemma-4-12b-qat",
+                    },
+                }
+            },
+        },
+    }
+
+    execution = StepExecution.from_dict(persisted)
+
+    assert isinstance(execution.output, AgentOutput)
+    assert isinstance(execution.output.data, AgentFinalOutputData)
+    assert execution.output.data.usage == AgentUsageOutput(
+        prompt_tokens=100,
+        completion_tokens=25,
+        total_tokens=125,
+        provider=AgentLLMProviderType.LMSTUDIO,
+        model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+    )
 
 
 def test_agent_stop_output_serializes_and_restores_typed_data() -> None:

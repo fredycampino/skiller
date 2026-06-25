@@ -6,7 +6,7 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsStatus,
     ListAgentModelsUseCase,
 )
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
@@ -14,12 +14,12 @@ from skiller.domain.agent.agent_config_model import (
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
-from skiller.domain.agent.agent_config_port import (
+from skiller.domain.agent.config.port import (
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
 )
-from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.model import AgentLLMProviderType
+from skiller.domain.agent.llm.provider_registry import (
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentLLMProviderList,
@@ -63,15 +63,18 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
     assert result.status == ListAgentModelsStatus.OK
     codex = _provider(result.providers, "codex")
     minimax = _provider(result.providers, "minimax")
+    lmstudio = _provider(result.providers, "lmstudio")
     bedrock = _provider(result.providers, "bedrock")
     provider_names = [provider.name for provider in result.providers]
-    assert provider_names == ["minimax", "codex", "bedrock"]
+    assert provider_names == ["minimax", "lmstudio", "codex", "bedrock"]
     assert codex.source == AgentConfigProviderSource.GLOBAL
     assert minimax.source == AgentConfigProviderSource.GLOBAL
+    assert lmstudio.source == AgentConfigProviderSource.NONE
     assert bedrock.source == AgentConfigProviderSource.NONE
     assert _model(codex.models, "gpt-5.5").active is True
     assert _model(codex.models, "gpt-5.4").active is False
     assert _model(minimax.models, "MiniMax-M2.7").active is False
+    assert _model(lmstudio.models, "google/gemma-4-12b-qat").active is False
     assert agent_config.config_paths == [None]
 
 

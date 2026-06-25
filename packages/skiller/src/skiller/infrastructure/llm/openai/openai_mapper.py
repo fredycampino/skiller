@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Protocol, TypeVar
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentLLMModel,
-)
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
     LLMResponse,
@@ -15,14 +13,50 @@ from skiller.domain.agent.llm_model import (
     LLMResponseFormatType,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolChoiceMode,
     LLMToolMessage,
     LLMUsage,
 )
-from skiller.domain.agent.llm_request import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
+    AgentLLMModel,
+)
+from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
+RequestT = TypeVar("RequestT", bound=LLMRequest, contravariant=True)
 
-def to_openai_kwargs(request: MiniMaxLLMRequest) -> dict[str, object]:
+
+class OpenAIMapper(Protocol[RequestT]):
+    def to_kwargs(self, request: RequestT) -> dict[str, object]: ...
+
+    def to_response(
+        self,
+        response: object,
+        *,
+        fallback_model: AgentLLMModel,
+    ) -> LLMResponse: ...
+
+
+@dataclass(frozen=True)
+class DefaultOpenAIMapper(OpenAIMapper[OpenAILLMRequest]):
+    extra_body: Mapping[str, object] | None = None
+
+    def to_kwargs(self, request: OpenAILLMRequest) -> dict[str, object]:
+        payload = to_openai_kwargs(request)
+        if self.extra_body is not None:
+            payload["extra_body"] = dict(self.extra_body)
+        return payload
+
+    def to_response(
+        self,
+        response: object,
+        *,
+        fallback_model: AgentLLMModel,
+    ) -> LLMResponse:
+        return to_port_llm_response(response, fallback_model=fallback_model)
+
+
+def to_openai_kwargs(request: OpenAILLMRequest) -> dict[str, object]:
     payload: dict[str, object] = {
         "model": request.model.value,
         "messages": [_message_to_payload(message) for message in request.messages],

@@ -40,5 +40,8 @@
       ],
       "all": []
     }
+  },
+  "llm": {
+    "default_provider": "lmstudio"
   }
 }

@@ -1,18 +1,22 @@
 import pytest
 
-from skiller.domain.agent.agent_llm_generation_model import LLMToolChoiceMode
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_lmstudio import (
+    AgentLMStudioLLMModel,
+    LMStudioLLMRequest,
+)
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentCodexLLMModel,
     AgentFakeLLMModel,
     AgentMiniMaxLLMModel,
 )
-from skiller.domain.agent.llm_model import LLMUserMessage
-from skiller.domain.agent.llm_request import (
-    BedrockLLMRequest,
-    CodexLLMRequest,
+from skiller.domain.agent.llm.request import (
     LLMRequest,
-    MiniMaxLLMRequest,
+    OpenAILLMRequest,
 )
 
 pytestmark = pytest.mark.unit
@@ -31,6 +35,20 @@ def test_llm_request_requires_supported_model() -> None:
             messages=(LLMUserMessage("hello"),),
             model=object(),
         )
+
+
+def test_openai_llm_request_accepts_openai_compatible_model() -> None:
+    request = OpenAILLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentMiniMaxLLMModel.M2_7,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        parallel_tool_calls=True,
+        temperature=1,
+        max_tokens=4096,
+        top_p=1,
+    )
+
+    assert request.model == AgentMiniMaxLLMModel.M2_7
 
 
 def test_minimax_llm_request_requires_minimax_model() -> None:
@@ -56,6 +74,34 @@ def test_minimax_llm_request_requires_minimax_model() -> None:
             tool_choice=LLMToolChoiceMode.AUTO,
             parallel_tool_calls=True,
             temperature=1,
+            max_tokens=4096,
+            top_p=1,
+        )
+
+
+def test_lmstudio_llm_request_requires_lmstudio_model() -> None:
+    request = LMStudioLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        parallel_tool_calls=True,
+        temperature=0.2,
+        max_tokens=4096,
+        top_p=1,
+    )
+
+    assert request.model == AgentLMStudioLLMModel.GEMMA_4_12B_QAT
+
+    with pytest.raises(
+        TypeError,
+        match="LMStudioLLMRequest model must be an AgentLMStudioLLMModel",
+    ):
+        LMStudioLLMRequest(
+            messages=(LLMUserMessage("hello"),),
+            model=AgentMiniMaxLLMModel.M2_7,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            parallel_tool_calls=True,
+            temperature=0.2,
             max_tokens=4096,
             top_p=1,
         )

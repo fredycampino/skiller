@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
-from skiller.domain.agent.agent_loop_model import AgentLoop
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.llm_model import LLMResponse
+from skiller.domain.agent.config.model import AgentEventOutputConfig
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.run.identity import AgentContext
+from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.tool.tool_contract import ToolResult, ToolRuntimeConfigs
 
 

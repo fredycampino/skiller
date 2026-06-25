@@ -8,9 +8,9 @@ from urllib.parse import parse_qs
 
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentCodexLLMModel
-from skiller.domain.agent.llm_model import LLMUserMessage
-from skiller.domain.agent.llm_request import CodexLLMRequest
+from skiller.domain.agent.llm.model import LLMUserMessage
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel
 from skiller.infrastructure.llm.codex import codex_llm_port
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentials,

@@ -10,15 +10,16 @@ from skiller.application.tools.files import FilesTool, FilesToolRuntimeConfig
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
-from skiller.domain.agent.agent_config_port import AgentConfigProviderSource
-from skiller.domain.agent.agent_config_validation_model import (
+from skiller.domain.agent.config.port import AgentConfigProviderSource
+from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentFakeLLMModel,
     AgentLLMProviderType,
+    AgentLMStudioLLMModel,
     AgentMiniMaxLLMModel,
 )
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
@@ -162,6 +163,39 @@ def test_json_agent_config_rejects_bedrock_without_profile(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="LLM provider requires profile"):
         _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_reads_lmstudio_provider(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_lmstudio_llm())
+
+    config = _provider(config_path=config_path, env={}).get_config()
+    provider = config.llm.default()
+
+    assert config.llm.default_provider == AgentLLMProviderType.LMSTUDIO
+    assert provider.type == AgentLLMProviderType.LMSTUDIO
+    assert provider.model == AgentLMStudioLLMModel.GEMMA_4_12B_QAT
+    assert provider.api_key == "lm-studio"
+    assert provider.base_url == "http://127.0.0.1:1234/v1"
+
+
+def test_json_agent_config_applies_lmstudio_selected_env_overrides(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_lmstudio_llm())
+    env = {
+        "AGENT_LMSTUDIO_API_KEY": "env-key",
+        "AGENT_LMSTUDIO_BASE_URL": "http://127.0.0.1:4321/v1",
+        "AGENT_LMSTUDIO_MODEL": "google/gemma-4-12b-qat",
+        "AGENT_LMSTUDIO_TIMEOUT_SECONDS": "9.5",
+    }
+
+    config = _provider(config_path=config_path, env=env).get_config()
+    provider = config.llm.default()
+
+    assert provider.api_key == "env-key"
+    assert provider.base_url == "http://127.0.0.1:4321/v1"
+    assert provider.model == AgentLMStudioLLMModel.GEMMA_4_12B_QAT
+    assert provider.timeout_seconds == 9.5
 
 
 def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
@@ -640,6 +674,30 @@ def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
         "llm": {"default_provider": "bedrock"},
         "providers": {
             "bedrock": provider,
+        },
+    }
+
+
+def _lmstudio_llm(
+    *,
+    model: str = "google/gemma-4-12b-qat",
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> dict[str, object]:
+    provider: dict[str, object] = {
+        "model": model,
+        "timeout_seconds": 30,
+        "window_width_tokens": 131_072,
+    }
+    if base_url is not None:
+        provider["base_url"] = base_url
+    if api_key is not None:
+        provider["api_key"] = api_key
+
+    return {
+        "llm": {"default_provider": "lmstudio"},
+        "providers": {
+            "lmstudio": provider,
         },
     }
 

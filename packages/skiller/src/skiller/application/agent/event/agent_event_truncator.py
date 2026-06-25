@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
-from skiller.domain.agent.agent_config_model import AgentEventOutputConfig
+from skiller.domain.agent.config.model import AgentEventOutputConfig
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentMessageEventBody,

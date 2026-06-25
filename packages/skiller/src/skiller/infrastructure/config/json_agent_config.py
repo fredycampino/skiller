@@ -2,17 +2,17 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from skiller.domain.agent.agent_config_model import AgentConfig
-from skiller.domain.agent.agent_config_port import (
+from skiller.domain.agent.config.model import AgentConfig
+from skiller.domain.agent.config.port import (
     AgentConfigPort,
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
 )
-from skiller.domain.agent.agent_config_validation_model import (
+from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.domain.agent.agent_llm_provider import AgentLLMProviderType
+from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 
 

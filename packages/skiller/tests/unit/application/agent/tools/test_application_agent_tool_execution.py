@@ -26,29 +26,29 @@ from skiller.application.agent.tools.tool_manager import (
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
 )
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentContextUsageMarker,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.agent_loop_model import AgentLoop
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
     LLMUsage,
 )
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.run.identity import AgentContext
+from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunAgent, RunAgentWindow

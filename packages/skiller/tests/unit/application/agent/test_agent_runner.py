@@ -11,20 +11,17 @@ from skiller.application.agent.tools.tool_manager import (
 )
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
 from skiller.application.tools.notify import NotifyTool
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
     AgentContextUsageMarker,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentFakeLLMModel
-from skiller.domain.agent.agent_run_identity import AgentContext, AgentRun
-from skiller.domain.agent.agent_run_model import AgentStopReason
-from skiller.domain.agent.agent_stats_model import (
+from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMResponse,
     LLMSystemMessage,
@@ -34,7 +31,10 @@ from skiller.domain.agent.llm_model import (
     LLMUsage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.run.identity import AgentContext, AgentRun
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,

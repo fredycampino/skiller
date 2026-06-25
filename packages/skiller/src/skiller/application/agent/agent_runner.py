@@ -14,9 +14,9 @@ from skiller.application.agent.runner_state import (
     AgentRunnerState,
 )
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
-from skiller.domain.agent.agent_context_store_port import AgentContextStorePort
-from skiller.domain.agent.agent_loop_model import AgentLoop
-from skiller.domain.agent.agent_run_model import AgentStopReason
+from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.run.loop import AgentLoop
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.tool.tool_execution_model import (
     ToolExecutionRequest,
 )

@@ -1,6 +1,6 @@
-from skiller.domain.agent.llm_model import LLMResponse
-from skiller.domain.agent.llm_port import LLMPort
-from skiller.domain.agent.llm_request import LLMRequest
+from skiller.domain.agent.llm.model import LLMResponse
+from skiller.domain.agent.llm.port import LLMPort
+from skiller.domain.agent.llm.request import LLMRequest
 
 
 class NullLLMPort(LLMPort[LLMRequest]):

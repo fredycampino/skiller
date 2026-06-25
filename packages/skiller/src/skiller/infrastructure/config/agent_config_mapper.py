@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
@@ -11,7 +11,11 @@ from skiller.domain.agent.agent_config_model import (
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.llm.provider_lmstudio import (
+    LMSTUDIO_DEFAULT_API_KEY,
+    LMSTUDIO_DEFAULT_BASE_URL,
+)
+from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -21,6 +25,8 @@ from skiller.domain.agent.agent_llm_provider_model import (
     AgentLLMProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
+    AgentLMStudioLLMModel,
+    AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
     AgentNullLLMModel,
@@ -146,6 +152,26 @@ def _build_provider(
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
+    if provider_type == AgentLLMProviderType.LMSTUDIO:
+        return AgentLMStudioProvider(
+            model=_lmstudio_model(raw_model),
+            api_key=_optional_api_key(
+                provider_type=provider_type,
+                provider=provider,
+                selected=selected,
+                env=env,
+                default=LMSTUDIO_DEFAULT_API_KEY,
+            ),
+            base_url=_optional_base_url(
+                provider_type=provider_type,
+                provider=provider,
+                selected=selected,
+                env=env,
+                default=LMSTUDIO_DEFAULT_BASE_URL,
+            ),
+            timeout_seconds=timeout_seconds,
+            window_width_tokens=window_width_tokens,
+        )
     if provider_type == AgentLLMProviderType.CODEX:
         return AgentCodexProvider(
             model=_codex_model(raw_model),
@@ -210,6 +236,13 @@ def _codex_model(value: str) -> AgentCodexLLMModel:
         return AgentCodexLLMModel(value)
     except ValueError as exc:
         raise ValueError(f"Unsupported model='{value}' for provider='codex'") from exc
+
+
+def _lmstudio_model(value: str) -> AgentLMStudioLLMModel:
+    try:
+        return AgentLMStudioLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='lmstudio'") from exc
 
 
 def _bedrock_model(value: str) -> AgentBedrockLLMModel:
@@ -303,6 +336,50 @@ def _resolve_api_key(
     if not secret_path.exists():
         raise ValueError(f"Missing api_key_file: {_display_path(secret_path)}")
     return secret_path.read_text(encoding="utf-8").strip()
+
+
+def _optional_api_key(
+    *,
+    provider_type: AgentLLMProviderType,
+    provider: LLMProviderConfigModel,
+    selected: bool,
+    env: Mapping[str, str],
+    default: str,
+) -> str:
+    value = _provider_env(provider_type, selected, "API_KEY", env)
+    if value is not None:
+        return value
+    if provider.api_key is not None:
+        return provider.api_key
+    if provider.api_key_env is not None:
+        value = env.get(provider.api_key_env)
+        if value is None:
+            raise ValueError(
+                f"Missing environment variable for api_key_env: {provider.api_key_env}"
+            )
+        return value
+    if provider.api_key_file is not None:
+        secret_path = Path(provider.api_key_file).expanduser()
+        if not secret_path.exists():
+            raise ValueError(f"Missing api_key_file: {_display_path(secret_path)}")
+        return secret_path.read_text(encoding="utf-8").strip()
+    return default
+
+
+def _optional_base_url(
+    *,
+    provider_type: AgentLLMProviderType,
+    provider: LLMProviderConfigModel,
+    selected: bool,
+    env: Mapping[str, str],
+    default: str,
+) -> str:
+    value = _provider_env(provider_type, selected, "BASE_URL", env)
+    if value is not None:
+        return value
+    if provider.base_url is not None:
+        return provider.base_url
+    return default
 
 
 def _provider_timeout_seconds(

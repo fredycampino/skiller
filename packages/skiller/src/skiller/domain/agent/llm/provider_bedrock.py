@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
-from skiller.domain.agent.agent_llm_model_enum import AgentLLMModelEnum
-from skiller.domain.agent.agent_llm_provider import (
-    AgentLLMProviderConfig,
+from skiller.domain.agent.llm.model import (
+    AgentLLMModelEnum,
     AgentLLMProviderType,
 )
+from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
+from skiller.domain.agent.llm.request import LLMRequest
 
 
 class AgentBedrockLLMModel(AgentLLMModelEnum):
@@ -18,6 +19,15 @@ class AgentBedrockLLMModel(AgentLLMModelEnum):
     CLAUDE_SONNET_4_5 = ("us.anthropic.claude-sonnet-4-5-20250929-v1:0", 200_000)
     CLAUDE_HAIKU_4_5 = ("us.anthropic.claude-haiku-4-5-20251001-v1:0", 200_000)
     CLAUDE_FABLE_5 = ("us.anthropic.claude-fable-5", 200_000)
+
+
+@dataclass(frozen=True)
+class BedrockLLMRequest(LLMRequest):
+    model: AgentBedrockLLMModel
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, AgentBedrockLLMModel):
+            raise TypeError("BedrockLLMRequest model must be an AgentBedrockLLMModel")
 
 
 @dataclass(frozen=True)

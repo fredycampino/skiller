@@ -5,8 +5,8 @@ from skiller.application.agent.mapper.agent_step_execution_mapper import (
     AgentStepExecutionMapper,
 )
 from skiller.application.agent.runner_state import AgentRunnerRequest
-from skiller.domain.agent.agent_run_identity import AgentRun
-from skiller.domain.agent.agent_run_model import AgentStopReason
+from skiller.domain.agent.run.identity import AgentRun
+from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep

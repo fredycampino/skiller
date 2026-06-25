@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from skiller.domain.agent.agent_llm_provider_model import AgentLLMModel
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
     LLMResponse,
@@ -13,7 +12,8 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUsage,
 )
-from skiller.domain.agent.llm_request import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentLLMModel
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 

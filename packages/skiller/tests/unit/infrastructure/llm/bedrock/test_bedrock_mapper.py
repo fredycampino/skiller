@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from skiller.domain.agent.agent_llm_provider_model import AgentBedrockLLMModel
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolMessage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_registry import AgentBedrockLLMModel
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import to_bedrock_kwargs
 
 pytestmark = pytest.mark.unit
@@ -87,4 +87,3 @@ def test_to_bedrock_kwargs_groups_consecutive_tool_results() -> None:
             ],
         },
     ]
-

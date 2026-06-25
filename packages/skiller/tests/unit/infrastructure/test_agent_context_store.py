@@ -3,15 +3,15 @@ import sqlite3
 
 import pytest
 
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntryType,
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_llm_provider_model import AgentMiniMaxLLMModel
-from skiller.domain.agent.agent_run_identity import AgentContext
-from skiller.domain.agent.llm_model import LLMUsage
+from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
+from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult

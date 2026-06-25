@@ -1,20 +1,14 @@
 import json
 from dataclasses import dataclass, field
 
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_llm_provider_model import (
-    AgentBedrockProvider,
-    AgentCodexProvider,
-    AgentLLMProvider,
-    AgentMiniMaxProvider,
-)
-from skiller.domain.agent.llm_model import (
+from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
     LLMSystemMessage,
@@ -23,12 +17,18 @@ from skiller.domain.agent.llm_model import (
     LLMToolMessage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm_request import (
-    BedrockLLMRequest,
-    CodexLLMRequest,
-    LLMRequest,
-    MiniMaxLLMRequest,
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
+from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_registry import (
+    AgentBedrockProvider,
+    AgentCodexProvider,
+    AgentLLMProvider,
+    AgentLMStudioProvider,
+    AgentMiniMaxProvider,
 )
+from skiller.domain.agent.llm.request import LLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -44,6 +44,17 @@ class AgentPromptBuilder:
         messages = tuple(self._build_messages(system=system, entries=entries))
         if isinstance(provider, AgentMiniMaxProvider):
             return MiniMaxLLMRequest(
+                messages=messages,
+                model=provider.model,
+                tool_choice=provider.tool_choice,
+                parallel_tool_calls=provider.parallel_tool_calls,
+                temperature=provider.temperature,
+                max_tokens=provider.max_output_tokens,
+                top_p=provider.top_p,
+                tools=tools,
+            )
+        if isinstance(provider, AgentLMStudioProvider):
+            return LMStudioLLMRequest(
                 messages=messages,
                 model=provider.model,
                 tool_choice=provider.tool_choice,

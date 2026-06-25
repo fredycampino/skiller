@@ -4,7 +4,7 @@ from skiller.application.use_cases.agent.get_agent_stats import (
     GetAgentStatsStatus,
     GetAgentStatsUseCase,
 )
-from skiller.domain.agent.agent_config_model import (
+from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
@@ -12,15 +12,15 @@ from skiller.domain.agent.agent_config_model import (
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
-from skiller.domain.agent.agent_llm_provider_model import (
+from skiller.domain.agent.context.stats_model import (
+    AgentContextObservedStats,
+    AgentContextObservedWindowStats,
+)
+from skiller.domain.agent.llm.provider_registry import (
     AgentLLMProviderList,
     AgentLLMProviderType,
     AgentNullLLMModel,
     AgentNullProvider,
-)
-from skiller.domain.agent.agent_stats_model import (
-    AgentContextObservedStats,
-    AgentContextObservedWindowStats,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunAgent

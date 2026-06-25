@@ -17,7 +17,7 @@ from skiller.application.agent.tools.tool_manager import (
     ToolPrepareFailure,
 )
 from skiller.application.agent.tools.tool_manager_model import AgentToolRequest
-from skiller.domain.agent.llm_model import LLMToolCall
+from skiller.domain.agent.llm.model import LLMToolCall
 from skiller.domain.run.steering_model import SteeringAgentInterrupt, SteeringAgentMessage
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_contract import ProcessTool, ToolResult, ToolResultStatus

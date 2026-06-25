@@ -4,13 +4,13 @@ from helpers.agent_config import agent_runner_config
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.notify import NotifyTool
-from skiller.domain.agent.agent_context_model import (
+from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.agent_run_identity import AgentContext
+from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_model import RunAgent, RunAgentWindow
 
 pytestmark = pytest.mark.unit

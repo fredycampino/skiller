@@ -5,6 +5,7 @@ from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.context.model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
+    LLMCustomModel,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
@@ -16,13 +17,16 @@ from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
 from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
 from skiller.domain.agent.llm.provider_registry import (
+    BEDROCK_MODELS,
+    CODEX_MODELS,
+    FAKE_MODELS,
+    MINIMAX_MODELS,
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
     AgentFakeProvider,
-    AgentLMStudioLLMModel,
     AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
@@ -32,9 +36,17 @@ from skiller.domain.agent.llm.request import LLMRequest
 pytestmark = pytest.mark.unit
 
 
+def _lmstudio_model() -> LLMCustomModel:
+    return LLMCustomModel(
+        value="google/gemma-4-12b-qat",
+        model_context_window_tokens=131_072,
+    )
+
+
 def _provider() -> AgentFakeProvider:
     return AgentFakeProvider(
         model=AgentFakeLLMModel.MODEL1,
+        models=FAKE_MODELS,
         timeout_seconds=30,
         window_width_tokens=100_000,
     )
@@ -326,6 +338,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
     builder = AgentPromptBuilder()
     provider = AgentMiniMaxProvider(
         model=AgentMiniMaxLLMModel.M2_7,
+        models=MINIMAX_MODELS,
         api_key="secret",
         timeout_seconds=30,
         window_width_tokens=100_000,
@@ -347,7 +360,8 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
 def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
     builder = AgentPromptBuilder()
     provider = AgentLMStudioProvider(
-        model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+        model=_lmstudio_model(),
+        models=(_lmstudio_model(),),
         timeout_seconds=30,
         window_width_tokens=131_072,
     )
@@ -369,6 +383,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
     builder = AgentPromptBuilder()
     provider = AgentCodexProvider(
         model=AgentCodexLLMModel.GPT_5_5,
+        models=CODEX_MODELS,
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         window_width_tokens=100_000,
@@ -393,6 +408,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
     builder = AgentPromptBuilder()
     provider = AgentBedrockProvider(
         model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        models=BEDROCK_MODELS,
         profile="claude-bedrock",
         timeout_seconds=120,
         window_width_tokens=200_000,

@@ -115,6 +115,7 @@ class AgentRunner:
 
             allowed_tools = [tool.name for tool in config.tools]
             max_tool_calls = config.config.loop.max_tool_calls
+            provider = config.config.llm.default()
             tool_execution_request = ToolExecutionRequest(
                 context=context,
                 turn_id=turn_id,
@@ -123,6 +124,7 @@ class AgentRunner:
                 runtime_configs=config.config.tools,
                 event_config=config.config.event_output,
                 max_tool_calls=max_tool_calls,
+                max_tool_result_bytes=provider.tool_result_max_bytes,
                 turn_loop=turn_loop,
             )
             tool_execution_results = self.tool_execution.execute(tool_execution_request)

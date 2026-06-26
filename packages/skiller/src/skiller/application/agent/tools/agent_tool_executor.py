@@ -37,8 +37,6 @@ from skiller.domain.tool.tool_process_model import (
 )
 from skiller.domain.tool.tool_process_port import ToolProcessPort
 
-_MAX_TOOL_RESULT_BYTES = 50_000
-
 
 class AgentToolExecutor(ToolProcessInterruptSignal):
     def __init__(
@@ -217,7 +215,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 state.add(tool_result)
                 continue
 
-            tool_result = self._check_tool_result(tool_result)
+            tool_result = self._check_tool_result(
+                tool_result,
+                max_bytes=request.max_tool_result_bytes,
+            )
             agent_tool_result = AgentToolResult(
                 turn_id=request.turn_id,
                 tool_call_id=agent_tool_call.tool_call_id,
@@ -254,9 +255,14 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
 
         return state.finish()
 
-    def _check_tool_result(self, tool_result: ToolResult) -> ToolResult:
+    def _check_tool_result(
+        self,
+        tool_result: ToolResult,
+        *,
+        max_bytes: int,
+    ) -> ToolResult:
         data_bytes = self._tool_result_field_bytes(tool_result.data)
-        if data_bytes > _MAX_TOOL_RESULT_BYTES:
+        if data_bytes > max_bytes:
             return ToolResult(
                 name=tool_result.name,
                 status=ToolResultStatus.FAILED,
@@ -265,7 +271,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 error=self.feedback.tool_result_too_large(
                     tool_name=tool_result.name,
                     field="data",
-                    max_bytes=_MAX_TOOL_RESULT_BYTES,
+                    max_bytes=max_bytes,
                     actual_bytes=data_bytes,
                 ),
             )
@@ -273,7 +279,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         error_bytes = 0
         if tool_result.error is not None:
             error_bytes = self._tool_result_field_bytes(tool_result.error)
-        if error_bytes <= _MAX_TOOL_RESULT_BYTES:
+        if error_bytes <= max_bytes:
             return tool_result
 
         return ToolResult(
@@ -284,7 +290,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
             error=self.feedback.tool_result_too_large(
                 tool_name=tool_result.name,
                 field="error",
-                max_bytes=_MAX_TOOL_RESULT_BYTES,
+                max_bytes=max_bytes,
                 actual_bytes=error_bytes,
             ),
         )

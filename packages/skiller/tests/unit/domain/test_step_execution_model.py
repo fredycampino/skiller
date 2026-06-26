@@ -1,7 +1,6 @@
 import pytest
 
 from skiller.domain.action.action_model import OpenUrlAction, RunAction
-from skiller.domain.agent.llm.provider_lmstudio import AgentLMStudioLLMModel
 from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel, AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
@@ -108,7 +107,7 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                     completion_tokens=25,
                     total_tokens=125,
                     provider=AgentLLMProviderType.CODEX,
-                    model=AgentCodexLLMModel.GPT_5_5,
+                    model=AgentCodexLLMModel.GPT_5_5.value,
                 ),
             ),
         ),
@@ -140,7 +139,7 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
     assert StepExecution.from_dict(persisted) == execution
 
 
-def test_agent_final_output_restores_lmstudio_usage_model() -> None:
+def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:
     persisted = {
         "step_type": "agent",
         "input": {},
@@ -177,8 +176,38 @@ def test_agent_final_output_restores_lmstudio_usage_model() -> None:
         completion_tokens=25,
         total_tokens=125,
         provider=AgentLLMProviderType.LMSTUDIO,
-        model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+        model="google/gemma-4-12b-qat",
     )
+
+
+def test_agent_final_output_serializes_custom_usage_model_name() -> None:
+    execution = StepExecution(
+        step_type=StepType.AGENT,
+        output=AgentOutput(
+            text="Done.",
+            data=AgentFinalOutputData(
+                stop_reason=AgentStopReason.FINAL,
+                context_id="ctx-1",
+                final="Done.",
+                turn_count=1,
+                tool_call_count=0,
+                usage=AgentUsageOutput(
+                    prompt_tokens=100,
+                    completion_tokens=25,
+                    total_tokens=125,
+                    provider=AgentLLMProviderType.LMSTUDIO,
+                    model="google/gemma-4-12b-qat",
+                ),
+            ),
+        ),
+    )
+
+    persisted = execution.to_persisted_dict()
+
+    assert persisted["output"]["value"]["data"]["usage"]["model"] == (
+        "google/gemma-4-12b-qat"
+    )
+    assert StepExecution.from_dict(persisted) == execution
 
 
 def test_agent_stop_output_serializes_and_restores_typed_data() -> None:

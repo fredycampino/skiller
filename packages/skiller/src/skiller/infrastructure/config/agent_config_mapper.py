@@ -11,11 +11,17 @@ from skiller.domain.agent.config.model import (
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
 )
+from skiller.domain.agent.llm.model import LLMCustomModel, LLMModelLike
 from skiller.domain.agent.llm.provider_lmstudio import (
     LMSTUDIO_DEFAULT_API_KEY,
     LMSTUDIO_DEFAULT_BASE_URL,
 )
 from skiller.domain.agent.llm.provider_registry import (
+    BEDROCK_MODELS,
+    CODEX_MODELS,
+    FAKE_MODELS,
+    MINIMAX_MODELS,
+    NULL_MODELS,
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -25,7 +31,6 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentLLMProvider,
     AgentLLMProviderList,
     AgentLLMProviderType,
-    AgentLMStudioLLMModel,
     AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
@@ -127,15 +132,22 @@ def _build_provider(
     if selected and selected_window_width_tokens is not None:
         window_width_tokens = selected_window_width_tokens
 
+    if provider.models is not None and provider_type != AgentLLMProviderType.LMSTUDIO:
+        raise ValueError(
+            f"Provider models config is not supported for provider='{provider_type.value}'"
+        )
+
     if provider_type == AgentLLMProviderType.NULL:
         return AgentNullProvider(
             model=_null_model(raw_model),
+            models=NULL_MODELS,
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.FAKE:
         return AgentFakeProvider(
             model=_fake_model(raw_model),
+            models=FAKE_MODELS,
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
@@ -148,13 +160,16 @@ def _build_provider(
         )
         return AgentMiniMaxProvider(
             model=_minimax_model(raw_model),
+            models=MINIMAX_MODELS,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.LMSTUDIO:
+        lmstudio_models = _lmstudio_models(provider)
         return AgentLMStudioProvider(
-            model=_lmstudio_model(raw_model),
+            model=_lmstudio_model(raw_model, models=lmstudio_models),
+            models=lmstudio_models,
             api_key=_optional_api_key(
                 provider_type=provider_type,
                 provider=provider,
@@ -175,6 +190,7 @@ def _build_provider(
     if provider_type == AgentLLMProviderType.CODEX:
         return AgentCodexProvider(
             model=_codex_model(raw_model),
+            models=CODEX_MODELS,
             credentials_file=_required_credentials_file(provider.credentials_file),
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
@@ -182,6 +198,7 @@ def _build_provider(
     if provider_type == AgentLLMProviderType.BEDROCK:
         return AgentBedrockProvider(
             model=_bedrock_model(raw_model),
+            models=BEDROCK_MODELS,
             profile=_required_profile(provider.profile),
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
@@ -238,11 +255,40 @@ def _codex_model(value: str) -> AgentCodexLLMModel:
         raise ValueError(f"Unsupported model='{value}' for provider='codex'") from exc
 
 
-def _lmstudio_model(value: str) -> AgentLMStudioLLMModel:
-    try:
-        return AgentLMStudioLLMModel(value)
-    except ValueError as exc:
-        raise ValueError(f"Unsupported model='{value}' for provider='lmstudio'") from exc
+def _lmstudio_models(provider: LLMProviderConfigModel) -> tuple[LLMModelLike, ...]:
+    if provider.models is None:
+        raise ValueError("LM Studio LLM provider requires models")
+
+    model_values = [model.model for model in provider.models]
+    duplicate_values = sorted(
+        {
+            model_value
+            for model_value in model_values
+            if model_values.count(model_value) > 1
+        }
+    )
+    if duplicate_values:
+        duplicate_text = ", ".join(duplicate_values)
+        raise ValueError(f"Duplicate LM Studio models: {duplicate_text}")
+
+    return tuple(
+        LLMCustomModel(
+            value=model.model,
+            model_context_window_tokens=model.context_window_tokens,
+        )
+        for model in provider.models
+    )
+
+
+def _lmstudio_model(value: str, *, models: tuple[LLMModelLike, ...]) -> LLMModelLike:
+    for model in models:
+        if model.value == value:
+            return model
+    configured_models = ", ".join(model.value for model in models)
+    raise ValueError(
+        f"LM Studio selected model='{value}' is not listed in configured models: "
+        f"{configured_models}"
+    )
 
 
 def _bedrock_model(value: str) -> AgentBedrockLLMModel:

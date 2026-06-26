@@ -1,6 +1,6 @@
 {
   "llm": {
-    "default_provider": "codex",
+    "default_provider": "lmstudio",
     "window_width_tokens": 100000
   },
   "loop": {

@@ -174,7 +174,7 @@ def test_agent_tool_execution_rejects_large_tool_result_data_before_publish() ->
     assert payload["status"] == ToolResultStatus.FAILED.value
     assert payload["data"] == {}
     assert "Tool result data from 'notify' is too large" in str(payload["error"])
-    assert "maximum allowed is 50000 bytes" in str(payload["error"])
+    assert "maximum allowed is 40000 bytes" in str(payload["error"])
     assert "text" not in payload
 
     body = runtime_events.calls[-1]["event"].payload.body
@@ -182,7 +182,7 @@ def test_agent_tool_execution_rejects_large_tool_result_data_before_publish() ->
     assert body.data == {}
     assert body.text is None
     assert "Tool result data from 'notify' is too large" in str(body.error)
-    assert "maximum allowed is 50000 bytes" in str(body.error)
+    assert "maximum allowed is 40000 bytes" in str(body.error)
 
 
 def test_agent_tool_execution_rejects_large_tool_result_error_before_publish() -> None:
@@ -209,7 +209,7 @@ def test_agent_tool_execution_rejects_large_tool_result_error_before_publish() -
     assert payload["status"] == ToolResultStatus.FAILED.value
     assert payload["data"] == {}
     assert "Tool result error from 'notify' is too large" in str(payload["error"])
-    assert "maximum allowed is 50000 bytes" in str(payload["error"])
+    assert "maximum allowed is 40000 bytes" in str(payload["error"])
     assert "text" not in payload
 
     body = runtime_events.calls[-1]["event"].payload.body
@@ -217,7 +217,7 @@ def test_agent_tool_execution_rejects_large_tool_result_error_before_publish() -
     assert body.data == {}
     assert body.text is None
     assert "Tool result error from 'notify' is too large" in str(body.error)
-    assert "maximum allowed is 50000 bytes" in str(body.error)
+    assert "maximum allowed is 40000 bytes" in str(body.error)
 
 
 def test_agent_tool_execution_interrupts_process_tool() -> None:
@@ -320,6 +320,7 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         runtime_configs=ToolRuntimeConfigs(),
         event_config=_event_output_config(),
         max_tool_calls=5,
+        max_tool_result_bytes=40_000,
         turn_loop=AgentLoop(max_turns=10),
     )
 
@@ -595,6 +596,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         ),
         event_config=_event_output_config(),
         max_tool_calls=5,
+        max_tool_result_bytes=40_000,
         turn_loop=AgentLoop(max_turns=10),
     )
 

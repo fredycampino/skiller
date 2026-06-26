@@ -33,6 +33,7 @@ class ToolExecutionRequest:
     runtime_configs: ToolRuntimeConfigs
     event_config: AgentEventOutputConfig
     max_tool_calls: int
+    max_tool_result_bytes: int
     turn_loop: AgentLoop
 
     @property

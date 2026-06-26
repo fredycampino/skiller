@@ -121,6 +121,62 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
     ]
 
 
+def test_agent_context_manager_caps_window_width_by_model_context_window() -> None:
+    store = _FakeAgentContextStore(
+        window_entries=[],
+        next_turn_id="turn-1",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    config = agent_runner_config(window_width_tokens=120_000)
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.window_width_tokens == 80_000
+    assert store.window_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_width_tokens": 80_000,
+        }
+    ]
+
+
+def test_agent_context_manager_uses_configured_window_when_smaller_than_model() -> None:
+    store = _FakeAgentContextStore(
+        window_entries=[],
+        next_turn_id="turn-1",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    config = agent_runner_config(window_width_tokens=60_000)
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.window_width_tokens == 48_000
+    assert store.window_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_width_tokens": 48_000,
+        }
+    ]
+
+
 def test_agent_context_manager_estimates_window_width_from_context_deltas() -> None:
     store = _FakeAgentContextStore(
         window_entries=[

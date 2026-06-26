@@ -44,9 +44,7 @@ class AgentContextManager:
     ) -> AgentContextLLMRequest:
         provider = config.config.llm.default()
         max_ratio = config.config.context.compaction.max_total_tokens_ratio
-        window_width_tokens = int(
-            provider.window_width_tokens * max_ratio,
-        )
+        window_width_tokens = provider.context_max_tokens(ratio=max_ratio)
         entries = self.agent_context_store.list_window_entries(
             context_id=context.context_id,
             window_width_tokens=window_width_tokens,

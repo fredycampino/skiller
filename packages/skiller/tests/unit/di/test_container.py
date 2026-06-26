@@ -5,7 +5,13 @@ import pytest
 
 from skiller.di.container import build_runtime_container
 from skiller.di.llm_client_factory import LLMClientFactory
+from skiller.domain.agent.llm.model import LLMCustomModel
 from skiller.domain.agent.llm.provider_registry import (
+    BEDROCK_MODELS,
+    CODEX_MODELS,
+    FAKE_MODELS,
+    MINIMAX_MODELS,
+    NULL_MODELS,
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -13,7 +19,6 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProvider,
-    AgentLMStudioLLMModel,
     AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
@@ -31,6 +36,13 @@ from skiller.infrastructure.llm.openai import openai_llm_port
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 
 pytestmark = pytest.mark.unit
+
+
+def _lmstudio_model() -> LLMCustomModel:
+    return LLMCustomModel(
+        value="google/gemma-4-12b-qat",
+        model_context_window_tokens=131_072,
+    )
 
 
 class _FakeOpenAIClient:
@@ -84,6 +96,7 @@ class _FakeBedrockConfig:
         (
             AgentNullProvider(
                 model=AgentNullLLMModel.NULL1,
+                models=NULL_MODELS,
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
@@ -92,6 +105,7 @@ class _FakeBedrockConfig:
         (
             AgentFakeProvider(
                 model=AgentFakeLLMModel.MODEL1,
+                models=FAKE_MODELS,
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
@@ -100,6 +114,7 @@ class _FakeBedrockConfig:
         (
             AgentMiniMaxProvider(
                 model=AgentMiniMaxLLMModel.M2_7,
+                models=MINIMAX_MODELS,
                 api_key="secret-key",
                 timeout_seconds=30,
                 window_width_tokens=100_000,
@@ -108,7 +123,8 @@ class _FakeBedrockConfig:
         ),
         (
             AgentLMStudioProvider(
-                model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+                model=_lmstudio_model(),
+                models=(_lmstudio_model(),),
                 timeout_seconds=30,
                 window_width_tokens=131_072,
             ),
@@ -117,6 +133,7 @@ class _FakeBedrockConfig:
         (
             AgentCodexProvider(
                 model=AgentCodexLLMModel.GPT_5_5,
+                models=CODEX_MODELS,
                 credentials_file="/tmp/openai-codex.json",
                 timeout_seconds=30,
                 window_width_tokens=100_000,
@@ -126,6 +143,7 @@ class _FakeBedrockConfig:
         (
             AgentBedrockProvider(
                 model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+                models=BEDROCK_MODELS,
                 profile="claude-bedrock",
                 timeout_seconds=30,
                 window_width_tokens=100_000,

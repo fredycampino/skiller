@@ -2,21 +2,56 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal, Mapping, TypeAlias
+from typing import Literal, Mapping, Protocol, TypeAlias, runtime_checkable
 
 
-class AgentLLMModelEnum(str, Enum):
+@runtime_checkable
+class LLMModelLike(Protocol):
+    value: str
     model_context_window_tokens: int
+
+
+def validate_llm_model_like(value: object, *, label: str) -> LLMModelLike:
+    if not isinstance(value, LLMModelLike):
+        raise TypeError(f"{label} must be an LLMModelLike")
+    if not isinstance(value.value, str) or not value.value.strip():
+        raise TypeError(f"{label} value must be a non-empty string")
+    if (
+        not isinstance(value.model_context_window_tokens, int)
+        or value.model_context_window_tokens <= 0
+    ):
+        raise TypeError(f"{label} context window must be a positive integer")
+    return value
+
+
+@dataclass(frozen=True)
+class LLMCustomModel:
+    value: str
+    model_context_window_tokens: int
+
+    def __post_init__(self) -> None:
+        if not self.value.strip():
+            raise ValueError("LLM custom model requires value")
+        if self.model_context_window_tokens <= 0:
+            raise ValueError("LLM custom model requires positive context window")
+
+
+class LLMStaticModel(str, Enum):
+    _model_context_window_tokens: int
 
     def __new__(
         cls,
         value: str,
         model_context_window_tokens: int,
-    ) -> "AgentLLMModelEnum":
+    ) -> "LLMStaticModel":
         item = str.__new__(cls, value)
         item._value_ = value
-        item.model_context_window_tokens = model_context_window_tokens
+        item._model_context_window_tokens = model_context_window_tokens
         return item
+
+    @property
+    def model_context_window_tokens(self) -> int:
+        return self._model_context_window_tokens
 
 
 class LLMToolChoiceMode(str, Enum):
@@ -127,19 +162,27 @@ class LLMUsage:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     provider: AgentLLMProviderType | None = None
-    model: AgentLLMModelEnum | None = None
+    model: str | None = None
 
     def __post_init__(self) -> None:
         if self.provider is not None:
             object.__setattr__(self, "provider", AgentLLMProviderType(self.provider))
-        if self.model is not None and not isinstance(self.model, AgentLLMModelEnum):
-            raise TypeError("LLMUsage model must be an AgentLLMModel enum")
+        if self.model is not None:
+            object.__setattr__(self, "model", _usage_model_value(self.model))
+
+
+def _usage_model_value(value: object) -> str:
+    if isinstance(value, LLMModelLike):
+        return value.value
+    if isinstance(value, str) and value.strip():
+        return value
+    raise TypeError("LLMUsage model must be a non-empty string")
 
 
 @dataclass(frozen=True)
 class LLMResponse:
     ok: bool
-    model: AgentLLMModelEnum
+    model: LLMModelLike
     content: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
     finish_reason: str | None = None
@@ -148,8 +191,7 @@ class LLMResponse:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, AgentLLMModelEnum):
-            raise TypeError("LLMResponse model must be an AgentLLMModel enum")
+        validate_llm_model_like(self.model, label="LLMResponse model")
         object.__setattr__(self, "content", _clean_optional_string(self.content))
         object.__setattr__(
             self,

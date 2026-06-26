@@ -8,12 +8,9 @@ from skiller.domain.agent.config.port import (
     AgentConfigProviderSource,
 )
 from skiller.domain.agent.llm.model import AgentLLMProviderType
-from skiller.domain.agent.llm.provider_bedrock import AgentBedrockLLMModel
-from skiller.domain.agent.llm.provider_lmstudio import AgentLMStudioLLMModel
 from skiller.domain.agent.llm.provider_registry import (
-    AgentCodexLLMModel,
+    PUBLIC_AGENT_LLM_PROVIDER_MODELS,
     AgentLLMProvider,
-    AgentMiniMaxLLMModel,
 )
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
@@ -51,14 +48,6 @@ _PUBLIC_PROVIDER_TYPES = (
     AgentLLMProviderType.CODEX,
     AgentLLMProviderType.BEDROCK,
 )
-
-_PROVIDER_MODEL_ENUMS = {
-    AgentLLMProviderType.MINIMAX: AgentMiniMaxLLMModel,
-    AgentLLMProviderType.LMSTUDIO: AgentLMStudioLLMModel,
-    AgentLLMProviderType.CODEX: AgentCodexLLMModel,
-    AgentLLMProviderType.BEDROCK: AgentBedrockLLMModel,
-}
-
 
 class ListAgentModelsUseCase:
     def __init__(
@@ -128,6 +117,11 @@ class ListAgentModelsUseCase:
         source: AgentConfigProviderSource,
     ) -> AgentModelsProviderItem:
         configured_provider = configured_by_type.get(provider_type)
+        provider_models = (
+            configured_provider.models
+            if configured_provider is not None
+            else PUBLIC_AGENT_LLM_PROVIDER_MODELS[provider_type]
+        )
         models = tuple(
             AgentModelItem(
                 name=model.value,
@@ -138,7 +132,7 @@ class ListAgentModelsUseCase:
                     default_provider=default_provider,
                 ),
             )
-            for model in _PROVIDER_MODEL_ENUMS[provider_type]
+            for model in provider_models
         )
         return AgentModelsProviderItem(
             name=provider_type.value,

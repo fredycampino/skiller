@@ -19,6 +19,23 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.17 - 2026-06-26
+
+### Added
+- Add LM Studio as an OpenAI-compatible provider with configured local model lists.
+- Add provider-aware context and tool result limits for agent runs.
+
+### Changed
+- Reorganize LLM provider domain models and provider registry modules.
+- Document provider-specific `agent.json` configuration, including LM Studio local model setup.
+
+### Fixed
+- Keep custom LM Studio model usage serialized as public model names in agent usage outputs.
+- Improve LM Studio model validation errors for configured local model lists.
+
+### Notes
+- Includes PR #90 and PR #91.
+
 ## 0.1.0-beta.16 - 2026-06-22
 
 ### Added

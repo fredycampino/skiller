@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from skiller.domain.agent.llm.model import (
-    AgentLLMModelEnum,
     AgentLLMProviderType,
+    LLMModelLike,
 )
 from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
 from skiller.domain.agent.llm.request import OpenAILLMRequest
@@ -15,21 +15,16 @@ LMSTUDIO_LLM_TOP_P = 1
 LMSTUDIO_LLM_MAX_OUTPUT_TOKENS = 4096
 
 
-class AgentLMStudioLLMModel(AgentLLMModelEnum):
-    GEMMA_4_12B_QAT = ("google/gemma-4-12b-qat", 131_072)
-
-
 @dataclass(frozen=True)
 class LMStudioLLMRequest(OpenAILLMRequest):
-    model: AgentLMStudioLLMModel
+    model: LLMModelLike
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, AgentLMStudioLLMModel):
-            raise TypeError("LMStudioLLMRequest model must be an AgentLMStudioLLMModel")
+        super().__post_init__()
 
 
 @dataclass(frozen=True)
-class AgentLMStudioProvider(AgentLLMProviderConfig[AgentLMStudioLLMModel]):
+class AgentLMStudioProvider(AgentLLMProviderConfig[LLMModelLike]):
     api_key: str = LMSTUDIO_DEFAULT_API_KEY
     base_url: str = LMSTUDIO_DEFAULT_BASE_URL
 
@@ -39,7 +34,6 @@ class AgentLMStudioProvider(AgentLLMProviderConfig[AgentLMStudioLLMModel]):
     type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.LMSTUDIO
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, AgentLMStudioLLMModel):
-            raise TypeError("LM Studio LLM provider model must be an AgentLMStudioLLMModel")
+        super().__post_init__()
         if not self.base_url.strip():
             raise ValueError("LM Studio LLM provider requires base_url")

@@ -11,6 +11,7 @@ from skiller.domain.agent.config.model import (
 )
 from skiller.domain.agent.config.validation import AgentConfigValidation
 from skiller.domain.agent.llm.provider_registry import (
+    FAKE_MODELS,
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProviderList,
@@ -43,6 +44,7 @@ def agent_config(
     *,
     max_turns: int = 1,
     max_tool_calls: int = 1,
+    window_width_tokens: int = 100_000,
     tools: ToolRuntimeConfigs | None = None,
 ) -> AgentConfig:
     return AgentConfig(
@@ -51,8 +53,9 @@ def agent_config(
             providers=(
                 AgentFakeProvider(
                     model=AgentFakeLLMModel.MODEL1,
+                    models=FAKE_MODELS,
                     timeout_seconds=30,
-                    window_width_tokens=100_000,
+                    window_width_tokens=window_width_tokens,
                 ),
             ),
         ),
@@ -85,6 +88,7 @@ def agent_runner_config(
     tools: tuple[ToolDefinition, ...] | list[ToolDefinition] = (),
     max_turns: int = 1,
     max_tool_calls: int = 1,
+    window_width_tokens: int = 100_000,
 ) -> AgentRunnerConfig:
     tool_definitions = tuple(tools)
     return AgentRunnerConfig(
@@ -94,5 +98,6 @@ def agent_runner_config(
         config=agent_config(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,
+            window_width_tokens=window_width_tokens,
         ),
     )

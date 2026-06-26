@@ -2,11 +2,16 @@ import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
 from skiller.domain.agent.llm.model import (
+    LLMCustomModel,
     LLMResponse,
     LLMUsage,
     LLMUserMessage,
 )
 from skiller.domain.agent.llm.provider_registry import (
+    BEDROCK_MODELS,
+    CODEX_MODELS,
+    FAKE_MODELS,
+    MINIMAX_MODELS,
     AgentBedrockLLMModel,
     AgentBedrockProvider,
     AgentCodexLLMModel,
@@ -14,7 +19,6 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProvider,
-    AgentLMStudioLLMModel,
     AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
@@ -22,6 +26,13 @@ from skiller.domain.agent.llm.provider_registry import (
 from skiller.domain.agent.llm.request import LLMRequest
 
 pytestmark = pytest.mark.unit
+
+
+def _lmstudio_model() -> LLMCustomModel:
+    return LLMCustomModel(
+        value="google/gemma-4-12b-qat",
+        model_context_window_tokens=131_072,
+    )
 
 
 class _FakeLLM:
@@ -108,6 +119,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         (
             AgentMiniMaxProvider(
                 model=AgentMiniMaxLLMModel.M2_7,
+                models=MINIMAX_MODELS,
                 api_key="secret",
                 timeout_seconds=30,
                 window_width_tokens=100_000,
@@ -116,7 +128,8 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         ),
         (
             AgentLMStudioProvider(
-                model=AgentLMStudioLLMModel.GEMMA_4_12B_QAT,
+                model=_lmstudio_model(),
+                models=(_lmstudio_model(),),
                 timeout_seconds=30,
                 window_width_tokens=131_072,
             ),
@@ -125,6 +138,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         (
             AgentCodexProvider(
                 model=AgentCodexLLMModel.GPT_5_5,
+                models=CODEX_MODELS,
                 credentials_file="/tmp/openai-codex.json",
                 timeout_seconds=120,
                 window_width_tokens=100_000,
@@ -134,6 +148,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         (
             AgentBedrockProvider(
                 model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+                models=BEDROCK_MODELS,
                 profile="claude-bedrock",
                 timeout_seconds=120,
                 window_width_tokens=100_000,
@@ -163,6 +178,7 @@ def _provider(
 ) -> AgentLLMProvider:
     return AgentFakeProvider(
         model=model,
+        models=FAKE_MODELS,
         timeout_seconds=30,
         window_width_tokens=100_000,
     )

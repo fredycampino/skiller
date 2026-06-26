@@ -78,9 +78,10 @@ class GetAgentStatsUseCase:
         context_stats = self.context_stats.get_stats(context_id=agent.context_id)
         config_path = self._resolve_agent_config_path(run.source, run.ref)
         config = self.agent_config.get_config(config_path=config_path)
-        capacity_tokens = config.llm.default().window_width_tokens
-        limit_tokens = int(
-            capacity_tokens * config.context.compaction.max_total_tokens_ratio,
+        provider = config.llm.default()
+        capacity_tokens = provider.model_max_tokens
+        limit_tokens = provider.context_max_tokens(
+            ratio=config.context.compaction.max_total_tokens_ratio,
         )
         return GetAgentStatsResult(
             status=GetAgentStatsStatus.OK,

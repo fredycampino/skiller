@@ -9,7 +9,7 @@ from skiller.domain.agent.context.model import (
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.model import LLMCustomModel, LLMUsage
 from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
 from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_context_model import RunContext
@@ -122,6 +122,67 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         total_tokens=168,
         provider="minimax",
         model=AgentMiniMaxLLMModel.M2_5,
+    )
+
+
+def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-custom-model.db"
+    run_store = SqliteRunStorePort(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_store.create_run(
+        "internal",
+        "demo",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=RUN_ID,
+    )
+    store = _store(db_path)
+    model = LLMCustomModel(
+        value="google/gemma-4-12b-qat",
+        model_context_window_tokens=100_000,
+    )
+
+    entry = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Hello",
+        usage=LLMUsage(
+            prompt_tokens=123,
+            completion_tokens=45,
+            total_tokens=168,
+            provider="lmstudio",
+            model=model,
+        ),
+        delta_tokens=123,
+        window_start_sequence=1,
+        window_base=True,
+    )
+
+    entries = store.list_entries(context_id=CONTEXT_ID)
+    with sqlite3.connect(db_path) as conn:
+        raw_usage = conn.execute(
+            """
+            SELECT usage_json
+            FROM agent_context_entries
+            WHERE id = ?
+            """,
+            (entry.id,),
+        ).fetchone()[0]
+
+    assert json.loads(raw_usage)["model"] == "google/gemma-4-12b-qat"
+    assert entries[0].usage == LLMUsage(
+        prompt_tokens=123,
+        completion_tokens=45,
+        total_tokens=168,
+        provider="lmstudio",
+        model="google/gemma-4-12b-qat",
+    )
+    assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        prompt_tokens=123,
+        completion_tokens=45,
+        total_tokens=168,
+        provider="lmstudio",
+        model="google/gemma-4-12b-qat",
     )
 
 

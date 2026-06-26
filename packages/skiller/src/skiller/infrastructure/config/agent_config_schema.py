@@ -10,10 +10,18 @@ DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS = 4000
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS = 20
 
 
+class LLMProviderModelConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    context_window_tokens: int = Field(gt=0)
+
+
 class LLMProviderConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str
+    models: tuple[LLMProviderModelConfigModel, ...] | None = None
     timeout_seconds: float = Field(gt=0)
     window_width_tokens: int = Field(gt=0)
     api_key: str | None = None

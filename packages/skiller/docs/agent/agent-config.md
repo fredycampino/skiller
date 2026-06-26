@@ -113,6 +113,18 @@ In this example the provider declares `1000000` tokens, but this agent uses
 `80000` as its effective context limit before applying
 `context.compaction.max_total_tokens_ratio`.
 
+## Providers
+
+Provider entries live under the root `providers` object. The provider id is the
+key, and the provider type is inferred from that key.
+
+All providers require these common fields:
+
+- `model`: selected model id
+- `timeout_seconds`: request timeout
+- `window_width_tokens`: provider context window used by Skiller unless
+  `llm.window_width_tokens` overrides it for the selected provider
+
 Supported provider/model combinations:
 
 | Provider | Models | Credentials |
@@ -120,11 +132,177 @@ Supported provider/model combinations:
 | `null` | `null1` | none |
 | `fake` | `model1` | none |
 | `minimax` | `MiniMax-M2.5`, `MiniMax-M2.7` | `api_key`, `api_key_env`, or `api_key_file` |
+| `lmstudio` | configured `models[]` entries | optional `api_key`, `api_key_env`, or `api_key_file` |
 | `codex` | `gpt-5.4`, `gpt-5.5` | `credentials_file` |
 | `bedrock` | `us.anthropic.claude-opus-4-6-v1`, `us.anthropic.claude-opus-4-7`, `us.anthropic.claude-opus-4-8`, `us.anthropic.claude-opus-4-5-20251101-v1:0`, `us.anthropic.claude-opus-4-1-20250805-v1:0`, `us.anthropic.claude-sonnet-4-6`, `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, `us.anthropic.claude-haiku-4-5-20251001-v1:0`, `us.anthropic.claude-fable-5` | `profile` |
 
-The runtime owns fixed implementation details such as protocol, base URL, and Codex headers.
-For Bedrock, use inference profile model IDs (for example `us.anthropic...`) instead of direct model IDs.
+### Null
+
+`null` is an internal no-op provider for local tests.
+
+```json
+{
+  "providers": {
+    "null": {
+      "model": "null1",
+      "timeout_seconds": 1,
+      "window_width_tokens": 1000
+    }
+  }
+}
+```
+
+### Fake
+
+`fake` is an internal deterministic provider for tests.
+
+```json
+{
+  "providers": {
+    "fake": {
+      "model": "model1",
+      "timeout_seconds": 1,
+      "window_width_tokens": 1000
+    }
+  }
+}
+```
+
+### MiniMax
+
+Accepted models:
+
+- `MiniMax-M2.5`
+- `MiniMax-M2.7`
+
+Accepted credential fields:
+
+- `api_key`
+- `api_key_env`
+- `api_key_file`
+
+```json
+{
+  "providers": {
+    "minimax": {
+      "api_key_file": "~/.skiller/secrets/minimax_api_key",
+      "model": "MiniMax-M2.7",
+      "timeout_seconds": 60,
+      "window_width_tokens": 80000
+    }
+  }
+}
+```
+
+### LM Studio
+
+LM Studio models are user-configured because local model identifiers depend on
+the models installed in LM Studio.
+
+Accepted fields:
+
+- `base_url`: optional OpenAI-compatible base URL; defaults to
+  `http://127.0.0.1:1234/v1`
+- `api_key`, `api_key_env`, or `api_key_file`: optional
+- `models`: required list of allowed local models
+
+```json
+{
+  "providers": {
+    "lmstudio": {
+      "base_url": "http://127.0.0.1:1234/v1",
+      "model": "mistralai/ministral-3-14b-reasoning",
+      "models": [
+        {
+          "model": "mistralai/ministral-3-14b-reasoning",
+          "context_window_tokens": 50000
+        },
+        {
+          "model": "google/gemma-4-12b-qat",
+          "context_window_tokens": 30000
+        }
+      ],
+      "timeout_seconds": 120,
+      "window_width_tokens": 50000
+    }
+  }
+}
+```
+
+For LM Studio, keep `window_width_tokens` and each configured
+`context_window_tokens` aligned with the model instance loaded in LM Studio
+(`lms ps --json` shows `contextLength`). Skiller does not load or resize LM
+Studio models; it only uses the OpenAI-compatible endpoint.
+
+Example using an API key file:
+
+```json
+{
+  "providers": {
+    "lmstudio": {
+      "api_key_file": "~/.skiller/secrets/lmstudio_api_key",
+      "model": "google/gemma-4-12b-qat",
+      "models": [
+        {
+          "model": "google/gemma-4-12b-qat",
+          "context_window_tokens": 30000
+        }
+      ],
+      "timeout_seconds": 120,
+      "window_width_tokens": 30000
+    }
+  }
+}
+```
+
+### Codex
+
+Accepted models:
+
+- `gpt-5.4`
+- `gpt-5.5`
+
+Accepted credential fields:
+
+- `credentials_file`
+
+```json
+{
+  "providers": {
+    "codex": {
+      "credentials_file": "~/.skiller/secrets/openai-codex.json",
+      "model": "gpt-5.5",
+      "timeout_seconds": 120,
+      "window_width_tokens": 100000
+    }
+  }
+}
+```
+
+The runtime owns fixed implementation details such as protocol, base URL, and
+Codex headers.
+
+### Bedrock
+
+Accepted credential fields:
+
+- `profile`
+
+Use inference profile model IDs (for example `us.anthropic...`) instead of
+direct model IDs.
+
+```json
+{
+  "providers": {
+    "bedrock": {
+      "profile": "claude-bedrock",
+      "model": "us.anthropic.claude-opus-4-6-v1",
+      "timeout_seconds": 120,
+      "window_width_tokens": 200000
+    }
+  }
+}
+```
 
 ## LLM Env Overrides
 
@@ -175,6 +353,22 @@ common model settings outside individual agents:
       "model": "gpt-5.5",
       "timeout_seconds": 120,
       "window_width_tokens": 100000
+    },
+    "lmstudio": {
+      "base_url": "http://127.0.0.1:1234/v1",
+      "model": "mistralai/ministral-3-14b-reasoning",
+      "models": [
+        {
+          "model": "mistralai/ministral-3-14b-reasoning",
+          "context_window_tokens": 30000
+        },
+        {
+          "model": "google/gemma-4-12b-qat",
+          "context_window_tokens": 40000
+        }
+      ],
+      "timeout_seconds": 120,
+      "window_width_tokens": 50000
     },
     "bedrock": {
       "profile": "claude-bedrock",

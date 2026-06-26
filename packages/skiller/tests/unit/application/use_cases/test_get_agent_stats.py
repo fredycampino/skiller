@@ -17,6 +17,7 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm.provider_registry import (
+    NULL_MODELS,
     AgentLLMProviderList,
     AgentLLMProviderType,
     AgentNullLLMModel,
@@ -49,6 +50,36 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
     assert result.stats.context.window.limit_tokens == 80000
     assert result.stats.context.window.capacity_tokens == 100000
     assert context_stats.context_ids == ["support-thread"]
+
+
+def test_get_agent_stats_caps_capacity_by_model_context_window() -> None:
+    result = GetAgentStatsUseCase(
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
+        context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=120000)),
+        skill_runner=_FakeSkillRunner(),
+    ).execute("run-1", "support_agent")
+
+    assert result.status == GetAgentStatsStatus.OK
+    assert result.stats is not None
+    assert result.stats.context.window.capacity_tokens == 100000
+    assert result.stats.context.window.limit_tokens == 80000
+
+
+def test_get_agent_stats_uses_configured_capacity_when_smaller_than_model() -> None:
+    result = GetAgentStatsUseCase(
+        run_store=_FakeRunStore(_build_run()),
+        run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
+        context_stats=_FakeContextStats(),
+        agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=60000)),
+        skill_runner=_FakeSkillRunner(),
+    ).execute("run-1", "support_agent")
+
+    assert result.status == GetAgentStatsStatus.OK
+    assert result.stats is not None
+    assert result.stats.context.window.capacity_tokens == 60000
+    assert result.stats.context.window.limit_tokens == 48000
 
 
 def test_get_agent_stats_returns_not_found_statuses() -> None:
@@ -138,9 +169,12 @@ class _FakeContextStats:
 
 
 class _FakeAgentConfig:
+    def __init__(self, config: AgentConfig | None = None) -> None:
+        self.config = config or _agent_config()
+
     def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
         _ = config_path
-        return _agent_config()
+        return self.config
 
 
 class _FakeSkillRunner:
@@ -149,11 +183,12 @@ class _FakeSkillRunner:
         raise FileNotFoundError
 
 
-def _agent_config() -> AgentConfig:
+def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
     provider = AgentNullProvider(
         model=AgentNullLLMModel.NULL1,
+        models=NULL_MODELS,
         timeout_seconds=30,
-        window_width_tokens=100000,
+        window_width_tokens=window_width_tokens,
     )
     return AgentConfig(
         llm=AgentLLMProviderList(

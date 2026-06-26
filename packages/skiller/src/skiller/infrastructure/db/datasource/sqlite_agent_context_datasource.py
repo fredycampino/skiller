@@ -18,10 +18,6 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextObservedWindowStats,
 )
 from skiller.domain.agent.llm.model import LLMUsage
-from skiller.domain.agent.llm.provider_registry import (
-    AgentLLMModel,
-    agent_llm_model_from_value,
-)
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
@@ -399,7 +395,7 @@ def _usage_to_dict(usage: LLMUsage) -> dict[str, int | str | None]:
     if usage.provider is not None:
         result["provider"] = usage.provider.value
     if usage.model is not None:
-        result["model"] = usage.model.value
+        result["model"] = usage.model
     return result
 
 
@@ -456,14 +452,11 @@ def _optional_string(value: object) -> str | None:
     return value
 
 
-def _optional_model(value: object) -> AgentLLMModel | None:
+def _optional_model(value: object) -> str | None:
     value = _optional_string(value)
     if value is None:
         return None
-    try:
-        return agent_llm_model_from_value(value)
-    except ValueError:
-        return None
+    return value
 
 
 def _optional_assistant_message_type(

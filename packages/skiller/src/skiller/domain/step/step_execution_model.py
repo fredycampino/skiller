@@ -7,11 +7,7 @@ from skiller.domain.action.action_model import (
     action_from_dict,
     action_to_public_dict,
 )
-from skiller.domain.agent.llm.provider_registry import (
-    AgentLLMModel,
-    AgentLLMProviderType,
-    agent_llm_model_from_value,
-)
+from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_type import StepType
 
@@ -48,7 +44,7 @@ class AgentUsageOutput:
     completion_tokens: int | None
     total_tokens: int | None
     provider: AgentLLMProviderType | None
-    model: AgentLLMModel | None
+    model: str | None
 
 
 @dataclass(frozen=True)
@@ -262,13 +258,14 @@ def _optional_provider(value: object) -> AgentLLMProviderType | None:
     return AgentLLMProviderType(str(value))
 
 
-def _optional_model(value: object) -> AgentLLMModel | None:
+def _optional_model(value: object) -> str | None:
     if value is None:
         return None
-    try:
-        return agent_llm_model_from_value(str(value))
-    except ValueError as exc:
-        raise ValueError(f"Unsupported agent usage model: {value}") from exc
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, dict) and isinstance(value.get("value"), str):
+        return value["value"]
+    raise ValueError(f"Unsupported agent usage model: {value}")
 
 
 def _build_notify_output_fields(output_fields: dict[str, Any]) -> dict[str, Any]:

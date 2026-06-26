@@ -2,12 +2,14 @@ import pytest
 
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
+    LLMCustomModel,
     LLMMessageRole,
     LLMResponse,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolMessage,
+    LLMUsage,
     LLMUserMessage,
 )
 from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
@@ -84,3 +86,19 @@ def test_llm_response_exposes_semantic_properties() -> None:
     assert response.has_text_content is True
     assert response.has_tool_calls is False
     assert response.is_error is True
+
+
+def test_llm_usage_normalizes_model_like_values_to_model_name() -> None:
+    usage = LLMUsage(
+        model=LLMCustomModel(
+            value="local/custom",
+            model_context_window_tokens=4096,
+        )
+    )
+
+    assert usage.model == "local/custom"
+
+
+def test_llm_usage_rejects_invalid_model_name() -> None:
+    with pytest.raises(TypeError, match="LLMUsage model must be a non-empty string"):
+        LLMUsage(model="")

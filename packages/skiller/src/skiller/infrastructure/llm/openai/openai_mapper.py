@@ -8,6 +8,7 @@ from typing import Protocol, TypeVar
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
+    LLMModelLike,
     LLMResponse,
     LLMResponseFormat,
     LLMResponseFormatType,
@@ -16,9 +17,6 @@ from skiller.domain.agent.llm.model import (
     LLMToolChoiceMode,
     LLMToolMessage,
     LLMUsage,
-)
-from skiller.domain.agent.llm.provider_registry import (
-    AgentLLMModel,
 )
 from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
@@ -33,7 +31,7 @@ class OpenAIMapper(Protocol[RequestT]):
         self,
         response: object,
         *,
-        fallback_model: AgentLLMModel,
+        fallback_model: LLMModelLike,
     ) -> LLMResponse: ...
 
 
@@ -51,7 +49,7 @@ class DefaultOpenAIMapper(OpenAIMapper[OpenAILLMRequest]):
         self,
         response: object,
         *,
-        fallback_model: AgentLLMModel,
+        fallback_model: LLMModelLike,
     ) -> LLMResponse:
         return to_port_llm_response(response, fallback_model=fallback_model)
 
@@ -76,7 +74,7 @@ def to_openai_kwargs(request: OpenAILLMRequest) -> dict[str, object]:
 def to_port_llm_response(
     response: object,
     *,
-    fallback_model: AgentLLMModel,
+    fallback_model: LLMModelLike,
 ) -> LLMResponse:
     choices = getattr(response, "choices", None)
     if choices is None and isinstance(response, Mapping):
@@ -134,8 +132,8 @@ def to_port_llm_response(
 def _response_model(
     response_model: object,
     *,
-    fallback_model: AgentLLMModel,
-) -> AgentLLMModel:
+    fallback_model: LLMModelLike,
+) -> LLMModelLike:
     if response_model == fallback_model.value:
         return fallback_model
     return fallback_model

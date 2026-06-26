@@ -19,7 +19,6 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockLLMModel,
     AgentFakeLLMModel,
     AgentLLMProviderType,
-    AgentLMStudioLLMModel,
     AgentMiniMaxLLMModel,
 )
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
@@ -174,9 +173,178 @@ def test_json_agent_config_reads_lmstudio_provider(tmp_path) -> None:
 
     assert config.llm.default_provider == AgentLLMProviderType.LMSTUDIO
     assert provider.type == AgentLLMProviderType.LMSTUDIO
-    assert provider.model == AgentLMStudioLLMModel.GEMMA_4_12B_QAT
+    assert provider.model.value == "google/gemma-4-12b-qat"
+    assert provider.model.model_context_window_tokens == 131_072
     assert provider.api_key == "lm-studio"
     assert provider.base_url == "http://127.0.0.1:1234/v1"
+
+
+def test_json_agent_config_resolves_lmstudio_api_key_env(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_lmstudio_llm(api_key_env="TEST_LMSTUDIO_KEY"))
+
+    config = _provider(
+        config_path=config_path,
+        env={"TEST_LMSTUDIO_KEY": "env-ref-key"},
+    ).get_config()
+
+    assert config.llm.default().api_key == "env-ref-key"
+
+
+def test_json_agent_config_resolves_lmstudio_api_key_file(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    secret_path = tmp_path / "lmstudio-key"
+    secret_path.write_text("file-key\n", encoding="utf-8")
+    _write_config(config_path, llm=_lmstudio_llm(api_key_file=str(secret_path)))
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.llm.default().api_key == "file-key"
+
+
+def test_json_agent_config_rejects_lmstudio_without_models(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_lmstudio_llm(models=None, include_default_models=False),
+    )
+
+    with pytest.raises(ValueError, match="LM Studio LLM provider requires models"):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_reads_lmstudio_custom_models(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_lmstudio_llm(
+            model="local/gemma-custom",
+            models=[
+                {
+                    "model": "local/gemma-custom",
+                    "context_window_tokens": 10_000,
+                },
+                {
+                    "model": "local/qwen-custom",
+                    "context_window_tokens": 32_000,
+                },
+            ],
+        ),
+    )
+
+    config = _provider(config_path=config_path, env={}).get_config()
+    provider = config.llm.default()
+
+    assert provider.model.value == "local/gemma-custom"
+    assert provider.model.model_context_window_tokens == 10_000
+    assert [model.value for model in provider.models] == [
+        "local/gemma-custom",
+        "local/qwen-custom",
+    ]
+
+
+def test_json_agent_config_rejects_lmstudio_model_outside_custom_models(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_lmstudio_llm(
+            model="local/not-allowed",
+            models=[
+                {
+                    "model": "local/gemma-custom",
+                    "context_window_tokens": 10_000,
+                },
+            ],
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "LM Studio selected model='local/not-allowed' is not listed in "
+            "configured models: local/gemma-custom"
+        ),
+    ):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_rejects_lmstudio_duplicate_custom_models(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_lmstudio_llm(
+            model="local/gemma-custom",
+            models=[
+                {
+                    "model": "local/gemma-custom",
+                    "context_window_tokens": 10_000,
+                },
+                {
+                    "model": "local/gemma-custom",
+                    "context_window_tokens": 32_000,
+                },
+            ],
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Duplicate LM Studio models: local/gemma-custom",
+    ):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_rejects_models_config_for_non_lmstudio_provider(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_minimax_llm(
+            api_key="secret",
+            extra={
+                "models": [
+                    {
+                        "model": "MiniMax-M2.5",
+                        "context_window_tokens": 204_800,
+                    },
+                ],
+            },
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Provider models config is not supported for provider='minimax'",
+    ):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_applies_lmstudio_custom_model_env_override(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_lmstudio_llm(
+            model="local/gemma-custom",
+            models=[
+                {
+                    "model": "local/gemma-custom",
+                    "context_window_tokens": 10_000,
+                },
+                {
+                    "model": "local/qwen-custom",
+                    "context_window_tokens": 32_000,
+                },
+            ],
+        ),
+    )
+
+    config = _provider(
+        config_path=config_path,
+        env={"AGENT_LMSTUDIO_MODEL": "local/qwen-custom"},
+    ).get_config()
+    provider = config.llm.default()
+
+    assert provider.model.value == "local/qwen-custom"
+    assert provider.model.model_context_window_tokens == 32_000
 
 
 def test_json_agent_config_applies_lmstudio_selected_env_overrides(tmp_path) -> None:
@@ -194,7 +362,7 @@ def test_json_agent_config_applies_lmstudio_selected_env_overrides(tmp_path) -> 
 
     assert provider.api_key == "env-key"
     assert provider.base_url == "http://127.0.0.1:4321/v1"
-    assert provider.model == AgentLMStudioLLMModel.GEMMA_4_12B_QAT
+    assert provider.model.value == "google/gemma-4-12b-qat"
     assert provider.timeout_seconds == 9.5
 
 
@@ -681,18 +849,35 @@ def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
 def _lmstudio_llm(
     *,
     model: str = "google/gemma-4-12b-qat",
+    models: list[dict[str, object]] | None = None,
+    include_default_models: bool = True,
     base_url: str | None = None,
     api_key: str | None = None,
+    api_key_env: str | None = None,
+    api_key_file: str | None = None,
 ) -> dict[str, object]:
     provider: dict[str, object] = {
         "model": model,
         "timeout_seconds": 30,
         "window_width_tokens": 131_072,
     }
+    if models is not None:
+        provider["models"] = models
+    elif include_default_models:
+        provider["models"] = [
+            {
+                "model": model,
+                "context_window_tokens": 131_072,
+            },
+        ]
     if base_url is not None:
         provider["base_url"] = base_url
     if api_key is not None:
         provider["api_key"] = api_key
+    if api_key_env is not None:
+        provider["api_key_env"] = api_key_env
+    if api_key_file is not None:
+        provider["api_key_file"] = api_key_file
 
     return {
         "llm": {"default_provider": "lmstudio"},

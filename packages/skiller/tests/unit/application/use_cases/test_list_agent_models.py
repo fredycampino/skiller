@@ -18,11 +18,14 @@ from skiller.domain.agent.config.port import (
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
 )
-from skiller.domain.agent.llm.model import AgentLLMProviderType
+from skiller.domain.agent.llm.model import AgentLLMProviderType, LLMCustomModel
 from skiller.domain.agent.llm.provider_registry import (
+    CODEX_MODELS,
+    MINIMAX_MODELS,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentLLMProviderList,
+    AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
 )
@@ -39,12 +42,14 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
             providers=(
                 AgentCodexProvider(
                     model=AgentCodexLLMModel.GPT_5_5,
+                    models=CODEX_MODELS,
                     timeout_seconds=120,
                     window_width_tokens=1050000,
                     credentials_file="/secret/codex.json",
                 ),
                 AgentMiniMaxProvider(
                     model=AgentMiniMaxLLMModel.M2_7,
+                    models=MINIMAX_MODELS,
                     timeout_seconds=30,
                     window_width_tokens=204800,
                     api_key="secret",
@@ -74,7 +79,7 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
     assert _model(codex.models, "gpt-5.5").active is True
     assert _model(codex.models, "gpt-5.4").active is False
     assert _model(minimax.models, "MiniMax-M2.7").active is False
-    assert _model(lmstudio.models, "google/gemma-4-12b-qat").active is False
+    assert lmstudio.models == ()
     assert agent_config.config_paths == [None]
 
 
@@ -105,6 +110,44 @@ def test_list_agent_models_uses_resolved_run_agent_config_path(tmp_path: Path) -
     assert result.status == ListAgentModelsStatus.OK
     assert agent_config.config_paths == [config_path]
     assert agent_config.source_config_paths == [config_path]
+
+
+def test_list_agent_models_returns_configured_lmstudio_models() -> None:
+    custom_model = LLMCustomModel(
+        value="local/gemma-custom",
+        model_context_window_tokens=10_000,
+    )
+    provider = AgentLMStudioProvider(
+        model=custom_model,
+        models=(custom_model,),
+        timeout_seconds=30,
+        window_width_tokens=10_000,
+    )
+    agent_config = _FakeAgentConfig(
+        _agent_config(
+            default_provider=AgentLLMProviderType.LMSTUDIO,
+            providers=(provider,),
+        ),
+        sources=(
+            AgentConfigProviderSourceItem(
+                provider_type=provider.type,
+                source=AgentConfigProviderSource.LOCAL,
+            ),
+        ),
+    )
+    use_case = ListAgentModelsUseCase(
+        run_store=_FakeRunStore(_build_run()),
+        agent_config=agent_config,
+        skill_runner=_FakeSkillRunner(),
+    )
+
+    result = use_case.execute("run-1")
+
+    lmstudio = _provider(result.providers, "lmstudio")
+    assert lmstudio.source == AgentConfigProviderSource.LOCAL
+    assert [(model.name, model.active) for model in lmstudio.models] == [
+        ("local/gemma-custom", True),
+    ]
 
 
 class _FakeRunStore:
@@ -162,6 +205,7 @@ class _FakeSkillRunner:
 def _codex_config() -> AgentConfig:
     provider = AgentCodexProvider(
         model=AgentCodexLLMModel.GPT_5_5,
+        models=CODEX_MODELS,
         timeout_seconds=120,
         window_width_tokens=1050000,
         credentials_file="/secret/codex.json",
@@ -175,7 +219,10 @@ def _codex_config() -> AgentConfig:
 def _agent_config(
     *,
     default_provider: AgentLLMProviderType,
-    providers: tuple[AgentCodexProvider | AgentMiniMaxProvider, ...],
+    providers: tuple[
+        AgentCodexProvider | AgentMiniMaxProvider | AgentLMStudioProvider,
+        ...,
+    ],
 ) -> AgentConfig:
     return AgentConfig(
         llm=AgentLLMProviderList(

@@ -231,6 +231,7 @@ def _tool_request() -> ToolExecutionRequest:
         runtime_configs=ToolRuntimeConfigs(),
         event_config=_event_output_config(),
         max_tool_calls=5,
+        max_tool_result_bytes=40_000,
         turn_loop=AgentLoop(max_turns=10),
     )
 

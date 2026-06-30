@@ -51,7 +51,6 @@ class ListModelsUseCase:
             command=command.raw_text,
             rows=models,
         )
-        state.set_status()
         _reset_prompt(state, mode=PromptMode.MODELS_TABLE)
         return ListModelsResult(state=state)
 

@@ -153,6 +153,7 @@ def test_bedrock_llm_request_requires_bedrock_model() -> None:
     request = BedrockLLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        max_tokens=4096,
     )
 
     assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
@@ -164,4 +165,5 @@ def test_bedrock_llm_request_requires_bedrock_model() -> None:
         BedrockLLMRequest(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_5,
+            max_tokens=4096,
         )

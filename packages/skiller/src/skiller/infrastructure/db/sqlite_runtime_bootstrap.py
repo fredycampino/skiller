@@ -4,7 +4,7 @@ from pathlib import Path
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
-SQLITE_RUNTIME_DB_VERSION = 7
+SQLITE_RUNTIME_DB_VERSION = 8
 
 
 class SqliteRuntimeBootstrap(SqliteConnectionSource, RuntimeBootstrapPort):
@@ -34,9 +34,36 @@ def apply_db_updates(conn: sqlite3.Connection, *, db_path: str) -> None:
     if current_version == 0 and table_count == 0:
         _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
         return
+    if current_version == 7:
+        _upgrade_v7_to_v8(conn)
+        _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
+        return
     raise RuntimeError(
         "Runtime DB version mismatch: "
         f"db={current_version}, expected={SQLITE_RUNTIME_DB_VERSION}, path={db_path}"
+    )
+
+
+def _upgrade_v7_to_v8(conn: sqlite3.Connection) -> None:
+    columns = _table_columns(conn, table="agent_context_entries")
+    if "delta_compact_tokens" not in columns:
+        conn.execute(
+            """
+            ALTER TABLE agent_context_entries
+            ADD COLUMN delta_compact_tokens INTEGER NULL
+            """
+        )
+    _create_agent_context_usage_marker_index(conn)
+
+
+def _create_agent_context_usage_marker_index(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_agent_context_usage_markers_context_sequence
+        ON agent_context_entries(context_id, sequence)
+        WHERE usage_json IS NOT NULL
+          AND delta_tokens IS NOT NULL
+        """
     )
 
 
@@ -56,7 +83,7 @@ def _should_reset_db(db_path: Path) -> bool:
         return False
     with sqlite3.connect(db_path) as conn:
         current_version = _db_version(conn)
-        if current_version == SQLITE_RUNTIME_DB_VERSION:
+        if current_version in {7, SQLITE_RUNTIME_DB_VERSION}:
             return False
         table_count = _table_count(conn)
     return not (current_version == 0 and table_count == 0)
@@ -74,6 +101,11 @@ def _table_count(conn: sqlite3.Connection) -> int:
     if row is None:
         return 0
     return int(row[0])
+
+
+def _table_columns(conn: sqlite3.Connection, *, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
 
 
 def _delete_db_files(db_path: Path) -> None:
@@ -188,6 +220,7 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
           message_type TEXT NULL,
           window_start_sequence INTEGER NULL,
           delta_tokens INTEGER NULL,
+          delta_compact_tokens INTEGER NULL,
           window_base INTEGER NULL,
           payload_json TEXT NOT NULL,
           usage_json TEXT NULL,
@@ -222,5 +255,9 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
           );
         CREATE INDEX IF NOT EXISTS idx_agent_context_entries_context
           ON agent_context_entries(context_id, sequence);
+        CREATE INDEX IF NOT EXISTS idx_agent_context_usage_markers_context_sequence
+          ON agent_context_entries(context_id, sequence)
+          WHERE usage_json IS NOT NULL
+            AND delta_tokens IS NOT NULL;
         """
     )

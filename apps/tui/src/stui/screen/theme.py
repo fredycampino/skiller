@@ -223,7 +223,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
         }}
 
         #runs-table-area {{
-            height: 1fr;
+            height: auto;
             align: center bottom;
             width: 100%;
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
@@ -234,7 +234,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
 
         #models-table-area {{
             display: none;
-            height: 1fr;
+            height: auto;
             align: center bottom;
             width: 100%;
             margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};

@@ -19,6 +19,11 @@ def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -
     assert _table_exists(db_path, "runs") is True
     assert _table_exists(db_path, "agent_context_entries") is True
     assert _table_exists(db_path, "webhook_registrations") is True
+    assert "delta_compact_tokens" in _table_columns(db_path, "agent_context_entries")
+    assert _index_exists(
+        db_path,
+        "idx_agent_context_usage_markers_context_sequence",
+    )
     assert _table_columns(db_path, "webhook_registrations") >= {
         "webhook",
         "secret",
@@ -41,6 +46,58 @@ def test_sqlite_runtime_bootstrap_resets_version_mismatch(tmp_path) -> None:
 
     assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
     assert _count_rows(db_path, "runs") == 0
+
+
+def test_sqlite_runtime_bootstrap_migrates_v7_to_v8(tmp_path) -> None:
+    db_path = tmp_path / "runtime.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE agent_context_entries (
+              id TEXT PRIMARY KEY,
+              run_id TEXT NOT NULL,
+              context_id TEXT NOT NULL,
+              sequence INTEGER NOT NULL,
+              entry_type TEXT NOT NULL,
+              message_type TEXT NULL,
+              window_start_sequence INTEGER NULL,
+              delta_tokens INTEGER NULL,
+              window_base INTEGER NULL,
+              payload_json TEXT NOT NULL,
+              usage_json TEXT NULL,
+              source_step_id TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO agent_context_entries (
+              id,
+              run_id,
+              context_id,
+              sequence,
+              entry_type,
+              payload_json,
+              source_step_id
+            ) VALUES (
+              'entry-1',
+              'run-1',
+              'ctx-1',
+              1,
+              'user_message',
+              '{"type":"user_message","text":"hello"}',
+              'support_agent'
+            );
+            PRAGMA user_version = 7;
+            """
+        )
+
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+
+    assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
+    assert "delta_compact_tokens" in _table_columns(db_path, "agent_context_entries")
+    assert _index_exists(
+        db_path,
+        "idx_agent_context_usage_markers_context_sequence",
+    )
+    assert _count_rows(db_path, "agent_context_entries") == 1
 
 
 def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> None:
@@ -165,6 +222,19 @@ def _count_rows(db_path, table: str) -> int:  # noqa: ANN001
         row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     assert row is not None
     return int(row[0])
+
+
+def _index_exists(db_path, index: str) -> bool:  # noqa: ANN001
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'index' AND name = ?
+            """,
+            (index,),
+        ).fetchone()
+    return row is not None
 
 
 def _table_columns(db_path, table: str) -> set[str]:  # noqa: ANN001

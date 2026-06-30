@@ -38,7 +38,13 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
         config_path,
         llm=_minimax_llm(api_key_file=str(secret_path)),
         loop={"max_turns": 12, "max_tool_calls": 7},
-        context={"compaction": {"enabled": True, "max_total_tokens_ratio": 0.9}},
+        context={
+            "compaction": {
+                "enabled": True,
+                "max_total_tokens_ratio": 0.9,
+                "keep_last": 5,
+            }
+        },
         event_output={
             "truncate": {
                 "enabled": False,
@@ -62,6 +68,7 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     assert config.loop.max_tool_calls == 7
     assert config.context.compaction.enabled is True
     assert config.context.compaction.max_total_tokens_ratio == 0.9
+    assert config.context.compaction.keep_last == 5
     assert config.event_output.truncate.enabled is False
     assert config.event_output.truncate.max_text_chars == 300
     assert config.event_output.truncate.max_json_chars == 2000

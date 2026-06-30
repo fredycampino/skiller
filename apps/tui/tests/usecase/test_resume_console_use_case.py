@@ -67,7 +67,7 @@ def test_resume_console_loads_waiting_session() -> None:
     assert state.session_key == "run-1"
     assert state.run_name == "chat"
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == "Say something"
+    assert state.view_status.message == "Say something"
     assert context.run_id == "run-1"
     assert context.run_name == "chat"
     assert context.status == RunStatus.WAITING_INPUT

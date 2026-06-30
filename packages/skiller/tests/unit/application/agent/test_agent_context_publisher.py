@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 import pytest
@@ -15,10 +16,12 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextPayload,
     AgentContextUsageMarker,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
+    agent_context_payload_to_dict,
 )
 from skiller.domain.agent.context.store_port import AgentContextStorePort
 from skiller.domain.agent.llm.model import (
@@ -141,9 +144,115 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         "text": "Done.",
         "usage": usage,
         "delta_tokens": 10,
+        "delta_compact_tokens": 10,
         "window_start_sequence": 1,
         "window_base": True,
     }
+
+
+def test_agent_context_publisher_compacts_delta_when_block_has_tool_history() -> None:
+    marker = AgentContextUsageMarker(
+        sequence=1,
+        prompt_tokens=100,
+        delta_tokens=100,
+        window_start_sequence=1,
+        window_base=True,
+    )
+    store = _FakeAgentContextStore(
+        marker=marker,
+        entries=[
+            AgentContextEntry(
+                id="entry-1",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=1,
+                entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
+                usage=LLMUsage(prompt_tokens=100, completion_tokens=1, total_tokens=101),
+                message_type=AgentAssistantMessageType.TOOL_CALLS,
+                window_start_sequence=1,
+                delta_tokens=100,
+                delta_compact_tokens=100,
+                window_base=True,
+                payload=AgentAssistantMessagePayload(
+                    turn_id="turn-1",
+                    message_type=AgentAssistantMessageType.TOOL_CALLS,
+                    text="I will inspect files.",
+                ),
+                source_step_id="agent-1",
+                created_at="2026-05-15T00:00:00Z",
+            ),
+            AgentContextEntry(
+                id="entry-2",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=2,
+                entry_type=AgentContextEntryType.TOOL_CALL,
+                usage=None,
+                payload=AgentToolCallPayload(
+                    turn_id="turn-1",
+                    parent_sequence=1,
+                    tool_call_id="call-1",
+                    tool="read_file",
+                    args={"path": "README.md"},
+                ),
+                source_step_id="agent-1",
+                created_at="2026-05-15T00:00:00Z",
+            ),
+            AgentContextEntry(
+                id="entry-3",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=3,
+                entry_type=AgentContextEntryType.TOOL_RESULT,
+                usage=None,
+                payload=AgentToolResultPayload(
+                    turn_id="turn-1",
+                    parent_sequence=1,
+                    tool_call_id="call-1",
+                    tool="read_file",
+                    status="OK",
+                    data={"content": "x" * 2000},
+                    error=None,
+                ),
+                source_step_id="agent-1",
+                created_at="2026-05-15T00:00:00Z",
+            ),
+        ],
+    )
+    run_agent_store = _FakeRunAgentStore()
+    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
+        agent_id="agent-1",
+        context_id="ctx-1",
+        window_start_sequence=1,
+        window_base=False,
+    )
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    final_payload = AgentAssistantMessagePayload(
+        turn_id="turn-1",
+        message_type=AgentAssistantMessageType.FINAL,
+        text="README inspected.",
+    )
+
+    publisher.publish_final_assistant_message(
+        context=_tool_request().context,
+        turn_id=final_payload.turn_id,
+        text=final_payload.text,
+        usage=LLMUsage(prompt_tokens=200, completion_tokens=5, total_tokens=205),
+    )
+
+    assert store.list_from_calls == [
+        {
+            "context_id": "ctx-1",
+            "start_sequence": marker.sequence,
+        }
+    ]
+    delta_payloads = [entry.payload for entry in store.entries] + [final_payload]
+    assert store.calls[-1]["delta_tokens"] == 100
+    assert store.calls[-1]["delta_compact_tokens"] == _expected_compact_delta_tokens(
+        delta_tokens=100,
+        payloads=delta_payloads,
+    )
+
 
 
 def test_agent_context_publisher_uses_window_estimate_for_base_delta() -> None:
@@ -247,17 +356,46 @@ def _event_output_config() -> AgentEventOutputConfig:
     )
 
 
+def _expected_compact_delta_tokens(
+    *,
+    delta_tokens: int,
+    payloads: list[AgentContextPayload],
+) -> int:
+    full_chars = sum(_payload_chars(payload) for payload in payloads)
+    compact_chars = sum(
+        _payload_chars(payload)
+        for payload in payloads
+        if not _is_prunable_payload(payload)
+    )
+    return round(delta_tokens * compact_chars / full_chars)
+
+
+def _is_prunable_payload(payload: AgentContextPayload) -> bool:
+    if isinstance(payload, AgentToolCallPayload | AgentToolResultPayload):
+        return True
+    if not isinstance(payload, AgentAssistantMessagePayload):
+        return False
+    return payload.message_type == AgentAssistantMessageType.TOOL_CALLS
+
+
+def _payload_chars(payload: AgentContextPayload) -> int:
+    return len(json.dumps(agent_context_payload_to_dict(payload), sort_keys=True))
+
+
 class _FakeAgentContextStore(AgentContextStorePort):
     def __init__(
         self,
         *,
         marker: AgentContextUsageMarker | None = None,
         estimated_tokens: int = 0,
+        entries: list[AgentContextEntry] | None = None,
     ) -> None:
         self.calls: list[dict[str, object]] = []
         self.marker = marker
         self.estimated_tokens = estimated_tokens
+        self.entries = entries or []
         self.estimate_calls: list[dict[str, object]] = []
+        self.list_from_calls: list[dict[str, object]] = []
 
     def init_db(self) -> None:
         raise NotImplementedError
@@ -289,6 +427,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
         text: str,
         usage: LLMUsage | None = None,
         delta_tokens: int = 0,
+        delta_compact_tokens: int = 0,
         window_start_sequence: int = 0,
         window_base: bool = False,
     ) -> AgentContextEntry:
@@ -300,6 +439,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "text": text,
                 "usage": usage,
                 "delta_tokens": delta_tokens,
+                "delta_compact_tokens": delta_compact_tokens,
                 "window_start_sequence": window_start_sequence,
                 "window_base": window_base,
             }
@@ -314,6 +454,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
             message_type=AgentAssistantMessageType.TOOL_CALLS,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
@@ -332,6 +473,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -343,6 +485,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "text": text,
                 "usage": usage,
                 "delta_tokens": delta_tokens,
+                "delta_compact_tokens": delta_compact_tokens,
                 "window_start_sequence": window_start_sequence,
                 "window_base": window_base,
             }
@@ -357,6 +500,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
             message_type=AgentAssistantMessageType.FINAL,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
@@ -424,7 +568,21 @@ class _FakeAgentContextStore(AgentContextStorePort):
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         _ = context_id
-        raise NotImplementedError
+        return self.entries
+
+    def list_entries_from_sequence(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        self.list_from_calls.append(
+            {
+                "context_id": context_id,
+                "start_sequence": start_sequence,
+            }
+        )
+        return [entry for entry in self.entries if entry.sequence >= start_sequence]
 
     def list_window_entries(
         self,

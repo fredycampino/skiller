@@ -93,15 +93,16 @@ class LoadSessionFromPostUseCase:
         state.load_session(run_id=run_id)
         self.session_store_port.write(StoredSession(run_id=run_id, run_name=""))
         state.set_transcript(mode=state.transcript.mode, items=[])
-        state.set_prompt(
-            waiting_prompt=runtime_status.prompt,
-        )
+        state.set_prompt()
         if run_status in {
             RunStatus.WAITING_INPUT,
             RunStatus.WAITING_WEBHOOK,
             RunStatus.WAITING_CHANNEL,
         }:
-            state.set_status(kind=ViewStatusKind.WAITING)
+            state.set_status(
+                kind=ViewStatusKind.WAITING,
+                message=runtime_status.prompt,
+            )
         else:
             state.set_status(kind=ViewStatusKind.RUNNING)
         self.context.activate_run(run_id, run_name="", status=run_status)

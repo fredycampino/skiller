@@ -40,7 +40,7 @@ from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
 from stui.screen.transcript import RenderTranscript
 from stui.screen.transcript_log import TranscriptLog
 from stui.viewmodel.console_screen_event import InspectRunContextEvent
-from stui.viewmodel.console_screen_state import ConsoleScreenState
+from stui.viewmodel.console_screen_state import ConsoleScreenState, PromptMode
 from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
 
 _NARROW_FOOTER_WIDTH = 80
@@ -88,24 +88,6 @@ class ConsoleScreen(App[str]):
                 markup=False,
                 min_width=0,
             ),
-            Container(
-                RunsTableView(
-                    id="runs-table",
-                    visible=False,
-                    empty_message=self.ui_strings.runs_table_empty_message,
-                    navigation_hint=self.ui_strings.runs_table_navigation_hint,
-                ),
-                id="runs-table-area",
-            ),
-            Container(
-                ModelsTableView(
-                    id="models-table",
-                    visible=False,
-                    theme=self.ui_theme,
-                    strings=self.ui_strings,
-                ),
-                id="models-table-area",
-            ),
             Horizontal(
                 ScreenStatusView(id="status", theme=self.ui_theme),
                 Container(
@@ -125,6 +107,24 @@ class ConsoleScreen(App[str]):
                     id="right-status-column",
                 ),
                 id="status-row",
+            ),
+            Container(
+                RunsTableView(
+                    id="runs-table",
+                    visible=False,
+                    empty_message=self.ui_strings.runs_table_empty_message,
+                    navigation_hint=self.ui_strings.runs_table_navigation_hint,
+                ),
+                id="runs-table-area",
+            ),
+            Container(
+                ModelsTableView(
+                    id="models-table",
+                    visible=False,
+                    theme=self.ui_theme,
+                    strings=self.ui_strings,
+                ),
+                id="models-table-area",
             ),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             PromptView(theme=self.ui_theme),
@@ -426,10 +426,7 @@ class ConsoleScreen(App[str]):
             status = self.query_one("#status", ScreenStatusView)
         except NoMatches:
             return
-        status.set_state(
-            new_state.view_status,
-            waiting_prompt=new_state.prompt.waiting_prompt,
-        )
+        status.set_state(new_state.view_status)
 
     def _refresh_footer(self, *, new_state: ConsoleScreenState) -> None:
         try:
@@ -600,15 +597,20 @@ class ConsoleScreen(App[str]):
             runs_table = self.query_one("#runs-table", RunsTableView)
             models_table_area = self.query_one("#models-table-area", Container)
             models_table = self.query_one("#models-table", ModelsTableView)
-            status = self.query_one("#status", ScreenStatusView)
+            status_row = self.query_one("#status-row", Horizontal)
         except NoMatches:
             return
 
+        prompt_panel_visible = new_state.prompt.mode in {
+            PromptMode.AUTOCOMPLETION,
+            PromptMode.RUNS_TABLE,
+            PromptMode.MODELS_TABLE,
+        }
         runs_table_area.display = new_state.runs_table.visible
         runs_table.display = new_state.runs_table.visible
         models_table_area.display = new_state.models_table.visible
         models_table.display = new_state.models_table.visible
-        status.display = not new_state.runs_table.visible and not new_state.models_table.visible
+        status_row.display = not prompt_panel_visible
 
     def _runs_table(self) -> RunsTableView:
         return self.query_one("#runs-table", RunsTableView)
@@ -746,7 +748,6 @@ def _build_screen_state_payload(state: ConsoleScreenState) -> dict[str, object]:
             "mode": state.prompt.mode.value,
             "text": state.prompt.text,
             "cursor_position": state.prompt.cursor_position,
-            "waiting_prompt": state.prompt.waiting_prompt,
         },
         "runs_table": {
             "visible": state.runs_table.visible,

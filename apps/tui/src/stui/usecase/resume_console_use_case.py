@@ -63,11 +63,11 @@ class ResumeConsoleUseCase:
             ],
         )
         state.set_autocompletion()
-        state.set_prompt(
-            waiting_prompt=runtime_status.prompt,
-            mode=PromptMode.DEFAULT,
+        state.set_prompt(mode=PromptMode.DEFAULT)
+        state.set_status(
+            kind=_view_status_kind(run_status),
+            message=runtime_status.prompt,
         )
-        state.set_status(kind=_view_status_kind(run_status))
         self.context.activate_run(
             stored_session.run_id,
             run_name=stored_session.run_name,

@@ -208,7 +208,7 @@ def test_runs_selection_loads_waiting_run_in_chat_mode() -> None:
     assert result.state.run_name == "ant"
     assert result.state.transcript.mode == TranscriptMode.CHAT
     assert result.state.view_status.kind == ViewStatusKind.WAITING
-    assert result.state.prompt.waiting_prompt == "Write a message"
+    assert result.state.view_status.message == "Write a message"
     assert context.run_id == "run-1234"
     assert context.run_name == "ant"
     assert context.mode == RunMode.CHAT

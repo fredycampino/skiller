@@ -21,16 +21,12 @@ def to_bedrock_kwargs(
     request: BedrockLLMRequest,
     *,
     max_tokens: int,
-    temperature: float,
 ) -> dict[str, object]:
     system, messages = _messages_to_payload(request.messages)
     payload: dict[str, object] = {
         "modelId": request.model.value,
         "messages": messages,
-        "inferenceConfig": {
-            "maxTokens": max_tokens,
-            "temperature": temperature,
-        },
+        "inferenceConfig": {"maxTokens": max_tokens},
     }
     if system:
         payload["system"] = system

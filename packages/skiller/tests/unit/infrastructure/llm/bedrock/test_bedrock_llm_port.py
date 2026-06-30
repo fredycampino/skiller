@@ -59,6 +59,7 @@ def test_bedrock_llm_port_generates_response(monkeypatch: pytest.MonkeyPatch) ->
         BedrockLLMRequest(
             messages=(LLMUserMessage("Hola mundo"),),
             model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            max_tokens=4096,
         )
     )
 
@@ -73,7 +74,7 @@ def test_bedrock_llm_port_generates_response(monkeypatch: pytest.MonkeyPatch) ->
         {
             "modelId": "us.anthropic.claude-opus-4-6-v1",
             "messages": [{"role": "user", "content": [{"text": "Hola mundo"}]}],
-            "inferenceConfig": {"maxTokens": 256, "temperature": 0.0},
+            "inferenceConfig": {"maxTokens": 4096},
         }
     ]
     assert response.ok is True
@@ -116,6 +117,7 @@ def test_bedrock_llm_port_maps_tool_use_to_tool_calls(
         BedrockLLMRequest(
             messages=(LLMUserMessage("run"),),
             model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            max_tokens=4096,
         )
     )
 
@@ -162,6 +164,7 @@ def test_bedrock_llm_port_returns_request_error(monkeypatch: pytest.MonkeyPatch)
         BedrockLLMRequest(
             messages=(LLMUserMessage("hello"),),
             model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            max_tokens=4096,
         )
     )
 

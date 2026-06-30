@@ -25,6 +25,7 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry: ...
@@ -37,6 +38,7 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry: ...
@@ -57,11 +59,26 @@ class AgentContextStorePort(Protocol):
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]: ...
 
+    def list_entries_from_sequence(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]: ...
+
     def list_window_entries(
         self,
         *,
         context_id: str,
         window_width_tokens: int,
+    ) -> list[AgentContextEntry]: ...
+
+    def list_compact_entries(
+        self,
+        *,
+        context_id: str,
+        window_width_tokens: int,
+        keep_last_markers: int,
     ) -> list[AgentContextEntry]: ...
 
     def get_last_usage_marker(

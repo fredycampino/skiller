@@ -454,7 +454,6 @@ class ConsoleScreenViewModel(LogEventsListener):
         state.set_prompt(
             text=self.state.prompt.text,
             cursor_position=self.state.prompt.cursor_position,
-            waiting_prompt=self.state.prompt.waiting_prompt,
             mode=self.state.prompt.mode,
         )
         state.set_status(

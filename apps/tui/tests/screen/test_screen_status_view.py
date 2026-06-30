@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 def test_screen_status_view_renders_waiting_with_prompt_in_brackets() -> None:
     view = ScreenStatusView()
     view._state = ViewStatusState(kind=ViewStatusKind.WAITING)
-    view._waiting_prompt = "Write a message. Type exit, quit, or bye to stop."
+    view._state.message = "Write a message. Type exit, quit, or bye to stop."
     renderable = view.render()
 
     assert isinstance(renderable, Text)
@@ -26,7 +26,7 @@ def test_screen_status_view_renders_waiting_with_prompt_in_brackets() -> None:
 def test_screen_status_view_renders_waiting_without_prompt() -> None:
     view = ScreenStatusView()
     view._state = ViewStatusState(kind=ViewStatusKind.WAITING)
-    view._waiting_prompt = ""
+    view._state.message = ""
     renderable = view.render()
 
     assert isinstance(renderable, Text)

@@ -24,7 +24,6 @@ def test_unsupported_input_use_case_resets_prompt_status_and_records_message() -
     state.set_prompt(
         text="hola",
         cursor_position=4,
-        waiting_prompt="Write a message",
         mode=PromptMode.AUTOCOMPLETION,
     )
     state.set_status(kind=ViewStatusKind.RUNNING, message="Running")
@@ -44,7 +43,6 @@ def test_unsupported_input_use_case_resets_prompt_status_and_records_message() -
     assert result.state is state
     assert state.prompt.text == ""
     assert state.prompt.cursor_position == 0
-    assert state.prompt.waiting_prompt == ""
     assert state.prompt.mode == PromptMode.DEFAULT
     assert state.autocompletion is None
     assert state.view_status.kind == ViewStatusKind.HIDDEN

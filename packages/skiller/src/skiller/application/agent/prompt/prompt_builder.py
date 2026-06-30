@@ -75,6 +75,7 @@ class AgentPromptBuilder:
             return BedrockLLMRequest(
                 messages=messages,
                 model=provider.model,
+                max_tokens=provider.max_output_tokens,
                 tools=tools,
             )
         return LLMRequest(

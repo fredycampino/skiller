@@ -82,6 +82,7 @@ class AgentContextEntry:
     message_type: AgentAssistantMessageType | None = None
     window_start_sequence: int | None = None
     delta_tokens: int | None = None
+    delta_compact_tokens: int | None = None
     window_base: bool | None = None
 
     def __post_init__(self) -> None:

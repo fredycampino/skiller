@@ -57,7 +57,8 @@ The other root fields are optional and use mapper/model defaults.
   "context": {
     "compaction": {
       "enabled": false,
-      "max_total_tokens_ratio": 0.8
+      "max_total_tokens_ratio": 0.8,
+      "keep_last": 5
     }
   },
   "event_output": {
@@ -482,14 +483,15 @@ Env overrides:
 
 Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 
-## Context  (only dev)
+## Context
 
 ```json
 {
   "context": {
     "compaction": {
       "enabled": false,
-      "max_total_tokens_ratio": 0.8
+      "max_total_tokens_ratio": 0.8,
+      "keep_last": 5
     }
   }
 }
@@ -497,16 +499,28 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 
 Fields:
 
-- `context.compaction.enabled`: reserved compaction flag
+- `context.compaction.enabled`: enables compact context window selection for agent prompts
 - `context.compaction.max_total_tokens_ratio`: ratio applied to `llm.window_width_tokens`
   when present, otherwise to the selected provider `window_width_tokens`
+- `context.compaction.keep_last`: number of recent usage marker blocks kept complete
+  before older tool history can be pruned
 
 Defaults:
 
 - `context.compaction.enabled = false`
 - `context.compaction.max_total_tokens_ratio = 0.8`
+- `context.compaction.keep_last = 5`
+
+Validation:
+
+- `context.compaction.max_total_tokens_ratio` must be greater than `0` and less than or equal to `1`
+- `context.compaction.keep_last` must be between `1` and `100`
 
 There are no context env overrides in the current mapper.
+
+Context config is not deep-merged between global and local `agent.json`. If a local file defines `context`, it replaces the whole global `context` section; omitted context fields then use defaults.
+
+Related context pruning details: [`./agent-context-prune.md`](./agent-context-prune.md).
 
 ## Agent Event Truncation
 

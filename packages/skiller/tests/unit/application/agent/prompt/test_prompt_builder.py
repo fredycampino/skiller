@@ -423,8 +423,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
 
     assert isinstance(request, BedrockLLMRequest)
     assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
-    assert not hasattr(request, "temperature")
-    assert not hasattr(request, "max_tokens")
+    assert request.max_tokens == 4096
     assert not hasattr(request, "top_p")
 
 

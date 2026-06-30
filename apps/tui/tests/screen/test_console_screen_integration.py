@@ -1272,7 +1272,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
         )
         viewmodel.state.transcript.mode = TranscriptMode.CHAT
         viewmodel.state.prompt.mode = PromptMode.DEFAULT
-        viewmodel.state.prompt.waiting_prompt = "Write a message."
+        viewmodel.state.view_status.message = "Write a message."
         viewmodel.state.view_status.kind = ViewStatusKind.WAITING
         viewmodel._run_event_context.activate_run(  # noqa: SLF001
             "run-1234",
@@ -1292,7 +1292,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
                 "prompt_text": app.state.prompt.text,
                 "prompt_mode": app.state.prompt.mode,
                 "cursor_position": app.state.prompt.cursor_position,
-                "waiting_prompt": app.state.prompt.waiting_prompt,
+                "status_message": app.state.view_status.message,
                 "view_status": app.state.view_status.kind,
                 "transcript_count": len(app.state.transcript.items),
             }
@@ -1319,13 +1319,13 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
             assert any('"items_count": 0' in line for line in rendered_lines)
             assert any('"text": "/dev"' in line for line in rendered_lines)
             assert any('"cursor_position": 4' in line for line in rendered_lines)
-            assert any('"waiting_prompt": "Write a message."' in line for line in rendered_lines)
             assert any('"kind": "waiting"' in line for line in rendered_lines)
+            assert any('"message": "Write a message."' in line for line in rendered_lines)
 
             assert app.state.prompt.text == baseline_state["prompt_text"]
             assert app.state.prompt.mode == baseline_state["prompt_mode"]
             assert app.state.prompt.cursor_position == baseline_state["cursor_position"]
-            assert app.state.prompt.waiting_prompt == baseline_state["waiting_prompt"]
+            assert app.state.view_status.message == baseline_state["status_message"]
             assert app.state.view_status.kind == baseline_state["view_status"]
             assert len(app.state.transcript.items) == baseline_state["transcript_count"]
 

@@ -20,7 +20,6 @@ from stui.usecase.submit_waiting_input_use_case import (
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
-    PromptState,
     RunAckItem,
     RunResumeItem,
     ViewStatusKind,
@@ -128,10 +127,7 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         observer = FakeObserver()
         events_port.current_run_id = "run-1234"
         events_port.current_listener = observer
-        state = ConsoleScreenState(
-            session_key="main",
-            prompt=PromptState(waiting_prompt="Write a message"),
-        )
+        state = ConsoleScreenState(session_key="main")
         state.transcript.items.append(RunAckItem(skill="wait_input_test", run_id="run-1234"))
 
         result = await use_case.execute(
@@ -153,7 +149,7 @@ def test_submit_waiting_input_use_case_accepts_and_resumes(monkeypatch: pytest.M
         assert context.run_name == "wait_input_test"
         assert context.mode == RunMode.CHAT
         assert context.status == RunStatus.RUNNING
-        assert state.prompt.waiting_prompt == ""
+        assert state.view_status.message == ""
         assert state.prompt.text == ""
         assert state.prompt.cursor_position == 0
         assert isinstance(state.transcript.items[-1], RunResumeItem)
@@ -196,10 +192,7 @@ def test_submit_waiting_input_use_case_rejects_input(monkeypatch: pytest.MonkeyP
         observer = FakeObserver()
         events_port.current_run_id = "run-1234"
         events_port.current_listener = observer
-        state = ConsoleScreenState(
-            session_key="main",
-            prompt=PromptState(waiting_prompt="Write a message"),
-        )
+        state = ConsoleScreenState(session_key="main")
 
         result = await use_case.execute(
             observer,

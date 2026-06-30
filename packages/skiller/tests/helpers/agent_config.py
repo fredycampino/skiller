@@ -67,6 +67,7 @@ def agent_config(
             compaction=AgentContextCompactionConfig(
                 enabled=False,
                 max_total_tokens_ratio=0.8,
+                keep_last=5,
             ),
         ),
         event_output=AgentEventOutputConfig(

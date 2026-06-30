@@ -1,9 +1,12 @@
+from dataclasses import replace
+
 import pytest
 from helpers.agent_config import agent_runner_config
 
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.tools.notify import NotifyTool
+from skiller.domain.agent.config.model import AgentContextCompactionConfig
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
@@ -319,16 +322,73 @@ def test_agent_context_manager_selects_window_by_delta_tokens_and_updates_run_ag
     ]
 
 
+def test_agent_context_manager_uses_compact_window_when_compaction_enabled() -> None:
+    store = _FakeAgentContextStore(
+        window_entries=[],
+        compact_entries=[
+            AgentContextEntry(
+                id="entry-compact",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=5,
+                entry_type=AgentContextEntryType.USER_MESSAGE,
+                payload=AgentUserMessagePayload(text="Compact task"),
+                usage=None,
+                source_step_id="agent-1",
+                created_at="2026-05-16T00:00:00Z",
+            )
+        ],
+        next_turn_id="turn-4",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    base_config = agent_runner_config()
+    compaction = AgentContextCompactionConfig(
+        enabled=True,
+        max_total_tokens_ratio=0.8,
+        keep_last=5,
+    )
+    agent_config = replace(
+        base_config.config,
+        context=replace(base_config.config.context, compaction=compaction),
+    )
+    config = replace(base_config, config=agent_config)
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.window_start_sequence == 5
+    assert result.llm_request.messages[1].content == "Compact task"
+    assert store.window_calls == []
+    assert store.compact_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_width_tokens": 80_000,
+            "keep_last_markers": 5,
+        }
+    ]
+
+
 class _FakeAgentContextStore:
     def __init__(
         self,
         *,
         window_entries: list[AgentContextEntry],
         next_turn_id: str,
+        compact_entries: list[AgentContextEntry] | None = None,
     ) -> None:
         self.window_entries = window_entries
+        self.compact_entries = compact_entries or window_entries
         self.next = next_turn_id
         self.window_calls: list[dict[str, object]] = []
+        self.compact_calls: list[dict[str, object]] = []
 
     def append_user_message(self, **kwargs):  # noqa: ANN003, ANN201
         raise NotImplementedError
@@ -362,6 +422,22 @@ class _FakeAgentContextStore:
             }
         )
         return self.window_entries
+
+    def list_compact_entries(
+        self,
+        *,
+        context_id: str,
+        window_width_tokens: int,
+        keep_last_markers: int,
+    ) -> list[AgentContextEntry]:
+        self.compact_calls.append(
+            {
+                "context_id": context_id,
+                "window_width_tokens": window_width_tokens,
+                "keep_last_markers": keep_last_markers,
+            }
+        )
+        return self.compact_entries
 
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id

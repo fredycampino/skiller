@@ -1,8 +1,10 @@
 import json
 import sqlite3
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
+from skiller.domain.agent.context.compact_delta import legacy_compact_delta_tokens
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
@@ -32,6 +34,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         usage: LLMUsage | None = None,
         window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
+        delta_compact_tokens: int | None = None,
         window_base: bool | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
@@ -49,12 +52,13 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                   message_type,
                   window_start_sequence,
                   delta_tokens,
+                  delta_compact_tokens,
                   window_base,
                   payload_json,
                   usage_json,
                   source_step_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry_id,
@@ -65,6 +69,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                     _message_type(payload),
                     window_start_sequence,
                     delta_tokens,
+                    delta_compact_tokens,
                     _bool_to_int(window_base),
                     json.dumps(agent_context_payload_to_dict(payload)),
                     json.dumps(_usage_to_dict(usage)) if usage is not None else None,
@@ -86,6 +91,19 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         with self._connect() as conn:
             return self._list_entries(conn, context_id=context_id)
+
+    def list_entries_from_sequence(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        with self._connect() as conn:
+            return self._list_entries_from_sequence(
+                conn,
+                context_id=context_id,
+                start_sequence=start_sequence,
+            )
 
     def list_window_entries(
         self,
@@ -112,6 +130,48 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 (context_id, start_sequence),
             ).fetchall()
         return [_build_entry(row) for row in rows]
+
+    def list_compact_entries(
+        self,
+        *,
+        context_id: str,
+        window_width_tokens: int,
+        keep_last_markers: int,
+    ) -> list[AgentContextEntry]:
+        keep_last_markers = min(100, max(1, keep_last_markers))
+        with self._connect() as conn:
+            self._backfill_compact_delta_tokens(conn, context_id=context_id)
+            protected_window = self._protected_compact_window(
+                conn,
+                context_id=context_id,
+                keep_last_markers=keep_last_markers,
+            )
+            if protected_window is None:
+                return self._list_entries(conn, context_id=context_id)
+            if protected_window.tokens >= window_width_tokens:
+                start_sequence = self.window_start_sequence(
+                    conn,
+                    context_id=context_id,
+                    window_width_tokens=window_width_tokens,
+                )
+                return self._list_entries_from_sequence(
+                    conn,
+                    context_id=context_id,
+                    start_sequence=start_sequence,
+                )
+
+            compact_start_sequence = self._compact_start_sequence(
+                conn,
+                context_id=context_id,
+                before_sequence=protected_window.start_sequence,
+                window_width_tokens=window_width_tokens - protected_window.tokens,
+            )
+            return self._list_compact_entries(
+                conn,
+                context_id=context_id,
+                compact_start_sequence=compact_start_sequence,
+                protected_start_sequence=protected_window.start_sequence,
+            )
 
     def get_last_usage_marker(
         self,
@@ -236,6 +296,259 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         ).fetchall()
         return [_build_entry(row) for row in rows]
 
+    def _list_entries_from_sequence(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        if start_sequence == 0:
+            return []
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND sequence >= ?
+            ORDER BY sequence ASC
+            """,
+            (context_id, start_sequence),
+        ).fetchall()
+        return [_build_entry(row) for row in rows]
+
+    def _backfill_compact_delta_tokens(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+    ) -> None:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND usage_json IS NOT NULL
+              AND delta_tokens IS NOT NULL
+              AND (
+                delta_compact_tokens IS NULL
+                OR (delta_tokens > 0 AND delta_compact_tokens = 0)
+              )
+            ORDER BY sequence ASC
+            """,
+            (context_id,),
+        ).fetchall()
+        for row in rows:
+            entry = _build_entry(row)
+            delta_compact_tokens = legacy_compact_delta_tokens(
+                delta_tokens=entry.delta_tokens or 0,
+            )
+            conn.execute(
+                """
+                UPDATE agent_context_entries
+                SET delta_compact_tokens = ?
+                WHERE id = ?
+                """,
+                (delta_compact_tokens, entry.id),
+            )
+
+    def _protected_compact_window(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        keep_last_markers: int,
+    ) -> "_ProtectedCompactWindow | None":
+        marker_row = conn.execute(
+            """
+            SELECT sequence
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND usage_json IS NOT NULL
+              AND delta_tokens IS NOT NULL
+            ORDER BY sequence DESC
+            LIMIT 1 OFFSET ?
+            """,
+            (context_id, keep_last_markers - 1),
+        ).fetchone()
+        if marker_row is None:
+            marker_row = conn.execute(
+                """
+                SELECT MIN(sequence) AS sequence
+                FROM agent_context_entries
+                WHERE context_id = ?
+                  AND usage_json IS NOT NULL
+                  AND delta_tokens IS NOT NULL
+                """,
+                (context_id,),
+            ).fetchone()
+        if marker_row is None or marker_row["sequence"] is None:
+            return None
+
+        marker_sequence = int(marker_row["sequence"])
+        start_sequence = self._usage_marker_block_start_sequence(
+            conn,
+            context_id=context_id,
+            marker_sequence=marker_sequence,
+        )
+        tokens = self._sum_delta_tokens_from_marker(
+            conn,
+            context_id=context_id,
+            marker_sequence=start_sequence,
+        )
+        return _ProtectedCompactWindow(
+            start_sequence=start_sequence,
+            tokens=tokens,
+        )
+
+    def _compact_start_sequence(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        before_sequence: int,
+        window_width_tokens: int,
+    ) -> int:
+        row = conn.execute(
+            """
+            WITH usage_rows AS (
+              SELECT sequence,
+                     CASE
+                       WHEN delta_compact_tokens > 0 THEN delta_compact_tokens
+                       ELSE 0
+                     END AS delta_tokens
+              FROM agent_context_entries
+              WHERE context_id = ?
+                AND usage_json IS NOT NULL
+                AND sequence < ?
+            ),
+            running AS (
+              SELECT sequence,
+                     SUM(delta_tokens) OVER (
+                       ORDER BY sequence DESC
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                     ) AS running_tokens
+              FROM usage_rows
+            ),
+            selected_usage AS (
+              SELECT MIN(sequence) AS sequence
+              FROM running
+              WHERE running_tokens <= ?
+            ),
+            fallback_usage AS (
+              SELECT MAX(sequence) AS sequence
+              FROM usage_rows
+            )
+            SELECT COALESCE(selected_usage.sequence, fallback_usage.sequence, 0)
+              AS marker_sequence
+            FROM selected_usage, fallback_usage
+            """,
+            (context_id, before_sequence, window_width_tokens),
+        ).fetchone()
+        if row is None or row["marker_sequence"] is None:
+            return 0
+        marker_sequence = int(row["marker_sequence"])
+        if marker_sequence == 0:
+            return 0
+        return self._usage_marker_block_start_sequence(
+            conn,
+            context_id=context_id,
+            marker_sequence=marker_sequence,
+        )
+
+    def _list_compact_entries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        compact_start_sequence: int,
+        protected_start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND sequence >= ?
+              AND (
+                sequence >= ?
+                OR NOT (
+                  entry_type IN (?, ?)
+                  OR (
+                    entry_type = ?
+                    AND message_type = ?
+                  )
+                )
+              )
+            ORDER BY sequence ASC
+            """,
+            (
+                context_id,
+                compact_start_sequence,
+                protected_start_sequence,
+                AgentContextEntryType.TOOL_CALL.value,
+                AgentContextEntryType.TOOL_RESULT.value,
+                AgentContextEntryType.ASSISTANT_MESSAGE.value,
+                AgentAssistantMessageType.TOOL_CALLS.value,
+            ),
+        ).fetchall()
+        return [_build_entry(row) for row in rows]
+
+    def _usage_marker_block_start_sequence(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> int:
+        row = conn.execute(
+            """
+            SELECT MAX(sequence) AS sequence
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND usage_json IS NOT NULL
+              AND sequence < ?
+            """,
+            (context_id, marker_sequence),
+        ).fetchone()
+        if row is not None and row["sequence"] is not None:
+            return int(row["sequence"])
+        row = conn.execute(
+            """
+            SELECT MIN(sequence) AS sequence
+            FROM agent_context_entries
+            WHERE context_id = ?
+            """,
+            (context_id,),
+        ).fetchone()
+        if row is None or row["sequence"] is None:
+            return marker_sequence
+        return int(row["sequence"])
+
+    def _sum_delta_tokens_from_marker(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> int:
+        row = conn.execute(
+            """
+            SELECT COALESCE(
+              SUM(CASE WHEN delta_tokens > 0 THEN delta_tokens ELSE 0 END),
+              0
+            ) AS tokens
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND usage_json IS NOT NULL
+              AND sequence >= ?
+            """,
+            (context_id, marker_sequence),
+        ).fetchone()
+        if row is None:
+            return 0
+        return int(row["tokens"])
+
     def _last_usage_marker(
         self,
         conn: sqlite3.Connection,
@@ -341,6 +654,12 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         return int(row["start_sequence"])
 
 
+@dataclass(frozen=True)
+class _ProtectedCompactWindow:
+    start_sequence: int
+    tokens: int
+
+
 def _empty_observed_stats() -> AgentContextObservedStats:
     return AgentContextObservedStats(
         entries=0,
@@ -351,13 +670,6 @@ def _empty_observed_stats() -> AgentContextObservedStats:
             current_tokens=0,
         ),
     )
-
-
-def _positive_delta_tokens(row: sqlite3.Row) -> int:
-    delta_tokens = _optional_int(row["delta_tokens"]) or 0
-    if delta_tokens < 0:
-        return 0
-    return delta_tokens
 
 
 def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
@@ -375,6 +687,7 @@ def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
         message_type=_optional_assistant_message_type(row["message_type"]),
         window_start_sequence=_optional_int(row["window_start_sequence"]),
         delta_tokens=_optional_int(row["delta_tokens"]),
+        delta_compact_tokens=_optional_int(row["delta_compact_tokens"]),
         window_base=_optional_bool(row["window_base"]),
         payload=agent_context_payload_from_dict(
             entry_type=entry_type,

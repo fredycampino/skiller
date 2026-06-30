@@ -14,6 +14,7 @@ class AgentLoopConfig:
 class AgentContextCompactionConfig:
     enabled: bool
     max_total_tokens_ratio: float
+    keep_last: int
 
 
 @dataclass(frozen=True)

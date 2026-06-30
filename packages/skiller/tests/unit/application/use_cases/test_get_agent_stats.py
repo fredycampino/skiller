@@ -203,6 +203,7 @@ def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
             compaction=AgentContextCompactionConfig(
                 enabled=False,
                 max_total_tokens_ratio=0.8,
+                keep_last=5,
             ),
         ),
         event_output=AgentEventOutputConfig(

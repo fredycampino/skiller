@@ -42,9 +42,10 @@ def test_to_bedrock_kwargs_groups_consecutive_tool_results() -> None:
             LLMToolMessage('{"ok":true}', tool_call_id="tooluse_2"),
         ),
         model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        max_tokens=4096,
     )
 
-    kwargs = to_bedrock_kwargs(request, max_tokens=256, temperature=0.0)
+    kwargs = to_bedrock_kwargs(request, max_tokens=4096)
 
     assert kwargs["messages"] == [
         {"role": "user", "content": [{"text": "run tools"}]},

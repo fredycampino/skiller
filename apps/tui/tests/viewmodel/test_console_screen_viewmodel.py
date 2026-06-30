@@ -280,7 +280,7 @@ def test_console_screen_state_defaults_to_idle_main_session() -> None:
     assert state.runs_table.visible is False
     assert state.runs_table.command == ""
     assert state.runs_table.rows == ()
-    assert state.prompt.waiting_prompt == ""
+    assert state.view_status.message == ""
     assert state.prompt.text == ""
     assert state.prompt.cursor_position == 0
     assert state.transcript.items == []
@@ -1436,7 +1436,7 @@ def test_console_screen_viewmodel_sends_plain_text_when_waiting_for_input() -> N
         assert viewmodel.state.transcript.items[-1].run_id == "run-1234"
         assert viewmodel.state.transcript.items[-1].skill == "run-1234"
         assert viewmodel.state.view_status.kind == ViewStatusKind.RUNNING
-        assert viewmodel.state.prompt.waiting_prompt == ""
+        assert viewmodel.state.view_status.message == ""
         assert viewmodel.state.prompt.text == ""
         assert viewmodel.state.prompt.cursor_position == 0
 
@@ -1609,7 +1609,7 @@ def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiti
                 ),
             ]
         )
-        assert viewmodel.state.prompt.waiting_prompt == ""
+        assert viewmodel.state.view_status.message == ""
         assert viewmodel._run_event_context.status == RunStatus.WAITING_WEBHOOK  # noqa: SLF001
 
         await viewmodel.submit("hola mundo")
@@ -1627,7 +1627,7 @@ def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiti
         ]
         assert outputs == []
         assert waiting_items == []
-        assert viewmodel.state.prompt.waiting_prompt == ""
+        assert viewmodel.state.view_status.message == ""
 
     with patched_to_thread(submit_waiting_input_use_case_module):
         asyncio.run(run())

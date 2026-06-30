@@ -115,7 +115,6 @@ class EventStateUseCase:
             state.set_prompt(
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
-                waiting_prompt="",
                 mode=PromptMode.DEFAULT,
             )
             self.events_port.subscribe(
@@ -131,11 +130,13 @@ class EventStateUseCase:
         ):
             payload: RunWaitingPayload = event.payload
             self.context.status = RunStatus.WAITING_INPUT
-            state.set_status(kind=ViewStatusKind.WAITING)
+            state.set_status(
+                kind=ViewStatusKind.WAITING,
+                message=_waiting_prompt(payload.output),
+            )
             state.set_prompt(
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
-                waiting_prompt=_waiting_prompt(payload.output),
                 mode=PromptMode.DEFAULT,
             )
             return
@@ -147,7 +148,6 @@ class EventStateUseCase:
             state.set_prompt(
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
-                waiting_prompt="",
                 mode=PromptMode.DEFAULT,
             )
             return

@@ -21,7 +21,6 @@ class ScreenStatusView(Static):
     ) -> None:
         super().__init__(id=id)
         self._state = state or ViewStatusState()
-        self._waiting_prompt = ""
         self._theme = theme
         self._frame_index = 0
         self._timer: Timer | None = None
@@ -38,11 +37,8 @@ class ScreenStatusView(Static):
     def set_state(
         self,
         state: ViewStatusState,
-        *,
-        waiting_prompt: str = "",
     ) -> None:
         self._state = state
-        self._waiting_prompt = waiting_prompt
         self._sync_timer()
         self.update(self.render())
 
@@ -66,12 +62,13 @@ class ScreenStatusView(Static):
             return f"{frame} Running"
         if self._state.kind == ViewStatusKind.WAITING:
             waiting_style = f"{self._theme.color_text_secondary} dim"
-            if not self._waiting_prompt:
+            message = self._state.message.strip()
+            if not message:
                 return Text("...", style=waiting_style)
             text = Text("...", style=waiting_style)
             text.append(" ")
             text.append(
-                f"[{self._waiting_prompt}]",
+                f"[{message}]",
                 style=waiting_style,
             )
             return text

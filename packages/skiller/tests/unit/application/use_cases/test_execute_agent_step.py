@@ -162,6 +162,7 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None = None,
         delta_tokens: int = 0,
+        delta_compact_tokens: int = 0,
         window_start_sequence: int = 0,
         window_base: bool = False,
     ) -> AgentContextEntry:
@@ -179,6 +180,7 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.TOOL_CALLS,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -191,6 +193,7 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -208,6 +211,7 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.FINAL,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -268,6 +272,7 @@ class _FakeAgentContextStore:
         message_type: AgentAssistantMessageType | None = None,
         window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
+        delta_compact_tokens: int | None = None,
         window_base: bool | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
@@ -280,6 +285,7 @@ class _FakeAgentContextStore:
                 "message_type": message_type.value if message_type else None,
                 "window_start_sequence": window_start_sequence,
                 "delta_tokens": delta_tokens,
+                "delta_compact_tokens": delta_compact_tokens,
                 "window_base": window_base,
                 "source_step_id": source_step_id,
             }
@@ -295,6 +301,7 @@ class _FakeAgentContextStore:
             message_type=message_type,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
@@ -307,6 +314,18 @@ class _FakeAgentContextStore:
             entry
             for entry in self.entries
             if entry.context_id == context_id
+        ]
+
+    def list_entries_from_sequence(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        return [
+            entry
+            for entry in self.list_entries(context_id=context_id)
+            if entry.sequence >= start_sequence
         ]
 
     def list_window_entries(

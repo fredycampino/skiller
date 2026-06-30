@@ -89,6 +89,7 @@ class AgentConfigMapper:
         compaction = AgentContextCompactionConfig(
             enabled=config.context.compaction.enabled,
             max_total_tokens_ratio=config.context.compaction.max_total_tokens_ratio,
+            keep_last=config.context.compaction.keep_last,
         )
         context = AgentContextConfig(
             compaction=compaction,

@@ -43,12 +43,20 @@ class AgentContextManager:
         config: AgentRunnerConfig,
     ) -> AgentContextLLMRequest:
         provider = config.config.llm.default()
-        max_ratio = config.config.context.compaction.max_total_tokens_ratio
+        compaction = config.config.context.compaction
+        max_ratio = compaction.max_total_tokens_ratio
         window_width_tokens = provider.context_max_tokens(ratio=max_ratio)
-        entries = self.agent_context_store.list_window_entries(
-            context_id=context.context_id,
-            window_width_tokens=window_width_tokens,
-        )
+        if compaction.enabled:
+            entries = self.agent_context_store.list_compact_entries(
+                context_id=context.context_id,
+                window_width_tokens=window_width_tokens,
+                keep_last_markers=compaction.keep_last,
+            )
+        else:
+            entries = self.agent_context_store.list_window_entries(
+                context_id=context.context_id,
+                window_width_tokens=window_width_tokens,
+            )
         window_start_sequence = _start_sequence(entries)
         run_agent = self.run_agent_store.get_agent(
             run_id=context.run_id,

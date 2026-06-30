@@ -50,6 +50,7 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -65,6 +66,7 @@ class AgentContextStore(
             usage=usage,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -77,6 +79,7 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
+        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -92,6 +95,7 @@ class AgentContextStore(
             usage=usage,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
+            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -142,6 +146,17 @@ class AgentContextStore(
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         return self.datasource.list_entries(context_id=context_id)
 
+    def list_entries_from_sequence(
+        self,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> list[AgentContextEntry]:
+        return self.datasource.list_entries_from_sequence(
+            context_id=context_id,
+            start_sequence=start_sequence,
+        )
+
     def list_window_entries(
         self,
         *,
@@ -151,6 +166,19 @@ class AgentContextStore(
         return self.datasource.list_window_entries(
             context_id=context_id,
             window_width_tokens=window_width_tokens,
+        )
+
+    def list_compact_entries(
+        self,
+        *,
+        context_id: str,
+        window_width_tokens: int,
+        keep_last_markers: int,
+    ) -> list[AgentContextEntry]:
+        return self.datasource.list_compact_entries(
+            context_id=context_id,
+            window_width_tokens=window_width_tokens,
+            keep_last_markers=keep_last_markers,
         )
 
     def get_last_usage_marker(

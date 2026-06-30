@@ -8,6 +8,8 @@ from skiller.domain.agent.llm.model import (
 from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
 from skiller.domain.agent.llm.request import LLMRequest
 
+BEDROCK_LLM_MAX_OUTPUT_TOKENS = 4096
+
 
 class AgentBedrockLLMModel(LLMStaticModel):
     CLAUDE_OPUS_4_6 = ("us.anthropic.claude-opus-4-6-v1", 200_000)
@@ -37,6 +39,7 @@ BEDROCK_MODELS = (
 @dataclass(frozen=True)
 class BedrockLLMRequest(LLMRequest):
     model: AgentBedrockLLMModel
+    max_tokens: int
 
     def __post_init__(self) -> None:
         if not isinstance(self.model, AgentBedrockLLMModel):
@@ -47,6 +50,7 @@ class BedrockLLMRequest(LLMRequest):
 class AgentBedrockProvider(AgentLLMProviderConfig[AgentBedrockLLMModel]):
     profile: str
 
+    max_output_tokens: ClassVar[int] = BEDROCK_LLM_MAX_OUTPUT_TOKENS
     type: ClassVar[AgentLLMProviderType] = AgentLLMProviderType.BEDROCK
 
     def __post_init__(self) -> None:

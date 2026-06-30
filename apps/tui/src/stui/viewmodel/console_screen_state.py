@@ -315,7 +315,6 @@ class PromptState:
     mode: PromptMode = PromptMode.DEFAULT
     text: str = ""
     cursor_position: int = 0
-    waiting_prompt: str = ""
 
 
 @dataclass
@@ -390,12 +389,10 @@ class ConsoleScreenState:
         *,
         text: str = "",
         cursor_position: int = 0,
-        waiting_prompt: str = "",
         mode: PromptMode = PromptMode.DEFAULT,
     ) -> None:
         self.prompt.text = text
         self.prompt.cursor_position = cursor_position
-        self.prompt.waiting_prompt = waiting_prompt
         self.prompt.mode = mode
 
     def set_transcript(

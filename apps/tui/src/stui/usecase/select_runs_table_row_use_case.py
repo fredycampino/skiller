@@ -74,11 +74,11 @@ class SelectRunsTableRowUseCase:
         self.session_store_port.write(StoredSession(run_id=run_id, run_name=run_name))
         state.set_transcript(mode=state.transcript.mode, items=transcript_items)
         state.set_autocompletion()
-        state.set_prompt(
-            waiting_prompt=runtime_status.prompt,
-            mode=PromptMode.DEFAULT,
+        state.set_prompt(mode=PromptMode.DEFAULT)
+        state.set_status(
+            kind=ViewStatusKind.WAITING,
+            message=runtime_status.prompt,
         )
-        state.set_status(kind=ViewStatusKind.WAITING)
         self.context.activate_run(
             run_id,
             run_name=run_name,

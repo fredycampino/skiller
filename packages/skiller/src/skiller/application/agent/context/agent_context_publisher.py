@@ -2,7 +2,14 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
-from skiller.domain.agent.context.model import AgentContextEntry
+from skiller.domain.agent.context.compact_delta import compact_delta_tokens
+from skiller.domain.agent.context.model import (
+    AgentAssistantMessagePayload,
+    AgentAssistantMessageType,
+    AgentContextEntry,
+    AgentContextPayload,
+    AgentContextUsageMarker,
+)
 from skiller.domain.agent.context.store_port import AgentContextStorePort
 from skiller.domain.agent.llm.model import LLMToolCall, LLMUsage
 from skiller.domain.agent.run.identity import AgentContext, AgentRun
@@ -93,13 +100,19 @@ class AgentContextPublisher:
         text: str,
         usage: LLMUsage | None,
     ) -> AgentContextEntry:
-        marker = self._response_marker(context=context, usage=usage)
+        payload = AgentAssistantMessagePayload(
+            turn_id=turn_id,
+            message_type=AgentAssistantMessageType.FINAL,
+            text=text,
+        )
+        marker = self._response_marker(context=context, usage=usage, payload=payload)
         return self.agent_context_store.append_final_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
             usage=usage,
             delta_tokens=marker.delta_tokens,
+            delta_compact_tokens=marker.delta_compact_tokens,
             window_start_sequence=marker.window_start_sequence,
             window_base=marker.window_base,
         )
@@ -112,13 +125,19 @@ class AgentContextPublisher:
         text: str,
         usage: LLMUsage | None = None,
     ) -> AgentContextEntry:
-        marker = self._response_marker(context=context, usage=usage)
+        payload = AgentAssistantMessagePayload(
+            turn_id=turn_id,
+            message_type=AgentAssistantMessageType.TOOL_CALLS,
+            text=text,
+        )
+        marker = self._response_marker(context=context, usage=usage, payload=payload)
         return self.agent_context_store.append_tool_calls_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
             usage=usage,
             delta_tokens=marker.delta_tokens,
+            delta_compact_tokens=marker.delta_compact_tokens,
             window_start_sequence=marker.window_start_sequence,
             window_base=marker.window_base,
         )
@@ -191,6 +210,7 @@ class AgentContextPublisher:
         *,
         context: AgentContext,
         usage: LLMUsage | None,
+        payload: AgentContextPayload,
     ) -> "_ResponseMarker":
         run_agent = self.run_agent_store.get_agent(
             run_id=context.run_id,
@@ -206,6 +226,7 @@ class AgentContextPublisher:
         if prompt_tokens is None:
             return _ResponseMarker(
                 delta_tokens=0,
+                delta_compact_tokens=0,
                 window_start_sequence=window_start_sequence,
                 window_base=window_base,
             )
@@ -214,7 +235,10 @@ class AgentContextPublisher:
             context_id=context.context_id,
         )
         if last_marker is None:
-            return _ResponseMarker(
+            return self._build_response_marker(
+                context=context,
+                payload=payload,
+                last_marker=last_marker,
                 delta_tokens=prompt_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
@@ -227,26 +251,92 @@ class AgentContextPublisher:
             delta_tokens = prompt_tokens - estimated_tokens
             if delta_tokens < 0:
                 delta_tokens = 0
-            return _ResponseMarker(
+            return self._build_response_marker(
+                context=context,
+                payload=payload,
+                last_marker=last_marker,
                 delta_tokens=delta_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )
         if prompt_tokens < last_marker.prompt_tokens:
-            return _ResponseMarker(
+            return self._build_response_marker(
+                context=context,
+                payload=payload,
+                last_marker=last_marker,
                 delta_tokens=prompt_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )
-        return _ResponseMarker(
+        return self._build_response_marker(
+            context=context,
+            payload=payload,
+            last_marker=last_marker,
             delta_tokens=prompt_tokens - last_marker.prompt_tokens,
             window_start_sequence=window_start_sequence,
             window_base=False,
         )
 
+    def _build_response_marker(
+        self,
+        *,
+        context: AgentContext,
+        payload: AgentContextPayload,
+        last_marker: AgentContextUsageMarker | None,
+        delta_tokens: int,
+        window_start_sequence: int,
+        window_base: bool,
+    ) -> "_ResponseMarker":
+        return _ResponseMarker(
+            delta_tokens=delta_tokens,
+            delta_compact_tokens=self._compact_delta_tokens(
+                context=context,
+                payload=payload,
+                last_marker=last_marker,
+                delta_tokens=delta_tokens,
+            ),
+            window_start_sequence=window_start_sequence,
+            window_base=window_base,
+        )
+
+    def _compact_delta_tokens(
+        self,
+        *,
+        context: AgentContext,
+        payload: AgentContextPayload,
+        last_marker: AgentContextUsageMarker | None,
+        delta_tokens: int,
+    ) -> int:
+        payloads = self._compact_delta_payloads(
+            context=context,
+            payload=payload,
+            last_marker=last_marker,
+        )
+        return compact_delta_tokens(
+            delta_tokens=delta_tokens,
+            payloads=payloads,
+        )
+
+    def _compact_delta_payloads(
+        self,
+        *,
+        context: AgentContext,
+        payload: AgentContextPayload,
+        last_marker: AgentContextUsageMarker | None,
+    ) -> list[AgentContextPayload]:
+        if last_marker is None:
+            return [payload]
+        entries = self.agent_context_store.list_entries_from_sequence(
+            context_id=context.context_id,
+            start_sequence=last_marker.sequence,
+        )
+        return [entry.payload for entry in entries] + [payload]
+
+
 
 @dataclass(frozen=True)
 class _ResponseMarker:
     delta_tokens: int
+    delta_compact_tokens: int
     window_start_sequence: int
     window_base: bool

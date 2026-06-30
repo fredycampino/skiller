@@ -1,8 +1,4 @@
 {
-  "llm": {
-    "default_provider": "lmstudio",
-    "window_width_tokens": 100000
-  },
   "loop": {
     "max_turns": 10,
     "max_tool_calls": 8

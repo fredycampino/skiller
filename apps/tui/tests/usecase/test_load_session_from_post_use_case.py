@@ -47,7 +47,7 @@ def test_load_session_from_post_loads_waiting_run() -> None:
 
     assert result.status == LoadSessionFromPostStatus.LOADED
     assert result.state.session_key == "waiting-run"
-    assert result.state.prompt.waiting_prompt == "Continue?"
+    assert result.state.view_status.message == "Continue?"
     assert result.state.view_status.kind == ViewStatusKind.WAITING
     assert context.run_id == "waiting-run"
     assert context.status == RunStatus.WAITING_INPUT

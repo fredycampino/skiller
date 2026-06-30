@@ -119,7 +119,7 @@ def test_event_state_waiting_input_sets_prompt_and_context() -> None:
     )
 
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == "Write a message."
+    assert state.view_status.message == "Write a message."
     assert context.status == RunStatus.WAITING_INPUT
 
 
@@ -144,7 +144,7 @@ def test_event_state_waiting_webhook_resubscribes_with_slow_polling() -> None:
     )
 
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == ""
+    assert state.view_status.message == ""
     assert context.status == RunStatus.WAITING_WEBHOOK
     assert events_port.subscribe_calls == [
         ("run-1", observer, WEBHOOK_POLL_INTERVAL_SECONDS)
@@ -169,13 +169,14 @@ def test_event_state_waiting_without_step_type_defaults_to_webhook() -> None:
     )
 
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == ""
+    assert state.view_status.message == ""
     assert context.status == RunStatus.WAITING_WEBHOOK
 
 
 def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     state = ConsoleScreenState()
-    state.set_prompt(text="draft", cursor_position=5, waiting_prompt="old")
+    state.set_prompt(text="draft", cursor_position=5)
+    state.set_status(kind=ViewStatusKind.WAITING, message="old")
     context = _context()
     use_case = _use_case(context=context)
 
@@ -194,7 +195,6 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     assert state.view_status.message == "boom"
     assert state.prompt.text == "draft"
     assert state.prompt.cursor_position == 5
-    assert state.prompt.waiting_prompt == ""
     assert context.status == RunStatus.FAILED
 
 
@@ -270,7 +270,7 @@ def test_event_state_projects_waiting_after_recoverable_agent_failure() -> None:
     )
 
     assert state.view_status.kind == ViewStatusKind.WAITING
-    assert state.prompt.waiting_prompt == "Choose 1 or 2"
+    assert state.view_status.message == "Choose 1 or 2"
     assert context.status == RunStatus.WAITING_INPUT
 
 

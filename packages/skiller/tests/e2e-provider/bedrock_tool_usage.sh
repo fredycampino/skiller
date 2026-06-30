@@ -90,6 +90,7 @@ response = client.generate(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),
             LLMUserMessage(f"Call the shell tool with command: {command}"),
         ),
+        max_tokens=provider.max_output_tokens,
         tools=(ShellSmokeTool(),),
     )
 )

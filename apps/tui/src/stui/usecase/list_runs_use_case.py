@@ -51,7 +51,6 @@ class ListRunsUseCase:
             command=command.raw_text,
             rows=runs,
         )
-        state.set_status()
         _reset_prompt(state, mode=PromptMode.RUNS_TABLE)
         return ListRunsResult(state=state)
 

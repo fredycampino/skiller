@@ -17,7 +17,7 @@ from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
-from skiller.domain.agent.context.store_port import AgentContextStorePort
+from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm.provider_registry import AgentLLMProvider
 from skiller.domain.agent.llm.request import LLMRequest

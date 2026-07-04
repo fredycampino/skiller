@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import overload
 
 from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
@@ -24,11 +25,17 @@ from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 from skiller.infrastructure.llm.openai.openai_mapper import DefaultOpenAIMapper
+from skiller.infrastructure.llm.openai.openai_request_logger import (
+    OpenAIFileLLMRequestLogger,
+)
 
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
 
 class LLMClientFactory:
+    def __init__(self, *, request_log_dir: Path) -> None:
+        self.request_log_dir = request_log_dir
+
     @overload
     def resolve(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
 
@@ -72,6 +79,9 @@ class LLMClientFactory:
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
             mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
+            request_logger=OpenAIFileLLMRequestLogger(
+                directory=self.request_log_dir / "minimax",
+            ),
         )
 
     def _lmstudio_client(self, provider: AgentLMStudioProvider) -> OpenAILLMPort:
@@ -80,6 +90,9 @@ class LLMClientFactory:
             base_url=provider.base_url,
             timeout_seconds=provider.timeout_seconds,
             mapper=DefaultOpenAIMapper(),
+            request_logger=OpenAIFileLLMRequestLogger(
+                directory=self.request_log_dir / "lmstudio",
+            ),
         )
 
     def _codex_client(self, provider: AgentCodexProvider) -> CodexLLMPort:

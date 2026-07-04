@@ -5,7 +5,7 @@
 Pending design.
 
 This document describes the YAML flow shape used by:
-- internal catalog entries shipped with Skiller under `packages/skiller/agents/<id>/agent.yaml`
+- internal catalog entries under `apps/agents/<id>/agent.yaml`
 - external files passed through `skiller run --file ...`
 
 ## Root Shape

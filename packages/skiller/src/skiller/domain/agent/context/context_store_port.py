@@ -2,6 +2,7 @@ from typing import Protocol
 
 from skiller.domain.agent.context.model import (
     AgentContextEntry,
+    AgentContextPayload,
     AgentContextUsageMarker,
 )
 from skiller.domain.agent.llm.model import LLMUsage
@@ -25,7 +26,6 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry: ...
@@ -38,7 +38,6 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry: ...
@@ -78,7 +77,7 @@ class AgentContextStorePort(Protocol):
         *,
         context_id: str,
         window_width_tokens: int,
-        keep_last_markers: int,
+        keep_last_blocks: int,
     ) -> list[AgentContextEntry]: ...
 
     def get_last_usage_marker(
@@ -93,5 +92,21 @@ class AgentContextStorePort(Protocol):
         context_id: str,
         start_sequence: int,
     ) -> int: ...
+
+    def estimate_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        window_start_sequence: int,
+        last_marker_sequence: int,
+        payload: AgentContextPayload,
+    ) -> int: ...
+
+    def add_compact_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> None: ...
 
     def next_turn_id(self, *, context_id: str) -> str: ...

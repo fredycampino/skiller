@@ -34,6 +34,9 @@ from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
 from skiller.infrastructure.llm.openai import openai_llm_port
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
+from skiller.infrastructure.llm.openai.openai_request_logger import (
+    OpenAIFileLLMRequestLogger,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -154,6 +157,7 @@ class _FakeBedrockConfig:
 )
 def test_llm_client_factory_creates_expected_client(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
     provider: AgentLLMProvider,
     expected_type: type[object],
 ) -> None:
@@ -168,11 +172,15 @@ def test_llm_client_factory_creates_expected_client(
         "skiller.di.llm_client_factory.CodexCredentialsDatasource",
         lambda: _FakeCodexCredentialsDatasource(),
     )
-    factory = LLMClientFactory()
+    request_log_dir = tmp_path / "llm-requests"
+    factory = LLMClientFactory(request_log_dir=request_log_dir)
 
     client = factory.resolve(provider)
 
     assert isinstance(client, expected_type)
+    if isinstance(client, OpenAILLMPort):
+        assert isinstance(client.request_logger, OpenAIFileLLMRequestLogger)
+        assert client.request_logger.directory.parent == request_log_dir
 
 
 def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) -> None:
@@ -180,7 +188,7 @@ def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) ->
         db_path=str(tmp_path / "runtime.db"),
     )
 
-    build_runtime_container(settings=settings, skills_dir=str(tmp_path))
+    build_runtime_container(settings=settings, flows_dir=str(tmp_path))
 
 
 def _token_with_account_id(account_id: str) -> str:

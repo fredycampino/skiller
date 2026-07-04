@@ -1,0 +1,31 @@
+name: context_compaction_loop_e2e
+description: "Interactive loop for context compaction validation"
+version: "0.1"
+start: ask_user
+
+inputs:
+  file_path: string
+
+steps:
+  - wait_input: ask_user
+    prompt: "Send next compaction test instruction for workspace packages/skiller/tests/e2e-agent/compact/workspace, or exit"
+    next: decide_exit
+
+  - switch: decide_exit
+    value: '{{output_value("ask_user").payload.text}}'
+    cases:
+      exit: done
+    default: answer
+
+  - agent: answer
+    system:
+      file: "./system.md"
+    task: '{{output_value("ask_user").payload.text}}'
+    tools:
+      - files
+      - shell
+    max_turns: 8
+    next: ask_user
+
+  - notify: done
+    message: "Done."

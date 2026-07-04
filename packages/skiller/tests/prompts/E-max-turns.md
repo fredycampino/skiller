@@ -48,7 +48,7 @@ needed than this list contains:
 11. `git diff --stat`
 12. `ls apps`
 13. `ls apps/tui`
-14. `ls packages/skiller/agents`
+14. `ls apps/agents`
 15. `ls packages/skiller/docs/dev`
 ```
 

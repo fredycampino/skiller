@@ -1,0 +1,38 @@
+{
+  "llm": {
+    "default_provider": "lmstudio",
+    "window_width_tokens": 8000,
+    "log_request": true
+  },
+  "context": {
+    "compaction": {
+      "enabled": true,
+      "max_total_tokens_ratio": 0.8,
+      "keep_last": 2
+    }
+  },
+  "tools": {
+    "shell": {
+      "allowed_paths": [
+        "./workspace"
+      ],
+      "allowlist_enabled": true,
+      "allow_env_prefix": false,
+      "allowed_commands": [
+        "pwd",
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "echo",
+        "date"
+      ]
+    },
+    "files": {
+      "read": ["./workspace"],
+      "write": ["./workspace"],
+      "all": []
+    }
+  }
+}

@@ -93,6 +93,7 @@ When the next measured assistant response is persisted, the context publisher re
 agent window state and computes:
 
 - `delta_tokens = prompt_tokens` when the response starts a new series.
+- `delta_tokens` is estimated from current block payload chars when the context window moved or was rebased.
 - `delta_tokens = current_prompt_tokens - previous_prompt_tokens` inside the same series.
 
 If provider usage is missing, `delta_tokens = 0`.

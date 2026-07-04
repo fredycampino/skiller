@@ -27,6 +27,7 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
             agent_config(
+                log_request=False,
                 max_turns=10,
                 max_tool_calls=5,
             )
@@ -62,6 +63,7 @@ def test_agent_step_config_reader_reads_base_limits_without_tools() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
             agent_config(
+                log_request=False,
                 max_turns=10,
                 max_tool_calls=5,
             )
@@ -90,6 +92,7 @@ def test_agent_step_config_reader_reads_base_limits_without_tools() -> None:
 
 def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_config() -> None:
     base_config = agent_config(
+        log_request=False,
         max_turns=10,
         max_tool_calls=5,
     )
@@ -169,7 +172,7 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
 def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
-            agent_config(max_turns=10, max_tool_calls=5),
+            agent_config(log_request=False, max_turns=10, max_tool_calls=5),
         ),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
@@ -189,7 +192,7 @@ def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
 def test_agent_step_config_reader_builds_tools_section_empty_when_no_tools() -> None:
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(
-            agent_config(max_turns=10, max_tool_calls=5),
+            agent_config(log_request=False, max_turns=10, max_tool_calls=5),
         ),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),

@@ -61,6 +61,26 @@ def test_llm_request_accepts_model_like_contract() -> None:
     assert request.model == model
 
 
+def test_llm_request_carries_log_request_flag() -> None:
+    default_request = LLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentFakeLLMModel.MODEL1,
+    )
+    request = MiniMaxLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentMiniMaxLLMModel.M2_7,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        parallel_tool_calls=True,
+        temperature=1,
+        max_tokens=4096,
+        top_p=1,
+        log_request=True,
+    )
+
+    assert default_request.log_request is False
+    assert request.log_request is True
+
+
 def test_llm_request_rejects_invalid_model_like_values() -> None:
     with pytest.raises(TypeError, match="LLMRequest model value must be a non-empty string"):
         LLMRequest(

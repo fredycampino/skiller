@@ -1,8 +1,15 @@
+from skiller.domain.agent.context.compact_delta import (
+    estimate_delta_tokens_from_chars,
+    payload_chars,
+)
+from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
+    AgentContextCompactDeltaUpdate,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextPayload,
     AgentContextUsageMarker,
     AgentToolCallPayload,
     AgentToolResultPayload,
@@ -12,7 +19,6 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
 )
 from skiller.domain.agent.context.stats_port import AgentContextStatsPort
-from skiller.domain.agent.context.store_port import AgentContextStorePort
 from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolResult
@@ -50,7 +56,6 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -66,7 +71,6 @@ class AgentContextStore(
             usage=usage,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -79,7 +83,6 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -95,7 +98,6 @@ class AgentContextStore(
             usage=usage,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -173,13 +175,29 @@ class AgentContextStore(
         *,
         context_id: str,
         window_width_tokens: int,
-        keep_last_markers: int,
+        keep_last_blocks: int,
     ) -> list[AgentContextEntry]:
-        return self.datasource.list_compact_entries(
+        keep_last_blocks = min(100, max(1, keep_last_blocks))
+        protected = self.datasource.list_protected_entries(
             context_id=context_id,
             window_width_tokens=window_width_tokens,
-            keep_last_markers=keep_last_markers,
+            keep_last_blocks=keep_last_blocks,
         )
+        if not protected.entries:
+            return self.datasource.list_entries(context_id=context_id)
+        if protected.tokens >= window_width_tokens:
+            return protected.entries
+
+        compact_start_sequence = protected.entries[0].sequence - 1
+        if compact_start_sequence <= 0:
+            return protected.entries
+
+        compact = self.datasource.list_compact_entries(
+            context_id=context_id,
+            start_sequence=compact_start_sequence,
+            window_width_tokens=window_width_tokens - protected.tokens,
+        )
+        return compact + protected.entries
 
     def get_last_usage_marker(
         self,
@@ -199,6 +217,38 @@ class AgentContextStore(
             start_sequence=start_sequence,
         )
 
+    def estimate_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        window_start_sequence: int,
+        last_marker_sequence: int,
+        payload: AgentContextPayload,
+    ) -> int:
+        block_start_sequence = max(window_start_sequence, last_marker_sequence + 1)
+        persisted_block_chars = self.datasource.payload_chars_from_sequence(
+            context_id=context_id,
+            start_sequence=block_start_sequence,
+        )
+        block_chars = persisted_block_chars + payload_chars(payload)
+        return estimate_delta_tokens_from_chars(block_chars=block_chars)
+
+    def add_compact_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> None:
+        block = self.datasource.compact_delta_block(
+            context_id=context_id,
+            marker_sequence=marker_sequence,
+        )
+        updates = _compact_delta_updates(block)
+        self.datasource.update_compact_delta_tokens(
+            context_id=context_id,
+            updates=updates,
+        )
+
     def get_stats(self, *, context_id: str) -> AgentContextObservedStats:
         return self.datasource.get_observed_stats(context_id=context_id)
 
@@ -209,6 +259,44 @@ class AgentContextStore(
 
     def next_turn_id(self, *, context_id: str) -> str:
         return self.datasource.next_turn_id(context_id=context_id)
+
+
+def _compact_delta_updates(
+    block: list[AgentContextEntry],
+) -> list[AgentContextCompactDeltaUpdate]:
+    if not block:
+        return []
+
+    marker = block[-1]
+    if marker.delta_tokens is None:
+        return []
+
+    delta_tokens = max(marker.delta_tokens, 0)
+    block_chars = sum(payload_chars(entry.payload) for entry in block)
+    updates: list[AgentContextCompactDeltaUpdate] = []
+    for entry in block:
+        if _is_prunable_entry(entry):
+            continue
+        delta_compact_tokens = 0
+        if block_chars > 0:
+            entry_chars = payload_chars(entry.payload)
+            delta_compact_tokens = round(delta_tokens * entry_chars / block_chars)
+        updates.append(
+            AgentContextCompactDeltaUpdate(
+                sequence=entry.sequence,
+                delta_compact_tokens=delta_compact_tokens,
+            )
+        )
+    return updates
+
+
+def _is_prunable_entry(entry: AgentContextEntry) -> bool:
+    if entry.entry_type in (
+        AgentContextEntryType.TOOL_CALL,
+        AgentContextEntryType.TOOL_RESULT,
+    ):
+        return True
+    return entry.message_type == AgentAssistantMessageType.TOOL_CALLS
 
 
 def _empty_usage() -> LLMUsage:

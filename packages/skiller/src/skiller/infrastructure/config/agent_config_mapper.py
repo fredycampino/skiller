@@ -61,7 +61,12 @@ class AgentConfigMapper:
         self.env = env
         self.tools = tools
 
-    def from_json(self, raw_config: dict[str, object]) -> AgentConfig:
+    def from_json(
+        self,
+        raw_config: dict[str, object],
+        *,
+        tools_base_path: Path,
+    ) -> AgentConfig:
         if "agent" in raw_config:
             raise ValueError("agent.json field 'agent' is not supported")
 
@@ -97,12 +102,14 @@ class AgentConfigMapper:
         llm = AgentLLMProviderList(
             default_provider=default_provider,
             providers=tuple(providers),
+            log_request=config.llm.log_request,
         )
         loop = _build_loop_config(config.loop, env=self.env)
         event_output = _build_event_output_config(config.event_output, env=self.env)
         tools = _build_tool_runtime_configs(
             raw_tools=config.tools,
             tools=self.tools,
+            base_path=tools_base_path,
         )
 
         return AgentConfig(
@@ -212,6 +219,7 @@ def _build_tool_runtime_configs(
     *,
     raw_tools: dict[str, dict[str, object]],
     tools: tuple[ToolDefinition, ...],
+    base_path: Path,
 ) -> ToolRuntimeConfigs:
     known_tool_names = {tool.name for tool in tools}
     unknown_tool_names = sorted(set(raw_tools) - known_tool_names)
@@ -224,7 +232,12 @@ def _build_tool_runtime_configs(
         if not isinstance(tool, ConfiguredTool):
             continue
         raw_tool = raw_tools.get(tool.name, {})
-        runtime_config_items.append(tool.to_runtime_config(raw_tool))
+        runtime_config_items.append(
+            tool.to_runtime_config(
+                raw_tool,
+                base_path=base_path,
+            )
+        )
     return ToolRuntimeConfigs(items=tuple(runtime_config_items))
 
 

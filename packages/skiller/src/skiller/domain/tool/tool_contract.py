@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, ClassVar, Generic, Mapping, Protocol, TypeVar, runtime_checkable
 
 from skiller.domain.tool.tool_process_model import ToolProcessOutput, ToolProcessRequest
@@ -142,6 +143,8 @@ class ConfiguredTool(Protocol[ConfigT]):
     def to_runtime_config(
         self,
         raw: Mapping[str, object],
+        *,
+        base_path: Path,
     ) -> ConfigT: ...
 
 

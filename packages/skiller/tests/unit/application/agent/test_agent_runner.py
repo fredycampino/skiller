@@ -15,6 +15,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextPayload,
     AgentContextUsageMarker,
 )
 from skiller.domain.agent.context.stats_model import (
@@ -82,7 +83,6 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None = None,
         delta_tokens: int = 0,
-        delta_compact_tokens: int = 0,
         window_start_sequence: int = 0,
         window_base: bool = False,
     ) -> AgentContextEntry:
@@ -100,7 +100,6 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.TOOL_CALLS,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -113,7 +112,6 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -131,7 +129,6 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.FINAL,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=context.agent_id,
         )
@@ -192,7 +189,6 @@ class _FakeAgentContextStore:
         message_type: AgentAssistantMessageType | None = None,
         window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
-        delta_compact_tokens: int | None = None,
         window_base: bool | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
@@ -205,7 +201,6 @@ class _FakeAgentContextStore:
                 "message_type": message_type.value if message_type else None,
                 "window_start_sequence": window_start_sequence,
                 "delta_tokens": delta_tokens,
-                "delta_compact_tokens": delta_compact_tokens,
                 "window_base": window_base,
                 "source_step_id": source_step_id,
             }
@@ -221,7 +216,6 @@ class _FakeAgentContextStore:
             message_type=message_type,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
@@ -315,6 +309,26 @@ class _FakeAgentContextStore:
             for entry in entries
             if entry.delta_tokens is not None and entry.delta_tokens > 0
         )
+
+    def estimate_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        window_start_sequence: int,
+        last_marker_sequence: int,
+        payload: AgentContextPayload,
+    ) -> int:
+        _ = context_id, window_start_sequence, last_marker_sequence, payload
+        large_delta_estimate = 1_000_000_000
+        return large_delta_estimate
+
+    def add_compact_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> None:
+        _ = context_id, marker_sequence
 
     def next_turn_id(self, *, context_id: str) -> str:
         entries = [
@@ -480,6 +494,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=1,
@@ -536,6 +551,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="You are a support agent.",
                 task="Inspect the issue.",
                 max_turns=3,
@@ -618,6 +634,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -723,6 +740,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -800,6 +818,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -859,6 +878,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=1,
@@ -925,6 +945,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=4,
@@ -966,6 +987,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -1011,6 +1033,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -1049,6 +1072,7 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
+                log_request=False,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,

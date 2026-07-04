@@ -106,6 +106,12 @@ class AgentContextUsageMarker:
     window_base: bool
 
 
+@dataclass(frozen=True)
+class AgentContextCompactDeltaUpdate:
+    sequence: int
+    delta_compact_tokens: int
+
+
 def agent_context_payload_to_dict(payload: AgentContextPayload) -> dict[str, object]:
     if isinstance(payload, AgentUserMessagePayload):
         return {"type": payload.type, "text": payload.text}

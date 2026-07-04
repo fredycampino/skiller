@@ -5,7 +5,7 @@ import yaml
 
 
 def test_mono_agent_has_named_agent_id() -> None:
-    agent_path = Path("packages/skiller/agents/mono/agent.yaml")
+    agent_path = Path("apps/agents/mono/agent.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
 
     agent_step = next(step for step in agent["steps"] if "agent" in step)
@@ -15,12 +15,15 @@ def test_mono_agent_has_named_agent_id() -> None:
 
 
 def test_mono_shell_config_is_restricted() -> None:
-    config_path = Path("packages/skiller/agents/mono/agent.json")
+    config_path = Path("apps/agents/mono/agent.json")
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     shell_config = config["tools"]["shell"]
 
-    assert shell_config["allowed_paths"] == [".", "./.venv/bin/skiller"]
+    assert shell_config["allowed_paths"] == [
+        "../../..",
+        "../../../.venv/bin/skiller",
+    ]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allowed_commands"] == [
         "pwd",

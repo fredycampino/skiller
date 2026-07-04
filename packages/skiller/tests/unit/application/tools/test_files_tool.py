@@ -134,20 +134,22 @@ def test_files_tool_rejects_edit_without_non_empty_old_text() -> None:
 
 def test_files_tool_maps_runtime_config() -> None:
     tool = FilesTool()
+    base_path = Path("/workspace")
 
     config = tool.to_runtime_config(
         {
             "read": ["."],
             "write": ["src"],
             "all": ["shared"],
-        }
+        },
+        base_path=base_path,
     )
 
     assert config == FilesToolRuntimeConfig(
         definition=FilesTool,
-        read=(Path("."),),
-        write=(Path("src"),),
-        all=(Path("shared"),),
+        read=(Path("/workspace"),),
+        write=(Path("/workspace/src"),),
+        all=(Path("/workspace/shared"),),
     )
 
 
@@ -155,7 +157,10 @@ def test_files_tool_rejects_unsupported_runtime_config_fields() -> None:
     tool = FilesTool()
 
     with pytest.raises(ValueError, match="unsupported config fields: delete"):
-        tool.to_runtime_config({"delete": ["."]})
+        tool.to_runtime_config(
+            {"delete": ["."]},
+            base_path=Path("/workspace"),
+        )
 
 
 def test_files_tool_policy_allows_path_inside_root(tmp_path) -> None:

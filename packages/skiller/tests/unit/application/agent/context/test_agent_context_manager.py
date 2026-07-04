@@ -49,6 +49,7 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
         context_id="ctx-1",
     )
     config = agent_runner_config(
+        log_request=False,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -71,6 +72,40 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
     assert result.max_ratio == 0.8
     assert result.estimated_tokens == 0
     assert [tool.name for tool in result.llm_request.tools] == ["notify"]
+
+
+def test_agent_context_manager_passes_log_request_to_llm_request() -> None:
+    store = _FakeAgentContextStore(
+        window_entries=[
+            AgentContextEntry(
+                id="entry-1",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=1,
+                entry_type=AgentContextEntryType.USER_MESSAGE,
+                payload=AgentUserMessagePayload(text="Hello"),
+                usage=None,
+                source_step_id="agent-1",
+                created_at="2026-05-16T00:00:00Z",
+            )
+        ],
+        next_turn_id="turn-2",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    config = agent_runner_config(log_request=True)
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.llm_request.log_request is True
 
 
 def test_agent_context_manager_builds_window_context_from_window_entries() -> None:
@@ -101,6 +136,7 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
         context_id="ctx-1",
     )
     config = agent_runner_config(
+        log_request=False,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -139,7 +175,7 @@ def test_agent_context_manager_caps_window_width_by_model_context_window() -> No
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(window_width_tokens=120_000)
+    config = agent_runner_config(log_request=False, window_width_tokens=120_000)
 
     result = manager.build_window_context(context=context, config=config)
 
@@ -167,7 +203,7 @@ def test_agent_context_manager_uses_configured_window_when_smaller_than_model() 
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(window_width_tokens=60_000)
+    config = agent_runner_config(log_request=False, window_width_tokens=60_000)
 
     result = manager.build_window_context(context=context, config=config)
 
@@ -233,6 +269,7 @@ def test_agent_context_manager_estimates_window_width_from_context_deltas() -> N
         context_id="ctx-1",
     )
     config = agent_runner_config(
+        log_request=False,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -292,6 +329,7 @@ def test_agent_context_manager_selects_window_by_delta_tokens_and_updates_run_ag
         context_id="ctx-1",
     )
     config = agent_runner_config(
+        log_request=False,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -350,7 +388,7 @@ def test_agent_context_manager_uses_compact_window_when_compaction_enabled() -> 
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    base_config = agent_runner_config()
+    base_config = agent_runner_config(log_request=False)
     compaction = AgentContextCompactionConfig(
         enabled=True,
         max_total_tokens_ratio=0.8,
@@ -371,7 +409,7 @@ def test_agent_context_manager_uses_compact_window_when_compaction_enabled() -> 
         {
             "context_id": "ctx-1",
             "window_width_tokens": 80_000,
-            "keep_last_markers": 5,
+            "keep_last_blocks": 5,
         }
     ]
 
@@ -405,6 +443,9 @@ class _FakeAgentContextStore:
     def append_tool_result(self, **kwargs):  # noqa: ANN003, ANN201
         raise NotImplementedError
 
+    def add_compact_delta_tokens(self, **kwargs):  # noqa: ANN003, ANN201
+        raise NotImplementedError
+
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
         _ = context_id
         raise NotImplementedError
@@ -428,13 +469,13 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
         window_width_tokens: int,
-        keep_last_markers: int,
+        keep_last_blocks: int,
     ) -> list[AgentContextEntry]:
         self.compact_calls.append(
             {
                 "context_id": context_id,
                 "window_width_tokens": window_width_tokens,
-                "keep_last_markers": keep_last_markers,
+                "keep_last_blocks": keep_last_blocks,
             }
         )
         return self.compact_entries

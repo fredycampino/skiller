@@ -11,6 +11,7 @@ class ShellToolRuntimeConfigMapper:
         *,
         raw: Mapping[str, object],
         definition: type[ToolDefinition],
+        base_path: Path,
     ) -> ShellToolRuntimeConfig:
         supported_fields = {
             "allowed_paths",
@@ -23,7 +24,7 @@ class ShellToolRuntimeConfigMapper:
             unknown_values = ", ".join(unknown_fields)
             raise ValueError(f"Tool 'shell' has unsupported config fields: {unknown_values}")
 
-        allowed_paths = _path_list_value(raw, "allowed_paths")
+        allowed_paths = _path_list_value(raw, "allowed_paths", base_path=base_path)
         allowlist_enabled = _bool_value(raw, "allowlist_enabled", False)
         allow_env_prefix = _bool_value(raw, "allow_env_prefix", True)
         allowed_commands = _string_list_value(raw, "allowed_commands")
@@ -63,8 +64,20 @@ def _string_list_value(raw: Mapping[str, object], name: str) -> list[str]:
     return items
 
 
-def _path_list_value(raw: Mapping[str, object], name: str) -> tuple[Path, ...]:
+def _path_list_value(
+    raw: Mapping[str, object],
+    name: str,
+    *,
+    base_path: Path,
+) -> tuple[Path, ...]:
     return tuple(
-        Path(item).expanduser().resolve(strict=False)
+        _path_value(item, base_path=base_path)
         for item in _string_list_value(raw, name)
     )
+
+
+def _path_value(raw: str, *, base_path: Path) -> Path:
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = base_path / path
+    return path.resolve(strict=False)

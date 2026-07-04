@@ -128,7 +128,7 @@ from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
-from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
+from skiller.infrastructure.skills.filesystem_runner_port import FilesystemRunnerPort
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 from skiller.infrastructure.tools.process.default_tool_process import DefaultToolProcessRunner
@@ -153,7 +153,7 @@ class RuntimeContainer:
 def build_runtime_container(
     settings: Settings | None = None,
     *,
-    skills_dir: str | None = None,
+    flows_dir: str | None = None,
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
@@ -169,12 +169,12 @@ def build_runtime_container(
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
-    filesystem_skill_runner = FilesystemSkillRunner(
-        skills_dir=skills_dir,
+    filesystem_runner_port = FilesystemRunnerPort(
+        flows_dir=Path(flows_dir) if flows_dir is not None else None,
     )
-    skill_runner: RunnerPort = filesystem_skill_runner
+    skill_runner: RunnerPort = filesystem_runner_port
     flow_port = FilesystemFlowPort(
-        flows_dir=str(filesystem_skill_runner.skills_dir),
+        flows_dir=str(filesystem_runner_port.flows_dir),
         mapper=FlowYamlMapper(),
     )
     shell_tool = ShellProcessTool()
@@ -193,7 +193,7 @@ def build_runtime_container(
         ),
         env=os.environ,
     )
-    llm_model = _build_llm_model_manager()
+    llm_model = _build_llm_model_manager(settings=cfg)
     mcp = DefaultMCP()
     shell_runtime_config = _build_shell_runtime_config()
     tool_process_runner = DefaultToolProcessRunner()
@@ -440,8 +440,12 @@ def build_runtime_container(
     )
 
 
-def _build_llm_model_manager() -> LLMModelManager:
-    return LLMModelManager(client_resolver=LLMClientFactory())
+def _build_llm_model_manager(*, settings: Settings) -> LLMModelManager:
+    db_path = Path(settings.db_path).expanduser()
+    request_log_dir = db_path.parent / "llm-requests"
+    return LLMModelManager(
+        client_resolver=LLMClientFactory(request_log_dir=request_log_dir),
+    )
 
 
 def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:

@@ -98,7 +98,7 @@ from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegis
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
-from skiller.infrastructure.skills.filesystem_skill_runner import FilesystemSkillRunner
+from skiller.infrastructure.skills.filesystem_runner_port import FilesystemRunnerPort
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
 from skiller.infrastructure.tools.process.default_tool_process import DefaultToolProcessRunner
 
@@ -138,11 +138,11 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         SqliteAgentContextDatasource(store.db_path),
     )
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
-    skill_runner = FilesystemSkillRunner(
-        skills_dir="skills",
+    skill_runner = FilesystemRunnerPort(
+        flows_dir=Path("skills"),
     )
     flow_port = FilesystemFlowPort(
-        flows_dir=str(skill_runner.skills_dir),
+        flows_dir=str(skill_runner.flows_dir),
         mapper=FlowYamlMapper(),
     )
     mcp = DefaultMCP()
@@ -438,7 +438,7 @@ def test_external_flow_file_is_snapshotted_at_run_creation() -> None:
 
         store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
-        skill_runner = FilesystemSkillRunner(skills_dir="skills")
+        skill_runner = FilesystemRunnerPort(flows_dir=Path("skills"))
         create_run_use_case = CreateRunUseCase(store, skill_runner)
         get_start_step_use_case = GetStartStepUseCase(store=store)
         render_current_step_use_case = RenderCurrentStepUseCase(

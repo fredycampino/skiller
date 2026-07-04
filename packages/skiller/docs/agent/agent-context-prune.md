@@ -9,7 +9,8 @@ This note defines the token markers persisted in agent context entries that have
 It is calculated from the LLM-reported `prompt_tokens`:
 
 - If there is no previous usage marker, `delta_tokens = prompt_tokens`.
-- If the context window moved or was rebased, Skiller estimates the current window tokens and stores the positive difference.
+- If the context window moved or was rebased, Skiller estimates the current block delta from
+  payload character counts. See [Moved window delta estimation](#moved-window-delta-estimation).
 - Otherwise, `delta_tokens = current_prompt_tokens - previous_prompt_tokens`.
 - If the result would be negative, it is clamped to `0`.
 
@@ -40,21 +41,67 @@ Examples:
 - Sequence `9`: `390 - 300 = 90`.
 - Sequence `12`: `500 - 390 = 110`.
 
+### Moved window delta estimation
+
+When the context window moved or was rebased, Skiller cannot calculate the delta from two
+comparable `prompt_tokens` values.
+
+In that case, Skiller estimates the current delta from payload character counts:
+
+- Start at `max(window_start_sequence, previous_usage_marker.sequence + 1)`.
+- Sum persisted payload chars from that start sequence.
+- Add the current response payload chars.
+- Convert chars to an estimated token delta.
+
+
+## Protected list context
+
+A protected list context is the recent tail that must stay complete before compact pruning is
+allowed.
+
+A block is the sequence range after the previous usage marker and up to the current usage marker.
+The current usage marker's `delta_tokens` is the token weight of that whole block.
+
+Example:
+
+| block marker | block sequences | block tokens |
+|---:|---|---:|
+| `2` | `1, 2` | `delta_tokens(2)` |
+| `4` | `3, 4` | `delta_tokens(4)` |
+| `7` | `5, 6, 7` | `delta_tokens(7)` |
+| `9` | `8, 9` | `delta_tokens(9)` |
+| `12` | `10, 11, 12` | `delta_tokens(12)` |
+
+Protected tail rule:
+
+1. Read usage markers from newest to oldest.
+2. Add complete blocks while both conditions hold:
+   the tail has at most `keep_last_blocks` and the accumulated `delta_tokens` stay
+   within `window_width_tokens`.
+3. Stop before adding a block that would exceed either limit.
+4. If the latest block alone exceeds `window_width_tokens`, keep that latest block anyway.
+5. If there are fewer than `keep_last_blocks` and they fit, keep all available blocks.
+6. The protected tail starts after the usage marker before the oldest protected block.
+7. The protected tail keeps every entry in those blocks, including prunable entries.
+
+The compact portion can only be selected before the protected tail start sequence. This keeps the
+compact list and protected list aligned on block boundaries.
+
+
 ## Marker delta compact tokens
 
-`delta_compact_tokens` is the estimated token delta for the same marker after removing tool history entries that can later be pruned from the prompt.
+`delta_compact_tokens(sequence)` is the estimated token weight of that sequence in compact mode.
+When present, it also marks the sequence as non-prunable for compact-window accumulation.
 
-Column semantics:
+Usage marker rule:
 
-- `NULL`: compact delta is not prepared. This is a legacy or migrated marker state.
-- `0`: compact delta was prepared and is zero. This is valid only when `delta_tokens = 0`.
-- `> 0`: compact delta was prepared and weighs that many estimated tokens.
-
-New marker rule:
-
-- Build the block from the previous entry with `usage_json` to the current entry with `usage_json`, including both markers.
-- Calculate `delta_compact_tokens` only when the block contains prunable entries.
-- If the block has no prunable entries, set `delta_compact_tokens = delta_tokens`.
+- For each usage marker, use the same delta block represented by `delta_tokens`: entries after
+  the previous usage marker up to and including the current usage marker.
+- Calculate `full_chars` as the serialized size of all entries in that delta block.
+- Estimate each entry weight with:
+  `entry_tokens = round(delta_tokens(marker) * entry_chars / full_chars)`.
+- Store `delta_compact_tokens = entry_tokens` only on non-prunable entries.
+- Prunable entries do not contribute compact weight.
 
 Prunable entries:
 
@@ -69,99 +116,131 @@ Non-prunable entries:
 
 Example:
 
-| sequence | entry | usage_json | prompt_tokens | delta_tokens | delta_compact_tokens |
-|---:|---|---|---:|---:|---:|
-| 1 | user: "hola" | no | null | null | null |
-| 2 | assistant final: "hola" | yes | 100 | 100 | 100 |
-| 3 | user: "busca README" | no | null | null | null |
-| 4 | assistant tool_calls | yes | 180 | 80 | compact estimate |
-| 5 | tool_call: search_files | no | null | null | null |
-| 6 | tool_result: README.md | no | null | null | null |
-| 7 | assistant final | yes | 300 | 120 | compact estimate |
-| 8 | user: "ahora package.json" | no | null | null | null |
-| 9 | assistant tool_calls | yes | 390 | 90 | compact estimate |
-| 10 | tool_call | no | null | null | null |
-| 11 | tool_result | no | null | null | null |
-| 12 | assistant final | yes | 500 | 110 | compact estimate |
+| sequence | entry | usage_json | prompt_tokens | delta_tokens | delta_compact_tokens | prunable |
+|---:|---|---|---:|---:|---:|---|
+| 1 | user: "hola" | no | null | null | entry estimate | no |
+| 2 | assistant final: "hola" | yes | 100 | 100 | entry estimate | no |
+| 3 | user: "busca README" | no | null | null | entry estimate | no |
+| 4 | assistant tool_calls | yes | 180 | 80 | null | yes |
+| 5 | tool_call: search_files | no | null | null | null | yes |
+| 6 | tool_result: README.md | no | null | null | null | yes |
+| 7 | assistant final | yes | 300 | 120 | entry estimate | no |
+| 8 | user: "ahora package.json" | no | null | null | entry estimate | no |
+| 9 | assistant tool_calls | yes | 390 | 90 | null | yes |
+| 10 | tool_call | no | null | null | null | yes |
+| 11 | tool_result | no | null | null | null | yes |
+| 12 | user: "incluye scripts" | no | null | null | entry estimate | no |
+| 13 | assistant final | yes | 500 | 110 | entry estimate | no |
 
-Block examples:
+Compact delta examples:
 
-- Sequence `2`: block `[2]`; no prunable entries; `delta_compact_tokens = 100`.
-- Sequence `4`: block `[2, 3, 4]`; contains `assistant tool_calls`; estimate compact delta.
-- Sequence `7`: block `[4, 5, 6, 7]`; contains `assistant tool_calls`, `tool_call`, and `tool_result`; estimate compact delta.
-- Sequence `9`: block `[7, 8, 9]`; contains `assistant tool_calls`; estimate compact delta.
-- Sequence `12`: block `[9, 10, 11, 12]`; contains `assistant tool_calls`, `tool_call`, and `tool_result`; estimate compact delta.
+- Marker `2`: estimate and store compact weights for sequences `1` and `2`.
+- Marker `4`: estimate compact weight for sequence `3`; sequence `4` is prunable.
+- Marker `7`: estimate compact weight for sequence `7`; sequences `5` and `6` are prunable.
+- Marker `9`: estimate compact weight for sequence `8`; sequence `9` is prunable.
+- Marker `13`: estimate compact weights for sequences `12` and `13`; sequences `10` and `11`
+  are prunable.
 
 Estimation:
 
-- `full_chars`: serialized size of all entries in the block.
-- `compact_chars`: serialized size after removing prunable entries.
-- `delta_compact_tokens = round(delta_tokens * compact_chars / full_chars)`.
+- `full_chars`: serialized size of all entries in the delta block.
+- `entry_chars`: serialized size of one non-prunable entry in the delta block.
+- `delta_compact_tokens(entry) = round(delta_tokens(marker) * entry_chars / full_chars)`.
 
 Safety rules:
 
-- If `full_chars == 0`, use `delta_tokens`.
-- Clamp the result to `0 <= delta_compact_tokens <= delta_tokens`.
-- If no prunable entries exist, use `delta_tokens`.
+- If `full_chars == 0`, no entry weight can be estimated from chars.
+- Clamp each entry estimate to `0 <= delta_compact_tokens(entry) <= delta_tokens(marker)`.
+- The sum of compact entry weights for one delta block must not exceed `delta_tokens(marker)`.
 
-Legacy backfill:
+`delta_compact_tokens` does not delete persisted context. It records per-sequence compact weights
+that a future compact prompt window can use when old tool history is omitted.
 
-- Before selecting a compact window, Skiller prepares legacy markers for the context.
-- Markers with `delta_compact_tokens IS NULL` are backfilled as `ceil(delta_tokens / 3)`.
-- Markers with `delta_tokens > 0` and `delta_compact_tokens = 0` are also rebuilt as `ceil(delta_tokens / 3)` because `0` is not a valid compact weight for a positive delta.
-- Markers with `delta_tokens = 0` and `delta_compact_tokens = 0` are left unchanged.
-- The legacy backfill does not use payload inspection. It is a transition heuristic for old markers whose compact weight was not prepared when they were written.
+Old persisted entries without `delta_compact_tokens` are not backfilled during compact-window
+selection. They do not participate in the compact list, but they can still appear in the protected
+tail or in a normal context window.
 
-`delta_compact_tokens` does not delete persisted context. It only records the estimated delta that a future compact prompt window can use when old tool history is omitted.
+## Compact list context
+
+A compact list context selects an older compact range before the protected tail.
+
+Inputs:
+
+- `start_sequence`: highest sequence that compact selection may inspect.
+- `window_width_tokens`: compact token budget.
+
+Rules:
+
+1. Walk backwards from `start_sequence`.
+2. Only entries with `delta_compact_tokens IS NOT NULL` participate in token accumulation.
+3. Entries with `delta_compact_tokens = NULL` do not add tokens and do not define range boundaries.
+4. Accumulate `delta_compact_tokens` from newest to oldest.
+5. If the first compact marker found already exceeds `window_width_tokens`, the compact list is empty.
+6. Otherwise, include compact markers while the accumulated sum stays `<= window_width_tokens`.
+7. The selected compact range starts at the oldest included compact marker.
+8. The selected compact range ends at the newest included compact marker.
+9. Return persisted entries inside that selected range in original sequence order.
+10. Omit prunable entries from the returned compact list.
+11. If there are no compact markers at or before `start_sequence`, the compact list is empty.
+
+The compact list never extends past the newest included compact marker. This prevents a non-compact
+entry between the newest compact marker and `start_sequence` from being included without a compact
+weight.
+
+Example:
+
+`start_sequence = 9`, `window_width_tokens = 120`.
+
+| sequence | delta_compact_tokens | accumulated | selected |
+|---:|---:|---:|---|
+| `9` | null | - | no |
+| `8` | 30 | 30 | yes |
+| `7` | 40 | 70 | yes |
+| `6` | null | - | no |
+| `5` | null | - | no |
+| `4` | null | - | no |
+| `3` | 35 | 105 | yes |
+| `2` | 50 | 155 | no |
+
+Selected compact range: `3..8`.
+
+Returned compact entries: non-prunable entries inside `3..8`.
+
 
 ## List context window
 
-A normal context window selects the most recent conversation entries that fit in the requested token width.
+A normal context window selects the most recent complete blocks that fit in the requested token
+width.
 
-The window is calculated from usage markers, not from every entry. A usage marker is an entry with `usage_json` and token marker columns. Each marker contributes its `delta_tokens` value to the window estimate.
+The window is calculated from usage markers, not from every entry. Each usage marker contributes
+its `delta_tokens` value to the window estimate.
 
 Algorithm:
 
 1. Read usage markers for the context.
 2. Treat negative `delta_tokens` as `0`.
-3. Accumulate `delta_tokens` backwards, from the newest marker to older markers.
-4. Select the oldest marker whose backward accumulation is still within the requested token window.
-5. Find the previous usage marker before that selected marker.
-6. Start the returned entries after the previous usage marker, so the selected marker block is not cut in the middle.
-7. If no marker fits, keep the latest marker block.
-8. Return all entries from the calculated start sequence in original sequence order.
+3. Accumulate `delta_tokens` backwards, from newest to oldest.
+4. Select the oldest marker whose backward accumulation is still within `window_width_tokens`.
+5. Start after the previous usage marker so the selected block is not cut in the middle.
+6. Return entries from that start sequence in original sequence order.
 
-The normal window does not prune entries. If a block is selected, its user messages, assistant messages, tool calls, and tool results are all returned complete.
+The normal window never prunes entries.
 
 ## Compact session window
 
-A compact session window keeps the recent part of the conversation complete and prunes only older tool history when more context can fit.
+A compact session window composes two lists:
 
-The compact window has one policy value: `keep_last_markers`. This value means how many recent usage marker blocks must stay complete. It is normalized to the range `1..100` before the window is calculated.
+- `Protected list context`: recent complete blocks that must stay unpruned.
+- `Compact list context`: older non-prunable entries selected with `delta_compact_tokens`.
 
 Algorithm:
 
-1. Prepare legacy compact deltas for the context when needed.
-2. Find the recent protected tail using the last `keep_last_markers` usage markers.
-3. Count that protected tail with normal `delta_tokens`.
-4. If the protected tail already fills or exceeds the requested token window, use the normal window result. No compact pruning is applied.
-5. If the protected tail does not fill the requested token window, fill the remaining older portion using prepared `delta_compact_tokens`.
-6. In that older compact portion, omit prunable entries and keep non-prunable entries.
-7. Return entries in original sequence order.
+1. Normalize configured `keep_last` to `1..100`; internally it is handled as
+   `keep_last_blocks`.
+2. Build the protected list.
+3. If the protected list already reaches `window_width_tokens`, return it.
+4. Otherwise, use the remaining token budget to build the compact list before the protected list.
+5. Return `compact_entries + protected_entries` in sequence order.
 
-Protected tail:
-
-- Uses normal `delta_tokens`.
-- Keeps all entries complete.
-- Does not prune `assistant tool_calls`, `tool_call`, or `tool_result` entries.
-
-Older compact portion:
-
-- Uses prepared `delta_compact_tokens` for accumulation.
-- Does not fall back from `delta_compact_tokens = NULL` to `delta_tokens`.
-- Omits prunable entries.
-- Keeps user messages and assistant final messages.
-
-Usage markers are entries with `usage_json` and token marker columns. The compact window uses usage markers, not only assistant final messages, because token growth is measured from usage marker to usage marker.
-
-A compact session window never modifies persisted context. It only changes which persisted entries are selected for the prompt window.
+A compact session window never modifies persisted context. It only changes which persisted entries
+are selected for the prompt window.

@@ -34,6 +34,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextPayload,
     AgentContextUsageMarker,
 )
 from skiller.domain.agent.context.stats_model import (
@@ -628,7 +629,6 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None = None,
         delta_tokens: int = 0,
-        delta_compact_tokens: int = 0,
         window_start_sequence: int = 0,
         window_base: bool = False,
     ) -> AgentContextEntry:
@@ -647,7 +647,6 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.TOOL_CALLS,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
         )
 
@@ -659,7 +658,6 @@ class _FakeAgentContextStore:
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        delta_compact_tokens: int,
         window_start_sequence: int,
         window_base: bool,
     ) -> AgentContextEntry:
@@ -678,7 +676,6 @@ class _FakeAgentContextStore:
             message_type=AgentAssistantMessageType.FINAL,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
         )
 
@@ -739,7 +736,6 @@ class _FakeAgentContextStore:
         message_type: AgentAssistantMessageType | None = None,
         window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
-        delta_compact_tokens: int | None = None,
         window_base: bool | None = None,
     ) -> AgentContextEntry:
         self.appended.append(
@@ -749,7 +745,6 @@ class _FakeAgentContextStore:
                 "message_type": message_type.value if message_type else None,
                 "window_start_sequence": window_start_sequence,
                 "delta_tokens": delta_tokens,
-                "delta_compact_tokens": delta_compact_tokens,
                 "window_base": window_base,
             }
         )
@@ -764,7 +759,6 @@ class _FakeAgentContextStore:
             message_type=message_type,
             window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            delta_compact_tokens=delta_compact_tokens,
             window_base=window_base,
             source_step_id=source_step_id,
             created_at="2026-05-09T00:00:00Z",
@@ -803,6 +797,26 @@ class _FakeAgentContextStore:
             for entry in entries
             if entry.delta_tokens is not None and entry.delta_tokens > 0
         )
+
+    def estimate_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        window_start_sequence: int,
+        last_marker_sequence: int,
+        payload: AgentContextPayload,
+    ) -> int:
+        _ = context_id, window_start_sequence, last_marker_sequence, payload
+        large_delta_estimate = 1_000_000_000
+        return large_delta_estimate
+
+    def add_compact_delta_tokens(
+        self,
+        *,
+        context_id: str,
+        marker_sequence: int,
+    ) -> None:
+        _ = context_id, marker_sequence
 
 
 class _FakeRunAgentStore:

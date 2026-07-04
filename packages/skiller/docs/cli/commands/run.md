@@ -39,7 +39,7 @@ Command:
 skiller run <flow>
 ```
 
-Internal flow ids resolve from `packages/skiller/agents/<id>/agent.yaml`.
+Internal flow ids resolve from `apps/agents/<id>/agent.yaml`.
 
 Output when the run succeeds:
 

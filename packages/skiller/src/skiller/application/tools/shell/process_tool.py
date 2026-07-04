@@ -80,11 +80,14 @@ class ShellProcessTool(
     def to_runtime_config(
         self,
         raw: Mapping[str, object],
+        *,
+        base_path: Path,
     ) -> ShellToolRuntimeConfig:
         mapper = ShellToolRuntimeConfigMapper()
         return mapper.from_mapping(
             raw=raw,
             definition=type(self),
+            base_path=base_path,
         )
 
     def request(self, input: ToolInput) -> ToolRequestResult[ShellToolRequest]:

@@ -2,10 +2,10 @@ from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.application.agent.prompt.prompt_builder import AgentPromptBuilder
+from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.context.model import (
     AgentContextEntry,
 )
-from skiller.domain.agent.context.store_port import AgentContextStorePort
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
@@ -50,7 +50,7 @@ class AgentContextManager:
             entries = self.agent_context_store.list_compact_entries(
                 context_id=context.context_id,
                 window_width_tokens=window_width_tokens,
-                keep_last_markers=compaction.keep_last,
+                keep_last_blocks=compaction.keep_last,
             )
         else:
             entries = self.agent_context_store.list_window_entries(
@@ -80,6 +80,7 @@ class AgentContextManager:
             system=config.system,
             entries=entries,
             tools=config.tools,
+            log_request=config.config.llm.log_request,
         )
         return AgentContextLLMRequest(
             context_id=context.context_id,

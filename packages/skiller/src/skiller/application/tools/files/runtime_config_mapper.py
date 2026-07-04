@@ -11,6 +11,7 @@ class FilesToolRuntimeConfigMapper:
         *,
         raw: Mapping[str, object],
         definition: type[ToolDefinition],
+        base_path: Path,
     ) -> FilesToolRuntimeConfig:
         supported_fields = {
             "read",
@@ -24,13 +25,18 @@ class FilesToolRuntimeConfigMapper:
 
         return FilesToolRuntimeConfig(
             definition=definition,
-            read=tuple(_path_list_value(raw, "read")),
-            write=tuple(_path_list_value(raw, "write")),
-            all=tuple(_path_list_value(raw, "all")),
+            read=tuple(_path_list_value(raw, "read", base_path=base_path)),
+            write=tuple(_path_list_value(raw, "write", base_path=base_path)),
+            all=tuple(_path_list_value(raw, "all", base_path=base_path)),
         )
 
 
-def _path_list_value(raw: Mapping[str, object], name: str) -> list[Path]:
+def _path_list_value(
+    raw: Mapping[str, object],
+    name: str,
+    *,
+    base_path: Path,
+) -> list[Path]:
     value = raw.get(name)
     if value is None:
         return []
@@ -43,5 +49,8 @@ def _path_list_value(raw: Mapping[str, object], name: str) -> list[Path]:
             raise ValueError(
                 f"Tool 'files' field '{name}' must be a list of non-empty strings"
             )
-        items.append(Path(item.strip()))
+        path = Path(item.strip()).expanduser()
+        if not path.is_absolute():
+            path = base_path / path
+        items.append(path.resolve(strict=False))
     return items

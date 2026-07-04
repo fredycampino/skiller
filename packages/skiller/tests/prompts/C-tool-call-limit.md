@@ -17,7 +17,7 @@ Use the shell tool to run 11 separate commands.
 7. `ls packages/skiller/src`
 8. `ls packages/skiller/tests`
 9. `ls packages/skiller/docs`
-10. `ls packages/skiller/agents`
+10. `ls apps/agents`
 11. `date`
 
 Important:

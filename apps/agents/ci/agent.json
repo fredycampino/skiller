@@ -1,13 +1,12 @@
 {
   "loop": {
-    "max_turns": 50,
-    "max_tool_calls": 10
+    "max_turns": 10,
+    "max_tool_calls": 8
   },
   "tools": {
     "shell": {
       "allowed_paths": [
-        ".",
-        "./.venv/bin/skiller"
+        "../../.."
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
@@ -21,28 +20,26 @@
         "tail",
         "wc",
         "nl",
+        "cat",
         "git",
-        "pytest",
         "ruff",
+        "pytest",
+        "uv",
         "python",
         "python3",
-        "echo",
-        "sleep",
-        "skiller"
+        "skiller",
+        "date"
       ]
     },
     "files": {
       "read": [
-        ".",
+        "../../..",
         "~/.skiller/settings/"
       ],
       "write": [
-        "."
+        "../../.."
       ],
       "all": []
     }
-  },
-  "llm": {
-    "default_provider": "codex"
   }
 }

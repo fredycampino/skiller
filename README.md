@@ -143,14 +143,14 @@ steps:
 ```
 
 The full prompt and step definition live in
-[`packages/skiller/agents/mono/agent.yaml`](packages/skiller/agents/mono/agent.yaml).
+[`apps/agents/mono/agent.yaml`](apps/agents/mono/agent.yaml).
 The provider, loop limits, shell allowlist, and file roots live in
-[`packages/skiller/agents/mono/agent.json`](packages/skiller/agents/mono/agent.json).
+[`apps/agents/mono/agent.json`](apps/agents/mono/agent.json).
 
 ## Project Layout
 
 - `packages/skiller/src/skiller`: runtime and CLI code
-- `packages/skiller/agents/mono`: bundled terminal agent
+- `apps/agents/mono`: bundled terminal agent
 - `packages/skiller/docs`: runtime and CLI documentation
 - `packages/skiller/tests`: runtime, CLI, and integration tests
 - `apps/tui`: Textual UI app

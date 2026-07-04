@@ -18,37 +18,39 @@ _OUTPUT_VALUE_RE = re.compile(
 _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
 
 
-class FilesystemSkillRunner(RunnerPort):
+class FilesystemRunnerPort(RunnerPort):
     def __init__(
         self,
-        skills_dir: str | None = None,
+        flows_dir: Path | None,
     ) -> None:
-        self.skills_dir = (
-            Path(skills_dir) if skills_dir is not None else _find_default_internal_agents_dir()
+        self.flows_dir = (
+            Path(flows_dir)
+            if flows_dir is not None
+            else _find_default_internal_flow_catalog_dir()
         )
 
     def load(self, source: str, ref: str) -> dict[str, Any]:
         if source == "internal":
-            yaml_path, json_path = _resolve_internal_skill_paths(
-                catalog_dir=self.skills_dir,
+            yaml_path, json_path = _resolve_internal_flow_paths(
+                catalog_dir=self.flows_dir,
                 ref=ref,
             )
         elif source == "file":
             path = Path(ref)
             suffix = path.suffix.lower()
             if suffix not in {".yaml", ".yml", ".json"}:
-                raise ValueError(f"Unsupported skill file extension: {path}")
+                raise ValueError(f"Unsupported flow file extension: {path}")
             yaml_path = path if suffix in {".yaml", ".yml"} else Path("__missing__.yaml")
             json_path = path if suffix == ".json" else Path("__missing__.json")
         else:
-            raise ValueError(f"Unsupported skill source: {source}")
+            raise ValueError(f"Unsupported flow source: {source}")
 
         if yaml_path.exists():
             return yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         if json_path.exists():
             return json.loads(json_path.read_text(encoding="utf-8"))
 
-        raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
+        raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
 
     def read_file(
         self,
@@ -58,7 +60,7 @@ class FilesystemSkillRunner(RunnerPort):
     ) -> str:
         file_path = self.resolve_file_path(source, ref, file_ref)
         if not file_path.exists():
-            raise FileNotFoundError(f"Skill file not found: {file_ref}")
+            raise FileNotFoundError(f"Flow file not found: {file_ref}")
         return file_path.read_text(encoding="utf-8")
 
     def resolve_file_path(
@@ -102,23 +104,23 @@ class FilesystemSkillRunner(RunnerPort):
 
     def _resolve_base_path(self, *, source: str, ref: str) -> Path:
         if source == "internal":
-            yaml_path, json_path = _resolve_internal_skill_paths(
-                catalog_dir=self.skills_dir,
+            yaml_path, json_path = _resolve_internal_flow_paths(
+                catalog_dir=self.flows_dir,
                 ref=ref,
             )
             if yaml_path.exists():
                 return yaml_path.parent
             if json_path.exists():
                 return json_path.parent
-            raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
+            raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
 
         if source == "file":
-            skill_path = Path(ref)
-            if not skill_path.exists():
-                raise FileNotFoundError(f"Skill not found: source={source} ref={ref}")
-            return skill_path.parent
+            flow_path = Path(ref)
+            if not flow_path.exists():
+                raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
+            return flow_path.parent
 
-        raise ValueError(f"Unsupported skill source: {source}")
+        raise ValueError(f"Unsupported flow source: {source}")
 
     def _render_value(self, value: Any, context: dict[str, Any]) -> Any:
         if isinstance(value, dict):
@@ -252,21 +254,18 @@ class FilesystemSkillRunner(RunnerPort):
         return current
 
 
-def _find_default_internal_agents_dir() -> Path:
+def _find_default_internal_flow_catalog_dir() -> Path:
     module_path = Path(__file__).resolve()
-    package_agents_dir = module_path.parents[2] / "agents"
-    if package_agents_dir.is_dir():
-        return package_agents_dir
 
     for parent in module_path.parents:
-        repo_agents_dir = parent / "packages" / "skiller" / "agents"
-        if repo_agents_dir.is_dir():
-            return repo_agents_dir
+        apps_agents_dir = parent / "apps" / "agents"
+        if apps_agents_dir.is_dir():
+            return apps_agents_dir
 
-    return Path("packages/skiller/agents")
+    return module_path.parents[3] / "apps" / "agents"
 
 
-def _resolve_internal_skill_paths(*, catalog_dir: Path, ref: str) -> tuple[Path, Path]:
+def _resolve_internal_flow_paths(*, catalog_dir: Path, ref: str) -> tuple[Path, Path]:
     normalized_ref = ref.strip().strip("/")
     nested_yaml_path = catalog_dir / normalized_ref / "agent.yaml"
     nested_json_path = catalog_dir / normalized_ref / "agent.json"
@@ -282,16 +281,16 @@ def _resolve_internal_skill_paths(*, catalog_dir: Path, ref: str) -> tuple[Path,
 
 def _resolve_file_path(*, base_path: Path, file_ref: str) -> Path:
     if not isinstance(file_ref, str) or not file_ref.strip():
-        raise ValueError("Skill file reference must be a non-empty string")
+        raise ValueError("Flow file reference must be a non-empty string")
 
     relative_path = Path(file_ref)
     if relative_path.is_absolute():
-        raise ValueError(f"Skill file reference must be relative: {file_ref}")
+        raise ValueError(f"Flow file reference must be relative: {file_ref}")
 
     resolved_base = base_path.resolve()
     resolved_path = (resolved_base / relative_path).resolve()
     try:
         resolved_path.relative_to(resolved_base)
     except ValueError as exc:
-        raise ValueError(f"Skill file reference escapes skill directory: {file_ref}") from exc
+        raise ValueError(f"Flow file reference escapes flow directory: {file_ref}") from exc
     return resolved_path

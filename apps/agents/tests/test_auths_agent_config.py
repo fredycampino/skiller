@@ -6,7 +6,7 @@ import yaml
 
 
 def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
-    agent_path = Path("packages/skiller/agents/auths/codex.yaml")
+    agent_path = Path("apps/agents/auths/codex.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
@@ -18,7 +18,7 @@ def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
 
 
 def test_codex_auth_check_does_not_delete_credentials_file() -> None:
-    agent_path = Path("packages/skiller/agents/auths/codex.yaml")
+    agent_path = Path("apps/agents/auths/codex.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     command = _steps_by_name(agent)["check_codex_credentials"]["command"]
 
@@ -47,7 +47,7 @@ def test_codex_auth_temp_files_are_stored_outside_secrets(tmp_path, monkeypatch)
 
 
 def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() -> None:
-    agent_path = Path("packages/skiller/agents/auths/minimax.yaml")
+    agent_path = Path("apps/agents/auths/minimax.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
@@ -65,7 +65,7 @@ def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() 
 def test_minimax_auth_ready_check_uses_existing_secret_without_requiring_config() -> None:
     command = _steps_by_name(
         yaml.safe_load(
-            Path("packages/skiller/agents/auths/minimax.yaml").read_text(encoding="utf-8")
+            Path("apps/agents/auths/minimax.yaml").read_text(encoding="utf-8")
         )
     )["check_minimax_config"]["command"]
 
@@ -76,7 +76,7 @@ def test_minimax_auth_ready_check_uses_existing_secret_without_requiring_config(
 def test_auth_provider_flows_emit_load_session_post_action() -> None:
     for flow in ("codex", "minimax", "bedrock"):
         agent = yaml.safe_load(
-            Path(f"packages/skiller/agents/auths/{flow}.yaml").read_text(
+            Path(f"apps/agents/auths/{flow}.yaml").read_text(
                 encoding="utf-8"
             )
         )
@@ -97,7 +97,7 @@ def test_auth_provider_flows_emit_load_session_post_action() -> None:
 
 def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
     agent = yaml.safe_load(
-        Path("packages/skiller/agents/auths/auth.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
 
@@ -125,7 +125,7 @@ def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:
 
 
 def _load_codex_auth_module() -> ModuleType:
-    module_path = Path("packages/skiller/agents/auths/codex_auth.py")
+    module_path = Path("apps/agents/auths/codex_auth.py")
     spec = importlib.util.spec_from_file_location("codex_auth", module_path)
     assert spec is not None
     assert spec.loader is not None

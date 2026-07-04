@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from skiller.domain.agent.context.compact_delta import payload_chars
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
+    AgentAssistantMessageType,
     AgentContextEntryType,
     AgentToolCallPayload,
     AgentUserMessagePayload,
@@ -61,7 +63,6 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         text="Old answer",
         usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
         delta_tokens=100,
-        delta_compact_tokens=100,
         window_start_sequence=1,
         window_base=True,
     )
@@ -72,7 +73,6 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         text="I will inspect.",
         usage=LLMUsage(prompt_tokens=190, completion_tokens=5, total_tokens=195),
         delta_tokens=90,
-        delta_compact_tokens=20,
         window_start_sequence=1,
         window_base=False,
     )
@@ -105,7 +105,6 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         text="File inspected.",
         usage=LLMUsage(prompt_tokens=230, completion_tokens=5, total_tokens=235),
         delta_tokens=40,
-        delta_compact_tokens=40,
         window_start_sequence=1,
         window_base=False,
     )
@@ -140,7 +139,6 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             model=AgentMiniMaxLLMModel.M2_5,
         ),
         delta_tokens=123,
-        delta_compact_tokens=77,
         window_start_sequence=1,
         window_base=True,
     )
@@ -172,7 +170,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         text="Hello",
     )
     assert entries[0].usage is None
-    assert entries[1].delta_compact_tokens == 77
+    assert entries[1].delta_compact_tokens is None
     assert entries[1].usage == LLMUsage(
         prompt_tokens=123,
         completion_tokens=45,
@@ -183,7 +181,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     assert raw_row[0] == "final"
     assert raw_row[1] == 1
     assert raw_row[2] == 123
-    assert raw_row[3] == 77
+    assert raw_row[3] is None
     assert raw_row[4] == 1
     assert json.loads(raw_row[5]) == {
         "prompt_tokens": 123,
@@ -226,6 +224,307 @@ def test_agent_context_store_lists_entries_from_sequence(tmp_path) -> None:
     assert [entry.sequence for entry in entries] == [second.sequence, third.sequence]
 
 
+def test_sqlite_agent_context_datasource_lists_protected_tail_by_blocks(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-protected-tail.db"
+    store = _store_with_run(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    _append_compact_fixture(store)
+
+    latest_block = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=40,
+        keep_last_blocks=1,
+    )
+    large_window_tail = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=130,
+        keep_last_blocks=1,
+    )
+    two_blocks_small_window_tail = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=40,
+        keep_last_blocks=2,
+    )
+    two_blocks_tail = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=130,
+        keep_last_blocks=2,
+    )
+    latest_block_over_window = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=30,
+        keep_last_blocks=2,
+    )
+    oversized_window_tail = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=500,
+        keep_last_blocks=1,
+    )
+
+    assert [entry.sequence for entry in latest_block.entries] == [5, 6, 7]
+    assert latest_block.tokens == 40
+    assert [entry.sequence for entry in large_window_tail.entries] == [5, 6, 7]
+    assert large_window_tail.tokens == 40
+    assert [entry.sequence for entry in two_blocks_small_window_tail.entries] == [
+        5,
+        6,
+        7,
+    ]
+    assert two_blocks_small_window_tail.tokens == 40
+    assert [entry.sequence for entry in two_blocks_tail.entries] == [3, 4, 5, 6, 7]
+    assert two_blocks_tail.tokens == 130
+    assert [entry.sequence for entry in latest_block_over_window.entries] == [
+        5,
+        6,
+        7,
+    ]
+    assert latest_block_over_window.tokens == 40
+    assert [entry.sequence for entry in oversized_window_tail.entries] == [5, 6, 7]
+    assert oversized_window_tail.tokens == 40
+
+
+def test_sqlite_agent_context_datasource_protected_tail_keeps_blocks_that_fit(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-protected-tail-fit.db"
+    store = _store_with_run(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+
+    for index, delta_tokens in enumerate((10, 20, 20, 15, 40, 50), 1):
+        store.append_final_assistant_message(
+            context=AGENT_CONTEXT,
+            turn_id=f"turn-{index}",
+            text=f"block {index}",
+            usage=LLMUsage(
+                prompt_tokens=delta_tokens,
+                completion_tokens=1,
+                total_tokens=delta_tokens + 1,
+            ),
+            delta_tokens=delta_tokens,
+            window_start_sequence=1,
+            window_base=index == 1,
+        )
+
+    protected = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=100,
+        keep_last_blocks=5,
+    )
+    max_blocks = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=200,
+        keep_last_blocks=5,
+    )
+
+    assert [entry.sequence for entry in protected.entries] == [5, 6]
+    assert protected.tokens == 90
+    assert [entry.sequence for entry in max_blocks.entries] == [2, 3, 4, 5, 6]
+    assert max_blocks.tokens == 145
+
+
+def test_sqlite_agent_context_datasource_returns_empty_protected_entries_without_usage(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-protected-empty.db"
+    store = _store_with_run(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    store.append_user_message(context=AGENT_CONTEXT, text="First")
+    store.append_user_message(context=AGENT_CONTEXT, text="Second")
+
+    protected = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=100,
+        keep_last_blocks=1,
+    )
+
+    assert protected.entries == []
+    assert protected.tokens == 0
+
+
+def test_sqlite_agent_context_datasource_lists_compact_entries_from_sequence(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-compact-list.db"
+    store = _store_with_run(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    _append_compact_fixture(store)
+    _set_compact_delta_tokens(db_path, sequence=1, value=20)
+    _set_compact_delta_tokens(db_path, sequence=2, value=30)
+    _set_compact_delta_tokens(db_path, sequence=3, value=35)
+    _set_compact_delta_tokens(db_path, sequence=7, value=40)
+
+    entries_before_tools = datasource.list_compact_entries(
+        context_id=CONTEXT_ID,
+        start_sequence=6,
+        window_width_tokens=65,
+    )
+    entries_with_pruned_tools = datasource.list_compact_entries(
+        context_id=CONTEXT_ID,
+        start_sequence=7,
+        window_width_tokens=75,
+    )
+    empty_when_first_marker_exceeds_budget = (
+        datasource.list_compact_entries(
+            context_id=CONTEXT_ID,
+            start_sequence=7,
+            window_width_tokens=30,
+        )
+    )
+    empty_without_compact_markers = datasource.list_compact_entries(
+        context_id=CONTEXT_ID,
+        start_sequence=0,
+        window_width_tokens=100,
+    )
+
+    assert [entry.sequence for entry in entries_before_tools] == [2, 3]
+    assert [entry.sequence for entry in entries_with_pruned_tools] == [3, 7]
+    assert empty_when_first_marker_exceeds_budget == []
+    assert empty_without_compact_markers == []
+
+
+def test_sqlite_agent_context_datasource_compact_and_protected_ranges_do_not_overlap(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-compact-protected-boundary.db"
+    store = _store_with_run(db_path)
+    datasource = SqliteAgentContextDatasource(str(db_path))
+    _append_compact_fixture(store)
+    _set_compact_delta_tokens(db_path, sequence=1, value=20)
+    _set_compact_delta_tokens(db_path, sequence=2, value=30)
+    _set_compact_delta_tokens(db_path, sequence=3, value=35)
+
+    protected = datasource.list_protected_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=40,
+        keep_last_blocks=1,
+    )
+    compact = datasource.list_compact_entries(
+        context_id=CONTEXT_ID,
+        start_sequence=protected.entries[0].sequence - 1,
+        window_width_tokens=85,
+    )
+
+    assert [entry.sequence for entry in compact] == [1, 2, 3]
+    assert [entry.sequence for entry in protected.entries] == [5, 6, 7]
+    assert compact[-1].sequence < protected.entries[0].sequence
+
+
+def test_agent_context_store_lists_all_entries_without_usage_markers(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-compact-without-usage.db"
+    store = _store_with_run(db_path)
+    first = store.append_user_message(context=AGENT_CONTEXT, text="First")
+    second = store.append_user_message(context=AGENT_CONTEXT, text="Second")
+
+    entries = store.list_compact_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=100,
+        keep_last_blocks=1,
+    )
+
+    assert [entry.sequence for entry in entries] == [first.sequence, second.sequence]
+
+
+def test_agent_context_store_returns_empty_compact_entries_for_empty_context(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-compact-empty.db"
+    store = _store_with_run(db_path)
+
+    entries = store.list_compact_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=100,
+        keep_last_blocks=1,
+    )
+
+    assert entries == []
+
+
+def test_agent_context_store_adds_compact_delta_tokens_to_non_prunable_entries(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-compact-delta-markers.db"
+    store = _store_with_run(db_path)
+
+    first_user = store.append_user_message(context=AGENT_CONTEXT, text="Inspect files")
+    first_marker = store.append_tool_calls_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="I will inspect.",
+        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        delta_tokens=90,
+        window_start_sequence=1,
+        window_base=True,
+    )
+    store.add_compact_delta_tokens(
+        context_id=CONTEXT_ID,
+        marker_sequence=first_marker.sequence,
+    )
+    tool_call = store.append_tool_call(
+        context=AGENT_CONTEXT,
+        tool_call=AgentToolCall(
+            turn_id="turn-1",
+            parent_sequence=first_marker.sequence,
+            tool_call_id="call-1",
+            tool="read_file",
+            args={"path": "README.md"},
+        ),
+    )
+    tool_result = store.append_tool_result(
+        context=AGENT_CONTEXT,
+        tool_result=AgentToolResult(
+            turn_id="turn-1",
+            tool_call_id="call-1",
+            parent_sequence=first_marker.sequence,
+            result=ToolResult(
+                name="read_file",
+                status=ToolResultStatus.COMPLETED,
+                data={"content": "x" * 200},
+                text="x" * 200,
+                error=None,
+            ),
+        ),
+    )
+    final_marker = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="File inspected.",
+        usage=LLMUsage(prompt_tokens=200, completion_tokens=5, total_tokens=205),
+        delta_tokens=110,
+        window_start_sequence=1,
+        window_base=False,
+    )
+    store.add_compact_delta_tokens(
+        context_id=CONTEXT_ID,
+        marker_sequence=final_marker.sequence,
+    )
+    first_block_chars = payload_chars(first_user.payload) + payload_chars(
+        first_marker.payload
+    )
+    tool_block_chars = (
+        payload_chars(tool_call.payload)
+        + payload_chars(tool_result.payload)
+        + payload_chars(final_marker.payload)
+    )
+
+    assert _compact_delta_tokens(db_path, sequence=first_user.sequence) == round(
+        90 * payload_chars(first_user.payload) / first_block_chars
+    )
+    assert _compact_delta_tokens(db_path, sequence=first_marker.sequence) is None
+    assert _compact_delta_tokens(db_path, sequence=tool_call.sequence) is None
+    assert _compact_delta_tokens(db_path, sequence=tool_result.sequence) is None
+    assert _compact_delta_tokens(db_path, sequence=final_marker.sequence) == round(
+        110 * payload_chars(final_marker.payload) / tool_block_chars
+    )
+    assert [entry.delta_tokens for entry in store.list_entries(context_id=CONTEXT_ID)] == [
+        None,
+        90,
+        None,
+        None,
+        110,
+    ]
+
 
 def test_agent_context_store_lists_compact_entries_with_protected_tail(tmp_path) -> None:
     db_path = tmp_path / "agent-context-compact-window.db"
@@ -235,17 +534,12 @@ def test_agent_context_store_lists_compact_entries_with_protected_tail(tmp_path)
     entries = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=130,
-        keep_last_markers=1,
+        keep_last_blocks=1,
     )
 
-    assert [entry.sequence for entry in entries] == [3, 4, 5, 6, 7]
-    assert entries[1].payload == AgentAssistantMessagePayload(
-        turn_id="turn-2",
-        message_type="tool_calls",
-        text="I will inspect.",
-    )
-    assert entries[2].entry_type == AgentContextEntryType.TOOL_CALL
-    assert entries[3].entry_type == AgentContextEntryType.TOOL_RESULT
+    assert [entry.sequence for entry in entries] == [5, 6, 7]
+    assert entries[0].entry_type == AgentContextEntryType.TOOL_CALL
+    assert entries[1].entry_type == AgentContextEntryType.TOOL_RESULT
 
 
 def test_agent_context_store_compact_entries_match_normal_window_when_tail_fills(
@@ -258,7 +552,7 @@ def test_agent_context_store_compact_entries_match_normal_window_when_tail_fills
     compact_entries = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=40,
-        keep_last_markers=1,
+        keep_last_blocks=1,
     )
     normal_entries = store.list_window_entries(
         context_id=CONTEXT_ID,
@@ -270,7 +564,37 @@ def test_agent_context_store_compact_entries_match_normal_window_when_tail_fills
     ]
 
 
-def test_agent_context_store_normalizes_compact_keep_last_markers(tmp_path) -> None:
+def test_agent_context_store_keeps_maximum_protected_blocks_when_they_fit(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-compact-window-min-blocks.db"
+    store = _store_with_run(db_path)
+    _append_compact_fixture(store)
+
+    entries = store.list_compact_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=130,
+        keep_last_blocks=2,
+    )
+
+    assert [entry.sequence for entry in entries] == [3, 4, 5, 6, 7]
+
+
+def test_agent_context_store_keeps_only_protected_blocks_that_fit_window(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-compact-window-fit-blocks.db"
+    store = _store_with_run(db_path)
+    _append_compact_fixture(store)
+
+    entries = store.list_compact_entries(
+        context_id=CONTEXT_ID,
+        window_width_tokens=40,
+        keep_last_blocks=2,
+    )
+
+    assert [entry.sequence for entry in entries] == [5, 6, 7]
+
+
+def test_agent_context_store_normalizes_compact_keep_last_blocks(tmp_path) -> None:
     db_path = tmp_path / "agent-context-compact-window-normalize.db"
     store = _store_with_run(db_path)
     _append_compact_fixture(store)
@@ -278,22 +602,22 @@ def test_agent_context_store_normalizes_compact_keep_last_markers(tmp_path) -> N
     below_min = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=130,
-        keep_last_markers=0,
+        keep_last_blocks=0,
     )
     min_value = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=130,
-        keep_last_markers=1,
+        keep_last_blocks=1,
     )
     above_max = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=130,
-        keep_last_markers=101,
+        keep_last_blocks=101,
     )
     max_value = store.list_compact_entries(
         context_id=CONTEXT_ID,
         window_width_tokens=130,
-        keep_last_markers=100,
+        keep_last_blocks=100,
     )
 
     assert [entry.sequence for entry in below_min] == [
@@ -302,64 +626,6 @@ def test_agent_context_store_normalizes_compact_keep_last_markers(tmp_path) -> N
     assert [entry.sequence for entry in above_max] == [
         entry.sequence for entry in max_value
     ]
-
-
-def test_agent_context_store_backfills_missing_compact_delta_tokens(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-compact-backfill.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE agent_context_entries
-            SET delta_compact_tokens = NULL
-            WHERE context_id = ? AND sequence = 2
-            """,
-            (CONTEXT_ID,),
-        )
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=170,
-        keep_last_markers=1,
-    )
-
-    assert _compact_delta_tokens(db_path, sequence=2) == 34
-    assert [entry.sequence for entry in entries] == [1, 2, 3, 4, 5, 6, 7]
-
-
-def test_agent_context_store_rebuilds_only_invalid_zero_compact_delta(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-backfill-zero.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE agent_context_entries
-            SET delta_compact_tokens = 0
-            WHERE context_id = ? AND sequence = 4
-            """,
-            (CONTEXT_ID,),
-        )
-        conn.execute(
-            """
-            UPDATE agent_context_entries
-            SET delta_tokens = 0, delta_compact_tokens = 0
-            WHERE context_id = ? AND sequence = 7
-            """,
-            (CONTEXT_ID,),
-        )
-
-    store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_markers=1,
-    )
-
-    assert _compact_delta_tokens(db_path, sequence=4) == 30
-    assert _compact_delta_tokens(db_path, sequence=7) == 0
 
 
 def _compact_delta_tokens(db_path: Path, *, sequence: int) -> int | None:
@@ -374,6 +640,18 @@ def _compact_delta_tokens(db_path: Path, *, sequence: int) -> int | None:
         ).fetchone()
     assert row is not None
     return row[0]
+
+
+def _set_compact_delta_tokens(db_path: Path, *, sequence: int, value: int) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE agent_context_entries
+            SET delta_compact_tokens = ?
+            WHERE context_id = ? AND sequence = ?
+            """,
+            (value, CONTEXT_ID, sequence),
+        )
 
 
 def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
@@ -405,7 +683,6 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
             model=model,
         ),
         delta_tokens=123,
-        delta_compact_tokens=123,
         window_start_sequence=1,
         window_base=True,
     )
@@ -463,7 +740,6 @@ def test_agent_context_store_persists_delta_markers(
         text="First",
         usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
         delta_tokens=90,
-        delta_compact_tokens=90,
         window_start_sequence=1,
         window_base=True,
     )
@@ -477,7 +753,6 @@ def test_agent_context_store_persists_delta_markers(
         text="Reset",
         usage=LLMUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
         delta_tokens=1,
-        delta_compact_tokens=1,
         window_start_sequence=reset_start.sequence,
         window_base=True,
     )
@@ -520,7 +795,6 @@ def test_agent_context_store_keeps_delta_series_markers(
         text="First",
         usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
         delta_tokens=90,
-        delta_compact_tokens=90,
         window_start_sequence=1,
         window_base=True,
     )
@@ -530,7 +804,6 @@ def test_agent_context_store_keeps_delta_series_markers(
         text="Next",
         usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=1,
         window_base=False,
     )
@@ -566,7 +839,6 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         text="Older",
         usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
         delta_tokens=90,
-        delta_compact_tokens=90,
         window_start_sequence=1,
         window_base=True,
     )
@@ -580,7 +852,6 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         text="Current base",
         usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
         delta_tokens=25,
-        delta_compact_tokens=25,
         window_start_sequence=start.sequence,
         window_base=True,
     )
@@ -590,7 +861,6 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         text="Corrupt negative",
         usage=LLMUsage(prompt_tokens=110, completion_tokens=5, total_tokens=115),
         delta_tokens=-5,
-        delta_compact_tokens=-5,
         window_start_sequence=start.sequence,
         window_base=False,
     )
@@ -610,7 +880,6 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         text="Tail",
         usage=LLMUsage(prompt_tokens=130, completion_tokens=5, total_tokens=135),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=start.sequence,
         window_base=False,
     )
@@ -619,6 +888,88 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         context_id=CONTEXT_ID,
         start_sequence=start.sequence,
     ) == 35
+
+
+def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-delta-estimate.db"
+    store = _store_with_run(db_path)
+
+    store.append_user_message(context=AGENT_CONTEXT, text="Old task " * 20)
+    marker = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Old answer " * 20,
+        usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
+        delta_tokens=100,
+        window_start_sequence=1,
+        window_base=True,
+    )
+    store.append_user_message(context=AGENT_CONTEXT, text="Current task " * 10)
+    current_payload = AgentAssistantMessagePayload(
+        turn_id="turn-2",
+        message_type=AgentAssistantMessageType.TOOL_CALLS,
+        text="Inspecting.",
+    )
+    persisted_block_chars = store.datasource.payload_chars_from_sequence(
+        context_id=CONTEXT_ID,
+        start_sequence=marker.sequence + 1,
+    )
+    block_chars = persisted_block_chars + payload_chars(current_payload)
+    expected_delta_tokens = max(1, (block_chars + 1) // 3)
+
+    assert store.estimate_delta_tokens(
+        context_id=CONTEXT_ID,
+        window_start_sequence=1,
+        last_marker_sequence=marker.sequence,
+        payload=current_payload,
+    ) == expected_delta_tokens
+
+
+def test_sqlite_agent_context_datasource_sums_payload_chars_from_sequence(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-payload-chars.db"
+    store = _store_with_run(db_path)
+
+    store.append_user_message(context=AGENT_CONTEXT, text="Ignored")
+    start = store.append_user_message(context=AGENT_CONTEXT, text="Start")
+    final = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-1",
+        text="Final",
+        usage=None,
+        delta_tokens=0,
+        window_start_sequence=0,
+        window_base=False,
+    )
+
+    assert store.datasource.payload_chars_from_sequence(
+        context_id=CONTEXT_ID,
+        start_sequence=start.sequence,
+    ) == payload_chars(start.payload) + payload_chars(final.payload)
+
+
+def test_agent_context_store_estimates_delta_tokens_from_current_payload(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-delta-estimate-current-payload.db"
+    store = _store_with_run(db_path)
+    current_payload = AgentAssistantMessagePayload(
+        turn_id="turn-1",
+        message_type=AgentAssistantMessageType.FINAL,
+        text="Done.",
+    )
+    block_chars = payload_chars(current_payload)
+    expected_delta_tokens = max(1, (block_chars + 1) // 3)
+
+    assert store.estimate_delta_tokens(
+        context_id=CONTEXT_ID,
+        window_start_sequence=999,
+        last_marker_sequence=999,
+        payload=current_payload,
+    ) == expected_delta_tokens
 
 
 def test_agent_context_store_returns_stats_from_latest_usage_marker(
@@ -646,7 +997,6 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         text="Base final",
         usage=LLMUsage(prompt_tokens=35, completion_tokens=5, total_tokens=40),
         delta_tokens=35,
-        delta_compact_tokens=35,
         window_start_sequence=1,
         window_base=True,
     )
@@ -660,7 +1010,6 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         text="Previous current final",
         usage=LLMUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30),
         delta_tokens=25,
-        delta_compact_tokens=25,
         window_start_sequence=3,
         window_base=True,
     )
@@ -670,7 +1019,6 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         text="Latest current final",
         usage=LLMUsage(prompt_tokens=45, completion_tokens=5, total_tokens=50),
         delta_tokens=20,
-        delta_compact_tokens=20,
         window_start_sequence=3,
         window_base=False,
     )
@@ -719,7 +1067,6 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         text="Older base",
         usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
         delta_tokens=80,
-        delta_compact_tokens=80,
         window_start_sequence=1,
         window_base=True,
     )
@@ -733,7 +1080,6 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         text="Old series inside current window",
         usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
         delta_tokens=40,
-        delta_compact_tokens=40,
         window_start_sequence=1,
         window_base=True,
     )
@@ -747,7 +1093,6 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         text="Current base",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=5, total_tokens=35),
         delta_tokens=30,
-        delta_compact_tokens=30,
         window_start_sequence=current_start.sequence,
         window_base=True,
     )
@@ -789,7 +1134,6 @@ def test_sqlite_agent_context_datasource_window_start_sequence_keeps_oversized_l
         text="Oversized",
         usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
         delta_tokens=80,
-        delta_compact_tokens=80,
         window_start_sequence=1,
         window_base=True,
     )
@@ -830,7 +1174,6 @@ def test_agent_context_store_stops_at_active_window_start_without_base_marker(
         text="Older base",
         usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
         delta_tokens=80,
-        delta_compact_tokens=80,
         window_start_sequence=1,
         window_base=True,
     )
@@ -844,7 +1187,6 @@ def test_agent_context_store_stops_at_active_window_start_without_base_marker(
         text="Latest current delta",
         usage=LLMUsage(prompt_tokens=35, completion_tokens=5, total_tokens=40),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=current_start.sequence,
         window_base=False,
     )
@@ -887,7 +1229,6 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         text="Older base",
         usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
         delta_tokens=80,
-        delta_compact_tokens=80,
         window_start_sequence=1,
         window_base=True,
     )
@@ -901,7 +1242,6 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         text="Old series marker inside current window",
         usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
         delta_tokens=40,
-        delta_compact_tokens=40,
         window_start_sequence=1,
         window_base=True,
     )
@@ -915,7 +1255,6 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         text="Current base",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=5, total_tokens=35),
         delta_tokens=30,
-        delta_compact_tokens=30,
         window_start_sequence=current_start.sequence,
         window_base=True,
     )
@@ -951,7 +1290,6 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         text="Older final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=1,
         window_base=True,
     )
@@ -961,7 +1299,6 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         text="Corrupt negative delta",
         usage=LLMUsage(prompt_tokens=5, completion_tokens=1, total_tokens=6),
         delta_tokens=-5,
-        delta_compact_tokens=-5,
         window_start_sequence=1,
         window_base=False,
     )
@@ -971,7 +1308,6 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         text="Latest final",
         usage=LLMUsage(prompt_tokens=15, completion_tokens=1, total_tokens=16),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=1,
         window_base=False,
     )
@@ -1100,7 +1436,6 @@ def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         text="I will inspect this.",
         usage=None,
         delta_tokens=0,
-        delta_compact_tokens=0,
         window_start_sequence=0,
         window_base=False,
     )
@@ -1142,7 +1477,6 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
         text="I will call a tool.",
         usage=None,
         delta_tokens=0,
-        delta_compact_tokens=0,
         window_start_sequence=0,
         window_base=False,
     )
@@ -1152,7 +1486,6 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
         text="Done",
         usage=LLMUsage(prompt_tokens=None, completion_tokens=12, total_tokens=None),
         delta_tokens=0,
-        delta_compact_tokens=0,
         window_start_sequence=1,
         window_base=True,
     )
@@ -1210,7 +1543,6 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         text="First final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=1,
         window_base=True,
     )
@@ -1220,7 +1552,6 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         text="Not final",
         usage=None,
         delta_tokens=0,
-        delta_compact_tokens=0,
         window_start_sequence=0,
         window_base=False,
     )
@@ -1230,7 +1561,6 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         text="Latest final",
         usage=LLMUsage(prompt_tokens=30, completion_tokens=9, total_tokens=39),
         delta_tokens=20,
-        delta_compact_tokens=20,
         window_start_sequence=1,
         window_base=False,
     )
@@ -1275,7 +1605,6 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
         text="First final",
         usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         delta_tokens=10,
-        delta_compact_tokens=10,
         window_start_sequence=1,
         window_base=True,
     )
@@ -1285,7 +1614,6 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
         text="Usage without prompt",
         usage=LLMUsage(prompt_tokens=None, completion_tokens=5, total_tokens=None),
         delta_tokens=0,
-        delta_compact_tokens=0,
         window_start_sequence=1,
         window_base=False,
     )

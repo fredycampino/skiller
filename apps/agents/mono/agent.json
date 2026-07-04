@@ -3,17 +3,18 @@
     "max_turns": 50,
     "max_tool_calls": 10
   },
-      "context": {
-        "compaction": {
-          "enabled": true,
-          "max_total_tokens_ratio": 0.8,
-          "keep_last": 5
-        }
-      },
+  "context": {
+    "compaction": {
+      "enabled": true,
+      "max_total_tokens_ratio": 0.8,
+      "keep_last": 10
+    }
+  },
   "tools": {
     "shell": {
       "allowed_paths": [
-        "."
+        "../../..",
+        "../../../.venv/bin/skiller"
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
@@ -27,25 +28,28 @@
         "tail",
         "wc",
         "nl",
-        "cat",
         "git",
         "pytest",
         "ruff",
         "python",
         "python3",
-        "skiller",
-        "date"
+        "echo",
+        "sleep",
+        "skiller"
       ]
     },
     "files": {
       "read": [
-        ".",
+        "../../..",
         "~/.skiller/settings/"
       ],
       "write": [
-        "."
+        "../../.."
       ],
       "all": []
     }
+  },
+  "llm": {
+    "default_provider": "codex"
   }
 }

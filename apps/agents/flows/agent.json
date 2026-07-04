@@ -1,12 +1,19 @@
 {
   "loop": {
-    "max_turns": 10,
-    "max_tool_calls": 8
+    "max_turns": 50,
+    "max_tool_calls": 10
   },
+      "context": {
+        "compaction": {
+          "enabled": true,
+          "max_total_tokens_ratio": 0.8,
+          "keep_last": 5
+        }
+      },
   "tools": {
     "shell": {
       "allowed_paths": [
-        "."
+        "../../.."
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
@@ -22,9 +29,8 @@
         "nl",
         "cat",
         "git",
-        "ruff",
         "pytest",
-        "uv",
+        "ruff",
         "python",
         "python3",
         "skiller",
@@ -33,11 +39,11 @@
     },
     "files": {
       "read": [
-        ".",
+        "../../..",
         "~/.skiller/settings/"
       ],
       "write": [
-        "."
+        "../../.."
       ],
       "all": []
     }

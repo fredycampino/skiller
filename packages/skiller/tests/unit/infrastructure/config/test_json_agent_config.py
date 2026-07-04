@@ -116,6 +116,20 @@ def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
     assert config.llm.default().window_width_tokens == 80_000
 
 
+def test_json_agent_config_reads_llm_log_request_flag(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {
+        "default_provider": "minimax",
+        "log_request": True,
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.llm.log_request is True
+
+
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     _write_config(config_path, llm=_minimax_llm(api_key_env="TEST_MINIMAX_KEY"))
@@ -399,7 +413,7 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
         allowed_paths=(
-            Path("tmp/work").resolve(strict=False),
+            (config_path.parent / "tmp/work").resolve(strict=False),
             Path("~/agent").expanduser().resolve(strict=False),
         ),
         allowlist_enabled=True,
@@ -408,11 +422,145 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
     )
     assert config.tools.get("files") == FilesToolRuntimeConfig(
         definition=FilesTool,
-        read=(Path("."),),
-        write=(Path("src"),),
-        all=(Path("shared"),),
+        read=(config_path.parent.resolve(strict=False),),
+        write=((config_path.parent / "src").resolve(strict=False),),
+        all=((config_path.parent / "shared").resolve(strict=False),),
     )
     assert config.tools.get("notify") is None
+
+
+def test_json_agent_config_resolves_global_tool_paths_against_global_config_dir(
+    tmp_path,
+) -> None:
+    global_config_dir = tmp_path / "global"
+    global_config_dir.mkdir()
+    global_config_path = global_config_dir / "agent.json"
+    context_config_dir = tmp_path / "local"
+    context_config_dir.mkdir()
+    context_config_path = context_config_dir / "agent.json"
+    _write_config(
+        global_config_path,
+        llm=_minimax_llm(api_key="secret"),
+        tools={
+            "shell": {
+                "allowed_paths": ["./workspace"],
+                "allowlist_enabled": True,
+                "allowed_commands": ["pwd"],
+            },
+            "files": {
+                "read": ["./workspace"],
+                "write": [],
+                "all": [],
+            },
+        },
+    )
+    _write_config(context_config_path, llm=_fake_llm())
+
+    config = _provider(config_path=global_config_path, env={}).get_config(
+        config_path=context_config_path
+    )
+
+    expected_workspace = (global_config_dir / "workspace").resolve(strict=False)
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(expected_workspace,),
+        allowlist_enabled=True,
+        allow_env_prefix=True,
+        allowed_commands=("pwd",),
+    )
+    assert config.tools.get("files") == FilesToolRuntimeConfig(
+        definition=FilesTool,
+        read=(expected_workspace,),
+        write=(),
+        all=(),
+    )
+
+
+def test_json_agent_config_resolves_local_tool_paths_against_local_config_dir(
+    tmp_path,
+) -> None:
+    global_config_dir = tmp_path / "global"
+    global_config_dir.mkdir()
+    global_config_path = global_config_dir / "agent.json"
+    context_config_dir = tmp_path / "local"
+    context_config_dir.mkdir()
+    context_config_path = context_config_dir / "agent.json"
+    _write_config(
+        global_config_path,
+        llm=_minimax_llm(api_key="secret"),
+        tools={
+            "shell": {
+                "allowed_paths": ["./global-workspace"],
+                "allowlist_enabled": True,
+                "allowed_commands": ["pwd"],
+            },
+        },
+    )
+    _write_config(
+        context_config_path,
+        llm=_fake_llm(),
+        tools={
+            "files": {
+                "read": ["./workspace"],
+                "write": ["./workspace"],
+                "all": [],
+            },
+        },
+    )
+
+    config = _provider(config_path=global_config_path, env={}).get_config(
+        config_path=context_config_path
+    )
+
+    expected_workspace = (context_config_dir / "workspace").resolve(strict=False)
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(),
+        allowlist_enabled=False,
+        allow_env_prefix=True,
+        allowed_commands=(),
+    )
+    assert config.tools.get("files") == FilesToolRuntimeConfig(
+        definition=FilesTool,
+        read=(expected_workspace,),
+        write=(expected_workspace,),
+        all=(),
+    )
+
+
+def test_json_agent_config_resolves_env_tool_paths_against_env_config_dir(
+    tmp_path,
+) -> None:
+    global_config_path = tmp_path / "global-agent.json"
+    env_config_dir = tmp_path / "env"
+    env_config_dir.mkdir()
+    env_config_path = env_config_dir / "agent.json"
+    _write_config(global_config_path, llm=_minimax_llm(api_key="secret"))
+    _write_config(
+        env_config_path,
+        llm=_fake_llm(),
+        tools={
+            "shell": {
+                "allowed_paths": ["./workspace"],
+                "allowlist_enabled": True,
+                "allowed_commands": ["pwd"],
+            },
+        },
+    )
+
+    config = _provider(
+        config_path=global_config_path,
+        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
+    ).get_config()
+
+    expected_workspace = (env_config_dir / "workspace").resolve(strict=False)
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(expected_workspace,),
+        allowlist_enabled=True,
+        allow_env_prefix=True,
+        allowed_commands=("pwd",),
+    )
 
 
 def test_json_agent_config_validates_valid_config(tmp_path) -> None:
@@ -684,7 +832,7 @@ def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) 
     )
     assert config.tools.get("files") == FilesToolRuntimeConfig(
         definition=FilesTool,
-        read=(Path("."),),
+        read=(context_config_path.parent.resolve(strict=False),),
         write=(),
         all=(),
     )

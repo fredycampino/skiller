@@ -1,5 +1,6 @@
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from skiller.domain.agent.config.model import AgentConfig
@@ -29,7 +30,11 @@ class JsonAgentConfig(AgentConfigPort):
         self.env = env
 
     def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
-        return self.config_mapper.from_json(self._load_config(config_path=config_path))
+        loaded_config = self._load_config(config_path=config_path)
+        return self.config_mapper.from_json(
+            loaded_config.payload,
+            tools_base_path=loaded_config.tools_base_path,
+        )
 
     def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
         try:
@@ -141,7 +146,7 @@ class JsonAgentConfig(AgentConfigPort):
         _write_json_object(provider_path, provider_payload)
         _write_json_object(default_path, default_payload)
 
-    def _load_config(self, *, config_path: Path | None = None) -> dict[str, object]:
+    def _load_config(self, *, config_path: Path | None = None) -> "_LoadedAgentConfig":
         global_config_path = self.config_path_global.expanduser()
         override_config_path = self._resolve_override_config_path(config_path=config_path)
         if not global_config_path.exists() and override_config_path is None:
@@ -150,12 +155,22 @@ class JsonAgentConfig(AgentConfigPort):
             )
 
         payload: dict[str, object] = {}
+        tools_base_path = global_config_path.parent
         if global_config_path.exists():
             payload = _load_json_object(global_config_path)
+            tools_base_path = global_config_path.parent
         if override_config_path is not None:
             override = _load_json_object(override_config_path)
-            return _override_config(payload, override)
-        return payload
+            if isinstance(override.get("tools"), dict):
+                tools_base_path = override_config_path.parent
+            return _LoadedAgentConfig(
+                payload=_override_config(payload, override),
+                tools_base_path=tools_base_path,
+            )
+        return _LoadedAgentConfig(
+            payload=payload,
+            tools_base_path=tools_base_path,
+        )
 
     def _resolve_config_path(self, *, config_path: Path | None = None) -> Path:
         explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
@@ -238,6 +253,12 @@ def _display_path(path: Path) -> str:
         return f"~/{relative}"
     except ValueError:
         return str(expanded)
+
+
+@dataclass(frozen=True)
+class _LoadedAgentConfig:
+    payload: dict[str, object]
+    tools_base_path: Path
 
 
 def _load_json_object(path: Path) -> dict[str, object]:

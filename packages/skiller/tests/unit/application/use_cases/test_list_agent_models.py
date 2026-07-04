@@ -223,11 +223,12 @@ def _agent_config(
         AgentCodexProvider | AgentMiniMaxProvider | AgentLMStudioProvider,
         ...,
     ],
-) -> AgentConfig:
+    ) -> AgentConfig:
     return AgentConfig(
         llm=AgentLLMProviderList(
             default_provider=default_provider,
             providers=providers,
+            log_request=False,
         ),
         loop=AgentLoopConfig(
             max_turns=2,

@@ -84,6 +84,10 @@ Unknown fields inside known sections are rejected.
 width for the selected provider. When absent, the selected provider uses its own
 `window_width_tokens`.
 
+`llm.log_request` is optional and defaults to `false`. When `true`, each LLM
+request built for the agent carries `log_request=true` so infrastructure clients
+can log that call.
+
 Each provider entry requires:
 
 - `model`
@@ -390,8 +394,8 @@ The local file is agent-level config:
 For packaged agents, this is normally next to the flow `agent.yaml`, for example:
 
 ```text
-packages/skiller/agents/mono/agent.yaml
-packages/skiller/agents/mono/agent.json
+apps/agents/mono/agent.yaml
+apps/agents/mono/agent.json
 ```
 
 The local file is optional. When present, it overrides the global file by root
@@ -446,14 +450,23 @@ Only these sources are used:
 Tool path settings are interpreted by each tool:
 
 - `tools.shell.allowed_paths` entries are expanded and resolved when
-  `agent.json` is loaded. Relative entries are resolved against the process
-  current working directory at load time.
+  `agent.json` is loaded.
 - `tools.files.read`, `tools.files.write`, and `tools.files.all` entries are
-  expanded and resolved when a file request is checked. Relative entries are
-  resolved against the process current working directory at request time.
+  expanded and resolved when `agent.json` is loaded.
 
-Use absolute paths for stable global config. Use `.` only when the agent is
-expected to run from the workspace root.
+Relative entries are resolved against the directory of the `agent.json` file
+that defines the `tools` section.
+
+- in the global `~/.skiller/settings/agent.json`, `.` resolves to
+  `~/.skiller/settings`
+- in an explicit `AGENT_AGENT_CONFIG_FILE`, `.` resolves to the directory of
+  that file
+- in a local flow `<flow-directory>/agent.json`, `.` resolves to
+  `<flow-directory>`
+
+If a local or explicit config defines `tools`, it replaces the whole global
+`tools` section, so the replacement paths resolve against the local or explicit
+file. Use absolute paths for stable shared global config.
 
 ## Loop
 

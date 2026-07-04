@@ -40,6 +40,7 @@ class AgentPromptBuilder:
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],
+        log_request: bool,
     ) -> LLMRequest:
         messages = tuple(self._build_messages(system=system, entries=entries))
         if isinstance(provider, AgentMiniMaxProvider):
@@ -52,6 +53,7 @@ class AgentPromptBuilder:
                 max_tokens=provider.max_output_tokens,
                 top_p=provider.top_p,
                 tools=tools,
+                log_request=log_request,
             )
         if isinstance(provider, AgentLMStudioProvider):
             return LMStudioLLMRequest(
@@ -63,6 +65,7 @@ class AgentPromptBuilder:
                 max_tokens=provider.max_output_tokens,
                 top_p=provider.top_p,
                 tools=tools,
+                log_request=log_request,
             )
         if isinstance(provider, AgentCodexProvider):
             return CodexLLMRequest(
@@ -70,6 +73,7 @@ class AgentPromptBuilder:
                 model=provider.model,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 tools=tools,
+                log_request=log_request,
             )
         if isinstance(provider, AgentBedrockProvider):
             return BedrockLLMRequest(
@@ -77,11 +81,13 @@ class AgentPromptBuilder:
                 model=provider.model,
                 max_tokens=provider.max_output_tokens,
                 tools=tools,
+                log_request=log_request,
             )
         return LLMRequest(
             messages=messages,
             model=provider.model,
             tools=tools,
+            log_request=log_request,
         )
 
     def _build_messages(

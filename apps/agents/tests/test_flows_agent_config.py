@@ -9,7 +9,7 @@ from skiller.infrastructure.config.agent_config_schema import (
 
 
 def test_flows_agent_uses_shell_and_files() -> None:
-    agent_path = Path("packages/skiller/agents/flows/agent.yaml")
+    agent_path = Path("apps/agents/flows/agent.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
 
     agent_step = next(step for step in agent["steps"] if "agent" in step)
@@ -24,7 +24,7 @@ def test_flows_agent_uses_shell_and_files() -> None:
 
 
 def test_flows_local_agent_config_is_restricted() -> None:
-    config_path = Path("packages/skiller/agents/flows/agent.json")
+    config_path = Path("apps/agents/flows/agent.json")
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert config["loop"] == {
@@ -33,7 +33,7 @@ def test_flows_local_agent_config_is_restricted() -> None:
     }
 
     shell_config = config["tools"]["shell"]
-    assert shell_config["allowed_paths"] == ["."]
+    assert shell_config["allowed_paths"] == ["../../.."]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allow_env_prefix"] is True
     assert shell_config["allowed_commands"] == [
@@ -58,23 +58,23 @@ def test_flows_local_agent_config_is_restricted() -> None:
 
 
 def test_flows_files_config_allows_workspace_read_write() -> None:
-    config_path = Path("packages/skiller/agents/flows/agent.json")
+    config_path = Path("apps/agents/flows/agent.json")
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert config["tools"]["files"] == {
         "read": [
-            ".",
+            "../../..",
             "~/.skiller/settings/",
         ],
         "write": [
-            ".",
+            "../../..",
         ],
         "all": [],
     }
 
 
 def test_flows_agent_has_explicit_exit_route() -> None:
-    agent_path = Path("packages/skiller/agents/flows/agent.yaml")
+    agent_path = Path("apps/agents/flows/agent.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
 
     wait_step = next(step for step in agent["steps"] if step.get("wait_input") == "ask_user")

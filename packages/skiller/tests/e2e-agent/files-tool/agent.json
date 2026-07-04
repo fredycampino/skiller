@@ -16,8 +16,8 @@
   },
   "tools": {
     "files": {
-      "read": ["packages/skiller/tests/e2e-agent/files-tool/workspace"],
-      "write": ["packages/skiller/tests/e2e-agent/files-tool/workspace"],
+      "read": ["./workspace"],
+      "write": ["./workspace"],
       "all": []
     }
   }

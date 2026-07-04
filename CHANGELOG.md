@@ -2,6 +2,20 @@
 
 All notable changes to this project should be summarized here before a version is cut from a `feature/*` branch into `main`.
 
+## 0.1.0-beta.19 - 2026-07-01
+
+### Added
+- Add agent context compaction with persisted compact token deltas.
+- Add agent context compaction configuration and pruning documentation.
+
+### Changed
+- Improve agent context window queries and SQLite indexes for compacted sessions.
+- Refine STUI run resume/status rendering around active context windows.
+- Pass Bedrock max token settings through provider requests.
+
+### Notes
+- Includes PR #93.
+
 ## Unreleased
 
 ### Added

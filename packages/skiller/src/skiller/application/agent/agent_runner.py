@@ -92,6 +92,7 @@ class AgentRunner:
             if not tools_enabled and has_invalid_final_content:
                 error = self.error_mapper.invalid_final_message(
                     agent_id=context.agent_id,
+                    response=response,
                 )
                 state.fail_invalid_final_message(error)
                 break
@@ -135,6 +136,7 @@ class AgentRunner:
             if state.finish == AgentStopReason.FINAL and has_invalid_final_content:
                 error = self.error_mapper.invalid_final_message(
                     agent_id=context.agent_id,
+                    response=response,
                 )
                 state.fail_invalid_final_message(error)
                 break

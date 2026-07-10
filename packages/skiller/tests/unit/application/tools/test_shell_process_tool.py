@@ -137,7 +137,10 @@ def test_shell_process_tool_rejects_command_outside_allowlist() -> None:
     )
 
     assert result.ok is False
-    assert result.error == "shell command blocked by allowlist policy: 'pytest' is not allowed"
+    assert result.error == (
+        "Command 'pytest' is not in the shell allowlist. "
+        "Use an allowed command (git) or ask to add 'pytest' to allowed_commands."
+    )
 
 
 def test_shell_process_tool_builds_result_from_output() -> None:

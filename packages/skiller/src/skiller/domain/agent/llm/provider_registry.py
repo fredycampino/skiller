@@ -102,7 +102,7 @@ PUBLIC_AGENT_LLM_PROVIDER_MODELS = {
 class AgentLLMProviderList:
     default_provider: AgentLLMProviderType
     providers: tuple[AgentLLMProvider, ...]
-    log_request: bool
+    log_request_file: str | None
 
     def __post_init__(self) -> None:
         if not self.providers:

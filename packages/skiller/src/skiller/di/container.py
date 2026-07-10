@@ -193,7 +193,7 @@ def build_runtime_container(
         ),
         env=os.environ,
     )
-    llm_model = _build_llm_model_manager(settings=cfg)
+    llm_model = _build_llm_model_manager()
     mcp = DefaultMCP()
     shell_runtime_config = _build_shell_runtime_config()
     tool_process_runner = DefaultToolProcessRunner()
@@ -440,11 +440,9 @@ def build_runtime_container(
     )
 
 
-def _build_llm_model_manager(*, settings: Settings) -> LLMModelManager:
-    db_path = Path(settings.db_path).expanduser()
-    request_log_dir = db_path.parent / "llm-requests"
+def _build_llm_model_manager() -> LLMModelManager:
     return LLMModelManager(
-        client_resolver=LLMClientFactory(request_log_dir=request_log_dir),
+        client_resolver=LLMClientFactory(),
     )
 
 

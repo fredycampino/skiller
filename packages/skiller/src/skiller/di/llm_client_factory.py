@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import overload
 
 from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
@@ -16,7 +15,12 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentNullProvider,
 )
 from skiller.domain.agent.llm.request import LLMRequest
-from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
+from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
+    BedrockFileLLMRequestLogger,
+)
+from skiller.infrastructure.llm.bedrock.bedrock_streaming_port import (
+    BedrockStreamingLLMPort,
+)
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
@@ -33,9 +37,6 @@ MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
 
 class LLMClientFactory:
-    def __init__(self, *, request_log_dir: Path) -> None:
-        self.request_log_dir = request_log_dir
-
     @overload
     def resolve(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
 
@@ -79,9 +80,7 @@ class LLMClientFactory:
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
             mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
-            request_logger=OpenAIFileLLMRequestLogger(
-                directory=self.request_log_dir / "minimax",
-            ),
+            request_logger=OpenAIFileLLMRequestLogger(),
         )
 
     def _lmstudio_client(self, provider: AgentLMStudioProvider) -> OpenAILLMPort:
@@ -90,9 +89,7 @@ class LLMClientFactory:
             base_url=provider.base_url,
             timeout_seconds=provider.timeout_seconds,
             mapper=DefaultOpenAIMapper(),
-            request_logger=OpenAIFileLLMRequestLogger(
-                directory=self.request_log_dir / "lmstudio",
-            ),
+            request_logger=OpenAIFileLLMRequestLogger(),
         )
 
     def _codex_client(self, provider: AgentCodexProvider) -> CodexLLMPort:
@@ -103,8 +100,9 @@ class LLMClientFactory:
             credentials_datasource=credentials_datasource,
         )
 
-    def _bedrock_client(self, provider: AgentBedrockProvider) -> BedrockLLMPort:
-        return BedrockLLMPort(
+    def _bedrock_client(self, provider: AgentBedrockProvider) -> BedrockStreamingLLMPort:
+        return BedrockStreamingLLMPort(
             profile=provider.profile,
             timeout_seconds=provider.timeout_seconds,
+            request_logger=BedrockFileLLMRequestLogger(overwrite=True),
         )

@@ -49,7 +49,7 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
         context_id="ctx-1",
     )
     config = agent_runner_config(
-        log_request=False,
+        log_request_file=None,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -101,11 +101,11 @@ def test_agent_context_manager_passes_log_request_to_llm_request() -> None:
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(log_request=True)
+    config = agent_runner_config(log_request_file="/tmp/skiller-llm.json")
 
     result = manager.build_window_context(context=context, config=config)
 
-    assert result.llm_request.log_request is True
+    assert result.llm_request.log_request_file == "/tmp/skiller-llm.json"
 
 
 def test_agent_context_manager_builds_window_context_from_window_entries() -> None:
@@ -136,7 +136,7 @@ def test_agent_context_manager_builds_window_context_from_window_entries() -> No
         context_id="ctx-1",
     )
     config = agent_runner_config(
-        log_request=False,
+        log_request_file=None,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -175,7 +175,7 @@ def test_agent_context_manager_caps_window_width_by_model_context_window() -> No
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(log_request=False, window_width_tokens=120_000)
+    config = agent_runner_config(log_request_file=None, window_width_tokens=120_000)
 
     result = manager.build_window_context(context=context, config=config)
 
@@ -203,7 +203,7 @@ def test_agent_context_manager_uses_configured_window_when_smaller_than_model() 
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(log_request=False, window_width_tokens=60_000)
+    config = agent_runner_config(log_request_file=None, window_width_tokens=60_000)
 
     result = manager.build_window_context(context=context, config=config)
 
@@ -269,7 +269,7 @@ def test_agent_context_manager_estimates_window_width_from_context_deltas() -> N
         context_id="ctx-1",
     )
     config = agent_runner_config(
-        log_request=False,
+        log_request_file=None,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -329,7 +329,7 @@ def test_agent_context_manager_selects_window_by_delta_tokens_and_updates_run_ag
         context_id="ctx-1",
     )
     config = agent_runner_config(
-        log_request=False,
+        log_request_file=None,
         task="Task",
         system="Be useful.",
         max_turns=1,
@@ -388,7 +388,7 @@ def test_agent_context_manager_uses_compact_window_when_compaction_enabled() -> 
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    base_config = agent_runner_config(log_request=False)
+    base_config = agent_runner_config(log_request_file=None)
     compaction = AgentContextCompactionConfig(
         enabled=True,
         max_total_tokens_ratio=0.8,

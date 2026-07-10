@@ -194,7 +194,7 @@ def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
         llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.NULL,
             providers=(provider,),
-            log_request=False,
+            log_request_file=None,
         ),
         loop=AgentLoopConfig(
             max_turns=2,

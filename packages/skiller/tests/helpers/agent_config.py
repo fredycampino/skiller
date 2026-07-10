@@ -26,7 +26,7 @@ class FakeAgentConfigPort:
         config: AgentConfig | None = None,
         validation: AgentConfigValidation | None = None,
     ) -> None:
-        self.config = config or agent_config(log_request=False)
+        self.config = config or agent_config()
         self.validation = validation or AgentConfigValidation.valid()
         self.config_paths: list[Path | None] = []
         self.validation_config_paths: list[Path | None] = []
@@ -42,7 +42,7 @@ class FakeAgentConfigPort:
 
 def agent_config(
     *,
-    log_request: bool,
+    log_request_file: str | None = None,
     max_turns: int = 1,
     max_tool_calls: int = 1,
     window_width_tokens: int = 100_000,
@@ -59,7 +59,7 @@ def agent_config(
                     window_width_tokens=window_width_tokens,
                 ),
             ),
-            log_request=log_request,
+            log_request_file=log_request_file,
         ),
         loop=AgentLoopConfig(
             max_turns=max_turns,
@@ -86,7 +86,7 @@ def agent_config(
 
 def agent_runner_config(
     *,
-    log_request: bool,
+    log_request_file: str | None = None,
     system: str = "Be useful.",
     task: str = "Hi",
     tools: tuple[ToolDefinition, ...] | list[ToolDefinition] = (),
@@ -103,6 +103,6 @@ def agent_runner_config(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,
             window_width_tokens=window_width_tokens,
-            log_request=log_request,
+            log_request_file=log_request_file,
         ),
     )

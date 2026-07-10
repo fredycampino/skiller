@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from skiller.domain.agent.llm.model import LLMResponse
@@ -38,8 +39,12 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
 
     def generate(self, request: RequestT) -> LLMResponse:
         kwargs = self.mapper.to_kwargs(request)
-        if request.log_request:
-            self.request_logger.log_request(request=kwargs)
+        log_file = request.log_request_file
+        if log_file is not None:
+            self.request_logger.log_request(
+                request=kwargs,
+                file=Path(log_file).expanduser(),
+            )
 
         if not self.api_key.strip():
             response = LLMResponse(
@@ -48,7 +53,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
                 error="API key is not configured for the selected model provider",
                 error_code="api_key_missing",
             )
-            if request.log_request and response.error is not None:
+            if log_file is not None and response.error is not None:
                 self.request_logger.log_error(error=response.error)
             return response
 
@@ -56,7 +61,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
             response = self.client.chat.completions.create(**kwargs)
         except Exception as exc:  # noqa: BLE001
             error = f"OpenAI request failed: {exc}"
-            if request.log_request:
+            if log_file is not None:
                 self.request_logger.log_error(error=error)
             return LLMResponse(
                 ok=False,
@@ -65,7 +70,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
                 error_code="request_failed",
             )
 
-        if request.log_request:
+        if log_file is not None:
             self.request_logger.log_response(response=response)
 
         return self.mapper.to_response(response, fallback_model=request.model)

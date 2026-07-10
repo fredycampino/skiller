@@ -26,8 +26,13 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentNullProvider,
 )
 from skiller.infrastructure.config.settings_model import Settings
-from skiller.infrastructure.llm.bedrock import bedrock_llm_port
-from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
+from skiller.infrastructure.llm.bedrock import bedrock_streaming_port
+from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
+    BedrockFileLLMRequestLogger,
+)
+from skiller.infrastructure.llm.bedrock.bedrock_streaming_port import (
+    BedrockStreamingLLMPort,
+)
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import CodexCredentials
 from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
 from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
@@ -151,20 +156,23 @@ class _FakeBedrockConfig:
                 timeout_seconds=30,
                 window_width_tokens=100_000,
             ),
-            BedrockLLMPort,
+            BedrockStreamingLLMPort,
         ),
     ],
 )
 def test_llm_client_factory_creates_expected_client(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
     provider: AgentLLMProvider,
     expected_type: type[object],
 ) -> None:
     monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeOpenAIClient)
-    monkeypatch.setattr(bedrock_llm_port, "_load_boto3_session_class", lambda: _FakeBedrockSession)
     monkeypatch.setattr(
-        bedrock_llm_port,
+        bedrock_streaming_port,
+        "_load_boto3_session_class",
+        lambda: _FakeBedrockSession,
+    )
+    monkeypatch.setattr(
+        bedrock_streaming_port,
         "_load_botocore_config_class",
         lambda: _FakeBedrockConfig,
     )
@@ -172,15 +180,17 @@ def test_llm_client_factory_creates_expected_client(
         "skiller.di.llm_client_factory.CodexCredentialsDatasource",
         lambda: _FakeCodexCredentialsDatasource(),
     )
-    request_log_dir = tmp_path / "llm-requests"
-    factory = LLMClientFactory(request_log_dir=request_log_dir)
+    factory = LLMClientFactory()
 
     client = factory.resolve(provider)
 
     assert isinstance(client, expected_type)
     if isinstance(client, OpenAILLMPort):
         assert isinstance(client.request_logger, OpenAIFileLLMRequestLogger)
-        assert client.request_logger.directory.parent == request_log_dir
+        assert client.request_logger.overwrite is False
+    if isinstance(client, BedrockStreamingLLMPort):
+        assert isinstance(client.request_logger, BedrockFileLLMRequestLogger)
+        assert client.request_logger.overwrite is True
 
 
 def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) -> None:

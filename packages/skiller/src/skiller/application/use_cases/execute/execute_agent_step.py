@@ -60,7 +60,10 @@ class ExecuteAgentStepUseCase:
                 config=config,
             )
         )
-        if runner_result.finish == AgentStopReason.LLM_REQUEST_FAILED:
+        if runner_result.finish in {
+            AgentStopReason.LLM_REQUEST_FAILED,
+            AgentStopReason.INVALID_FINAL_MESSAGE,
+        }:
             execution = self.execution_mapper.request_fail(
                 current_step=current_step,
                 config=config,
@@ -68,10 +71,7 @@ class ExecuteAgentStepUseCase:
             )
             return self._advance(current_step=current_step, execution=execution)
 
-        if runner_result.finish in {
-            AgentStopReason.TOOL_EXECUTION_FAILED,
-            AgentStopReason.INVALID_FINAL_MESSAGE,
-        }:
+        if runner_result.finish == AgentStopReason.TOOL_EXECUTION_FAILED:
             raise ValueError(runner_result.error or f"Agent step '{step_id}' failed")
 
         execution = self.execution_mapper.success(

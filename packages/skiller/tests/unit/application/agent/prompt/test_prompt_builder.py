@@ -121,7 +121,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         system="Be useful.",
         entries=entries,
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert request.model == "model1"
@@ -147,20 +147,6 @@ def test_agent_prompt_builder_builds_messages() -> None:
             tool_call_id="call-1",
         ),
     )
-
-
-def test_agent_prompt_builder_passes_log_request_flag() -> None:
-    builder = AgentPromptBuilder()
-
-    request = builder.build_request(
-        provider=_provider(),
-        system="Be useful.",
-        entries=[],
-        tools=(),
-        log_request=True,
-    )
-
-    assert request.log_request is True
 
 
 def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
@@ -213,7 +199,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         system="Be useful.",
         entries=entries,
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert request.messages == (
@@ -301,7 +287,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         system="Be useful.",
         entries=entries,
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert request.messages == (
@@ -344,7 +330,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert request.messages == (
@@ -367,7 +353,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert isinstance(request, MiniMaxLLMRequest)
@@ -390,7 +376,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert isinstance(request, LMStudioLLMRequest)
@@ -414,7 +400,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert isinstance(request, CodexLLMRequest)
@@ -440,7 +426,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert isinstance(request, BedrockLLMRequest)
@@ -458,7 +444,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(tool,),
-        log_request=False,
+        log_request_file=None,
     )
 
     assert request.tools == (tool,)

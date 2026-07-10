@@ -56,6 +56,7 @@ class _FakeRequestLogger:
         self,
         *,
         request: object,
+        file: object,
     ) -> None:
         self.requests.append(request)
 
@@ -74,7 +75,7 @@ class _FakeRequestLogger:
         self.errors.append(error)
 
 
-def _minimax_request(*, log_request: bool = False) -> MiniMaxLLMRequest:
+def _minimax_request(*, log_request_file: str | None = None) -> MiniMaxLLMRequest:
     return MiniMaxLLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=AgentMiniMaxLLMModel.M2_7,
@@ -83,7 +84,7 @@ def _minimax_request(*, log_request: bool = False) -> MiniMaxLLMRequest:
         max_tokens=4096,
         top_p=1,
         parallel_tool_calls=True,
-        log_request=log_request,
+        log_request_file=log_request_file,
     )
 
 
@@ -166,7 +167,7 @@ def test_openai_llm_logs_request_and_response_when_enabled(
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request(log_request=True))
+    result = llm.generate(_minimax_request(log_request_file="/tmp/skiller-llm.json"))
 
     assert result.ok is True
     assert logger.requests == [_expected_openai_kwargs()]
@@ -198,7 +199,7 @@ def test_openai_llm_logs_error_when_request_fails(
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request(log_request=True))
+    result = llm.generate(_minimax_request(log_request_file="/tmp/skiller-llm.json"))
 
     assert result.ok is False
     assert result.error == "OpenAI request failed: network down"

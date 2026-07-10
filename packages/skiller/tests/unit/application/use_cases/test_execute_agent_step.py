@@ -573,7 +573,7 @@ def _build_use_case(
     resolved_tool_manager = tool_manager or _FakeToolManager()
     resolved_agent_config = agent_config or FakeAgentConfigPort(
         config=agent_config_factory(
-            log_request=False,
+            log_request_file=None,
             tools=ToolRuntimeConfigs(),
         ),
     )
@@ -1005,7 +1005,7 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     ]
 
 
-def test_execute_agent_step_fails_when_agent_returns_invalid_final_message() -> None:
+def test_execute_agent_step_advances_when_agent_returns_invalid_final_message() -> None:
     store = _FakeStore()
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
@@ -1025,23 +1025,46 @@ def test_execute_agent_step_fails_when_agent_returns_invalid_final_message() -> 
     )
     context = RunContext(inputs={}, step_executions={})
 
-    with pytest.raises(ValueError, match="returned no final answer"):
-        use_case.execute(
-            CurrentStep(
-                run_id="run-1",
-                step_index=0,
-                step_id="support_agent",
-                step_type=StepType.AGENT,
-                step={
-                    "system": "Be useful.",
-                    "task": "Hi",
-                    "max_turns": 2,
-                    "tools": [],
-                    "next": "send_reply",
-                },
-                context=context,
-            )
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="support_agent",
+            step_type=StepType.AGENT,
+            step={
+                "system": "Be useful.",
+                "task": "Hi",
+                "max_turns": 2,
+                "tools": [],
+                "next": "send_reply",
+            },
+            context=context,
         )
+    )
+
+    assert result.status == StepExecutionStatus.NEXT
+    assert result.next_step_id == "send_reply"
+    assert result.execution is not None
+    assert isinstance(result.execution.output.data, AgentStopOutputData)
+    assert (
+        result.execution.output.data.stop_reason
+        == AgentStopReason.INVALID_FINAL_MESSAGE
+    )
+    assert result.execution.output.data.context_id
+    assert result.execution.output.data.message == (
+        "Agent step 'support_agent' returned no final answer: "
+        '{"ok":true,"model":"model1","content":null,"tool_calls":[],'
+        '"finish_reason":null,"usage":null,"error":null,"error_code":null}'
+    )
+    assert context.step_executions["support_agent"] == result.execution
+    assert store.updated == [
+        {
+            "run_id": "run-1",
+            "status": RunStatus.RUNNING,
+            "current": "send_reply",
+            "context": context,
+        }
+    ]
 
 
 def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries() -> None:

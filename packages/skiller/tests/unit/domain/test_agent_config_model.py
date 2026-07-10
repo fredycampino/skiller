@@ -28,7 +28,7 @@ def test_agent_llm_provider_list_requires_default_provider() -> None:
         AgentLLMProviderList(
             default_provider=AgentLLMProviderType.CODEX,
             providers=(_minimax_provider(),),
-            log_request=False,
+            log_request_file=None,
         )
 
 

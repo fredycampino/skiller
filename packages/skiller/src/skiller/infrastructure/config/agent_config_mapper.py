@@ -102,7 +102,7 @@ class AgentConfigMapper:
         llm = AgentLLMProviderList(
             default_provider=default_provider,
             providers=tuple(providers),
-            log_request=config.llm.log_request,
+            log_request_file=config.llm.log_request_file,
         )
         loop = _build_loop_config(config.loop, env=self.env)
         event_output = _build_event_output_config(config.event_output, env=self.env)

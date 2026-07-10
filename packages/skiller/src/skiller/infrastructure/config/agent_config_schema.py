@@ -38,7 +38,7 @@ class LLMConfigModel(BaseModel):
 
     default_provider: str
     window_width_tokens: int | None = Field(default=None, gt=0)
-    log_request: bool = False
+    log_request_file: str | None = None
 
 
 class LoopConfigModel(BaseModel):

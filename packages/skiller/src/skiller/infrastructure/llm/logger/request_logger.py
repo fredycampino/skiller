@@ -13,6 +13,7 @@ class LLMRequestLogger(Protocol):
         self,
         *,
         request: object,
+        file: Path,
     ) -> None: ...
 
     def log_response(
@@ -29,21 +30,23 @@ class LLMRequestLogger(Protocol):
 
 
 class FileLLMRequestLogger:
-    def __init__(self, *, directory: Path) -> None:
-        self.directory = directory
+    def __init__(self, *, overwrite: bool = False) -> None:
+        self.overwrite = overwrite
         self.current_path: Path | None = None
+        self._sequence = 0
 
     def log_request(
         self,
         *,
         request: object,
+        file: Path,
     ) -> None:
-        self.directory.mkdir(parents=True, exist_ok=True)
-        sequence = self._next_sequence()
-        path = self.directory / f"{sequence:04d}.json"
+        file.parent.mkdir(parents=True, exist_ok=True)
+        self._sequence += 1
+        path = file if self.overwrite else _sequenced_path(file, self._sequence)
         safe_request = self.redact_request(request=request)
         payload = {
-            "sequence": sequence,
+            "sequence": self._sequence,
             "request": to_log_value(safe_request),
             "response": None,
             "error": None,
@@ -92,17 +95,6 @@ class FileLLMRequestLogger:
         if self.current_path is None:
             raise RuntimeError("LLM request log response requires a request log")
         return self.current_path
-
-    def _next_sequence(self) -> int:
-        paths = self.directory.glob("*.json")
-        sequences = [
-            sequence
-            for sequence in (_sequence_from_name(path.name) for path in paths)
-            if sequence is not None
-        ]
-        if not sequences:
-            return 1
-        return max(sequences) + 1
 
 
 def redact_keys(
@@ -161,11 +153,8 @@ def _redact_keys(
     return value
 
 
-def _sequence_from_name(name: str) -> int | None:
-    prefix = name.split(".", 1)[0]
-    if not prefix.isdigit():
-        return None
-    return int(prefix)
+def _sequenced_path(file: Path, sequence: int) -> Path:
+    return file.with_name(f"{file.stem}-{sequence:04d}{file.suffix}")
 
 
 def _read_json(path: Path) -> dict[str, object]:

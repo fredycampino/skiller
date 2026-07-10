@@ -80,7 +80,7 @@ class AgentContextManager:
             system=config.system,
             entries=entries,
             tools=config.tools,
-            log_request=config.config.llm.log_request,
+            log_request_file=config.config.llm.log_request_file,
         )
         return AgentContextLLMRequest(
             context_id=context.context_id,

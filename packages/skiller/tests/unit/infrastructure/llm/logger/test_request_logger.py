@@ -1,5 +1,4 @@
 import json
-from dataclasses import dataclass
 
 import pytest
 
@@ -11,12 +10,6 @@ from skiller.infrastructure.llm.logger.request_logger import (
 )
 
 pytestmark = pytest.mark.unit
-
-
-@dataclass(frozen=True)
-class ExampleRequest:
-    model: str
-    api_key: str
 
 
 class FakeRedactingFileLLMRequestLogger(FileLLMRequestLogger):
@@ -43,53 +36,21 @@ class FakeRedactingFileLLMRequestLogger(FileLLMRequestLogger):
         )
 
 
-def test_file_llm_request_logger_writes_request_and_response(tmp_path) -> None:
-    logger = FileLLMRequestLogger(directory=tmp_path)
-
-    logger.log_request(request=ExampleRequest(model="gpt-test", api_key="secret"))
-    logger.log_response(response={"content": "done"})
-
-    payload = _read_json(tmp_path / "0001.json")
-
-    assert payload == {
-        "sequence": 1,
-        "request": {
-            "model": "gpt-test",
-            "api_key": "secret",
-        },
-        "response": {
-            "content": "done",
-        },
-        "error": None,
-    }
-
-
 def test_file_llm_request_logger_writes_one_file_per_request(tmp_path) -> None:
-    logger = FileLLMRequestLogger(directory=tmp_path)
+    logger = FileLLMRequestLogger()
+    file = tmp_path / "llm.json"
 
-    logger.log_request(request={"message": "first"})
-    logger.log_request(request={"message": "second"})
-    logger.log_request(request={"message": "third"})
+    logger.log_request(request={"message": "first"}, file=file)
+    logger.log_request(request={"message": "second"}, file=file)
+    logger.log_request(request={"message": "third"}, file=file)
     logger.log_response(response={"content": "done"})
 
     assert sorted(path.name for path in tmp_path.glob("*.json")) == [
-        "0001.json",
-        "0002.json",
-        "0003.json",
+        "llm-0001.json",
+        "llm-0002.json",
+        "llm-0003.json",
     ]
-    assert _read_json(tmp_path / "0001.json") == {
-        "sequence": 1,
-        "request": {"message": "first"},
-        "response": None,
-        "error": None,
-    }
-    assert _read_json(tmp_path / "0002.json") == {
-        "sequence": 2,
-        "request": {"message": "second"},
-        "response": None,
-        "error": None,
-    }
-    assert _read_json(tmp_path / "0003.json") == {
+    assert _read_json(tmp_path / "llm-0003.json") == {
         "sequence": 3,
         "request": {"message": "third"},
         "response": {"content": "done"},
@@ -97,8 +58,27 @@ def test_file_llm_request_logger_writes_one_file_per_request(tmp_path) -> None:
     }
 
 
+def test_file_llm_request_logger_overwrite_reuses_single_file(tmp_path) -> None:
+    logger = FileLLMRequestLogger(overwrite=True)
+    file = tmp_path / "llm.json"
+
+    logger.log_request(request={"message": "first"}, file=file)
+    logger.log_response(response={"content": "first-done"})
+    logger.log_request(request={"message": "second"}, file=file)
+    logger.log_response(response={"content": "second-done"})
+
+    assert [path.name for path in tmp_path.glob("*.json")] == ["llm.json"]
+    assert _read_json(file) == {
+        "sequence": 2,
+        "request": {"message": "second"},
+        "response": {"content": "second-done"},
+        "error": None,
+    }
+
+
 def test_file_llm_request_logger_uses_provider_redaction_hooks(tmp_path) -> None:
-    logger = FakeRedactingFileLLMRequestLogger(directory=tmp_path)
+    logger = FakeRedactingFileLLMRequestLogger()
+    file = tmp_path / "llm.json"
 
     logger.log_request(
         request={
@@ -108,6 +88,7 @@ def test_file_llm_request_logger_uses_provider_redaction_hooks(tmp_path) -> None
             },
             "messages": ["hello"],
         },
+        file=file,
     )
     logger.log_response(
         response={
@@ -118,7 +99,7 @@ def test_file_llm_request_logger_uses_provider_redaction_hooks(tmp_path) -> None
         },
     )
 
-    payload = _read_json(tmp_path / "0001.json")
+    payload = _read_json(tmp_path / "llm-0001.json")
 
     assert payload["request"] == {
         "api_key": REDACTED_VALUE,
@@ -136,7 +117,8 @@ def test_file_llm_request_logger_uses_provider_redaction_hooks(tmp_path) -> None
 
 
 def test_file_llm_request_logger_requires_request_before_response(tmp_path) -> None:
-    logger = FileLLMRequestLogger(directory=tmp_path)
+    _ = tmp_path
+    logger = FileLLMRequestLogger()
 
     with pytest.raises(RuntimeError, match="requires a request log"):
         logger.log_response(response={"content": "done"})

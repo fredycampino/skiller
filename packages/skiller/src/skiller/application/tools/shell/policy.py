@@ -89,8 +89,11 @@ class ShellCommandPolicy:
                     "shell command blocked by allowlist policy: executable could not be resolved"
                 )
             if executable not in self.allowed_commands:
+                allowed = ", ".join(sorted(self.allowed_commands))
                 raise ValueError(
-                    f"shell command blocked by allowlist policy: '{executable}' is not allowed"
+                    f"Command '{executable}' is not in the shell allowlist. "
+                    f"Use an allowed command ({allowed}) or ask to add "
+                    f"'{executable}' to allowed_commands."
                 )
 
     def _split_command_segments(self, command: str) -> list[list[str]]:

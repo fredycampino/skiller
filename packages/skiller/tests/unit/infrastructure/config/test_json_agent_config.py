@@ -116,18 +116,18 @@ def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
     assert config.llm.default().window_width_tokens == 80_000
 
 
-def test_json_agent_config_reads_llm_log_request_flag(tmp_path) -> None:
+def test_json_agent_config_reads_llm_log_request_file(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     payload = _minimax_llm(api_key="secret")
     payload["llm"] = {
         "default_provider": "minimax",
-        "log_request": True,
+        "log_request_file": "/tmp/skiller-llm.json",
     }
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
     config = _provider(config_path=config_path, env={}).get_config()
 
-    assert config.llm.log_request is True
+    assert config.llm.log_request_file == "/tmp/skiller-llm.json"
 
 
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:

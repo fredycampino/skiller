@@ -1,4 +1,6 @@
-from skiller.domain.agent.llm.model import LLMResponse
+import json
+
+from skiller.domain.agent.llm.model import LLMResponse, LLMUsage
 
 
 class AgentErrorMapper:
@@ -6,8 +8,12 @@ class AgentErrorMapper:
         detail = self._llm_error_detail(response)
         return f"Agent '{agent_id}' LLM request failed: {detail}"
 
-    def invalid_final_message(self, *, agent_id: str) -> str:
-        return f"Agent step '{agent_id}' returned no final answer"
+    def invalid_final_message(self, *, agent_id: str, response: LLMResponse) -> str:
+        payload = _response_payload(response)
+        return (
+            f"Agent step '{agent_id}' returned no final answer: "
+            f"{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
+        )
 
     def _llm_error_detail(self, response: LLMResponse) -> str:
         if response.error and response.error_code:
@@ -23,3 +29,35 @@ class AgentErrorMapper:
             return f"finish_reason={response.finish_reason}"
 
         return f"model={response.model.value} returned ok=false without error"
+
+
+def _response_payload(response: LLMResponse) -> dict[str, object]:
+    return {
+        "ok": response.ok,
+        "model": response.model.value,
+        "content": response.content,
+        "tool_calls": [
+            {
+                "id": tool_call.id,
+                "name": tool_call.function.name,
+                "arguments_json": tool_call.function.arguments_json,
+            }
+            for tool_call in response.tool_calls
+        ],
+        "finish_reason": response.finish_reason,
+        "usage": _usage_payload(response.usage),
+        "error": response.error,
+        "error_code": response.error_code,
+    }
+
+
+def _usage_payload(usage: LLMUsage | None) -> dict[str, object] | None:
+    if usage is None:
+        return None
+    return {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+        "provider": usage.provider.value if usage.provider is not None else None,
+        "model": usage.model,
+    }

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -71,7 +72,7 @@ def _verify_with_boto3(*, profile: str, model: str) -> str | None:
     try:
         session = boto3.Session(profile_name=profile)
         client = session.client("bedrock-runtime", config=Config(read_timeout=60))
-        response = client.converse(
+        response = client.converse_stream(
             modelId=model,
             messages=[
                 {
@@ -79,11 +80,19 @@ def _verify_with_boto3(*, profile: str, model: str) -> str | None:
                     "content": [{"text": f"Reply with exactly: {VERIFY_MARKER}"}],
                 }
             ],
-            inferenceConfig={"maxTokens": 20, "temperature": 0},
+            inferenceConfig={"maxTokens": 20},
         )
+        parts: list[str] = []
+        for event in response["stream"]:
+            if not isinstance(event, dict) or "contentBlockDelta" not in event:
+                continue
+            delta = event["contentBlockDelta"].get("delta", {})
+            text = delta.get("text") if isinstance(delta, dict) else None
+            if isinstance(text, str):
+                parts.append(text)
     except (ClientError, BotoCoreError) as exc:
         raise AuthError(f"bedrock verification failed: {exc}") from exc
-    return _extract_text_from_converse_response(response)
+    return "".join(parts).strip()
 
 
 def _verify_with_aws_cli(*, profile: str, model: str) -> str:
@@ -94,12 +103,12 @@ def _verify_with_aws_cli(*, profile: str, model: str) -> str:
                 "content": [{"text": f"Reply with exactly: {VERIFY_MARKER}"}],
             }
         ],
-        "inferenceConfig": {"maxTokens": 20, "temperature": 0},
+        "inferenceConfig": {"maxTokens": 20},
     }
     command = [
         "aws",
         "bedrock-runtime",
-        "converse",
+        "converse-stream",
         "--profile",
         profile,
         "--model-id",
@@ -125,30 +134,20 @@ def _verify_with_aws_cli(*, profile: str, model: str) -> str:
         stdout = (result.stdout or "").strip()
         detail = stderr or stdout or f"exit code {result.returncode}"
         raise AuthError(f"bedrock verification failed: {detail}")
-    try:
-        response = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise AuthError(f"invalid aws cli response: {exc}") from exc
-    if not isinstance(response, dict):
-        raise AuthError("invalid aws cli response payload")
-    return _extract_text_from_converse_response(response)
+    return _extract_text_from_stream_output(result.stdout)
 
 
-def _extract_text_from_converse_response(response: dict[str, Any]) -> str:
-    output = response.get("output")
-    if not isinstance(output, dict):
-        raise AuthError("bedrock response missing output")
-    message = output.get("message")
-    if not isinstance(message, dict):
-        raise AuthError("bedrock response missing message")
-    content = message.get("content")
-    if not isinstance(content, list):
-        raise AuthError("bedrock response missing content")
-    return "".join(
-        block.get("text", "")
-        for block in content
-        if isinstance(block, dict) and isinstance(block.get("text"), str)
-    ).strip()
+def _extract_text_from_stream_output(stdout: str) -> str:
+    # converse-stream emits an event stream; the CLI renders it as JSON whose
+    # exact shape can vary, so collect every "text" delta (which may be chunked)
+    # and concatenate to rebuild the reply regardless of the surrounding shape.
+    parts: list[str] = []
+    for raw in re.findall(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', stdout):
+        try:
+            parts.append(json.loads(f'"{raw}"'))
+        except json.JSONDecodeError:
+            parts.append(raw)
+    return "".join(parts).strip()
 
 
 def _configured_profile() -> str | None:

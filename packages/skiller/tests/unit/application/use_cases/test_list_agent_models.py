@@ -228,7 +228,7 @@ def _agent_config(
         llm=AgentLLMProviderList(
             default_provider=default_provider,
             providers=providers,
-            log_request=False,
+            log_request_file=None,
         ),
         loop=AgentLoopConfig(
             max_turns=2,

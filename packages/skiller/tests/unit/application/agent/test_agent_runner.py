@@ -494,7 +494,7 @@ def test_agent_runner_returns_final_text_without_tools() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=1,
@@ -551,7 +551,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="You are a support agent.",
                 task="Inspect the issue.",
                 max_turns=3,
@@ -634,7 +634,7 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -740,7 +740,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -818,7 +818,7 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -878,7 +878,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=1,
@@ -945,7 +945,7 @@ def test_agent_runner_uses_plain_text_final_answer_with_tools_enabled() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=4,
@@ -987,7 +987,7 @@ def test_agent_runner_returns_llm_request_failed_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -1033,7 +1033,7 @@ def test_agent_runner_returns_tool_execution_failed_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -1072,7 +1072,7 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
         AgentRunnerRequest(
             agent=AgentRun(run_id="run-1", agent_id="support_agent"),
             config=agent_runner_config(
-                log_request=False,
+                log_request_file=None,
                 system="Be useful.",
                 task="Hi",
                 max_turns=3,
@@ -1083,4 +1083,8 @@ def test_agent_runner_returns_invalid_final_message_finish() -> None:
 
     assert result.final_text is None
     assert result.finish == AgentStopReason.INVALID_FINAL_MESSAGE
-    assert result.error == "Agent step 'support_agent' returned no final answer"
+    assert result.error == (
+        "Agent step 'support_agent' returned no final answer: "
+        '{"ok":true,"model":"model1","content":null,"tool_calls":[],'
+        '"finish_reason":null,"usage":null,"error":null,"error_code":null}'
+    )

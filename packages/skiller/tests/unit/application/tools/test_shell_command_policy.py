@@ -83,7 +83,7 @@ def test_shell_command_policy_rejects_non_allowlisted_segment() -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="'cat' is not allowed"):
+    with pytest.raises(ValueError, match="'cat' is not in the shell allowlist"):
         policy.validate_command(
             command="printf 'hello' | cat",
             effective_cwd="/workspace",

@@ -17,6 +17,7 @@ class AgentBedrockLLMModel(LLMStaticModel):
     CLAUDE_OPUS_4_8 = ("us.anthropic.claude-opus-4-8", 200_000)
     CLAUDE_OPUS_4_5 = ("us.anthropic.claude-opus-4-5-20251101-v1:0", 200_000)
     CLAUDE_OPUS_4_1 = ("us.anthropic.claude-opus-4-1-20250805-v1:0", 200_000)
+    CLAUDE_SONNET_5 = ("us.anthropic.claude-sonnet-5", 200_000)
     CLAUDE_SONNET_4_6 = ("us.anthropic.claude-sonnet-4-6", 200_000)
     CLAUDE_SONNET_4_5 = ("us.anthropic.claude-sonnet-4-5-20250929-v1:0", 200_000)
     CLAUDE_HAIKU_4_5 = ("us.anthropic.claude-haiku-4-5-20251001-v1:0", 200_000)
@@ -29,6 +30,7 @@ BEDROCK_MODELS = (
     AgentBedrockLLMModel.CLAUDE_OPUS_4_8,
     AgentBedrockLLMModel.CLAUDE_OPUS_4_5,
     AgentBedrockLLMModel.CLAUDE_OPUS_4_1,
+    AgentBedrockLLMModel.CLAUDE_SONNET_5,
     AgentBedrockLLMModel.CLAUDE_SONNET_4_6,
     AgentBedrockLLMModel.CLAUDE_SONNET_4_5,
     AgentBedrockLLMModel.CLAUDE_HAIKU_4_5,

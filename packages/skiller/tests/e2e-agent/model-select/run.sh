@@ -98,6 +98,9 @@ assert payload["status"] == "OK", payload
 assert providers["codex"]["source"] == "global", providers["codex"]
 assert providers["minimax"]["source"] == "global", providers["minimax"]
 assert codex_models["gpt-5.5"]["active"] is True, providers["codex"]
+assert codex_models["gpt-5.6-sol"]["active"] is False, providers["codex"]
+assert codex_models["gpt-5.6-terra"]["active"] is False, providers["codex"]
+assert codex_models["gpt-5.6-luna"]["active"] is False, providers["codex"]
 assert minimax_models["MiniMax-M2.7"]["active"] is False, providers["minimax"]
 assert minimax_models["MiniMax-M2.5"]["active"] is False, providers["minimax"]
 PY

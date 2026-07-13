@@ -78,6 +78,9 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
     assert bedrock.source == AgentConfigProviderSource.NONE
     assert _model(codex.models, "gpt-5.5").active is True
     assert _model(codex.models, "gpt-5.4").active is False
+    assert _model(codex.models, "gpt-5.6-sol").active is False
+    assert _model(codex.models, "gpt-5.6-terra").active is False
+    assert _model(codex.models, "gpt-5.6-luna").active is False
     assert _model(minimax.models, "MiniMax-M2.7").active is False
     assert lmstudio.models == ()
     assert agent_config.config_paths == [None]

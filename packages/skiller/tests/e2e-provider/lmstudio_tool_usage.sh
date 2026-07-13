@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../../../.."
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 base_url="${LMSTUDIO_BASE_URL:-http://localhost:1234/v1}"
 api_key="${LMSTUDIO_API_KEY:-lm-studio}"
-model="${LMSTUDIO_MODEL:-google/gemma-4-12b-qat}"
+TEST_LMSTUDIO_MODEL="${TEST_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}"
 timeout_seconds="${LMSTUDIO_TIMEOUT_SECONDS:-120}"
 
 if [[ "${RUN_PROVIDER_E2E:-0}" != "1" && "${RUN_LMSTUDIO_PROVIDER_E2E:-0}" != "1" ]]; then
@@ -26,9 +26,73 @@ if [[ ! -x "${runtime_python}" ]]; then
   exit 1
 fi
 
+# ─── LM Studio setup / health check ──────────────────────────────────────────
+
+lmstudio_api_key_file="/home/fede/.skiller/secrets/lmstudio_api_key"
+if [[ -f "${lmstudio_api_key_file}" ]]; then
+  lmstudio_api_key="$(cat "${lmstudio_api_key_file}")"
+else
+  lmstudio_api_key="${api_key}"
+fi
+
+_lms_available() {
+  command -v lms &>/dev/null
+}
+
+_model_loaded() {
+  local expected="$1"
+  local models
+  models=$(curl -s \
+    -H "Authorization: Bearer ${lmstudio_api_key}" \
+    "${base_url}/models" 2>/dev/null | \
+    python3 -c "import sys,json; data=json.load(sys.stdin); print('\n'.join(m.get('id','') for m in data.get('data',[])))" \
+    2>/dev/null || true)
+  echo "${models}" | grep -qE "^${expected}(:|$)"
+}
+
+if ! _lms_available; then
+  printf 'FAIL: lms CLI not found in PATH\n' >&2
+  exit 1
+fi
+
+if ! lms daemon ping &>/dev/null; then
+  echo "Starting LM Studio daemon..."
+  lms daemon up
+  sleep 2
+fi
+
+if ! lms server status &>/dev/null; then
+  echo "Starting LM Studio server on port 1234..."
+  lms server start --port 1234
+  sleep 2
+fi
+
+if ! _model_loaded "${TEST_LMSTUDIO_MODEL}"; then
+  echo "Loading model ${TEST_LMSTUDIO_MODEL}..."
+  lms load "${TEST_LMSTUDIO_MODEL}" --context-length 8000
+  sleep 5
+fi
+
+echo "Verifying model is available..."
+if ! _model_loaded "${TEST_LMSTUDIO_MODEL}"; then
+  printf 'FAIL: model %s not loaded\n' "${TEST_LMSTUDIO_MODEL}" >&2
+  lms ps 2>/dev/null || true
+  exit 1
+fi
+
+echo "LM Studio ready with model: ${TEST_LMSTUDIO_MODEL}"
+lms ps
+
+_cleanup() {
+  echo "Stopping LM Studio server..."
+  lms server stop 2>/dev/null || true
+}
+
+trap _cleanup EXIT
+
 LMSTUDIO_BASE_URL="${base_url}" \
 LMSTUDIO_API_KEY="${api_key}" \
-LMSTUDIO_MODEL="${model}" \
+LMSTUDIO_MODEL="${TEST_LMSTUDIO_MODEL}" \
 LMSTUDIO_TIMEOUT_SECONDS="${timeout_seconds}" \
 PYTHONPATH=packages/skiller/src \
 "${runtime_python}" - <<'PY'
@@ -41,8 +105,8 @@ from skiller.domain.agent.llm.model import (
     LLMToolChoiceMode,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm.model import LLMModel
 from skiller.domain.agent.llm.provider_lmstudio import (
-    AgentLMStudioLLMModel,
     AgentLMStudioProvider,
     LMStudioLLMRequest,
 )
@@ -79,7 +143,10 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = AgentLMStudioLLMModel(os.environ["LMSTUDIO_MODEL"])
+model = LLMModel(
+    value=os.environ["LMSTUDIO_MODEL"],
+    model_context_window_tokens=8000,
+)
 provider = AgentLMStudioProvider(
     model=model,
     api_key=os.environ["LMSTUDIO_API_KEY"],

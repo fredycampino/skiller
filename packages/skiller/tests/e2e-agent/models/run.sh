@@ -82,13 +82,14 @@ assert set(payload) == {"run_id", "status", "ok", "providers"}, payload
 
 providers = payload["providers"]
 provider_names = [provider["name"] for provider in providers]
-assert provider_names == ["minimax", "codex", "bedrock"], provider_names
+assert provider_names == ["minimax", "lmstudio", "codex", "bedrock"], provider_names
 assert "null" not in provider_names
 assert "fake" not in provider_names
 
 for provider in providers:
     assert set(provider) == {"name", "source", "models"}, provider
-    assert provider["source"] == "global", provider
+    expected_source = "none" if provider["name"] == "lmstudio" else "global"
+    assert provider["source"] == expected_source, provider
     for model in provider["models"]:
         assert set(model) == {"name", "active"}, model
 
@@ -102,6 +103,9 @@ bedrock_models = {model["name"]: model for model in bedrock["models"]}
 
 assert codex_models["gpt-5.5"]["active"] is True, codex
 assert codex_models["gpt-5.4"]["active"] is False, codex
+assert codex_models["gpt-5.6-sol"]["active"] is False, codex
+assert codex_models["gpt-5.6-terra"]["active"] is False, codex
+assert codex_models["gpt-5.6-luna"]["active"] is False, codex
 assert minimax_models["MiniMax-M2.7"]["active"] is False, minimax
 assert bedrock_models["us.anthropic.claude-sonnet-4-6"]["active"] is False, bedrock
 

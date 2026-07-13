@@ -12,11 +12,17 @@ from skiller.domain.agent.llm.request import LLMRequest
 class AgentCodexLLMModel(LLMStaticModel):
     GPT_5_4 = ("gpt-5.4", 1_050_000)
     GPT_5_5 = ("gpt-5.5", 1_050_000)
+    GPT_5_6_SOL = ("gpt-5.6-sol", 1_050_000)
+    GPT_5_6_TERRA = ("gpt-5.6-terra", 1_050_000)
+    GPT_5_6_LUNA = ("gpt-5.6-luna", 1_050_000)
 
 
 CODEX_MODELS = (
     AgentCodexLLMModel.GPT_5_4,
     AgentCodexLLMModel.GPT_5_5,
+    AgentCodexLLMModel.GPT_5_6_SOL,
+    AgentCodexLLMModel.GPT_5_6_TERRA,
+    AgentCodexLLMModel.GPT_5_6_LUNA,
 )
 
 

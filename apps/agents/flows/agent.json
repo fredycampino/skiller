@@ -7,7 +7,7 @@
     "compaction": {
       "enabled": true,
       "max_total_tokens_ratio": 0.8,
-      "keep_last": 5
+      "keep_last": 10
     }
   },
   "tools": {

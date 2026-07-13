@@ -2,20 +2,6 @@
 
 All notable changes to this project should be summarized here before a version is cut from a `feature/*` branch into `main`.
 
-## 0.1.0-beta.19 - 2026-07-01
-
-### Added
-- Add agent context compaction with persisted compact token deltas.
-- Add agent context compaction configuration and pruning documentation.
-
-### Changed
-- Improve agent context window queries and SQLite indexes for compacted sessions.
-- Refine STUI run resume/status rendering around active context windows.
-- Pass Bedrock max token settings through provider requests.
-
-### Notes
-- Includes PR #93.
-
 ## Unreleased
 
 ### Added
@@ -32,6 +18,37 @@ All notable changes to this project should be summarized here before a version i
 
 ### Notes
 - Update this section when a branch is ready for release.
+
+## 0.1.0-beta.20 - 2026-07-13
+
+### Added
+- Add Bedrock streaming client support with request file logging.
+- Add LM Studio auth fixture coverage.
+- Add Codex 5.6 model entries.
+
+### Changed
+- Treat empty final Bedrock streaming events as non-fatal.
+- Update agent model and auth fixtures.
+
+### Removed
+- Remove Claude Bedrock auth option from agent fixtures.
+
+### Notes
+- Includes PR #97 and PR #98.
+
+## 0.1.0-beta.19 - 2026-07-01
+
+### Added
+- Add agent context compaction with persisted compact token deltas.
+- Add agent context compaction configuration and pruning documentation.
+
+### Changed
+- Improve agent context window queries and SQLite indexes for compacted sessions.
+- Refine STUI run resume/status rendering around active context windows.
+- Pass Bedrock max token settings through provider requests.
+
+### Notes
+- Includes PR #93.
 
 ## 0.1.0-beta.18 - 2026-06-30
 

@@ -1,0 +1,114 @@
+name: auths/lmstudio
+description: "Configure LM Studio settings for Skiller agents"
+version: "0.1"
+start: check_current_state
+
+inputs:
+  continue_id: string
+
+on_success:
+  cleanup: true
+  action:
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_current_state
+    command: |
+      set -eu
+
+      python3 "{{flow.dir}}/lmstudio_auth.py" format-menu
+    next: show_menu
+
+  - notify: show_menu
+    format: markdown
+    message: >
+      {{output_value("check_current_state").stdout}}
+    next: wait_selection
+
+  - wait_input: wait_selection
+    prompt: "Choose an option (1-6)"
+    next: route_selection
+
+  - switch: route_selection
+    value: '{{output_value("wait_selection").payload.text}}'
+    cases:
+      "1": add_api_token
+      "2": url_server
+      "3": check_connection
+      "4": update_models_list
+      "5": status
+      "6": exit
+      exit: exit
+      Exit: exit
+      quit: exit
+      Quit: exit
+    default: invalid_option
+
+  - notify: invalid_option
+    message: "Invalid option. Choose 1-6."
+    next: show_menu
+
+  - shell: add_api_token
+    command: |
+      set -eu
+
+      echo "Add API token not implemented yet"
+    cwd: "{{flow.dir}}"
+    timeout: 15
+    check: true
+    next: show_menu
+
+  - shell: url_server
+    command: |
+      set -eu
+
+      echo "Url Server not implemented yet"
+    cwd: "{{flow.dir}}"
+    timeout: 15
+    check: true
+    next: show_menu
+
+  - shell: check_connection
+    command: |
+      set -eu
+
+      python3 "{{flow.dir}}/lmstudio_auth.py" check-connection
+    next: show_connection_result
+
+  - notify: show_connection_result
+    format: markdown
+    message: |
+      # Connection Check
+
+      {{output_value("check_connection").stdout}}
+    next: show_menu
+
+  - shell: update_models_list
+    command: |
+      set -eu
+
+      echo "Update models list not implemented yet"
+    cwd: "{{flow.dir}}"
+    timeout: 15
+    check: true
+    next: show_menu
+
+  - shell: status
+    command: |
+      set -eu
+
+      echo "Status not implemented yet"
+    cwd: "{{flow.dir}}"
+    timeout: 15
+    check: true
+    next: show_menu
+
+  - notify: exit
+    message: "LM Studio configuration closed."

@@ -65,27 +65,25 @@ steps:
 
       ```text
       1 Usar profile (skiller-bedrock)
-      2 Usar profile (claude-bedrock)
-      3 Escribir otro profile
-      4 Cancelar
+      2 Escribir otro profile
+      3 Cancelar
       ```
     next: select_profile_option
 
   - wait_input: select_profile_option
-    prompt: "Choose 1, 2, 3, or 4."
+    prompt: "Choose 1, 2, or 3."
     next: route_profile_option
 
   - switch: route_profile_option
     value: '{{output_value("select_profile_option").payload.text}}'
     cases:
       "1": verify_skiller_profile
-      "2": verify_claude_profile
-      "3": ask_custom_profile
-      "4": exit_setup
+      "2": ask_custom_profile
+      "3": exit_setup
     default: invalid_profile_option
 
   - notify: invalid_profile_option
-    message: "Invalid option. Choose 1, 2, 3, or 4."
+    message: "Invalid option. Choose 1, 2, or 3."
     next: select_profile_option
 
   - shell: verify_skiller_profile
@@ -117,37 +115,6 @@ steps:
     value: '{{output_value("verify_skiller_profile").stdout}}'
     cases:
       ready: write_bedrock_config_skiller
-    default: validation_error
-
-  - shell: verify_claude_profile
-    command: |
-      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
-      if [ -z "$runtime_python" ]; then
-        skiller_bin="$(command -v skiller || true)"
-        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
-          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
-        fi
-      fi
-      if [ -z "$runtime_python" ]; then
-        runtime_python="python3"
-      fi
-      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
-        --profile "claude-bedrock" \
-        --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
-        printf '%s' ready
-      else
-        printf '%s\n' "$verify_output" >&2
-        printf '%s' invalid
-      fi
-    cwd: .
-    timeout: 120
-    check: true
-    next: route_verify_claude
-
-  - switch: route_verify_claude
-    value: '{{output_value("verify_claude_profile").stdout}}'
-    cases:
-      ready: write_bedrock_config_claude
     default: validation_error
 
   - wait_input: ask_custom_profile
@@ -201,54 +168,6 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
       profile="skiller-bedrock"
-      model="${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
-
-      mkdir -p "$(dirname "$config_file")"
-
-      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
-      import json
-      import os
-      from pathlib import Path
-
-      config_file = Path(os.environ["CONFIG_FILE"])
-      profile = os.environ["PROFILE"]
-      model = os.environ["MODEL"]
-      if config_file.exists():
-          config = json.loads(config_file.read_text(encoding="utf-8"))
-      else:
-          config = {}
-
-      llm = config.setdefault("llm", {})
-      llm["default_provider"] = "bedrock"
-      providers = config.setdefault("providers", {})
-      providers["bedrock"] = {
-          "model": model,
-          "timeout_seconds": 120,
-          "window_width_tokens": 200000,
-          "profile": profile,
-      }
-
-      config_file.write_text(
-          json.dumps(config, indent=2, sort_keys=True) + "\n",
-          encoding="utf-8",
-      )
-      PY
-
-      printf '%s\n' "Bedrock config saved."
-      printf '%s\n' "Config: $config_file"
-      printf '%s\n' "Profile: $profile"
-    cwd: .
-    timeout: 20
-    check: true
-    next: credentials_ready
-
-  - shell: write_bedrock_config_claude
-    command: |
-      set -eu
-
-      settings_dir="$HOME/.skiller/settings"
-      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      profile="claude-bedrock"
       model="${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
 
       mkdir -p "$(dirname "$config_file")"

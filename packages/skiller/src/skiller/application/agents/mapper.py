@@ -8,6 +8,10 @@ from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentResult,
     InterruptAgentStatus,
 )
+from skiller.application.use_cases.agent.list_agent_context import (
+    ListAgentContextResult,
+    ListAgentContextStatus,
+)
 from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
@@ -48,6 +52,51 @@ class AgentServiceMapper:
         if result.stats is not None:
             payload["context_id"] = result.stats.context_id
             payload["context"] = self._context_to_dict(result.stats)
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
+    def to_context_input(self, run_id: str, agent_id: str) -> tuple[str, str]:
+        return run_id.strip(), agent_id.strip()
+
+    def to_context_dict(self, result: ListAgentContextResult) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "run_id": result.run_id,
+            "agent_id": result.agent_id,
+            "status": result.status.value,
+            "ok": result.status == ListAgentContextStatus.OK,
+        }
+        if result.context_id is not None:
+            payload["context_id"] = result.context_id
+        if result.window is not None:
+            payload["request_context"] = {
+                "mode": result.window.mode,
+                "entries": result.window.entries,
+                "start_sequence": result.window.start_sequence,
+                "end_sequence": result.window.end_sequence,
+                "limit_tokens": result.window.limit_tokens,
+                "estimated_tokens": result.window.estimated_tokens,
+                "payload_bytes": result.window.payload_bytes,
+                "keep_last": result.window.keep_last,
+            }
+        if result.entries:
+            payload["entries"] = [
+                {
+                    "sequence": entry.sequence,
+                    "role": entry.role,
+                    "type": entry.type,
+                    "delta_tokens": entry.delta_tokens,
+                    "delta_compact_tokens": entry.delta_compact_tokens,
+                    "payload_bytes": entry.payload_bytes,
+                    "usage": entry.usage,
+                    "prunable": entry.prunable,
+                    "window_start_sequence": entry.window_start_sequence,
+                    "window_base": entry.window_base,
+                }
+                for entry in result.entries
+            ]
+        else:
+            payload["entries"] = []
         if result.error is not None:
             payload["error"] = result.error
         return payload

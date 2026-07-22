@@ -38,6 +38,7 @@ from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsUseCase
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
+from skiller.application.use_cases.agent.list_agent_context import ListAgentContextUseCase
 from skiller.application.use_cases.agent.list_agent_models import ListAgentModelsUseCase
 from skiller.application.use_cases.agent.select_agent_model import SelectAgentModelUseCase
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -264,6 +265,13 @@ def build_runtime_container(
         agent_config=agent_config,
         skill_runner=skill_runner,
     )
+    list_agent_context_use_case = ListAgentContextUseCase(
+        run_store=store,
+        run_agent_store=run_agent_store,
+        agent_context_store=agent_context_store,
+        agent_config=agent_config,
+        skill_runner=skill_runner,
+    )
     list_agent_models_use_case = ListAgentModelsUseCase(
         run_store=store,
         agent_config=agent_config,
@@ -421,6 +429,7 @@ def build_runtime_container(
     agent_service = AgentApplicationService(
         interrupt_agent_use_case=interrupt_agent_use_case,
         get_agent_stats_use_case=get_agent_stats_use_case,
+        list_agent_context_use_case=list_agent_context_use_case,
         list_agent_models_use_case=list_agent_models_use_case,
         select_agent_model_use_case=select_agent_model_use_case,
     )

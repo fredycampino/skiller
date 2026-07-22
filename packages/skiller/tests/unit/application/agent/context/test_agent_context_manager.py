@@ -11,6 +11,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextWindowEntries,
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.run.identity import AgentContext
@@ -455,14 +456,17 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         self.window_calls.append(
             {
                 "context_id": context_id,
                 "window_width_tokens": window_width_tokens,
             }
         )
-        return self.window_entries
+        return AgentContextWindowEntries(
+            entries=self.window_entries,
+            estimated_tokens=sum(entry.delta_tokens or 0 for entry in self.window_entries),
+        )
 
     def list_compact_entries(
         self,
@@ -470,7 +474,7 @@ class _FakeAgentContextStore:
         context_id: str,
         window_width_tokens: int,
         keep_last_blocks: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         self.compact_calls.append(
             {
                 "context_id": context_id,
@@ -478,7 +482,10 @@ class _FakeAgentContextStore:
                 "keep_last_blocks": keep_last_blocks,
             }
         )
-        return self.compact_entries
+        return AgentContextWindowEntries(
+            entries=self.compact_entries,
+            estimated_tokens=sum(entry.delta_tokens or 0 for entry in self.compact_entries),
+        )
 
     def next_turn_id(self, *, context_id: str) -> str:
         _ = context_id

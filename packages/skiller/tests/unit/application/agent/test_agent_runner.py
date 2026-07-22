@@ -17,6 +17,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntryType,
     AgentContextPayload,
     AgentContextUsageMarker,
+    AgentContextWindowEntries,
 )
 from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
@@ -247,14 +248,18 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         self.window_calls.append(
             {
                 "context_id": context_id,
                 "window_width_tokens": window_width_tokens,
             }
         )
-        return self.list_entries(context_id=context_id)
+        entries = self.list_entries(context_id=context_id)
+        return AgentContextWindowEntries(
+            entries=entries,
+            estimated_tokens=sum(entry.delta_tokens or 0 for entry in entries),
+        )
 
     def get_last_usage_marker(
         self,

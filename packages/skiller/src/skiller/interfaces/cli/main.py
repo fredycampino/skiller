@@ -352,6 +352,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     agent_stats_parser.add_argument("run_id")
     agent_stats_parser.add_argument("--agent", required=True)
+    agent_context_parser = agent_sub.add_parser(
+        "context",
+        help="List the effective agent context window without payload content",
+    )
+    agent_context_parser.add_argument("run_id")
+    agent_context_parser.add_argument("--agent", required=True)
     agent_models_parser = agent_sub.add_parser(
         "models",
         help="List agent model options for a run",
@@ -673,6 +679,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agent" and args.agent_command == "stats":
         result = controller.agent_stats(args.run_id, args.agent)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "OK" else 1
+
+    if args.command == "agent" and args.agent_command == "context":
+        result = controller.agent_context(args.run_id, args.agent)
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "OK" else 1
 

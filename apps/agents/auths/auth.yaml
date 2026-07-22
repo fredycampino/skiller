@@ -20,13 +20,14 @@ steps:
       1 Codex
       2 MiniMax
       3 Bedrock
-      4 Configure later
-      5 Exit app
+      4 LM Studio
+      5 Configure later
+      6 Exit
       ```
     next: select_provider
 
   - wait_input: select_provider
-    prompt: "Choose 1, 2, 3, 4, or 5."
+    prompt: "Choose 1, 2, 3, 4, 5, or 6."
     next: route_provider
 
   - switch: route_provider
@@ -35,8 +36,9 @@ steps:
       "1": start_codex
       "2": start_minimax
       "3": start_bedrock
-      "4": configure_later
-      "5": exit_app
+      "4": start_lmstudio
+      "5": configure_later
+      "6": exit_app
     default: invalid_choice
 
   - notify: start_codex
@@ -69,6 +71,16 @@ steps:
       params: "--arg continue_id={{inputs.continue_id}}"
       auto: true
 
+  - notify: start_lmstudio
+    format: markdown
+    message: Starting LM Studio setup.
+    action:
+      type: run
+      label: Start LM Studio setup
+      arg: auths/lmstudio
+      params: "--arg continue_id={{inputs.continue_id}}"
+      auto: true
+
   - notify: configure_later
     format: markdown
     message: |
@@ -89,10 +101,10 @@ steps:
   - notify: exit_app
     format: markdown
     message: |
-      Press `Ctrl+Q` to exit the app.
+      Use `/` to see more commands.
 
   - notify: invalid_choice
     format: markdown
     message: |
-      Invalid option. Choose `1`, `2`, `3`, `4`, or `5`.
+      Invalid option. Choose `1`, `2`, `3`, `4`, `5`, or `6`.
     next: select_provider

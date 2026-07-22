@@ -6,13 +6,16 @@ This note defines the token markers persisted in agent context entries that have
 
 `delta_tokens` is the existing token delta marker for an entry with `usage_json`.
 
-It is calculated from the LLM-reported `prompt_tokens`:
+It is calculated from LLM-reported `prompt_tokens` only when consecutive markers are comparable; otherwise Skiller estimates the persisted-context block from payload size:
 
-- If there is no previous usage marker, `delta_tokens = prompt_tokens`.
+- If there is no previous usage marker, Skiller estimates the current block delta from payload
+  character counts. Provider `prompt_tokens` include prompt parts outside persisted context, such as
+  system messages and tool schema, so they are not used as the block delta.
 - If the context window moved or was rebased, Skiller estimates the current block delta from
   payload character counts. See [Moved window delta estimation](#moved-window-delta-estimation).
+- If `current_prompt_tokens < previous_prompt_tokens`, Skiller estimates the current block delta
+  because the provider values are not comparable as a monotonic series.
 - Otherwise, `delta_tokens = current_prompt_tokens - previous_prompt_tokens`.
-- If the result would be negative, it is clamped to `0`.
 
 `delta_tokens` belongs to the current usage marker, but it represents the measured growth since the previous usage marker. It is not the isolated token size of the current entry.
 
@@ -21,25 +24,25 @@ Example:
 | sequence | entry | usage_json | prompt_tokens | delta_tokens |
 |---:|---|---|---:|---:|
 | 1 | user: "hola" | no | null | null |
-| 2 | assistant final: "hola" | yes | 100 | 100 |
+| 2 | assistant final: "hola" | yes | 130 | 100 |
 | 3 | user: "busca README" | no | null | null |
-| 4 | assistant tool_calls | yes | 180 | 80 |
+| 4 | assistant tool_calls | yes | 210 | 80 |
 | 5 | tool_call: search_files | no | null | null |
 | 6 | tool_result: README.md | no | null | null |
-| 7 | assistant final | yes | 300 | 120 |
+| 7 | assistant final | yes | 330 | 120 |
 | 8 | user: "ahora package.json" | no | null | null |
-| 9 | assistant tool_calls | yes | 390 | 90 |
+| 9 | assistant tool_calls | yes | 420 | 90 |
 | 10 | tool_call | no | null | null |
 | 11 | tool_result | no | null | null |
-| 12 | assistant final | yes | 500 | 110 |
+| 12 | assistant final | yes | 530 | 110 |
 
 Examples:
 
-- Sequence `2`: `100 - 0 = 100`.
-- Sequence `4`: `180 - 100 = 80`.
-- Sequence `7`: `300 - 180 = 120`.
-- Sequence `9`: `390 - 300 = 90`.
-- Sequence `12`: `500 - 390 = 110`.
+- Sequence `2`: first marker; `delta_tokens` is estimated from the persisted block `1..2`.
+- Sequence `4`: `210 - 130 = 80`.
+- Sequence `7`: `330 - 210 = 120`.
+- Sequence `9`: `420 - 330 = 90`.
+- Sequence `12`: `530 - 420 = 110`.
 
 ### Moved window delta estimation
 

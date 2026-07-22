@@ -251,8 +251,14 @@ class AgentContextPublisher:
             )
 
         if last_marker is None:
+            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
+                context_id=context.context_id,
+                window_start_sequence=window_start_sequence,
+                last_marker_sequence=0,
+                payload=payload,
+            )
             return _ResponseMarker(
-                delta_tokens=prompt_tokens,
+                delta_tokens=estimated_delta_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )
@@ -263,15 +269,20 @@ class AgentContextPublisher:
                 last_marker_sequence=last_marker.sequence,
                 payload=payload,
             )
-            delta_tokens = min(prompt_tokens, estimated_delta_tokens)
             return _ResponseMarker(
-                delta_tokens=delta_tokens,
+                delta_tokens=estimated_delta_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )
         if prompt_tokens < last_marker.prompt_tokens:
+            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
+                context_id=context.context_id,
+                window_start_sequence=window_start_sequence,
+                last_marker_sequence=last_marker.sequence,
+                payload=payload,
+            )
             return _ResponseMarker(
-                delta_tokens=prompt_tokens,
+                delta_tokens=estimated_delta_tokens,
                 window_start_sequence=window_start_sequence,
                 window_base=True,
             )

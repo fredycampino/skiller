@@ -12,6 +12,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntryType,
     AgentContextPayload,
     AgentContextUsageMarker,
+    AgentContextWindowEntries,
     agent_context_payload_from_dict,
     agent_context_payload_to_dict,
 )
@@ -116,7 +117,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         *,
         context_id: str,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         with self._connect() as conn:
             start_sequence = self.window_start_sequence(
                 conn,
@@ -124,7 +125,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 window_width_tokens=window_width_tokens,
             )
             if start_sequence == 0:
-                return []
+                return AgentContextWindowEntries(entries=[], estimated_tokens=0)
             rows = conn.execute(
                 """
                 SELECT *
@@ -135,7 +136,15 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 """,
                 (context_id, start_sequence),
             ).fetchall()
-        return [_build_entry(row) for row in rows]
+            estimated_tokens = self._estimate_window_tokens(
+                conn,
+                context_id=context_id,
+                start_sequence=start_sequence,
+            )
+        return AgentContextWindowEntries(
+            entries=[_build_entry(row) for row in rows],
+            estimated_tokens=estimated_tokens,
+        )
 
     def list_protected_entries(
         self,
@@ -221,7 +230,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         context_id: str,
         start_sequence: int,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -246,11 +255,13 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 ),
                 selected_range AS (
                   SELECT MIN(sequence) AS start_sequence,
-                         MAX(sequence) AS end_sequence
+                         MAX(sequence) AS end_sequence,
+                         MAX(running_tokens) AS tokens
                   FROM running
                   WHERE running_tokens <= ?
                 )
-                SELECT e.*
+                SELECT e.*,
+                       selected_range.tokens AS selected_tokens
                 FROM agent_context_entries e
                 JOIN selected_range ON 1 = 1
                 WHERE e.context_id = ?
@@ -277,7 +288,12 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                     AgentAssistantMessageType.TOOL_CALLS.value,
                 ),
             ).fetchall()
-        return [_build_entry(row) for row in rows]
+        if not rows:
+            return AgentContextWindowEntries(entries=[], estimated_tokens=0)
+        return AgentContextWindowEntries(
+            entries=[_build_entry(row) for row in rows],
+            estimated_tokens=int(rows[0]["selected_tokens"]),
+        )
 
     def get_last_usage_marker(
         self,
@@ -294,18 +310,31 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
         start_sequence: int,
     ) -> int:
         with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT COALESCE(
-                  SUM(CASE WHEN delta_tokens > 0 THEN delta_tokens ELSE 0 END),
-                  0
-                ) AS estimated_tokens
-                FROM agent_context_entries
-                WHERE context_id = ?
-                  AND sequence >= ?
-                """,
-                (context_id, start_sequence),
-            ).fetchone()
+            return self._estimate_window_tokens(
+                conn,
+                context_id=context_id,
+                start_sequence=start_sequence,
+            )
+
+    def _estimate_window_tokens(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        context_id: str,
+        start_sequence: int,
+    ) -> int:
+        row = conn.execute(
+            """
+            SELECT COALESCE(
+              SUM(CASE WHEN delta_tokens > 0 THEN delta_tokens ELSE 0 END),
+              0
+            ) AS estimated_tokens
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND sequence >= ?
+            """,
+            (context_id, start_sequence),
+        ).fetchone()
         if row is None:
             return 0
         return int(row["estimated_tokens"])

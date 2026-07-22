@@ -11,6 +11,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntryType,
     AgentContextPayload,
     AgentContextUsageMarker,
+    AgentContextWindowEntries,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
@@ -164,7 +165,7 @@ class AgentContextStore(
         *,
         context_id: str,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         return self.datasource.list_window_entries(
             context_id=context_id,
             window_width_tokens=window_width_tokens,
@@ -176,7 +177,7 @@ class AgentContextStore(
         context_id: str,
         window_width_tokens: int,
         keep_last_blocks: int,
-    ) -> list[AgentContextEntry]:
+    ) -> AgentContextWindowEntries:
         keep_last_blocks = min(100, max(1, keep_last_blocks))
         protected = self.datasource.list_protected_entries(
             context_id=context_id,
@@ -184,20 +185,33 @@ class AgentContextStore(
             keep_last_blocks=keep_last_blocks,
         )
         if not protected.entries:
-            return self.datasource.list_entries(context_id=context_id)
+            entries = self.datasource.list_entries(context_id=context_id)
+            return AgentContextWindowEntries(
+                entries=entries,
+                estimated_tokens=sum(entry.delta_tokens or 0 for entry in entries),
+            )
         if protected.tokens >= window_width_tokens:
-            return protected.entries
+            return AgentContextWindowEntries(
+                entries=protected.entries,
+                estimated_tokens=protected.tokens,
+            )
 
         compact_start_sequence = protected.entries[0].sequence - 1
         if compact_start_sequence <= 0:
-            return protected.entries
+            return AgentContextWindowEntries(
+                entries=protected.entries,
+                estimated_tokens=protected.tokens,
+            )
 
         compact = self.datasource.list_compact_entries(
             context_id=context_id,
             start_sequence=compact_start_sequence,
             window_width_tokens=window_width_tokens - protected.tokens,
         )
-        return compact + protected.entries
+        return AgentContextWindowEntries(
+            entries=compact.entries + protected.entries,
+            estimated_tokens=compact.estimated_tokens + protected.tokens,
+        )
 
     def get_last_usage_marker(
         self,

@@ -92,11 +92,12 @@ configured window width would be exceeded. It then updates the run agent window 
 When the next measured assistant response is persisted, the context publisher reads the run
 agent window state and computes:
 
-- `delta_tokens = prompt_tokens` when the response starts a new series.
+- `delta_tokens` is estimated from current block payload chars when the response starts a new series.
 - `delta_tokens` is estimated from current block payload chars when the context window moved or was rebased.
-- `delta_tokens = current_prompt_tokens - previous_prompt_tokens` inside the same series.
+- `delta_tokens` is estimated from current block payload chars when provider `prompt_tokens` are not monotonic.
+- `delta_tokens = current_prompt_tokens - previous_prompt_tokens` inside the same comparable series.
 
-If provider usage is missing, `delta_tokens = 0`.
+If provider usage is missing, `delta_tokens` is estimated from current block payload chars.
 
 ## Stats
 

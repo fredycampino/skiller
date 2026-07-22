@@ -47,16 +47,17 @@ class AgentContextManager:
         max_ratio = compaction.max_total_tokens_ratio
         window_width_tokens = provider.context_max_tokens(ratio=max_ratio)
         if compaction.enabled:
-            entries = self.agent_context_store.list_compact_entries(
+            context_window = self.agent_context_store.list_compact_entries(
                 context_id=context.context_id,
                 window_width_tokens=window_width_tokens,
                 keep_last_blocks=compaction.keep_last,
             )
         else:
-            entries = self.agent_context_store.list_window_entries(
+            context_window = self.agent_context_store.list_window_entries(
                 context_id=context.context_id,
                 window_width_tokens=window_width_tokens,
             )
+        entries = context_window.entries
         window_start_sequence = _start_sequence(entries)
         run_agent = self.run_agent_store.get_agent(
             run_id=context.run_id,
@@ -90,12 +91,8 @@ class AgentContextManager:
             window_start_sequence=window_start_sequence,
             window_end_sequence=_end_sequence(entries),
             max_ratio=max_ratio,
-            estimated_tokens=_estimated_tokens(entries),
+            estimated_tokens=context_window.estimated_tokens,
         )
-
-
-def _estimated_tokens(entries: list[AgentContextEntry]) -> int:
-    return sum(entry.delta_tokens or 0 for entry in entries)
 
 
 def _start_sequence(entries: list[AgentContextEntry]) -> int:

@@ -4,6 +4,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntry,
     AgentContextPayload,
     AgentContextUsageMarker,
+    AgentContextWindowEntries,
 )
 from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.agent.run.identity import AgentContext
@@ -70,7 +71,7 @@ class AgentContextStorePort(Protocol):
         *,
         context_id: str,
         window_width_tokens: int,
-    ) -> list[AgentContextEntry]: ...
+    ) -> AgentContextWindowEntries: ...
 
     def list_compact_entries(
         self,
@@ -78,7 +79,7 @@ class AgentContextStorePort(Protocol):
         context_id: str,
         window_width_tokens: int,
         keep_last_blocks: int,
-    ) -> list[AgentContextEntry]: ...
+    ) -> AgentContextWindowEntries: ...
 
     def get_last_usage_marker(
         self,

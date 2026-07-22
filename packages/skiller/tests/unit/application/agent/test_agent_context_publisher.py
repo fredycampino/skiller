@@ -115,7 +115,7 @@ def test_agent_context_publisher_publishes_tool_feedback_messages() -> None:
 
 
 def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
-    store = _FakeAgentContextStore()
+    store = _FakeAgentContextStore(estimated_delta_tokens=4)
     run_agent_store = _FakeRunAgentStore()
     run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
         agent_id="agent-1",
@@ -141,10 +141,22 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         "message_type": "final",
         "text": "Done.",
         "usage": usage,
-        "delta_tokens": 10,
+        "delta_tokens": 4,
         "window_start_sequence": 1,
         "window_base": True,
     }
+    assert store.estimate_delta_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_start_sequence": 1,
+            "last_marker_sequence": 0,
+            "payload": AgentAssistantMessagePayload(
+                turn_id="turn-1",
+                message_type=AgentAssistantMessageType.FINAL,
+                text="Done.",
+            ),
+        }
+    ]
     assert store.compact_delta_calls == [
         {
             "context_id": "ctx-1",
@@ -162,7 +174,7 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
             window_start_sequence=1,
             window_base=False,
         ),
-        estimated_delta_tokens=690,
+        estimated_delta_tokens=90_000,
     )
     run_agent_store = _FakeRunAgentStore()
     run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
@@ -198,8 +210,85 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
             ),
         }
     ]
-    assert store.calls[-1]["delta_tokens"] == 690
+    assert store.calls[-1]["delta_tokens"] == 90_000
     assert store.calls[-1]["window_start_sequence"] == 3
+    assert store.calls[-1]["window_base"] is True
+
+
+def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
+    store = _FakeAgentContextStore(
+        marker=AgentContextUsageMarker(
+            sequence=10,
+            prompt_tokens=500,
+            delta_tokens=200,
+            window_start_sequence=1,
+            window_base=False,
+        ),
+        estimated_delta_tokens=99,
+    )
+    run_agent_store = _FakeRunAgentStore()
+    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
+        agent_id="agent-1",
+        context_id="ctx-1",
+        window_start_sequence=1,
+        window_base=False,
+    )
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    request = _tool_request()
+
+    publisher.publish_final_assistant_message(
+        context=request.context,
+        turn_id="turn-2",
+        text="More.",
+        usage=LLMUsage(prompt_tokens=620, completion_tokens=5, total_tokens=625),
+    )
+
+    assert store.estimate_delta_calls == []
+    assert store.calls[-1]["delta_tokens"] == 120
+    assert store.calls[-1]["window_base"] is False
+
+
+def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease() -> None:
+    store = _FakeAgentContextStore(
+        marker=AgentContextUsageMarker(
+            sequence=10,
+            prompt_tokens=500,
+            delta_tokens=200,
+            window_start_sequence=1,
+            window_base=False,
+        ),
+        estimated_delta_tokens=33,
+    )
+    run_agent_store = _FakeRunAgentStore()
+    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
+        agent_id="agent-1",
+        context_id="ctx-1",
+        window_start_sequence=1,
+        window_base=False,
+    )
+    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    request = _tool_request()
+
+    publisher.publish_final_assistant_message(
+        context=request.context,
+        turn_id="turn-2",
+        text="Short.",
+        usage=LLMUsage(prompt_tokens=300, completion_tokens=5, total_tokens=305),
+    )
+
+    assert store.estimate_delta_calls == [
+        {
+            "context_id": "ctx-1",
+            "window_start_sequence": 1,
+            "last_marker_sequence": 10,
+            "payload": AgentAssistantMessagePayload(
+                turn_id="turn-2",
+                message_type=AgentAssistantMessageType.FINAL,
+                text="Short.",
+            ),
+        }
+    ]
+    assert store.calls[-1]["delta_tokens"] == 33
     assert store.calls[-1]["window_base"] is True
 
 

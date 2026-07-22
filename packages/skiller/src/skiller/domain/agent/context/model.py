@@ -107,6 +107,26 @@ class AgentContextUsageMarker:
 
 
 @dataclass(frozen=True)
+class AgentContextWindowEntries:
+    entries: list[AgentContextEntry]
+    estimated_tokens: int
+
+    def __iter__(self):  # noqa: ANN204
+        return iter(self.entries)
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __getitem__(self, index: int) -> AgentContextEntry:
+        return self.entries[index]
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, list):
+            return self.entries == other
+        return super().__eq__(other)
+
+
+@dataclass(frozen=True)
 class AgentContextCompactDeltaUpdate:
     sequence: int
     delta_compact_tokens: int

@@ -115,6 +115,11 @@ class RuntimeController:
         result = self.agent_service.get_agent_stats(final_run_id, final_agent_id)
         return self.agent_mapper.to_stats_dict(result)
 
+    def agent_context(self, run_id: str, agent_id: str) -> dict[str, Any]:
+        final_run_id, final_agent_id = self.agent_mapper.to_context_input(run_id, agent_id)
+        result = self.agent_service.list_agent_context(final_run_id, final_agent_id)
+        return self.agent_mapper.to_context_dict(result)
+
     def agent_models(self, run_id: str) -> dict[str, Any]:
         final_run_id = self.agent_mapper.to_models_input(run_id)
         result = self.agent_service.list_agent_models(final_run_id)

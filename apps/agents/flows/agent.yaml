@@ -1,11 +1,15 @@
 name: flows
 description: "Agentic flow specialist for Skiller"
 version: "0.1"
-start: ask_user
+start: intro
 
 inputs: {}
 
 steps:
+  - notify: intro
+    message: "Flows helps you create, review, and fix agentic flows. Write a task to start."
+    next: ask_user
+
   - wait_input: ask_user
     prompt: "Write a task"
     next: decide_exit
@@ -25,7 +29,7 @@ steps:
     tools:
       - shell
       - files
-    max_turns: 30
+    max_turns: 50
     next: ask_user
 
   - notify: done

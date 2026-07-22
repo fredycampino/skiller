@@ -9,6 +9,12 @@ from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentResult,
     InterruptAgentStatus,
 )
+from skiller.application.use_cases.agent.list_agent_context import (
+    AgentContextEntryItem,
+    AgentContextWindow,
+    ListAgentContextResult,
+    ListAgentContextStatus,
+)
 from skiller.application.use_cases.agent.list_agent_models import (
     AgentModelItem,
     AgentModelsProviderItem,
@@ -102,6 +108,73 @@ def test_mapper_serializes_select_agent_model_result() -> None:
         "model": "gpt-5.4",
         "status": "OK",
         "ok": True,
+    }
+
+
+def test_mapper_serializes_agent_context_result_without_payload() -> None:
+    mapper = AgentServiceMapper()
+    result = ListAgentContextResult(
+        status=ListAgentContextStatus.OK,
+        run_id="run-1",
+        agent_id="support",
+        context_id="ctx-1",
+        window=AgentContextWindow(
+            mode="compact",
+            entries=1,
+            start_sequence=3,
+            end_sequence=3,
+            limit_tokens=80000,
+            estimated_tokens=50,
+            payload_bytes=128,
+            keep_last=10,
+        ),
+        entries=(
+            AgentContextEntryItem(
+                sequence=3,
+                role="assistant",
+                type="final",
+                delta_tokens=50,
+                delta_compact_tokens=12,
+                payload_bytes=128,
+                usage=True,
+                prunable=False,
+                window_start_sequence=1,
+                window_base=True,
+            ),
+        ),
+    )
+
+    assert mapper.to_context_input(" run-1 ", " support ") == ("run-1", "support")
+    assert mapper.to_context_dict(result) == {
+        "run_id": "run-1",
+        "agent_id": "support",
+        "status": "OK",
+        "ok": True,
+        "context_id": "ctx-1",
+        "request_context": {
+            "mode": "compact",
+            "entries": 1,
+            "start_sequence": 3,
+            "end_sequence": 3,
+            "limit_tokens": 80000,
+            "estimated_tokens": 50,
+            "payload_bytes": 128,
+            "keep_last": 10,
+        },
+        "entries": [
+            {
+                "sequence": 3,
+                "role": "assistant",
+                "type": "final",
+                "delta_tokens": 50,
+                "delta_compact_tokens": 12,
+                "payload_bytes": 128,
+                "usage": True,
+                "prunable": False,
+                "window_start_sequence": 1,
+                "window_base": True,
+            },
+        ],
     }
 
 

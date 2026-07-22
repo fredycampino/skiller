@@ -19,6 +19,18 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.21 - 2026-07-23
+
+### Added
+- Add agent context listing use case, service mapping, CLI/runtime exposure, and tests.
+
+### Changed
+- Persist and expose estimated context window tokens through agent context storage and request mapping.
+- Update LM Studio auth and flow fixtures for current agent configuration.
+
+### Notes
+- Includes the agent context window handling update from PR #100.
+
 ## 0.1.0-beta.20 - 2026-07-13
 
 ### Added

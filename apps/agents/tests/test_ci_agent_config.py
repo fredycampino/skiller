@@ -23,7 +23,10 @@ def test_ci_shell_config_is_restricted() -> None:
 
     shell_config = config["tools"]["shell"]
 
-    assert shell_config["allowed_paths"] == ["../../.."]
+    assert shell_config["allowed_paths"] == [
+        "../../..",
+        "~/develop/py/skiller/apps",
+    ]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allowed_commands"] == [
         "pwd",
@@ -57,9 +60,11 @@ def test_ci_files_config_allows_repo_read_write() -> None:
         "read": [
             "../../..",
             "~/.skiller/settings/",
+            "~/develop/py/skiller/apps",
         ],
         "write": [
             "../../..",
+            "~/develop/py/skiller/apps",
         ],
         "all": [],
     }

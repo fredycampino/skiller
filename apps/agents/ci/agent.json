@@ -6,7 +6,8 @@
   "tools": {
     "shell": {
       "allowed_paths": [
-        "../../.."
+        "../../..",
+        "~/develop/py/skiller/apps"
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,
@@ -34,10 +35,12 @@
     "files": {
       "read": [
         "../../..",
-        "~/.skiller/settings/"
+        "~/.skiller/settings/",
+        "~/develop/py/skiller/apps"
       ],
       "write": [
-        "../../.."
+        "../../..",
+        "~/develop/py/skiller/apps"
       ],
       "all": []
     }

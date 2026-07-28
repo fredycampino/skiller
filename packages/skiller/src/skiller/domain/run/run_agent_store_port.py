@@ -11,6 +11,8 @@ class RunAgentStorePort(Protocol):
         agent_id: str,
     ) -> RunAgent | None: ...
 
+    def get_first_agent(self, *, run_id: str) -> RunAgent | None: ...
+
     def attach_agent(
         self,
         *,

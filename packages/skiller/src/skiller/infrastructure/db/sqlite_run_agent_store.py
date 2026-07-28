@@ -17,6 +17,9 @@ class SqliteRunAgentStore(RunAgentStorePort):
     ) -> RunAgent | None:
         return self.datasource.get_agent(run_id=run_id, agent_id=agent_id)
 
+    def get_first_agent(self, *, run_id: str) -> RunAgent | None:
+        return self.datasource.get_first_agent(run_id=run_id)
+
     def attach_agent(
         self,
         *,

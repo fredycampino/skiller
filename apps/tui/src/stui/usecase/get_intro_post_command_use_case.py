@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from stui.usecase.normalize_command_use_case import Command, CommandKind
 
-ONBOARDING_INTRO_RUN_ARG = "onboarding/intro"
+INFO_INTRO_RUN_ARG = "info/info"
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class GetIntroPostCommandUseCase:
             command=Command(
                 kind=CommandKind.RUN,
                 name="/run",
-                raw_text=f"/run {ONBOARDING_INTRO_RUN_ARG}",
-                args_text=ONBOARDING_INTRO_RUN_ARG,
+                raw_text=f"/run {INFO_INTRO_RUN_ARG}",
+                args_text=INFO_INTRO_RUN_ARG,
             )
         )

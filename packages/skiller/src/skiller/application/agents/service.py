@@ -2,6 +2,10 @@ from skiller.application.use_cases.agent.get_agent_stats import (
     GetAgentStatsResult,
     GetAgentStatsUseCase,
 )
+from skiller.application.use_cases.agent.get_agent_tools import (
+    GetAgentToolsResult,
+    GetAgentToolsUseCase,
+)
 from skiller.application.use_cases.agent.interrupt_agent import (
     InterruptAgentResult,
     InterruptAgentUseCase,
@@ -27,12 +31,14 @@ class AgentApplicationService:
         get_agent_stats_use_case: GetAgentStatsUseCase,
         list_agent_context_use_case: ListAgentContextUseCase,
         list_agent_models_use_case: ListAgentModelsUseCase,
+        get_agent_tools_use_case: GetAgentToolsUseCase,
         select_agent_model_use_case: SelectAgentModelUseCase,
     ) -> None:
         self.interrupt_agent_use_case = interrupt_agent_use_case
         self.get_agent_stats_use_case = get_agent_stats_use_case
         self.list_agent_context_use_case = list_agent_context_use_case
         self.list_agent_models_use_case = list_agent_models_use_case
+        self.get_agent_tools_use_case = get_agent_tools_use_case
         self.select_agent_model_use_case = select_agent_model_use_case
 
     def interrupt_agent(self, run_id: str) -> InterruptAgentResult:
@@ -46,6 +52,9 @@ class AgentApplicationService:
 
     def list_agent_models(self, run_id: str) -> ListAgentModelsResult:
         return self.list_agent_models_use_case.execute(run_id)
+
+    def get_agent_tools(self, run_id: str) -> GetAgentToolsResult:
+        return self.get_agent_tools_use_case.execute(run_id)
 
     def select_agent_model(
         self,

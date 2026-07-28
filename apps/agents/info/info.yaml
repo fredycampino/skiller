@@ -1,4 +1,4 @@
-name: onboarding/intro
+name: info/info
 description: "First-use intro after LLM provider setup"
 version: "0.1"
 start: welcome

@@ -125,6 +125,11 @@ class RuntimeController:
         result = self.agent_service.list_agent_models(final_run_id)
         return self.agent_mapper.to_models_dict(result)
 
+    def agent_tools(self, run_id: str) -> dict[str, Any]:
+        final_run_id = self.agent_mapper.to_tools_input(run_id)
+        result = self.agent_service.get_agent_tools(final_run_id)
+        return self.agent_mapper.to_tools_dict(result)
+
     def agent_model(self, run_id: str, provider: str, model: str) -> dict[str, Any]:
         final_run_id, final_provider, final_model = self.agent_mapper.to_select_model_input(
             run_id,

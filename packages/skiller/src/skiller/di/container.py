@@ -37,6 +37,7 @@ from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsUseCase
+from skiller.application.use_cases.agent.get_agent_tools import GetAgentToolsUseCase
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
 from skiller.application.use_cases.agent.list_agent_context import ListAgentContextUseCase
 from skiller.application.use_cases.agent.list_agent_models import ListAgentModelsUseCase
@@ -277,6 +278,12 @@ def build_runtime_container(
         agent_config=agent_config,
         skill_runner=skill_runner,
     )
+    get_agent_tools_use_case = GetAgentToolsUseCase(
+        run_store=store,
+        run_agent_store=run_agent_store,
+        agent_config=agent_config,
+        skill_runner=skill_runner,
+    )
     select_agent_model_use_case = SelectAgentModelUseCase(
         run_store=store,
         agent_config=agent_config,
@@ -431,6 +438,7 @@ def build_runtime_container(
         get_agent_stats_use_case=get_agent_stats_use_case,
         list_agent_context_use_case=list_agent_context_use_case,
         list_agent_models_use_case=list_agent_models_use_case,
+        get_agent_tools_use_case=get_agent_tools_use_case,
         select_agent_model_use_case=select_agent_model_use_case,
     )
     agent_mapper = AgentServiceMapper()

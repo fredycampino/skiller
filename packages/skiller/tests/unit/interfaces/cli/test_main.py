@@ -21,6 +21,7 @@ class _FakeController:
         self.interrupt_agent_calls: list[str] = []
         self.agent_model_calls: list[dict[str, str]] = []
         self.agent_stats_calls: list[dict[str, str]] = []
+        self.agent_tools_calls: list[str] = []
         self.action_done_calls: list[dict[str, str]] = []
         self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
@@ -130,6 +131,19 @@ class _FakeController:
                     "limit_tokens": 80000,
                     "capacity_tokens": 100000,
                 },
+            },
+        }
+
+    def agent_tools(self, run_id: str) -> dict[str, object]:
+        self.agent_tools_calls.append(run_id)
+        return {
+            "run_id": run_id,
+            "agent_id": "support_agent",
+            "status": "OK",
+            "ok": True,
+            "tools": {
+                "shell": {"enabled": True, "allowed_paths": ["/workspace"]},
+                "files": {"enabled": False},
             },
         }
 
@@ -912,6 +926,11 @@ def test_webhook_list_and_remove_are_controller_passthroughs(
         (
             ["agent", "stats", "run-1", "--agent", "support_agent"],
             "agent_stats_calls",
+            "OK",
+        ),
+        (
+            ["agent", "tools", "run-1"],
+            "agent_tools_calls",
             "OK",
         ),
     ],

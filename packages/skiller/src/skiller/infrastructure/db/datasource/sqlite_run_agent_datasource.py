@@ -7,12 +7,7 @@ from skiller.infrastructure.db.sqlite_run_agent_mapper import (
 
 
 class SqliteRunAgentDatasource(SqliteConnectionSource):
-    def get_agent(
-        self,
-        *,
-        run_id: str,
-        agent_id: str,
-    ) -> RunAgent | None:
+    def _get_agents(self, *, run_id: str) -> dict[str, RunAgent]:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -23,9 +18,21 @@ class SqliteRunAgentDatasource(SqliteConnectionSource):
                 (run_id,),
             ).fetchone()
         if row is None:
-            return None
-        agents = agents_from_json(row["agents_json"])
+            return {}
+        return agents_from_json(row["agents_json"])
+
+    def get_agent(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+    ) -> RunAgent | None:
+        agents = self._get_agents(run_id=run_id)
         return agents.get(agent_id)
+
+    def get_first_agent(self, *, run_id: str) -> RunAgent | None:
+        agents = self._get_agents(run_id=run_id)
+        return next(iter(agents.values()), None)
 
     def attach_agent(
         self,

@@ -6,29 +6,17 @@ Use this as a short user manual for Skiller. Keep answers concrete and point to 
 
 Skiller runs YAML-defined workflows. A workflow is made of steps. A run is one execution of a workflow. An agent step lets an LLM work with configured tools.
 
-Reference: `packages/skiller/docs/architecture/architecture.md`
-
-### Basic workflow
-
-1. Choose or create a flow YAML.
-2. Run the flow with `skiller run ...`.
-3. List executions with `skiller runs`.
-4. Inspect a run with `skiller logs <run_id>`.
-5. Inspect agent tools with `skiller agent tools <run_id>`.
-
-Use `--help` on each command for exact flags.
-
-References:
-- `packages/skiller/docs/flows/flow-schema.md`
-- `packages/skiller/docs/steps/agent.md`
 
 ### Essential commands
+Use `--help` on each command for exact flags.
 
 - `skiller run ...`: start a flow.
-- `skiller runs`: list known runs in the configured DB.
-- `skiller logs <run_id>`: show run logs/transcript.
-- `skiller agent tools <run_id>`: show tools available to the run agent.
+- `skiller status ...`: status run.
+- `skiller logs ...`: show run logs/transcript.
+- `skiller agent..`: show tools available to the run agent.
 - `skiller --help` and `skiller <command> --help`: command-specific usage.
+
+Command reference: `<path-docs>/cli/commands/`
 
 ### Configuration basics
 
@@ -54,18 +42,8 @@ Common fields:
 - `tools`: tools enabled for the agent step.
 - `next`: next step after completion.
 
-Reference: `packages/skiller/docs/flows/flow-schema.md`
+Reference: `<path-docs>/flows/flow-schema.md`
 
-### Reusable instructions
-
-Use `instructions` for reusable system prompt fragments.
-
-Examples:
-- `"skiller-user"`: packaged instruction from `apps/instructions/skiller-user.md`.
-- `"solve-task-style"`: packaged instruction from `apps/instructions/solve-task-style.md`.
-- `"./repo-rules.md"`: local file relative to the flow YAML.
-
-Reference: `packages/skiller/docs/steps/agent.md`
 
 ### Quick troubleshooting
 
@@ -77,8 +55,8 @@ Reference: `packages/skiller/docs/steps/agent.md`
 
 ### Documentation map
 
-- Flow schema: `packages/skiller/docs/flows/flow-schema.md`
-- Agent step: `packages/skiller/docs/steps/agent.md`
-- Runtime architecture: `packages/skiller/docs/architecture/architecture.md`
-- Runtime development rules: `packages/skiller/docs/architecture/dev-rules.md`
-- Runtime code style: `packages/skiller/docs/architecture/code-style.md`
+- Flow schema: `<path-docs>/flows/flow-schema.md`
+- Agent step: `<path-docs>/steps/agent.md`
+- Runtime architecture: `<path-docs>/architecture/architecture.md`
+- Runtime development rules: `<path-docs>/architecture/dev-rules.md`
+- Runtime code style: `<path-docs>/architecture/code-style.md`

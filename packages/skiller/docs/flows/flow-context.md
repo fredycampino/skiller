@@ -54,12 +54,24 @@ Prefer `output_value("<step_id>")` over direct access to
 ## Flow
 
 Use `flow.dir` to read the directory that contains the current flow file.
-This is useful for helper files shipped next to a flow.
+Use `flow.run_id` to read the id of the current flow run.
 
 ```yaml
 steps:
   - shell: run_helper
-    command: python3 "{{flow.dir}}/helper.py"
+    command: python3 "{{flow.dir}}/helper.py" --run-id "{{flow.run_id}}"
+```
+
+## Runtime
+
+Use `runtime.python` to read the absolute path of the Python interpreter that
+runs Skiller. Use it for Python helpers shipped alongside a flow instead of
+resolving `python` or `python3` from `PATH`.
+
+```yaml
+steps:
+  - shell: run_helper
+    command: '"{{runtime.python}}" "{{flow.dir}}/helper.py" --run-id "{{flow.run_id}}"'
 ```
 
 ## Step Executions

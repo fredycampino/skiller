@@ -80,6 +80,8 @@ Template access:
 {{output_value("run_tests").stdout}}
 {{output_value("run_tests").exit_code}}
 {{flow.dir}}
+{{flow.run_id}}
+{{runtime.python}}
 ```
 
 Use `output_value(...)` instead of reading `step_executions.<step_id>.output.value...` directly.

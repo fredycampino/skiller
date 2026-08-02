@@ -36,6 +36,25 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
     assert step.next == "done"
 
 
+def test_agent_step_mapper_appends_instructions_after_system() -> None:
+    step = AgentStepMapper().to_agent(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="support_agent",
+            step_type=StepType.AGENT,
+            step={
+                "system": "Be useful.",
+                "instructions": ["Ask first.", "Format compactly."],
+                "task": "Help user",
+            },
+            context=RunContext(inputs={}, step_executions={}),
+        )
+    )
+
+    assert step.system == "Be useful.\n\nAsk first.\n\nFormat compactly."
+
+
 @pytest.mark.parametrize(
     ("body", "expected"),
     [
@@ -52,6 +71,10 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
         (
             {"system": "Be useful.", "task": "x", "tools": "notify"},
             "requires list tools",
+        ),
+        (
+            {"system": "Be useful.", "task": "x", "instructions": "questions"},
+            "requires list instructions",
         ),
         (
             {"system": "Be useful.", "task": "x", "tools": ["notify", ""]},

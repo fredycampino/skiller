@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepUseCase,
+    _packaged_instruction_dir_candidates,
 )
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.run.run_context_model import RunContext
@@ -164,6 +167,95 @@ def test_resolves_agent_system_file() -> None:
     assert result.current_step is not None
     assert result.current_step.step["system"] == "Resolved system prompt"
     assert skill_runner.read_skill_file_calls == [("internal", "demo", "./system.md")]
+
+
+def test_resolves_agent_local_instructions() -> None:
+    run = _build_run(current="support_agent")
+    run.snapshot = {
+        "start": "support_agent",
+        "steps": [
+            {
+                "agent": "support_agent",
+                "system": "Be useful.",
+                "instructions": ["./base.md", "../shared/rules.md"],
+                "task": "Help user",
+            }
+        ],
+    }
+    skill_runner = _FakeSkillRunner({"steps": []})
+    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=skill_runner)
+
+    result = use_case.execute("run-1")
+
+    assert result.status == CurrentStepStatus.READY
+    assert result.current_step is not None
+    assert result.current_step.step["instructions"] == [
+        "Resolved system prompt",
+        "Resolved system prompt",
+    ]
+    assert skill_runner.read_skill_file_calls == [
+        ("internal", "demo", "./base.md"),
+        ("internal", "demo", "../shared/rules.md"),
+    ]
+
+
+def test_packaged_instruction_candidates_include_wheel_layout() -> None:
+    module_path = Path(
+        "/venv/lib/python3.11/site-packages/skiller/application/use_cases/render/render_current_step.py"
+    )
+
+    candidates = _packaged_instruction_dir_candidates(module_path)
+
+    assert Path("/venv/lib/python3.11/site-packages/apps/instructions") in candidates
+
+
+def test_resolves_agent_packaged_instructions() -> None:
+    run = _build_run(current="support_agent")
+    run.snapshot = {
+        "start": "support_agent",
+        "steps": [
+            {
+                "agent": "support_agent",
+                "system": "Be useful.",
+                "instructions": ["solve-task-style", "response-style"],
+                "task": "Help user",
+            }
+        ],
+    }
+    skill_runner = _FakeSkillRunner({"steps": []})
+    use_case = RenderCurrentStepUseCase(store=_FakeStore(run), skill_runner=skill_runner)
+
+    result = use_case.execute("run-1")
+
+    assert result.status == CurrentStepStatus.READY
+    assert result.current_step is not None
+    instructions = result.current_step.step["instructions"]
+    assert isinstance(instructions, list)
+    assert instructions[0].startswith("## Solve Task Workflow")
+    assert instructions[1].startswith("## Response Style")
+    assert skill_runner.read_skill_file_calls == []
+
+
+@pytest.mark.parametrize("instructions", ["solve-task-style", [""], ["../ok.md", "bad/name"]])
+def test_rejects_invalid_agent_instructions(instructions: object) -> None:
+    run = _build_run(current="support_agent")
+    run.snapshot = {
+        "start": "support_agent",
+        "steps": [
+            {
+                "agent": "support_agent",
+                "system": "Be useful.",
+                "instructions": instructions,
+                "task": "Help user",
+            }
+        ],
+    }
+    use_case = RenderCurrentStepUseCase(
+        store=_FakeStore(run), skill_runner=_FakeSkillRunner({"steps": []})
+    )
+
+    with pytest.raises(ValueError, match="instructions|instruction package names"):
+        use_case.execute("run-1")
 
 
 def test_returns_ready_with_assign_step_type() -> None:

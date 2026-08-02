@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,9 @@ class FilesystemRunnerPort(RunnerPort):
                 ref=flow.ref,
             ).resolve()
         )
+        flow_context["run_id"] = flow.id
         render_context["flow"] = flow_context
+        render_context["runtime"] = {"python": sys.executable}
         render_context.setdefault("env", dict(os.environ))
         return self._render_value(rendered, render_context)
 

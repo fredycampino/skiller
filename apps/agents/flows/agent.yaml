@@ -25,6 +25,10 @@ steps:
   - agent: flows_agent
     system:
       file: "./system.md"
+    instructions:
+      - "solve-task-style"
+      - "create-flows"
+      - "response-style"
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell

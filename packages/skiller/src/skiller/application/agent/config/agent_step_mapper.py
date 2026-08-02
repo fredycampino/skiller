@@ -12,9 +12,12 @@ class AgentStepMapper:
         if "context_id" in current_step.step:
             raise ValueError(f"Step '{current_step.step_id}' does not support context_id")
 
+        system = self._required_string(current_step, "system")
+        instructions = self._instructions(current_step, current_step.step.get("instructions"))
+
         return AgentStep(
             id=current_step.step_id,
-            system=self._required_string(current_step, "system"),
+            system=self._join_system_parts(system, instructions),
             task=self._required_string(current_step, "task"),
             max_turns=self._optional_positive_int(current_step, "max_turns"),
             max_tool_calls=self._optional_positive_int(current_step, "max_tool_calls"),
@@ -51,6 +54,24 @@ class AgentStepMapper:
         if value <= 0:
             raise ValueError(f"Step '{current_step.step_id}' requires positive {field}")
         return value
+
+    def _instructions(self, current_step: CurrentStep, value: Any) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if not isinstance(value, list):
+            raise ValueError(f"Step '{current_step.step_id}' requires list instructions")
+
+        instructions: list[str] = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(
+                    f"Step '{current_step.step_id}' requires non-empty instructions"
+                )
+            instructions.append(item.strip())
+        return tuple(instructions)
+
+    def _join_system_parts(self, system: str, instructions: tuple[str, ...]) -> str:
+        return "\n\n".join((system, *instructions))
 
     def _tools(self, current_step: CurrentStep, value: Any) -> tuple[str, ...]:
         if value is None:

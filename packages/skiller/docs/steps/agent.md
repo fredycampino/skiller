@@ -32,7 +32,23 @@ Minimal:
   next: finish
 ```
 
-System prompt from a file:
+System prompt with reusable instructions:
+
+```yaml
+- agent: ci_agent
+  system: |
+    Follow the CI workflow for this step.
+  instructions:
+    - "solve-task-style"
+    - "response-style"
+    - "./repo-rules.md"
+  task: '{{output_value("ask_user").payload.text}}'
+  tools:
+    - shell
+  next: ask_user
+```
+
+Legacy system prompt from a file:
 
 ```yaml
 - agent: ci_agent
@@ -48,14 +64,19 @@ System prompt from a file:
 
 - `system` (required): step-specific instruction merged with a short runtime base system supplied by Skiller on every turn.
   - string block: inline step-specific system prompt
-  - `{file: "./system.md"}`: load the prompt from a UTF-8 file next to the flow file
+  - `{file: "./system.md"}`: legacy form that loads the prompt from a UTF-8 file next to the flow file
+- `instructions` (optional): ordered reusable instruction sources appended after `system`.
+  - `"solve-task-style"`: packaged instruction shipped with Skiller
+  - `"./repo-rules.md"`: local UTF-8 file relative to the flow file
 - `task` (required): user request for this run; templates are allowed.
 - `tools` (optional): allowlist of tool names for this step.
 - `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `loop.max_turns` from `agent.json`.
 - `next` (optional): next step after the agent step completes normally.
 
-`system.file` must be a relative path inside the flow directory. Absolute paths
-and paths escaping the flow directory are rejected.
+Local instruction files and legacy `system.file` must be relative paths inside
+the flow directory. Absolute paths and paths escaping the flow directory are
+rejected. Packaged instruction names must be slugs such as `solve-task-style` or
+`response-style`.
 
 Runtime-only limits:
 

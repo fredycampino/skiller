@@ -33,8 +33,11 @@ steps:
     default: mono_agent
 
   - agent: mono_agent
-    system:
-      file: "./system.md"
+    system: |
+      You are a concise assistant for this flow.
+    instructions:
+      - "solve-task-style"
+      - "response-style"
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell

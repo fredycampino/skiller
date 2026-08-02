@@ -189,8 +189,12 @@ steps:
 ```yaml
 steps:
   - agent: ci_agent
-    system:
-      file: "./system.md"
+    system: |
+      Follow the CI workflow for this step.
+    instructions:
+      - "solve-task-style"
+      - "response-style"
+      - "./repo-rules.md"
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell
@@ -198,8 +202,9 @@ steps:
     next: ask_user
 ```
 
-`system.file` is resolved relative to the selected YAML file directory. Absolute
-paths and paths escaping that directory are rejected.
+Local `instructions` files and legacy `system.file` are resolved relative to the
+selected YAML file directory. Absolute paths and paths escaping that directory
+are rejected. Packaged instruction names must be slugs such as `solve-task-style`.
 
 ## Validation Rules
 

@@ -10,4 +10,5 @@ def test_wheel_includes_agents_and_docs() -> None:
     ]
 
     assert force_include["apps/agents"] == "apps/agents"
+    assert force_include["apps/instructions"] == "apps/instructions"
     assert force_include["packages/skiller/docs"] == "skiller/docs"

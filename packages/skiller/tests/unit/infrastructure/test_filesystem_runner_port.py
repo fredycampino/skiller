@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ pytestmark = pytest.mark.unit
 
 @dataclass(frozen=True)
 class _FlowReference:
+    id: str
     source: str
     ref: str
 
@@ -27,6 +29,7 @@ def _build_render_runner(tmp_path) -> tuple[FilesystemRunnerPort, _FlowReference
         encoding="utf-8",
     )
     return FilesystemRunnerPort(flows_dir=agents_dir), _FlowReference(
+        id="run-demo",
         source="internal",
         ref="demo",
     )
@@ -291,10 +294,50 @@ def test_render_step_can_resolve_internal_flow_directory(tmp_path) -> None:  # n
             "command": 'python3 "{{flow.dir}}/minimax_auth.py" api-key-file',
         },
         {"inputs": {}, "step_executions": {}},
-        flow=_FlowReference(source="internal", ref="auths/minimax"),
+        flow=_FlowReference(
+            id="run-minimax",
+            source="internal",
+            ref="auths/minimax",
+        ),
     )
 
     assert rendered["command"] == f'python3 "{agent_dir}/minimax_auth.py" api-key-file'
+
+
+def test_render_step_can_resolve_flow_run_id(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+
+    rendered = runner.render(
+        {
+            "run_id": "{{flow.run_id}}",
+            "command": "echo {{flow.run_id}}",
+        },
+        {"inputs": {}, "step_executions": {}},
+        flow=flow,
+    )
+
+    assert rendered == {
+        "run_id": "run-demo",
+        "command": "echo run-demo",
+    }
+
+
+def test_render_step_can_resolve_runtime_python(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+
+    rendered = runner.render(
+        {
+            "python": "{{runtime.python}}",
+            "command": '"{{runtime.python}}" "{{flow.dir}}/helper.py"',
+        },
+        {"inputs": {}, "runtime": {"python": "untrusted-python"}, "step_executions": {}},
+        flow=flow,
+    )
+
+    assert rendered == {
+        "python": sys.executable,
+        "command": f'"{sys.executable}" "{tmp_path}/agents/demo/helper.py"',
+    }
 
 
 def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa: ANN001
@@ -310,7 +353,11 @@ def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa:
             "command": 'python3 "{{flow.dir}}/helper.py" check',
         },
         {"inputs": {}, "step_executions": {}},
-        flow=_FlowReference(source="file", ref=str(flow_file)),
+        flow=_FlowReference(
+            id="run-external",
+            source="file",
+            ref=str(flow_file),
+        ),
     )
 
     assert rendered["command"] == f'python3 "{tmp_path}/helper.py" check'

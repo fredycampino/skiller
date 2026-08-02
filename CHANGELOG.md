@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.22 - 2026-08-02
+
+### Added
+- Add the `skiller agent tools <run_id>` command to inspect agent tool configuration.
+- Add reusable agent `instructions` and packaged built-in instruction guides.
+
+### Changed
+- Allow CI agent configuration to access the packaged `apps` path.
+- Ask agents to reply in the user's standard language.
+
+### Notes
+- Includes PR #102, PR #103, and PR #104.
+
 ## 0.1.0-beta.21 - 2026-07-23
 
 ### Added

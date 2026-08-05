@@ -340,6 +340,18 @@ def test_render_step_can_resolve_runtime_python(tmp_path) -> None:  # noqa: ANN0
     }
 
 
+def test_render_step_can_resolve_runtime_venv(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+
+    rendered = runner.render(
+        {"allowed_paths": ["{{runtime.venv}}"]},
+        {"inputs": {}, "step_executions": {}},
+        flow=flow,
+    )
+
+    assert rendered == {"allowed_paths": [str(Path(sys.prefix).resolve())]}
+
+
 def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa: ANN001
     flow_file = tmp_path / "external.yaml"
     flow_file.write_text(

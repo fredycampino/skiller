@@ -4,7 +4,14 @@ from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_minimax import (
+    MINIMAX_BASE_URL,
+    MiniMaxLLMRequest,
+)
+from skiller.domain.agent.llm.provider_moonshot import (
+    MOONSHOT_BASE_URL,
+    MoonshotLLMRequest,
+)
 from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockProvider,
     AgentCodexProvider,
@@ -12,6 +19,7 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentLLMProvider,
     AgentLMStudioProvider,
     AgentMiniMaxProvider,
+    AgentMoonshotProvider,
     AgentNullProvider,
 )
 from skiller.domain.agent.llm.request import LLMRequest
@@ -33,12 +41,13 @@ from skiller.infrastructure.llm.openai.openai_request_logger import (
     OpenAIFileLLMRequestLogger,
 )
 
-MINIMAX_BASE_URL = "https://api.minimax.io/v1"
-
 
 class LLMClientFactory:
     @overload
     def resolve(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
+
+    @overload
+    def resolve(self, provider: AgentMoonshotProvider) -> LLMPort[MoonshotLLMRequest]: ...
 
     @overload
     def resolve(self, provider: AgentLMStudioProvider) -> LLMPort[LMStudioLLMRequest]: ...
@@ -65,6 +74,8 @@ class LLMClientFactory:
             return FakeLLMPort(model=provider.model)
         if isinstance(provider, AgentMiniMaxProvider):
             return self._minimax_client(provider)
+        if isinstance(provider, AgentMoonshotProvider):
+            return self._moonshot_client(provider)
         if isinstance(provider, AgentLMStudioProvider):
             return self._lmstudio_client(provider)
         if isinstance(provider, AgentCodexProvider):
@@ -80,6 +91,15 @@ class LLMClientFactory:
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
             mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
+            request_logger=OpenAIFileLLMRequestLogger(),
+        )
+
+    def _moonshot_client(self, provider: AgentMoonshotProvider) -> OpenAILLMPort:
+        return OpenAILLMPort(
+            api_key=provider.api_key,
+            base_url=MOONSHOT_BASE_URL,
+            timeout_seconds=provider.timeout_seconds,
+            mapper=DefaultOpenAIMapper(),
             request_logger=OpenAIFileLLMRequestLogger(),
         )
 

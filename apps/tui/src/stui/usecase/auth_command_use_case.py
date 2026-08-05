@@ -11,6 +11,7 @@ _AUTH_RUN_ARGS_BY_PROVIDER = {
     "codex": "auths/codex",
     "minimax": "auths/minimax",
     "bedrock": "auths/bedrock",
+    "moonshot": "auths/moonshot",
 }
 
 

@@ -749,6 +749,7 @@ def test_prompt_enter_applies_auth_command_completion_and_shows_params() -> None
             "codex",
             "minimax",
             "bedrock",
+            "moonshot",
         ]
 
     asyncio.run(run())
@@ -992,7 +993,8 @@ def test_console_screen_viewmodel_rejects_unknown_auth_provider() -> None:
 
         assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
         assert viewmodel.state.view_status.message == (
-            "Unknown auth provider. Use /auth, /auth codex, /auth minimax, or /auth bedrock."
+            "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
+            "/auth bedrock, or /auth moonshot."
         )
         assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
         assert viewmodel.state.transcript.items[0].text == "/auth unknown"

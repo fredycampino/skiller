@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_shell_step import ExecuteShellStepUseCase
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
@@ -27,6 +26,7 @@ pytestmark = pytest.mark.unit
 class _FakeStore:
     def __init__(self) -> None:
         self.updated: list[dict[str, object]] = []
+        self._run: object | None = None
 
     def update_run(self, run_id: str, *, status=None, current=None, context=None) -> None:  # noqa: ANN001
         self.updated.append(
@@ -37,6 +37,11 @@ class _FakeStore:
                 "context": context,
             }
         )
+
+    def get_run(self, run_id: str) -> object:
+        if self._run is None:
+            self._run = _build_run()
+        return self._run
 
 
 class _FakeProcessRunner:
@@ -106,21 +111,29 @@ class _FakeAgentSteeringStore:
         return []
 
 
+class _FakeFlowRunner:
+    def __init__(self, flow_dir: Path) -> None:
+        self.flow_dir = flow_dir
+
+    def resolve_flow_dir(self, source: object, ref: str) -> Path:
+        _ = source
+        assert ref == "moonshot.yaml"
+        return self.flow_dir
+
+
 def _build_use_case(
     *,
     store: _FakeStore | None = None,
     process_runner: _FakeProcessRunner | None = None,
     agent_steering_store: _FakeAgentSteeringStore | None = None,
+    flow_runner: _FakeFlowRunner | None = None,
 ) -> ExecuteShellStepUseCase:
     return ExecuteShellStepUseCase(
         store=store or _FakeStore(),
         shell_tool=ShellProcessTool(shell="/bin/bash"),
-        shell_config=ShellToolRuntimeConfig(
-            definition=ShellProcessTool,
-            allowed_paths=(Path("/workspace"),),
-        ),
         process_runner=process_runner or _FakeProcessRunner(),
         agent_steering_store=agent_steering_store or _FakeAgentSteeringStore(),
+        flow_runner=flow_runner or _FakeFlowRunner(Path.cwd().resolve()),
     )
 
 
@@ -161,7 +174,7 @@ def test_execute_shell_step_moves_current_to_explicit_next() -> None:
     assert process_runner.requests == [
         ToolProcessRequest(
             command=["/bin/bash", "-lc", "printf hello"],
-            cwd="/workspace",
+            cwd=str(Path.cwd().resolve()),
             env={"FOO": "bar"},
             timeout=30,
         )
@@ -357,3 +370,141 @@ def test_execute_shell_step_pops_step_interrupt_while_waiting_for_process() -> N
 
     assert process_runner.interrupt_signal_seen is True
     assert agent_steering_store.popped == [("run-1", SteeringStepInterrupt)]
+
+
+def _build_run() -> object:
+    from skiller.domain.run.run_model import Run
+
+    return Run(
+        id="run-1",
+        source="file",
+        ref="moonshot.yaml",
+        snapshot={},
+        status="RUNNING",
+        current=None,
+        context=RunContext(inputs={}, step_executions={}),
+        created_at="",
+        updated_at="",
+    )
+
+
+def test_execute_shell_step_defaults_allowed_paths_with_flow_dir(tmp_path: Path) -> None:
+    flow_dir = tmp_path / "flows" / "auths"
+    flow_dir.mkdir(parents=True)
+    process_runner = _FakeProcessRunner()
+    use_case = _build_use_case(
+        process_runner=process_runner,
+        flow_runner=_FakeFlowRunner(flow_dir),
+    )
+
+    script = flow_dir / "helper.py"
+    script.write_text("print('ok')", encoding="utf-8")
+    command = f"cat {script} && cd {flow_dir}"
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="run_tests",
+            step_type=StepType.SHELL,
+            step={
+                "command": command,
+                "cwd": ".",
+            },
+            context=RunContext(inputs={}, step_executions={}),
+        )
+    )
+
+    assert result.status == StepExecutionStatus.COMPLETED
+    assert len(process_runner.requests) == 1
+    assert process_runner.requests[0].command == ["/bin/bash", "-lc", command]
+
+
+def test_execute_shell_step_defaults_allow_python_executable(tmp_path: Path) -> None:
+    import sys
+
+    flow_dir = tmp_path / "flows"
+    flow_dir.mkdir(parents=True)
+    process_runner = _FakeProcessRunner()
+    use_case = _build_use_case(
+        process_runner=process_runner,
+        flow_runner=_FakeFlowRunner(flow_dir),
+    )
+
+    python_bin = str(Path(sys.executable).resolve())
+    command = f'"{python_bin}" --version'
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="run_tests",
+            step_type=StepType.SHELL,
+            step={
+                "command": command,
+                "cwd": ".",
+            },
+            context=RunContext(inputs={}, step_executions={}),
+        )
+    )
+
+    assert result.status == StepExecutionStatus.COMPLETED
+
+
+def test_execute_shell_step_runs_env_prefixed_python_heredoc(tmp_path: Path) -> None:
+    import sys
+
+    from skiller.infrastructure.tools.process.default_tool_process import (
+        DefaultToolProcessRunner,
+    )
+
+    flow_dir = tmp_path / "flows" / "auths"
+    flow_dir.mkdir(parents=True)
+    helper = flow_dir / "moonshot_auth.py"
+    helper.write_text("print('auth-helper')", encoding="utf-8")
+    out_dir = flow_dir / "out"
+    out_dir.mkdir()
+
+    python_bin = sys.executable
+    command = f"""set -eu
+
+helper_out="$({python_bin} "{flow_dir}/moonshot_auth.py")"
+
+CONFIG_FILE="{out_dir}/config.json" SECRET_FILE="$helper_out" {python_bin} - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config_file = Path(os.environ["CONFIG_FILE"])
+config_file.write_text(
+    json.dumps({{"secret": os.environ["SECRET_FILE"]}}) + "\\n",
+    encoding="utf-8",
+)
+PY
+"""
+
+    use_case = ExecuteShellStepUseCase(
+        store=_FakeStore(),
+        shell_tool=ShellProcessTool(shell="/bin/bash"),
+        process_runner=DefaultToolProcessRunner(),
+        agent_steering_store=_FakeAgentSteeringStore(),
+        flow_runner=_FakeFlowRunner(flow_dir),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="write_moonshot_config",
+            step_type=StepType.SHELL,
+            step={
+                "command": command,
+                "cwd": ".",
+            },
+            context=RunContext(inputs={}, step_executions={}),
+        )
+    )
+
+    assert result.status == StepExecutionStatus.COMPLETED
+    config_text = (out_dir / "config.json").read_text(encoding="utf-8").strip()
+    assert config_text == '{"secret": "auth-helper"}'

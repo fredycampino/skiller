@@ -87,8 +87,8 @@ def test_autocomplete_use_case_suggests_auth_provider_params() -> None:
 
     assert state is not None
     assert state.query == ""
-    assert [item.label for item in state.items] == ["codex", "minimax", "bedrock"]
-    assert [item.kind for item in state.items] == ["param", "param", "param"]
+    assert [item.label for item in state.items] == ["codex", "minimax", "bedrock", "moonshot"]
+    assert [item.kind for item in state.items] == ["param", "param", "param", "param"]
     assert state.replace_from == 6
     assert state.replace_to == 6
 
@@ -97,8 +97,9 @@ def test_autocomplete_use_case_suggests_auth_provider_params() -> None:
     ("text", "label"),
     [
         ("/auth c", "codex"),
-        ("/auth m", "minimax"),
+        ("/auth mi", "minimax"),
         ("/auth b", "bedrock"),
+        ("/auth mo", "moonshot"),
     ],
 )
 def test_autocomplete_use_case_filters_auth_provider_params(

@@ -20,16 +20,18 @@ on_error:
 
 steps:
   - shell: check_codex_credentials
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
-      credentials_file="$(python3 "{{flow.dir}}/codex_auth.py" credentials-file)"
-      if verify_output="$(python3 "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}" 2>&1)"; then
+      credentials_file="$({{runtime.python}} "{{flow.dir}}/codex_auth.py" credentials-file)"
+      if verify_output="$({{runtime.python}} "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}" 2>&1)"; then
         printf '%s' ready
         exit 0
       fi
 
-      python3 "{{flow.dir}}/codex_auth.py" cleanup-authorization
+      {{runtime.python}} "{{flow.dir}}/codex_auth.py" cleanup-authorization
       printf '%s' missing
     cwd: .
     timeout: 15
@@ -60,14 +62,20 @@ steps:
     next: prepare_authorization
 
   - shell: prepare_authorization
-    command: python3 "{{flow.dir}}/codex_auth.py" prepare
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" prepare
     cwd: .
     timeout: 15
     check: true
     next: start_callback_server
 
   - shell: start_callback_server
-    command: python3 "{{flow.dir}}/codex_auth.py" start-callback-server
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" start-callback-server
     cwd: .
     timeout: 15
     check: true
@@ -84,31 +92,39 @@ steps:
     next: wait_authorization_callback
 
   - shell: wait_authorization_callback
-    command: python3 "{{flow.dir}}/codex_auth.py" wait-callback
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" wait-callback
     cwd: .
     timeout: 960
     check: true
     next: exchange_authorization_code
 
   - shell: exchange_authorization_code
-    command: python3 "{{flow.dir}}/codex_auth.py" exchange-token
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" exchange-token
     cwd: .
     timeout: 60
     check: true
     next: require_credentials
 
   - shell: write_codex_config
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      credentials_file="$(python3 "{{flow.dir}}/codex_auth.py" credentials-file)"
+      credentials_file="$({{runtime.python}} "{{flow.dir}}/codex_auth.py" credentials-file)"
 
       mkdir -p "$(dirname "$config_file")" "$secrets_dir"
 
-      CONFIG_FILE="$config_file" CREDENTIALS_FILE="$credentials_file" python3 - <<'PY'
+      CONFIG_FILE="$config_file" CREDENTIALS_FILE="$credentials_file" {{runtime.python}} - <<'PY'
       import json
       import os
       from pathlib import Path
@@ -145,14 +161,20 @@ steps:
     next: credentials_ready
 
   - shell: require_credentials
-    command: python3 "{{flow.dir}}/codex_auth.py" status --require
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" status --require
     cwd: .
     timeout: 15
     check: true
     next: verify_credentials
 
   - shell: verify_credentials
-    command: python3 "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
+    allowed_paths:
+      - "~/.skiller"
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" verify --model "${SKILLER_OPENAI_CODEX_MODEL:-gpt-5.5}"
     cwd: .
     timeout: 120
     check: true

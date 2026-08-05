@@ -21,13 +21,14 @@ steps:
       2 MiniMax
       3 Bedrock
       4 LM Studio
-      5 Configure later
-      6 Exit
+      5 Moonshot
+      6 Configure later
+      7 Exit
       ```
     next: select_provider
 
   - wait_input: select_provider
-    prompt: "Choose 1, 2, 3, 4, 5, or 6."
+    prompt: "Choose 1, 2, 3, 4, 5, 6, or 7."
     next: route_provider
 
   - switch: route_provider
@@ -37,8 +38,9 @@ steps:
       "2": start_minimax
       "3": start_bedrock
       "4": start_lmstudio
-      "5": configure_later
-      "6": exit_app
+      "5": start_moonshot
+      "6": configure_later
+      "7": exit_app
     default: invalid_choice
 
   - notify: start_codex
@@ -81,6 +83,16 @@ steps:
       params: "--arg continue_id={{inputs.continue_id}}"
       auto: true
 
+  - notify: start_moonshot
+    format: markdown
+    message: Starting Moonshot setup.
+    action:
+      type: run
+      label: Start Moonshot setup
+      arg: auths/moonshot
+      params: "--arg continue_id={{inputs.continue_id}}"
+      auto: true
+
   - notify: configure_later
     format: markdown
     message: |
@@ -106,5 +118,5 @@ steps:
   - notify: invalid_choice
     format: markdown
     message: |
-      Invalid option. Choose `1`, `2`, `3`, `4`, `5`, or `6`.
+      Invalid option. Choose `1`, `2`, `3`, `4`, `5`, `6`, or `7`.
     next: select_provider

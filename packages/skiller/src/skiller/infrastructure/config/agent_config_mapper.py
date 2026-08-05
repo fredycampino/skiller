@@ -21,6 +21,7 @@ from skiller.domain.agent.llm.provider_registry import (
     CODEX_MODELS,
     FAKE_MODELS,
     MINIMAX_MODELS,
+    MOONSHOT_MODELS,
     NULL_MODELS,
     AgentBedrockLLMModel,
     AgentBedrockProvider,
@@ -34,6 +35,8 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentLMStudioProvider,
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
+    AgentMoonshotLLMModel,
+    AgentMoonshotProvider,
     AgentNullLLMModel,
     AgentNullProvider,
 )
@@ -71,7 +74,9 @@ class AgentConfigMapper:
             raise ValueError("agent.json field 'agent' is not supported")
 
         try:
-            config = AgentConfigModel.model_validate(raw_config)
+            config = AgentConfigModel.model_validate(
+                _config_with_known_providers(raw_config)
+            )
         except ValidationError as exc:
             raise ValueError(f"Invalid agent config: {exc}") from exc
 
@@ -173,6 +178,20 @@ def _build_provider(
             timeout_seconds=timeout_seconds,
             window_width_tokens=window_width_tokens,
         )
+    if provider_type == AgentLLMProviderType.MOONSHOT:
+        api_key = _resolve_api_key(
+            provider_type=provider_type,
+            provider=provider,
+            selected=selected,
+            env=env,
+        )
+        return AgentMoonshotProvider(
+            model=_moonshot_model(raw_model),
+            models=MOONSHOT_MODELS,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            window_width_tokens=window_width_tokens,
+        )
     if provider_type == AgentLLMProviderType.LMSTUDIO:
         lmstudio_models = _lmstudio_models(provider)
         return AgentLMStudioProvider(
@@ -260,6 +279,13 @@ def _minimax_model(value: str) -> AgentMiniMaxLLMModel:
         return AgentMiniMaxLLMModel(value)
     except ValueError as exc:
         raise ValueError(f"Unsupported model='{value}' for provider='minimax'") from exc
+
+
+def _moonshot_model(value: str) -> AgentMoonshotLLMModel:
+    try:
+        return AgentMoonshotLLMModel(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported model='{value}' for provider='moonshot'") from exc
 
 
 def _codex_model(value: str) -> AgentCodexLLMModel:
@@ -475,6 +501,31 @@ def _provider_type(provider_id: str) -> AgentLLMProviderType:
         return AgentLLMProviderType(provider_id)
     except ValueError as exc:
         raise ValueError(f"Unsupported LLM provider: {provider_id}") from exc
+
+
+def _config_with_known_providers(
+    raw_config: dict[str, object],
+) -> dict[str, object]:
+    providers = raw_config.get("providers")
+    if not isinstance(providers, dict):
+        return raw_config
+
+    return {
+        **raw_config,
+        "providers": {
+            provider_id: provider
+            for provider_id, provider in providers.items()
+            if isinstance(provider_id, str)
+            and _known_provider_type(provider_id) is not None
+        },
+    }
+
+
+def _known_provider_type(provider_id: str) -> AgentLLMProviderType | None:
+    try:
+        return AgentLLMProviderType(provider_id)
+    except ValueError:
+        return None
 
 
 def _env_bool(env_name: str, default: bool, env: Mapping[str, str]) -> bool:

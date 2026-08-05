@@ -71,7 +71,7 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
     lmstudio = _provider(result.providers, "lmstudio")
     bedrock = _provider(result.providers, "bedrock")
     provider_names = [provider.name for provider in result.providers]
-    assert provider_names == ["minimax", "lmstudio", "codex", "bedrock"]
+    assert provider_names == ["minimax", "lmstudio", "codex", "bedrock", "moonshot"]
     assert codex.source == AgentConfigProviderSource.GLOBAL
     assert minimax.source == AgentConfigProviderSource.GLOBAL
     assert lmstudio.source == AgentConfigProviderSource.NONE

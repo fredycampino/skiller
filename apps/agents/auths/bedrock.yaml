@@ -20,26 +20,17 @@ on_error:
 
 steps:
   - shell: check_bedrock_config
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
-      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
-      if [ -z "$runtime_python" ]; then
-        skiller_bin="$(command -v skiller || true)"
-        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
-          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
-        fi
-      fi
-      if [ -z "$runtime_python" ]; then
-        runtime_python="python3"
-      fi
-
-      profile="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" configured-profile 2>/dev/null || true)"
+      profile="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" configured-profile 2>/dev/null || true)"
       if [ -z "$profile" ]; then
         printf '%s' missing
         exit 0
       fi
 
-      if "$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify --profile "$profile" --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" >/dev/null 2>&1; then
+      if "{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify --profile "$profile" --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" >/dev/null 2>&1; then
         printf '%s' ready
         exit 0
       fi
@@ -87,18 +78,10 @@ steps:
     next: select_profile_option
 
   - shell: verify_skiller_profile
+    allowed_paths:
+      - "~/.skiller"
     command: |
-      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
-      if [ -z "$runtime_python" ]; then
-        skiller_bin="$(command -v skiller || true)"
-        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
-          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
-        fi
-      fi
-      if [ -z "$runtime_python" ]; then
-        runtime_python="python3"
-      fi
-      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
+      if verify_output="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify \
         --profile "skiller-bedrock" \
         --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
         printf '%s' ready
@@ -122,6 +105,8 @@ steps:
     next: verify_custom_profile
 
   - shell: verify_custom_profile
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
@@ -132,17 +117,7 @@ steps:
         exit 0
       fi
 
-      runtime_python="${SKILLER_RUNTIME_PYTHON:-}"
-      if [ -z "$runtime_python" ]; then
-        skiller_bin="$(command -v skiller || true)"
-        if [ -n "$skiller_bin" ] && [ -f "$skiller_bin" ]; then
-          runtime_python="$(awk 'NR==1{sub("^#!",""); print; exit}' "$skiller_bin")"
-        fi
-      fi
-      if [ -z "$runtime_python" ]; then
-        runtime_python="python3"
-      fi
-      if verify_output="$("$runtime_python" "{{flow.dir}}/bedrock_auth.py" verify \
+      if verify_output="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify \
         --profile "$profile" \
         --model "${SKILLER_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}" 2>&1)"; then
         printf '%s' ready
@@ -162,6 +137,8 @@ steps:
     default: validation_error
 
   - shell: write_bedrock_config_skiller
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
@@ -172,7 +149,7 @@ steps:
 
       mkdir -p "$(dirname "$config_file")"
 
-      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
+      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" "{{runtime.python}}" - <<'PY'
       import json
       import os
       from pathlib import Path
@@ -210,6 +187,8 @@ steps:
     next: credentials_ready
 
   - shell: write_bedrock_config_custom
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
@@ -221,7 +200,7 @@ steps:
 
       mkdir -p "$(dirname "$config_file")"
 
-      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" python3 - <<'PY'
+      CONFIG_FILE="$config_file" PROFILE="$profile" MODEL="$model" "{{runtime.python}}" - <<'PY'
       import json
       import os
       from pathlib import Path

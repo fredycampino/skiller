@@ -47,6 +47,7 @@ _PUBLIC_PROVIDER_TYPES = (
     AgentLLMProviderType.LMSTUDIO,
     AgentLLMProviderType.CODEX,
     AgentLLMProviderType.BEDROCK,
+    AgentLLMProviderType.MOONSHOT,
 )
 
 class ListAgentModelsUseCase:

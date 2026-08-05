@@ -35,7 +35,6 @@ from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.files import FilesTool
 from skiller.application.tools.notify import NotifyTool
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.agent.get_agent_stats import GetAgentStatsUseCase
 from skiller.application.use_cases.agent.get_agent_tools import GetAgentToolsUseCase
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
@@ -197,7 +196,6 @@ def build_runtime_container(
     )
     llm_model = _build_llm_model_manager()
     mcp = DefaultMCP()
-    shell_runtime_config = _build_shell_runtime_config()
     tool_process_runner = DefaultToolProcessRunner()
     server_status = DefaultServerStatus(cfg)
     channel_sender = DefaultChannelSender()
@@ -338,9 +336,9 @@ def build_runtime_container(
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
-        shell_config=shell_runtime_config,
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
+        flow_runner=skill_runner,
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)
@@ -466,14 +464,4 @@ def _build_llm_model_manager() -> LLMModelManager:
 def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:
     return ToolManager(
         tools=list(tools),
-    )
-
-
-def _build_shell_runtime_config() -> ShellToolRuntimeConfig:
-    return ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(),
-        allowlist_enabled=False,
-        allow_env_prefix=True,
-        allowed_commands=(),
     )

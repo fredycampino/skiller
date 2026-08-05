@@ -79,6 +79,9 @@ class FilesystemRunnerPort(RunnerPort):
             file_ref=file_ref,
         )
 
+    def resolve_flow_dir(self, source: str, ref: str) -> Path:
+        return self._resolve_base_path(source=source, ref=ref)
+
     def render(
         self,
         step: dict[str, Any],
@@ -101,7 +104,10 @@ class FilesystemRunnerPort(RunnerPort):
         )
         flow_context["run_id"] = flow.id
         render_context["flow"] = flow_context
-        render_context["runtime"] = {"python": sys.executable}
+        render_context["runtime"] = {
+            "python": sys.executable,
+            "venv": str(Path(sys.prefix).resolve()),
+        }
         render_context.setdefault("env", dict(os.environ))
         return self._render_value(rendered, render_context)
 

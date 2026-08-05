@@ -20,19 +20,21 @@ on_error:
 
 steps:
   - shell: check_current_state
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
-      if [ "$(python3 "{{flow.dir}}/lmstudio_auth.py" print-config)" = "{}" ]; then
-        python3 "{{flow.dir}}/lmstudio_auth.py" write-config >/dev/null
+      if [ "$("{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" print-config)" = "{}" ]; then
+        "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" write-config >/dev/null
       fi
 
-      models_json="$(python3 "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
+      models_json="$("{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
       if [ -n "$models_json" ]; then
-        python3 "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
+        "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
       fi
 
-      python3 "{{flow.dir}}/lmstudio_auth.py" format-menu
+      "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" format-menu
     next: show_menu
 
   - notify: show_menu
@@ -62,15 +64,17 @@ steps:
     next: show_menu
 
   - shell: provider_status
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
-      models_json="$(python3 "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
+      models_json="$("{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
       if [ -n "$models_json" ]; then
-        python3 "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
+        "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
       fi
 
-      python3 "{{flow.dir}}/lmstudio_auth.py" provider-status
+      "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" provider-status
     next: show_provider_status
 
   - notify: show_provider_status
@@ -82,14 +86,16 @@ steps:
     next: wait_continue
 
   - shell: check_connection
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
-      python3 "{{flow.dir}}/lmstudio_auth.py" check-connection
+      "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" check-connection
 
-      models_json="$(python3 "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
+      models_json="$("{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" available-models 2>/dev/null || true)"
       if [ -n "$models_json" ]; then
-        python3 "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
+        "{{runtime.python}}" "{{flow.dir}}/lmstudio_auth.py" add-models "$models_json" >/dev/null || true
       fi
     next: show_connection_result
 

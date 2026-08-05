@@ -29,7 +29,8 @@ class TuiStrings:
     models_table_provider_configured_marker: str = "✓"
     models_table_active_model_marker: str = "●"
     auth_unknown_provider_message: str = (
-        "Unknown auth provider. Use /auth, /auth codex, /auth minimax, or /auth bedrock."
+        "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
+        "/auth bedrock, or /auth moonshot."
     )
     autocomplete_quit_description: str = "Exit the TUI"
     autocomplete_exit_description: str = "Exit the TUI"

@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.domain.run.run_model import RunStatus
@@ -5,6 +10,7 @@ from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.run.steering_model import SteeringStepInterrupt
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.step.current_step_model import CurrentStep
+from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.step_execution_model import ShellOutput, StepExecution
 from skiller.domain.step.step_execution_result_model import (
     StepAdvance,
@@ -26,19 +32,20 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         self,
         store: RunStorePort,
         shell_tool: ShellProcessTool,
-        shell_config: ShellToolRuntimeConfig,
         process_runner: ToolProcessPort,
         agent_steering_store: SteeringPort,
+        flow_runner: RunnerPort,
     ) -> None:
         self.store = store
         self.shell_tool = shell_tool
-        self.shell_config = shell_config
         self.process_runner = process_runner
         self.agent_steering_store = agent_steering_store
+        self.flow_runner = flow_runner
 
     def execute(self, current_step: CurrentStep) -> StepAdvance:
         step_id = current_step.step_id
         step = current_step.step
+        shell_config = self._step_shell_config(current_step)
 
         check = self._parse_check(step_id=step_id, value=step.get("check"))
         shell_request_result = self.shell_tool.request(
@@ -60,7 +67,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             raise ValueError(f"Shell step '{step_id}' request returned no request")
         shell_request = shell_request_result.request
         policy_result = self.shell_tool.policy(
-            config=self.shell_config,
+            config=shell_config,
             request=shell_request,
         )
         if not policy_result.ok:
@@ -70,7 +77,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         shell_request = policy_result.request
 
         process_request = self.shell_tool.call(
-            config=self.shell_config,
+            config=shell_config,
             request=shell_request,
         )
         result = self._execute_shell_process(
@@ -112,6 +119,35 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         if isinstance(value, bool):
             return value
         raise ValueError(f"Step '{step_id}' requires boolean check")
+
+    def _step_shell_config(self, current_step: CurrentStep) -> ShellToolRuntimeConfig:
+        run = self.store.get_run(current_step.run_id)
+        allowed_paths = [
+            Path.cwd().resolve(),
+            self.flow_runner.resolve_flow_dir(run.source, run.ref).resolve(),
+            Path(sys.executable).resolve(),
+        ]
+        raw_allowed_paths = current_step.step.get("allowed_paths") or []
+        if not isinstance(raw_allowed_paths, list):
+            return ShellToolRuntimeConfig(
+                definition=ShellProcessTool,
+                allowed_paths=tuple(allowed_paths),
+            )
+
+        for raw_path in raw_allowed_paths:
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                raise ValueError(
+                    "Shell step field 'allowed_paths' must be a list of non-empty strings"
+                )
+            path = Path(raw_path).expanduser()
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            allowed_paths.append(path.resolve(strict=False))
+
+        return ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=tuple(allowed_paths),
+        )
 
     def _execute_shell_process(
         self,

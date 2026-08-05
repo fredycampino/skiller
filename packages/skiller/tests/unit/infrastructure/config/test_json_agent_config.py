@@ -20,6 +20,7 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentFakeLLMModel,
     AgentLLMProviderType,
     AgentMiniMaxLLMModel,
+    AgentMoonshotLLMModel,
 )
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.agent_config_schema import (
@@ -98,6 +99,47 @@ def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> 
     assert config.loop.max_tool_calls == 3
     assert config.event_output.truncate.enabled is False
     assert config.event_output.truncate.max_text_chars == 100
+
+
+def test_json_agent_config_reads_moonshot_provider(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_moonshot_llm(api_key="secret"))
+
+    config = _provider(config_path=config_path, env={}).get_config()
+    provider = config.llm.default()
+
+    assert config.llm.default_provider == AgentLLMProviderType.MOONSHOT
+    assert provider.type == AgentLLMProviderType.MOONSHOT
+    assert provider.api_key == "secret"
+    assert provider.model == AgentMoonshotLLMModel.KIMI_K3
+
+
+def test_json_agent_config_applies_moonshot_env_overrides(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_moonshot_llm(api_key="file-key"))
+
+    config = _provider(
+        config_path=config_path,
+        env={
+            "AGENT_MOONSHOT_API_KEY": "env-key",
+            "AGENT_MOONSHOT_MODEL": "kimi-k2.7-code",
+        },
+    ).get_config()
+    provider = config.llm.default()
+
+    assert provider.api_key == "env-key"
+    assert provider.model == AgentMoonshotLLMModel.KIMI_K2_7_CODE
+
+
+def test_json_agent_config_rejects_unsupported_moonshot_model(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(config_path, llm=_moonshot_llm(api_key="secret", model="unknown"))
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported model='unknown' for provider='moonshot'",
+    ):
+        _provider(config_path=config_path, env={}).get_config()
 
 
 def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
@@ -912,6 +954,40 @@ def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
         _provider(config_path=config_path, env={}).get_config()
 
 
+def test_json_agent_config_ignores_unknown_provider_when_default_is_known(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm={
+            "llm": {"default_provider": "minimax"},
+            "providers": {
+                "minimax": {
+                    "api_key": "secret",
+                    "model": "MiniMax-M2.5",
+                    "timeout_seconds": 30,
+                    "window_width_tokens": 100_000,
+                },
+                "future-provider": {
+                    "api_key": "secret",
+                    "model": "kimi-k3",
+                    "timeout_seconds": 30,
+                    "window_width_tokens": 256_000,
+                    "future_option": True,
+                },
+            },
+        },
+    )
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
+    assert tuple(provider.type for provider in config.llm.providers) == (
+        AgentLLMProviderType.MINIMAX,
+    )
+
+
 def test_json_agent_config_rejects_unsupported_env_model_override(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     _write_config(config_path, llm=_minimax_llm(api_key="secret"))
@@ -963,6 +1039,24 @@ def _minimax_llm(
         "llm": {"default_provider": "minimax"},
         "providers": {
             "minimax": provider,
+        },
+    }
+
+
+def _moonshot_llm(
+    *,
+    api_key: str,
+    model: str = "kimi-k3",
+) -> dict[str, object]:
+    return {
+        "llm": {"default_provider": "moonshot"},
+        "providers": {
+            "moonshot": {
+                "api_key": api_key,
+                "model": model,
+                "timeout_seconds": 30,
+                "window_width_tokens": 256_000,
+            },
         },
     }
 

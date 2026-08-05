@@ -25,7 +25,6 @@ from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
-from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
@@ -185,15 +184,9 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
     execute_shell_step_use_case = ExecuteShellStepUseCase(
         store=store,
         shell_tool=shell_tool,
-        shell_config=ShellToolRuntimeConfig(
-            definition=ShellProcessTool,
-            allowed_paths=(),
-            allowlist_enabled=False,
-            allow_env_prefix=True,
-            allowed_commands=(),
-        ),
         process_runner=tool_process_runner,
         agent_steering_store=agent_steering_store,
+        flow_runner=skill_runner,
     )
     execute_switch_step_use_case = ExecuteSwitchStepUseCase(store=store)
     execute_when_step_use_case = ExecuteWhenStepUseCase(store=store)

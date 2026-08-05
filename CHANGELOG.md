@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.24 - 2026-08-05
+
+### Added
+- Add Moonshot LLM provider support with packaged auth flow and model metadata.
+- Add Moonshot provider smoke coverage.
+
+### Changed
+- Update provider auth flows and TUI auth/autocomplete behavior for Moonshot support.
+- Pass runtime and flow path template context through shell step execution.
+
+### Notes
+- Includes PR #108.
+
 ## 0.1.0-beta.23 - 2026-08-02
 
 ### Added

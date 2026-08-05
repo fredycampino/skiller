@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -158,18 +159,103 @@ def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
     assert config.llm.default().window_width_tokens == 80_000
 
 
-def test_json_agent_config_reads_llm_log_request_file(tmp_path) -> None:
+def test_json_agent_config_reads_debug_log_request_file(tmp_path) -> None:
     config_path = tmp_path / "agent.json"
     payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {
-        "default_provider": "minimax",
+    payload["llm"] = {"default_provider": "minimax"}
+    payload["debug"] = {
+        "log_request": True,
         "log_request_file": "/tmp/skiller-llm.json",
     }
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
     config = _provider(config_path=config_path, env={}).get_config()
 
-    assert config.llm.log_request_file == "/tmp/skiller-llm.json"
+    assert config.debug.log_request is True
+    assert config.debug.log_request_file == "/tmp/skiller-llm.json"
+
+
+def test_json_agent_config_reads_debug_log_override_file(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["debug"] = {"log_override_file": False}
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.debug.log_override_file is False
+
+
+def test_json_agent_config_rejects_legacy_llm_log_request_fields(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {
+        "default_provider": "minimax",
+        "log_request": True,
+        "log_request_file": "/tmp/legacy.json",
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+def test_json_agent_config_defaults_debug_log_request_to_false_and_file_to_provider_path(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {"default_provider": "minimax"}
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.debug.log_request is False
+    assert config.debug.log_override_file is True
+    assert (
+        config.debug.log_request_file
+        == "~/.skiller/logs/request/minimax/request.json"
+    )
+
+
+def test_json_agent_config_defaults_null_debug_log_request_file_to_provider_path(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {"default_provider": "minimax"}
+    payload["debug"] = {
+        "log_request": True,
+        "log_request_file": None,
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.debug.log_request is True
+    assert (
+        config.debug.log_request_file
+        == "~/.skiller/logs/request/minimax/request.json"
+    )
+
+
+def test_json_agent_config_defaults_empty_debug_log_request_file_to_provider_path(
+    tmp_path,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    payload["llm"] = {"default_provider": "minimax"}
+    payload["debug"] = {
+        "log_request_file": " ",
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert (
+        config.debug.log_request_file
+        == "~/.skiller/logs/request/minimax/request.json"
+    )
 
 
 def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
@@ -455,6 +541,8 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
         allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
             (config_path.parent / "tmp/work").resolve(strict=False),
             Path("~/agent").expanduser().resolve(strict=False),
         ),
@@ -469,6 +557,37 @@ def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
         all=((config_path.parent / "shared").resolve(strict=False),),
     )
     assert config.tools.get("notify") is None
+
+
+def test_json_agent_config_resolves_shell_runtime_path_templates(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write_config(
+        config_path,
+        llm=_minimax_llm(api_key="secret"),
+        tools={
+            "shell": {
+                "allowed_paths": [
+                    "{{flow.dir}}",
+                    "{{runtime.venv}}",
+                ],
+            },
+        },
+    )
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.tools.get("shell") == ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
+            config_path.parent.resolve(strict=False),
+            Path(sys.prefix).resolve(strict=False),
+        ),
+        allowlist_enabled=False,
+        allow_env_prefix=True,
+        allowed_commands=(),
+    )
 
 
 def test_json_agent_config_resolves_global_tool_paths_against_global_config_dir(
@@ -505,7 +624,11 @@ def test_json_agent_config_resolves_global_tool_paths_against_global_config_dir(
     expected_workspace = (global_config_dir / "workspace").resolve(strict=False)
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(expected_workspace,),
+        allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
+            expected_workspace,
+        ),
         allowlist_enabled=True,
         allow_env_prefix=True,
         allowed_commands=("pwd",),
@@ -557,7 +680,10 @@ def test_json_agent_config_resolves_local_tool_paths_against_local_config_dir(
     expected_workspace = (context_config_dir / "workspace").resolve(strict=False)
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(),
+        allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
+        ),
         allowlist_enabled=False,
         allow_env_prefix=True,
         allowed_commands=(),
@@ -598,7 +724,11 @@ def test_json_agent_config_resolves_env_tool_paths_against_env_config_dir(
     expected_workspace = (env_config_dir / "workspace").resolve(strict=False)
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(expected_workspace,),
+        allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
+            expected_workspace,
+        ),
         allowlist_enabled=True,
         allow_env_prefix=True,
         allowed_commands=("pwd",),
@@ -867,7 +997,10 @@ def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) 
     assert config.loop.max_tool_calls == DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS
     assert config.tools.get("shell") == ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(),
+        allowed_paths=(
+            Path.cwd().resolve(strict=False),
+            Path(sys.executable).resolve(strict=False),
+        ),
         allowlist_enabled=False,
         allow_env_prefix=True,
         allowed_commands=(),

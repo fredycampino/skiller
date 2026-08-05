@@ -122,6 +122,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         entries=entries,
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert request.model == "model1"
@@ -200,6 +201,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         entries=entries,
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert request.messages == (
@@ -288,6 +290,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         entries=entries,
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert request.messages == (
@@ -331,6 +334,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
         entries=[],
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert request.messages == (
@@ -354,6 +358,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         entries=[],
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert isinstance(request, MiniMaxLLMRequest)
@@ -377,6 +382,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         entries=[],
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert isinstance(request, LMStudioLLMRequest)
@@ -401,6 +407,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         entries=[],
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert isinstance(request, CodexLLMRequest)
@@ -427,6 +434,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         entries=[],
         tools=(),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert isinstance(request, BedrockLLMRequest)
@@ -445,6 +453,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
         entries=[],
         tools=(tool,),
         log_request_file=None,
+        log_override_file=True,
     )
 
     assert request.tools == (tool,)

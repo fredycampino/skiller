@@ -5,6 +5,7 @@ from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
+    AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
@@ -42,6 +43,7 @@ class FakeAgentConfigPort:
 
 def agent_config(
     *,
+    log_request: bool = False,
     log_request_file: str | None = None,
     max_turns: int = 1,
     max_tool_calls: int = 1,
@@ -59,7 +61,6 @@ def agent_config(
                     window_width_tokens=window_width_tokens,
                 ),
             ),
-            log_request_file=log_request_file,
         ),
         loop=AgentLoopConfig(
             max_turns=max_turns,
@@ -80,12 +81,18 @@ def agent_config(
                 max_array_items=10,
             ),
         ),
+        debug=AgentDebugConfig(
+            log_request=log_request,
+            log_request_file=log_request_file,
+            log_override_file=True,
+        ),
         tools=tools or ToolRuntimeConfigs(),
     )
 
 
 def agent_runner_config(
     *,
+    log_request: bool = False,
     log_request_file: str | None = None,
     system: str = "Be useful.",
     task: str = "Hi",
@@ -103,6 +110,7 @@ def agent_runner_config(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,
             window_width_tokens=window_width_tokens,
+            log_request=log_request,
             log_request_file=log_request_file,
         ),
     )

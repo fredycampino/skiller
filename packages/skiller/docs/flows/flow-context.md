@@ -67,12 +67,21 @@ steps:
 Use `runtime.python` to read the absolute path of the Python interpreter that
 runs Skiller. Use it for Python helpers shipped alongside a flow instead of
 resolving `python` or `python3` from `PATH`.
+Use `runtime.venv` to read the root of the active Python environment.
 
 ```yaml
 steps:
   - shell: run_helper
+    allowed_paths:
+      - "~/.skiller"
     command: '"{{runtime.python}}" "{{flow.dir}}/helper.py" --run-id "{{flow.run_id}}"'
 ```
+
+`allowed_paths` is optional. Shell steps already allow the process cwd, the
+current flow directory, and the resolved Python executable. Entries in
+`allowed_paths` add further roots. `runtime.python` is listed separately when
+it is used in a command because the virtualenv interpreter can be a symlink
+whose resolved target is outside `runtime.venv`.
 
 ## Step Executions
 

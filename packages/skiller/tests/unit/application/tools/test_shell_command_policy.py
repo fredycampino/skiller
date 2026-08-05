@@ -213,3 +213,84 @@ def test_shell_command_policy_does_not_validate_executable_as_command_path() -> 
         command="./.venv/bin/python -m hatchling build",
         effective_cwd="/workspace",
     )
+
+
+def test_shell_command_policy_blocks_symlink_pointing_outside_allowed_root(tmp_path) -> None:
+    real_python = tmp_path / "usr" / "bin" / "python3.12"
+    real_python.parent.mkdir(parents=True)
+    real_python.write_text("", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    venv_bin = workspace / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    venv_python = venv_bin / "python"
+    venv_python.symlink_to(real_python)
+
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(workspace,),
+        )
+    )
+
+    with pytest.raises(ValueError, match="shell command path escapes allowed_paths"):
+        policy.validate_command(
+            command=f'"{venv_python}" --version',
+            effective_cwd=str(workspace),
+        )
+
+
+def test_shell_command_policy_still_blocks_path_outside_allowed_roots(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(workspace,),
+        )
+    )
+
+    with pytest.raises(ValueError, match="shell command path escapes allowed_paths"):
+        policy.validate_command(
+            command="cat /etc/passwd",
+            effective_cwd=str(workspace),
+        )
+
+
+def test_shell_command_policy_allows_env_assignment_path_inside_allowed_root(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(workspace.resolve(),),
+        )
+    )
+
+    policy.validate_command(
+        command=f"CONFIG_FILE={workspace}/config.json python3 script.py",
+        effective_cwd=str(workspace),
+    )
+
+
+def test_shell_command_policy_blocks_env_assignment_path_outside_allowed_root(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(workspace.resolve(),),
+        )
+    )
+
+    with pytest.raises(ValueError, match="shell command path escapes allowed_paths"):
+        policy.validate_command(
+            command=f"CONFIG_FILE={outside}/config.json python3 script.py",
+            effective_cwd=str(workspace),
+        )

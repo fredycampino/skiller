@@ -28,12 +28,18 @@ from skiller.domain.agent.llm.provider_minimax import (
     AgentMiniMaxLLMModel,
     AgentMiniMaxProvider,
 )
+from skiller.domain.agent.llm.provider_moonshot import (
+    MOONSHOT_MODELS,
+    AgentMoonshotLLMModel,
+    AgentMoonshotProvider,
+)
 
 __all__ = (
     "BEDROCK_MODELS",
     "CODEX_MODELS",
     "FAKE_MODELS",
     "MINIMAX_MODELS",
+    "MOONSHOT_MODELS",
     "NULL_MODELS",
     "PUBLIC_AGENT_LLM_PROVIDER_MODELS",
     "AgentBedrockLLMModel",
@@ -49,6 +55,8 @@ __all__ = (
     "AgentLMStudioProvider",
     "AgentMiniMaxLLMModel",
     "AgentMiniMaxProvider",
+    "AgentMoonshotLLMModel",
+    "AgentMoonshotProvider",
     "AgentNullLLMModel",
     "AgentNullProvider",
     "agent_llm_model_from_value",
@@ -58,6 +66,7 @@ AgentLLMModel: TypeAlias = (
     AgentNullLLMModel
     | AgentFakeLLMModel
     | AgentMiniMaxLLMModel
+    | AgentMoonshotLLMModel
     | AgentCodexLLMModel
     | AgentBedrockLLMModel
 )
@@ -68,6 +77,7 @@ def agent_llm_model_from_value(value: str) -> AgentLLMModel:
         AgentNullLLMModel,
         AgentFakeLLMModel,
         AgentMiniMaxLLMModel,
+        AgentMoonshotLLMModel,
         AgentCodexLLMModel,
         AgentBedrockLLMModel,
     )
@@ -84,6 +94,7 @@ AgentLLMProvider: TypeAlias = (
     AgentNullProvider
     | AgentFakeProvider
     | AgentMiniMaxProvider
+    | AgentMoonshotProvider
     | AgentLMStudioProvider
     | AgentCodexProvider
     | AgentBedrockProvider
@@ -92,6 +103,7 @@ AgentLLMProvider: TypeAlias = (
 
 PUBLIC_AGENT_LLM_PROVIDER_MODELS = {
     AgentLLMProviderType.MINIMAX: MINIMAX_MODELS,
+    AgentLLMProviderType.MOONSHOT: MOONSHOT_MODELS,
     AgentLLMProviderType.LMSTUDIO: (),
     AgentLLMProviderType.CODEX: CODEX_MODELS,
     AgentLLMProviderType.BEDROCK: BEDROCK_MODELS,

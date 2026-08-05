@@ -196,4 +196,5 @@ def _auth_provider_catalog() -> tuple[CompletionItem, ...]:
         CompletionItem(label="codex", insert_text="codex", kind=_PARAM_KIND),
         CompletionItem(label="minimax", insert_text="minimax", kind=_PARAM_KIND),
         CompletionItem(label="bedrock", insert_text="bedrock", kind=_PARAM_KIND),
+        CompletionItem(label="moonshot", insert_text="moonshot", kind=_PARAM_KIND),
     )

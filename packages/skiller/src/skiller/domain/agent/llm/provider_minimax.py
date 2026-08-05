@@ -8,6 +8,7 @@ from skiller.domain.agent.llm.model import (
 from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
 from skiller.domain.agent.llm.request import OpenAILLMRequest
 
+MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 MINIMAX_LLM_TEMPERATURE = 1
 MINIMAX_LLM_TOP_P = 1
 MINIMAX_LLM_MAX_OUTPUT_TOKENS = 4096

@@ -1,7 +1,7 @@
-name: auths/minimax
-description: "Configure MiniMax credentials for Skiller agents"
+name: auths/moonshot
+description: "Configure Moonshot credentials for Skiller agents"
 version: "0.1"
-start: check_minimax_config
+start: check_moonshot_config
 
 inputs:
   continue_id: string
@@ -19,7 +19,7 @@ on_error:
   cleanup: true
 
 steps:
-  - shell: check_minimax_config
+  - shell: check_moonshot_config
     allowed_paths:
       - "~/.skiller"
     command: |
@@ -28,11 +28,11 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      secret_file="$({{runtime.python}} "{{flow.dir}}/moonshot_auth.py" api-key-file)"
 
       if [ -s "$secret_file" ]; then
         api_key="$(tr -d '[:space:]' < "$secret_file")"
-        if [ "${#api_key}" -lt 100 ]; then
+        if [ "${#api_key}" -lt 20 ]; then
           printf '%s' invalid
           exit 0
         fi
@@ -45,35 +45,35 @@ steps:
     cwd: .
     timeout: 15
     check: true
-    next: route_minimax_config
+    next: route_moonshot_config
 
-  - switch: route_minimax_config
-    value: '{{output_value("check_minimax_config").stdout}}'
+  - switch: route_moonshot_config
+    value: '{{output_value("check_moonshot_config").stdout}}'
     cases:
-      ready: backup_minimax_config
-      invalid: clear_invalid_minimax_secret
-    default: explain_minimax
+      ready: backup_moonshot_config
+      invalid: clear_invalid_moonshot_secret
+    default: explain_moonshot
 
-  - notify: explain_minimax
+  - notify: explain_moonshot
     format: markdown
     message: |
-      # MiniMax setup
+      # Moonshot setup
 
-      Paste your MiniMax API key in the next prompt.
+      Paste your Moonshot API key in the next prompt.
 
-      Skiller will save it in the configured MiniMax API key file.
+      Skiller will save it in the configured Moonshot API key file.
 
       If no file is configured, Skiller uses:
 
       ```text
-      ~/.skiller/secrets/minimax_api_key
+      ~/.skiller/secrets/moonshot_api_key
       ```
 
       The setup run will clean its persisted context after it finishes.
     next: ask_api_key
 
   - wait_input: ask_api_key
-    prompt: "Paste your MiniMax API key"
+    prompt: "Paste your Moonshot API key"
     next: validate_api_key_shape
 
   - shell: validate_api_key_shape
@@ -85,7 +85,7 @@ steps:
       api_key='{{output_value("ask_api_key").payload.text}}'
       api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
 
-      if [ "${#api_key}" -lt 100 ]; then
+      if [ "${#api_key}" -lt 20 ]; then
         printf '%s' invalid
         exit 0
       fi
@@ -99,10 +99,10 @@ steps:
   - switch: route_api_key_shape
     value: '{{output_value("validate_api_key_shape").stdout}}'
     cases:
-      valid: write_minimax_secret
-    default: clear_invalid_minimax_secret
+      valid: write_moonshot_secret
+    default: clear_invalid_moonshot_secret
 
-  - shell: write_minimax_secret
+  - shell: write_moonshot_secret
     allowed_paths:
       - "~/.skiller"
     command: |
@@ -111,11 +111,11 @@ steps:
       api_key='{{output_value("ask_api_key").payload.text}}'
       api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
       if [ -z "$api_key" ]; then
-        printf '%s\n' "MiniMax API key is required." >&2
+        printf '%s\n' "Moonshot API key is required." >&2
         exit 1
       fi
 
-      secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      secret_file="$({{runtime.python}} "{{flow.dir}}/moonshot_auth.py" api-key-file)"
       mkdir -p "$(dirname "$secret_file")"
       umask 077
       printf '%s\n' "$api_key" > "$secret_file"
@@ -123,15 +123,15 @@ steps:
     cwd: .
     timeout: 15
     check: true
-    next: backup_minimax_config
+    next: backup_moonshot_config
 
-  - shell: clear_invalid_minimax_secret
+  - shell: clear_invalid_moonshot_secret
     allowed_paths:
       - "~/.skiller"
     command: |
       set -eu
 
-      secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      secret_file="$({{runtime.python}} "{{flow.dir}}/moonshot_auth.py" api-key-file)"
       rm -f "$secret_file"
       printf '%s' cleared
     cwd: .
@@ -140,10 +140,10 @@ steps:
     next: invalid_api_key_shape
 
   - notify: invalid_api_key_shape
-    message: "That does not look like a MiniMax API key. Paste the full key."
+    message: "That does not look like a Moonshot API key. Paste the full key."
     next: ask_api_key
 
-  - shell: backup_minimax_config
+  - shell: backup_moonshot_config
     allowed_paths:
       - "~/.skiller"
     command: |
@@ -151,8 +151,8 @@ steps:
 
       settings_dir="$HOME/.skiller/settings"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      backup_file="$HOME/.skiller/settings/agent.json.moonshot-auth.bak"
+      missing_file="$HOME/.skiller/settings/agent.json.moonshot-auth.missing"
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$backup_file")"
       rm -f "$backup_file" "$missing_file"
@@ -166,9 +166,9 @@ steps:
     cwd: .
     timeout: 15
     check: true
-    next: write_minimax_config
+    next: write_moonshot_config
 
-  - shell: write_minimax_config
+  - shell: write_moonshot_config
     allowed_paths:
       - "~/.skiller"
     command: |
@@ -177,12 +177,12 @@ steps:
       settings_dir="$HOME/.skiller/settings"
       secrets_dir="$HOME/.skiller/secrets"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      secret_file="$({{runtime.python}} "{{flow.dir}}/moonshot_auth.py" api-key-file)"
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$secret_file")"
 
       if [ ! -s "$secret_file" ]; then
-        printf '%s\n' "MiniMax API key is required." >&2
+        printf '%s\n' "Moonshot API key is required." >&2
         exit 1
       fi
 
@@ -199,10 +199,10 @@ steps:
           config = {}
 
       llm = config.setdefault("llm", {})
-      llm["default_provider"] = "minimax"
+      llm["default_provider"] = "moonshot"
       providers = config.setdefault("providers", {})
-      providers["minimax"] = {
-          "model": "MiniMax-M2.7",
+      providers["moonshot"] = {
+          "model": "kimi-k3",
           "timeout_seconds": 60,
           "window_width_tokens": 80000,
           "api_key_file": secret_file,
@@ -214,44 +214,44 @@ steps:
       )
       PY
 
-      printf '%s\n' "MiniMax config saved."
+      printf '%s\n' "Moonshot config saved."
       printf '%s\n' "Config: $config_file"
       printf '%s\n' "Secret: $secret_file"
     cwd: .
     timeout: 15
     check: true
-    next: verify_minimax
+    next: verify_moonshot
 
-  - agent: verify_minimax
+  - agent: verify_moonshot
     system: |
       You are a configuration check agent.
       Reply with one short sentence.
-    task: "Say that the MiniMax agent configuration works."
+    task: "Say that the Moonshot agent configuration works."
     tools: []
     max_turns: 1
-    next: route_minimax_validation
+    next: route_moonshot_validation
 
-  - switch: route_minimax_validation
-    value: '{{output_value("verify_minimax").data.stop_reason}}'
+  - switch: route_moonshot_validation
+    value: '{{output_value("verify_moonshot").data.stop_reason}}'
     cases:
-      final: commit_minimax_config
-    default: restore_failed_minimax_config
+      final: commit_moonshot_config
+    default: restore_failed_moonshot_config
 
-  - shell: commit_minimax_config
+  - shell: commit_moonshot_config
     allowed_paths:
       - "~/.skiller"
     command: |
       set -eu
 
-      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      rm -f "$HOME/.skiller/settings/agent.json.moonshot-auth.bak"
+      rm -f "$HOME/.skiller/settings/agent.json.moonshot-auth.missing"
       printf '%s' committed
     cwd: .
     timeout: 15
     check: true
     next: done
 
-  - shell: restore_failed_minimax_config
+  - shell: restore_failed_moonshot_config
     allowed_paths:
       - "~/.skiller"
     command: |
@@ -259,9 +259,9 @@ steps:
 
       settings_dir="$HOME/.skiller/settings"
       config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
-      secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
+      backup_file="$HOME/.skiller/settings/agent.json.moonshot-auth.bak"
+      missing_file="$HOME/.skiller/settings/agent.json.moonshot-auth.missing"
+      secret_file="$({{runtime.python}} "{{flow.dir}}/moonshot_auth.py" api-key-file)"
 
       if [ -f "$backup_file" ]; then
         cp "$backup_file" "$config_file"
@@ -279,11 +279,11 @@ steps:
   - notify: validation_error
     format: markdown
     message: |
-      MiniMax validation failed. The saved key was removed.
+      Moonshot validation failed. The saved key was removed.
 
       Choose an option:
 
-      1. Paste a new MiniMax API key
+      1. Paste a new Moonshot API key
       2. Exit
     next: select_validation_action
 
@@ -305,11 +305,11 @@ steps:
     default: invalid_validation_action
 
   - notify: invalid_validation_action
-    message: "Invalid option. Type 1 to paste a new MiniMax API key or 2 to exit."
+    message: "Invalid option. Type 1 to paste a new Moonshot API key or 2 to exit."
     next: select_validation_action
 
   - notify: done
-    message: "MiniMax responded. Agent configuration is ready."
+    message: "Moonshot responded. Agent configuration is ready."
 
   - notify: exit_setup
-    message: "MiniMax setup closed."
+    message: "Moonshot setup closed."

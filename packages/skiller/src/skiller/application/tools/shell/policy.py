@@ -152,12 +152,17 @@ class ShellCommandPolicy:
 
     def _segment_arguments(self, tokens: list[str]) -> list[str]:
         index = 0
+        env_assignments: list[str] = []
         if self.allow_env_prefix:
             while index < len(tokens) and self._ENV_ASSIGNMENT_RE.match(tokens[index]):
+                env_assignments.append(tokens[index])
                 index += 1
         if index >= len(tokens):
-            return []
-        return tokens[index + 1 :]
+            return env_assignments
+        executable_path = tokens[index].strip().strip("'\"")
+        arguments = tokens[index + 1 :]
+        executable_candidates = self._path_if_candidate(executable_path)
+        return env_assignments + executable_candidates + arguments
 
     def _extract_paths_from_raw_command(self, command: str) -> list[str]:
         candidates: list[str] = []

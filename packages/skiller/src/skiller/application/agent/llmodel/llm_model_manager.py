@@ -8,6 +8,7 @@ from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
 from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_moonshot import MoonshotLLMRequest
 from skiller.domain.agent.llm.provider_registry import (
     AgentBedrockProvider,
     AgentCodexProvider,
@@ -15,6 +16,7 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentLLMProvider,
     AgentLMStudioProvider,
     AgentMiniMaxProvider,
+    AgentMoonshotProvider,
     AgentNullProvider,
 )
 from skiller.domain.agent.llm.request import LLMRequest
@@ -34,6 +36,11 @@ class LLMModelManager:
         if isinstance(provider, AgentMiniMaxProvider):
             if not isinstance(request, MiniMaxLLMRequest):
                 raise RuntimeError("MiniMax LLM provider requires MiniMaxLLMRequest")
+            client = self.client(provider)
+            response = client.generate(request)
+        elif isinstance(provider, AgentMoonshotProvider):
+            if not isinstance(request, MoonshotLLMRequest):
+                raise RuntimeError("Moonshot LLM provider requires MoonshotLLMRequest")
             client = self.client(provider)
             response = client.generate(request)
         elif isinstance(provider, AgentLMStudioProvider):
@@ -62,6 +69,9 @@ class LLMModelManager:
 
     @overload
     def client(self, provider: AgentMiniMaxProvider) -> LLMPort[MiniMaxLLMRequest]: ...
+
+    @overload
+    def client(self, provider: AgentMoonshotProvider) -> LLMPort[MoonshotLLMRequest]: ...
 
     @overload
     def client(self, provider: AgentLMStudioProvider) -> LLMPort[LMStudioLLMRequest]: ...

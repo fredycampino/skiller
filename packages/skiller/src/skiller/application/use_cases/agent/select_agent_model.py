@@ -27,6 +27,7 @@ class SelectAgentModelResult:
 
 _SELECTABLE_PROVIDER_TYPES = {
     AgentLLMProviderType.MINIMAX,
+    AgentLLMProviderType.MOONSHOT,
     AgentLLMProviderType.LMSTUDIO,
     AgentLLMProviderType.CODEX,
     AgentLLMProviderType.BEDROCK,

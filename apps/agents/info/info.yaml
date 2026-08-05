@@ -14,16 +14,15 @@ steps:
 
       Your LLM provider is configured.
 
-      Start by creating your agentic flow.
+      Starting the agentic flows workspace.
 
-      In Stui:
+      You can also start it manually with:
 
       ```text
       /run flows
       ```
-
-      CLI example:
-
-      ```bash
-      skiller run flows
-      ```
+    action:
+      type: run
+      label: Start flows
+      arg: flows
+      auto: true

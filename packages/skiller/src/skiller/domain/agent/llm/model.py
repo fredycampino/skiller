@@ -64,6 +64,7 @@ class AgentLLMProviderType(str, Enum):
     NULL = "null"
     FAKE = "fake"
     MINIMAX = "minimax"
+    MOONSHOT = "moonshot"
     LMSTUDIO = "lmstudio"
     CODEX = "codex"
     BEDROCK = "bedrock"

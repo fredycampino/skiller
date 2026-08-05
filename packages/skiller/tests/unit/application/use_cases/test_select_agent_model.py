@@ -19,12 +19,15 @@ from skiller.domain.agent.llm.model import AgentLLMProviderType, LLMCustomModel
 from skiller.domain.agent.llm.provider_registry import (
     CODEX_MODELS,
     FAKE_MODELS,
+    MOONSHOT_MODELS,
     AgentCodexLLMModel,
     AgentCodexProvider,
     AgentFakeLLMModel,
     AgentFakeProvider,
     AgentLLMProviderList,
     AgentLMStudioProvider,
+    AgentMoonshotLLMModel,
+    AgentMoonshotProvider,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
@@ -87,6 +90,36 @@ def test_select_agent_model_supports_lmstudio(tmp_path: Path) -> None:
         _SetModelCall(
             provider_type=AgentLLMProviderType.LMSTUDIO,
             model="google/gemma-4-12b-qat",
+            config_path=config_path,
+        )
+    ]
+
+
+def test_select_agent_model_supports_moonshot(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    config_path.write_text("{}", encoding="utf-8")
+    agent_config = _FakeAgentConfig(
+        config=_agent_config(_moonshot_provider())
+    )
+    use_case = SelectAgentModelUseCase(
+        run_store=_FakeRunStore(_build_run()),
+        agent_config=agent_config,
+        skill_runner=_FakeSkillRunner(config_path=config_path),
+    )
+
+    result = use_case.execute(
+        run_id="run-1",
+        provider="moonshot",
+        model="kimi-k3",
+    )
+
+    assert result.status == SelectAgentModelStatus.OK
+    assert result.provider == "moonshot"
+    assert result.model == "kimi-k3"
+    assert agent_config.set_model_calls == [
+        _SetModelCall(
+            provider_type=AgentLLMProviderType.MOONSHOT,
+            model="kimi-k3",
             config_path=config_path,
         )
     ]
@@ -276,7 +309,12 @@ def _build_run() -> Run:
 
 
 def _agent_config(
-    *providers: AgentCodexProvider | AgentLMStudioProvider | AgentFakeProvider,
+    *providers: (
+        AgentCodexProvider
+        | AgentLMStudioProvider
+        | AgentMoonshotProvider
+        | AgentFakeProvider
+    ),
 ) -> AgentConfig:
     if not providers:
         providers = (_fake_provider(),)
@@ -328,6 +366,16 @@ def _lmstudio_provider() -> AgentLMStudioProvider:
         models=(_lmstudio_model(),),
         timeout_seconds=30,
         window_width_tokens=131_072,
+    )
+
+
+def _moonshot_provider() -> AgentMoonshotProvider:
+    return AgentMoonshotProvider(
+        model=AgentMoonshotLLMModel.KIMI_K3,
+        models=MOONSHOT_MODELS,
+        api_key="secret",
+        timeout_seconds=30,
+        window_width_tokens=256_000,
     )
 
 

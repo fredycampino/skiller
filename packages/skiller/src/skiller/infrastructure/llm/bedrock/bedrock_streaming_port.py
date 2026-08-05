@@ -53,6 +53,7 @@ class BedrockStreamingLLMPort(LLMPort[BedrockLLMRequest]):
             self.request_logger.log_request(
                 request=kwargs,
                 file=Path(log_file).expanduser(),
+                overwrite=request.log_override_file,
             )
 
         try:

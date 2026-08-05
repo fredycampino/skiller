@@ -76,12 +76,16 @@ class AgentContextManager:
             ),
         )
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
+        log_request_file = None
+        if config.config.debug.log_request:
+            log_request_file = config.config.debug.log_request_file
         llm_request = self.prompt_builder.build_request(
             provider=provider,
             system=config.system,
             entries=entries,
             tools=config.tools,
-            log_request_file=config.config.llm.log_request_file,
+            log_request_file=log_request_file,
+            log_override_file=config.config.debug.log_override_file,
         )
         return AgentContextLLMRequest(
             context_id=context.context_id,

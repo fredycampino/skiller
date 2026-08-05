@@ -124,5 +124,5 @@ class LLMClientFactory:
         return BedrockStreamingLLMPort(
             profile=provider.profile,
             timeout_seconds=provider.timeout_seconds,
-            request_logger=BedrockFileLLMRequestLogger(overwrite=True),
+            request_logger=BedrockFileLLMRequestLogger(),
         )

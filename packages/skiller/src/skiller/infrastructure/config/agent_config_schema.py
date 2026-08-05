@@ -38,7 +38,14 @@ class LLMConfigModel(BaseModel):
 
     default_provider: str
     window_width_tokens: int | None = Field(default=None, gt=0)
+
+
+class DebugConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    log_request: bool = False
     log_request_file: str | None = None
+    log_override_file: bool = True
 
 
 class LoopConfigModel(BaseModel):
@@ -88,6 +95,7 @@ class AgentConfigModel(BaseModel):
 
     llm: LLMConfigModel
     providers: dict[str, LLMProviderConfigModel]
+    debug: DebugConfigModel = Field(default_factory=DebugConfigModel)
     loop: LoopConfigModel = Field(default_factory=LoopConfigModel)
     context: ContextConfigModel = Field(default_factory=ContextConfigModel)
     event_output: EventOutputConfigModel = Field(

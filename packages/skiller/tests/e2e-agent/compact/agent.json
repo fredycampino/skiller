@@ -1,7 +1,9 @@
 {
   "llm": {
     "default_provider": "lmstudio",
-    "window_width_tokens": 8000,
+    "window_width_tokens": 8000
+  },
+  "debug": {
     "log_request": true
   },
   "context": {

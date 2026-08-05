@@ -14,6 +14,7 @@ class LLMRequestLogger(Protocol):
         *,
         request: object,
         file: Path,
+        overwrite: bool | None = None,
     ) -> None: ...
 
     def log_response(
@@ -40,10 +41,12 @@ class FileLLMRequestLogger:
         *,
         request: object,
         file: Path,
+        overwrite: bool | None = None,
     ) -> None:
         file.parent.mkdir(parents=True, exist_ok=True)
         self._sequence += 1
-        path = file if self.overwrite else _sequenced_path(file, self._sequence)
+        should_overwrite = self.overwrite if overwrite is None else overwrite
+        path = file if should_overwrite else _sequenced_path(file, self._sequence)
         safe_request = self.redact_request(request=request)
         payload = {
             "sequence": self._sequence,

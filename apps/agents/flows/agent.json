@@ -1,4 +1,8 @@
 {
+  "debug": {
+    "log_request": true,
+    "log_override_file": false
+  },
   "loop": {
     "max_turns": 50,
     "max_tool_calls": 10
@@ -13,7 +17,8 @@
   "tools": {
     "shell": {
       "allowed_paths": [
-        "../../.."
+        "{{flow.dir}}",
+        "{{runtime.venv}}"
       ],
       "allowlist_enabled": true,
       "allow_env_prefix": true,

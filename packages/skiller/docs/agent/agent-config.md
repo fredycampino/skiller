@@ -39,6 +39,11 @@ The other root fields are optional and use mapper/model defaults.
 
 ```json
 {
+  "debug": {
+    "log_request": true,
+    "log_override_file": false,
+    "log_request_file": "logs/llm_requests.json"
+  },
   "llm": {
     "default_provider": "minimax"
   },
@@ -84,10 +89,6 @@ Unknown fields inside known sections are rejected.
 width for the selected provider. When absent, the selected provider uses its own
 `window_width_tokens`.
 
-`llm.log_request` is optional and defaults to `false`. When `true`, each LLM
-request built for the agent carries `log_request=true` so infrastructure clients
-can log that call.
-
 Each provider entry requires:
 
 - `model`
@@ -117,6 +118,29 @@ Provider entries are keyed by the logical provider id:
 In this example the provider declares `1000000` tokens, but this agent uses
 `80000` as its effective context limit before applying
 `context.compaction.max_total_tokens_ratio`.
+
+## Debug
+
+`debug.log_request` is optional and defaults to `false`. It is the only switch
+that enables request logging.
+
+`debug.log_request_file` is optional and defaults to
+`~/.skiller/logs/request/<provider>/request.json`, where `<provider>` is the
+selected default provider. This field only defines the destination file. It does
+not enable logging by itself.
+
+`debug.log_override_file` is optional and defaults to `true`. When `true`, each
+request replaces the configured log file. When `false`, numbered files are
+created instead.
+
+The legacy `log_request` and `log_request_file` fields under `llm` are invalid and
+cause configuration validation to fail.
+
+```text
+log_request=false + default log_request_file -> no request log is written
+log_request=true + default log_request_file -> request log is written to the default file
+log_request=true + custom log_request_file -> request log is written to the custom file
+```
 
 ## Providers
 
@@ -447,26 +471,8 @@ Only these sources are used:
 - the `agent.json` passed by the current flow context, normally next to the
   current flow `agent.yaml`
 
-Tool path settings are interpreted by each tool:
-
-- `tools.shell.allowed_paths` entries are expanded and resolved when
-  `agent.json` is loaded.
-- `tools.files.read`, `tools.files.write`, and `tools.files.all` entries are
-  expanded and resolved when `agent.json` is loaded.
-
-Relative entries are resolved against the directory of the `agent.json` file
-that defines the `tools` section.
-
-- in the global `~/.skiller/settings/agent.json`, `.` resolves to
-  `~/.skiller/settings`
-- in an explicit `AGENT_AGENT_CONFIG_FILE`, `.` resolves to the directory of
-  that file
-- in a local flow `<flow-directory>/agent.json`, `.` resolves to
-  `<flow-directory>`
-
-If a local or explicit config defines `tools`, it replaces the whole global
-`tools` section, so the replacement paths resolve against the local or explicit
-file. Use absolute paths for stable shared global config.
+Tool-specific configuration and path resolution are documented in
+[`./agent-config-tools.md`](./agent-config-tools.md).
 
 ## Loop
 
@@ -577,92 +583,6 @@ Env overrides:
 
 Related event contract: [`./agent-event.md`](./agent-event.md).
 
-## Tools
-
-`tools` is optional.
-
-`agent.json` can configure only tools that read runtime config. Current
-configurable tools:
-
-- `shell`
-- `files`
-
-### Tool Shell
-
-`tools.shell` controls what the agent `shell` tool may execute. It restricts the
-working directory, explicit path arguments, and optionally the executable names.
-
-```json
-{
-  "tools": {
-    "shell": {
-      "allowed_paths": ["."],
-      "allowlist_enabled": false,
-      "allow_env_prefix": true,
-      "allowed_commands": []
-    }
-  }
-}
-```
-
-Fields:
-
-- `tools.shell.allowed_paths`
-- `tools.shell.allowlist_enabled`
-- `tools.shell.allow_env_prefix`
-- `tools.shell.allowed_commands`
-
-`allowed_paths` defines the roots where shell `cwd` and explicit command path
-arguments may point.
-
-Defaults:
-
-- `allowed_paths = ()`
-- `allowlist_enabled = false`
-- `allow_env_prefix = true`
-- `allowed_commands = ()`
-
-When `allowed_paths` is empty, the shell policy uses the process current
-working directory as the effective allowed root.
-
-### Tool Files
-
-`tools.files` controls what the agent `files` tool may read or modify. Read and
-write roots are independent, and `all` grants both permissions.
-
-```json
-{
-  "tools": {
-    "files": {
-      "read": ["."],
-      "write": ["."],
-      "all": []
-    }
-  }
-}
-```
-
-Fields:
-
-- `tools.files.read`
-- `tools.files.write`
-- `tools.files.all`
-
-Defaults:
-
-- `read = ()`
-- `write = ()`
-- `all = ()`
-
-`tools.files.all` grants both read and write access. `tools.files.read` only
-grants read access. `tools.files.write` grants write and edit access.
-
-When no files roots are configured, files actions are blocked.
-
-Unknown tool config keys fail config mapping.
-
-There are no tool env overrides in the current mapper.
-
 ## Validation Behavior
 
 `validate_config` loads the same files and uses the same mapper as normal
@@ -688,4 +608,5 @@ runtime execution. Validation reports these categories:
 - [`./agent-context.md`](./agent-context.md)
 - [`./agent-event.md`](./agent-event.md)
 - [`./agent-tool-dev.md`](./agent-tool-dev.md)
+- [`./agent-config-tools.md`](./agent-config-tools.md)
 - [`../steps/agent.md`](../steps/agent.md)

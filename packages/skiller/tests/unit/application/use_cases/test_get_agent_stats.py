@@ -8,6 +8,7 @@ from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
+    AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
@@ -194,7 +195,6 @@ def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
         llm=AgentLLMProviderList(
             default_provider=AgentLLMProviderType.NULL,
             providers=(provider,),
-            log_request_file=None,
         ),
         loop=AgentLoopConfig(
             max_turns=2,
@@ -214,6 +214,11 @@ def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
                 max_json_chars=1000,
                 max_array_items=10,
             ),
+        ),
+        debug=AgentDebugConfig(
+            log_request=False,
+            log_request_file=None,
+            log_override_file=True,
         ),
     )
 

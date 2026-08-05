@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -418,6 +419,32 @@ def test_execute_shell_step_defaults_allowed_paths_with_flow_dir(tmp_path: Path)
     assert result.status == StepExecutionStatus.COMPLETED
     assert len(process_runner.requests) == 1
     assert process_runner.requests[0].command == ["/bin/bash", "-lc", command]
+
+
+def test_execute_shell_step_resolves_relative_allowed_paths_from_flow_dir(
+    tmp_path: Path,
+) -> None:
+    flow_dir = tmp_path / "flows" / "auths"
+    flow_dir.mkdir(parents=True)
+    use_case = _build_use_case(flow_runner=_FakeFlowRunner(flow_dir))
+    current_step = CurrentStep(
+        run_id="run-1",
+        step_index=0,
+        step_id="run_tests",
+        step_type=StepType.SHELL,
+        step={"command": "printf hello", "allowed_paths": [".", "./helpers"]},
+        context=RunContext(inputs={}, step_executions={}),
+    )
+
+    config = use_case._step_shell_config(current_step)
+
+    assert config.allowed_paths == (
+        Path.cwd().resolve(),
+        flow_dir.resolve(),
+        Path(sys.executable).resolve(),
+        flow_dir.resolve(),
+        (flow_dir / "helpers").resolve(),
+    )
 
 
 def test_execute_shell_step_defaults_allow_python_executable(tmp_path: Path) -> None:

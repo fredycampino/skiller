@@ -19,6 +19,7 @@ class LLMRequest:
     tools: tuple[ToolDefinition, ...] = field(default=(), kw_only=True)
     response_format: LLMResponseFormat | None = field(default=None, kw_only=True)
     log_request_file: str | None = field(default=None, kw_only=True)
+    log_override_file: bool = field(default=True, kw_only=True)
 
     def __post_init__(self) -> None:
         validate_llm_model_like(self.model, label="LLMRequest model")

@@ -36,9 +36,17 @@ class AgentEventOutputConfig:
 
 
 @dataclass(frozen=True)
+class AgentDebugConfig:
+    log_request: bool
+    log_request_file: str | None
+    log_override_file: bool
+
+
+@dataclass(frozen=True)
 class AgentConfig:
     llm: AgentLLMProviderList
     loop: AgentLoopConfig
     context: AgentContextConfig
     event_output: AgentEventOutputConfig
+    debug: AgentDebugConfig
     tools: ToolRuntimeConfigs = field(default_factory=ToolRuntimeConfigs)

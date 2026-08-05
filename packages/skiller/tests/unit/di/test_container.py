@@ -187,10 +187,8 @@ def test_llm_client_factory_creates_expected_client(
     assert isinstance(client, expected_type)
     if isinstance(client, OpenAILLMPort):
         assert isinstance(client.request_logger, OpenAIFileLLMRequestLogger)
-        assert client.request_logger.overwrite is False
     if isinstance(client, BedrockStreamingLLMPort):
         assert isinstance(client.request_logger, BedrockFileLLMRequestLogger)
-        assert client.request_logger.overwrite is True
 
 
 def test_build_runtime_container_does_not_load_agent_config_eagerly(tmp_path) -> None:

@@ -7,6 +7,7 @@ from skiller.domain.agent.config.model import (
     AgentConfig,
     AgentContextCompactionConfig,
     AgentContextConfig,
+    AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
     AgentLoopConfig,
@@ -48,10 +49,13 @@ from skiller.domain.tool.tool_contract import (
 )
 from skiller.infrastructure.config.agent_config_schema import (
     AgentConfigModel,
+    DebugConfigModel,
     EventOutputConfigModel,
     LLMProviderConfigModel,
     LoopConfigModel,
 )
+
+DEFAULT_LLM_REQUEST_LOG_FILE = "~/.skiller/logs/request/{provider}/request.json"
 
 
 class AgentConfigMapper:
@@ -107,7 +111,14 @@ class AgentConfigMapper:
         llm = AgentLLMProviderList(
             default_provider=default_provider,
             providers=tuple(providers),
-            log_request_file=config.llm.log_request_file,
+        )
+        debug = AgentDebugConfig(
+            log_request=config.debug.log_request,
+            log_request_file=_resolve_log_request_file(
+                debug_config=config.debug,
+                default_provider=default_provider,
+            ),
+            log_override_file=config.debug.log_override_file,
         )
         loop = _build_loop_config(config.loop, env=self.env)
         event_output = _build_event_output_config(config.event_output, env=self.env)
@@ -122,8 +133,19 @@ class AgentConfigMapper:
             loop=loop,
             context=context,
             event_output=event_output,
+            debug=debug,
             tools=tools,
         )
+
+
+def _resolve_log_request_file(
+    *,
+    debug_config: DebugConfigModel,
+    default_provider: AgentLLMProviderType,
+) -> str:
+    if debug_config.log_request_file is None or not debug_config.log_request_file.strip():
+        return DEFAULT_LLM_REQUEST_LOG_FILE.format(provider=default_provider.value)
+    return debug_config.log_request_file
 
 
 def _build_provider(

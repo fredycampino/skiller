@@ -33,7 +33,7 @@ def test_flows_local_agent_config_is_restricted() -> None:
     }
 
     shell_config = config["tools"]["shell"]
-    assert shell_config["allowed_paths"] == ["../../.."]
+    assert shell_config["allowed_paths"] == ["{{flow.dir}}", "{{runtime.venv}}"]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allow_env_prefix"] is True
     assert shell_config["allowed_commands"] == [

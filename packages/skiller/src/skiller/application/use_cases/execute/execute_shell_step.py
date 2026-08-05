@@ -122,9 +122,10 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
 
     def _step_shell_config(self, current_step: CurrentStep) -> ShellToolRuntimeConfig:
         run = self.store.get_run(current_step.run_id)
+        flow_dir = self.flow_runner.resolve_flow_dir(run.source, run.ref).resolve()
         allowed_paths = [
             Path.cwd().resolve(),
-            self.flow_runner.resolve_flow_dir(run.source, run.ref).resolve(),
+            flow_dir,
             Path(sys.executable).resolve(),
         ]
         raw_allowed_paths = current_step.step.get("allowed_paths") or []
@@ -141,7 +142,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
                 )
             path = Path(raw_path).expanduser()
             if not path.is_absolute():
-                path = Path.cwd() / path
+                path = flow_dir / path
             allowed_paths.append(path.resolve(strict=False))
 
         return ShellToolRuntimeConfig(

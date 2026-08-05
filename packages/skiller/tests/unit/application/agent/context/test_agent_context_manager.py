@@ -75,7 +75,7 @@ def test_agent_context_manager_builds_llm_request_from_context_window() -> None:
     assert [tool.name for tool in result.llm_request.tools] == ["notify"]
 
 
-def test_agent_context_manager_passes_log_request_to_llm_request() -> None:
+def test_agent_context_manager_passes_log_request_file_when_logging_is_enabled() -> None:
     store = _FakeAgentContextStore(
         window_entries=[
             AgentContextEntry(
@@ -102,11 +102,51 @@ def test_agent_context_manager_passes_log_request_to_llm_request() -> None:
         agent_id="agent-1",
         context_id="ctx-1",
     )
-    config = agent_runner_config(log_request_file="/tmp/skiller-llm.json")
+    config = agent_runner_config(
+        log_request=True,
+        log_request_file="/tmp/skiller-llm.json",
+    )
 
     result = manager.build_window_context(context=context, config=config)
 
     assert result.llm_request.log_request_file == "/tmp/skiller-llm.json"
+
+
+def test_agent_context_manager_omits_log_request_file_when_logging_is_disabled() -> None:
+    store = _FakeAgentContextStore(
+        window_entries=[
+            AgentContextEntry(
+                id="entry-1",
+                run_id="run-1",
+                context_id="ctx-1",
+                sequence=1,
+                entry_type=AgentContextEntryType.USER_MESSAGE,
+                payload=AgentUserMessagePayload(text="Hello"),
+                usage=None,
+                source_step_id="agent-1",
+                created_at="2026-05-16T00:00:00Z",
+            )
+        ],
+        next_turn_id="turn-2",
+    )
+    manager = AgentContextManager(
+        agent_context_store=store,
+        run_agent_store=_FakeRunAgentStore(),
+        prompt_builder=AgentPromptBuilder(),
+    )
+    context = AgentContext(
+        run_id="run-1",
+        agent_id="agent-1",
+        context_id="ctx-1",
+    )
+    config = agent_runner_config(
+        log_request=False,
+        log_request_file="/tmp/skiller-llm.json",
+    )
+
+    result = manager.build_window_context(context=context, config=config)
+
+    assert result.llm_request.log_request_file is None
 
 
 def test_agent_context_manager_builds_window_context_from_window_entries() -> None:

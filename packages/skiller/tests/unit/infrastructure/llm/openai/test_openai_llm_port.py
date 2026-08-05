@@ -57,7 +57,9 @@ class _FakeRequestLogger:
         *,
         request: object,
         file: object,
+        overwrite: bool,
     ) -> None:
+        _ = (file, overwrite)
         self.requests.append(request)
 
     def log_response(

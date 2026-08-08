@@ -422,10 +422,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
                 WHERE context_id = ?
                   AND sequence = ?
                 """,
-                [
-                    (update.delta_compact_tokens, context_id, update.sequence)
-                    for update in updates
-                ],
+                [(update.delta_compact_tokens, context_id, update.sequence) for update in updates],
             )
 
     def get_observed_stats(
@@ -688,8 +685,10 @@ def _build_entry(row: sqlite3.Row) -> AgentContextEntry:
 def _usage_to_dict(usage: LLMUsage) -> dict[str, int | str | None]:
     result: dict[str, int | str | None] = {
         "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
+        "output_tokens": usage.output_tokens,
         "total_tokens": usage.total_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
     }
     if usage.provider is not None:
         result["provider"] = usage.provider.value
@@ -721,8 +720,10 @@ def _usage_from_json(raw_usage: object) -> LLMUsage | None:
         return None
     return LLMUsage(
         prompt_tokens=_optional_int(parsed.get("prompt_tokens")),
-        completion_tokens=_optional_int(parsed.get("completion_tokens")),
+        output_tokens=_optional_int(parsed.get("output_tokens")),
         total_tokens=_optional_int(parsed.get("total_tokens")),
+        cache_read_tokens=_optional_int(parsed.get("cache_read_tokens")),
+        cache_write_tokens=_optional_int(parsed.get("cache_write_tokens")),
         provider=_optional_string(parsed.get("provider")),
         model=_optional_model(parsed.get("model")),
     )

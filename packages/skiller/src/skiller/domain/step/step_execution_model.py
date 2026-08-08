@@ -41,8 +41,10 @@ class AssignOutput(OutputBase):
 @dataclass(frozen=True)
 class AgentUsageOutput:
     prompt_tokens: int | None
-    completion_tokens: int | None
+    output_tokens: int | None
     total_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
     provider: AgentLLMProviderType | None
     model: str | None
 
@@ -179,14 +181,10 @@ def _build_output(step_type: StepType, data: dict[str, Any] | None) -> OutputBas
     return output_type(
         text=str(text),
         text_ref=(
-            str(text_ref).strip()
-            if isinstance(text_ref, str) and text_ref.strip()
-            else None
+            str(text_ref).strip() if isinstance(text_ref, str) and text_ref.strip() else None
         ),
         body_ref=(
-            str(body_ref).strip()
-            if isinstance(body_ref, str) and body_ref.strip()
-            else None
+            str(body_ref).strip() if isinstance(body_ref, str) and body_ref.strip() else None
         ),
         **output_fields,
     )
@@ -239,8 +237,10 @@ def _build_agent_usage_output(raw_usage: object) -> AgentUsageOutput:
         raise ValueError("agent usage output must be an object")
     return AgentUsageOutput(
         prompt_tokens=_optional_int(raw_usage.get("prompt_tokens")),
-        completion_tokens=_optional_int(raw_usage.get("completion_tokens")),
+        output_tokens=_optional_int(raw_usage.get("output_tokens")),
         total_tokens=_optional_int(raw_usage.get("total_tokens")),
+        cache_read_tokens=_optional_int(raw_usage.get("cache_read_tokens")),
+        cache_write_tokens=_optional_int(raw_usage.get("cache_write_tokens")),
         provider=_optional_provider(raw_usage.get("provider")),
         model=_optional_model(raw_usage.get("model")),
     )

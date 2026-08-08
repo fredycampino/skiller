@@ -61,7 +61,15 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Old answer",
-        usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=100,
+            output_tokens=5,
+            total_tokens=105,
+        ),
         delta_tokens=100,
         window_start_sequence=1,
         window_base=True,
@@ -71,7 +79,15 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="I will inspect.",
-        usage=LLMUsage(prompt_tokens=190, completion_tokens=5, total_tokens=195),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=190,
+            output_tokens=5,
+            total_tokens=195,
+        ),
         delta_tokens=90,
         window_start_sequence=1,
         window_base=False,
@@ -103,7 +119,15 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="File inspected.",
-        usage=LLMUsage(prompt_tokens=230, completion_tokens=5, total_tokens=235),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=230,
+            output_tokens=5,
+            total_tokens=235,
+        ),
         delta_tokens=40,
         window_start_sequence=1,
         window_base=False,
@@ -132,8 +156,10 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         turn_id="turn-1",
         text="Hello",
         usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
             prompt_tokens=123,
-            completion_tokens=45,
+            output_tokens=45,
             total_tokens=168,
             provider="minimax",
             model=AgentMiniMaxLLMModel.M2_5,
@@ -172,8 +198,10 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     assert entries[0].usage is None
     assert entries[1].delta_compact_tokens is None
     assert entries[1].usage == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=123,
-        completion_tokens=45,
+        output_tokens=45,
         total_tokens=168,
         provider="minimax",
         model=AgentMiniMaxLLMModel.M2_5,
@@ -185,14 +213,18 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     assert raw_row[4] == 1
     assert json.loads(raw_row[5]) == {
         "prompt_tokens": 123,
-        "completion_tokens": 45,
+        "output_tokens": 45,
         "total_tokens": 168,
+        "cache_read_tokens": None,
+        "cache_write_tokens": None,
         "provider": "minimax",
         "model": "MiniMax-M2.5",
     }
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=123,
-        completion_tokens=45,
+        output_tokens=45,
         total_tokens=168,
         provider="minimax",
         model=AgentMiniMaxLLMModel.M2_5,
@@ -298,8 +330,12 @@ def test_sqlite_agent_context_datasource_protected_tail_keeps_blocks_that_fit(
             turn_id=f"turn-{index}",
             text=f"block {index}",
             usage=LLMUsage(
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
+                model=None,
                 prompt_tokens=delta_tokens,
-                completion_tokens=1,
+                output_tokens=1,
                 total_tokens=delta_tokens + 1,
             ),
             delta_tokens=delta_tokens,
@@ -365,12 +401,10 @@ def test_sqlite_agent_context_datasource_lists_compact_entries_from_sequence(
         start_sequence=7,
         window_width_tokens=75,
     )
-    empty_when_first_marker_exceeds_budget = (
-        datasource.list_compact_entries(
-            context_id=CONTEXT_ID,
-            start_sequence=7,
-            window_width_tokens=30,
-        )
+    empty_when_first_marker_exceeds_budget = datasource.list_compact_entries(
+        context_id=CONTEXT_ID,
+        start_sequence=7,
+        window_width_tokens=30,
     )
     empty_without_compact_markers = datasource.list_compact_entries(
         context_id=CONTEXT_ID,
@@ -452,7 +486,15 @@ def test_agent_context_store_adds_compact_delta_tokens_to_non_prunable_entries(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="I will inspect.",
-        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=90,
+            output_tokens=5,
+            total_tokens=95,
+        ),
         delta_tokens=90,
         window_start_sequence=1,
         window_base=True,
@@ -490,7 +532,15 @@ def test_agent_context_store_adds_compact_delta_tokens_to_non_prunable_entries(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="File inspected.",
-        usage=LLMUsage(prompt_tokens=200, completion_tokens=5, total_tokens=205),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=200,
+            output_tokens=5,
+            total_tokens=205,
+        ),
         delta_tokens=110,
         window_start_sequence=1,
         window_base=False,
@@ -499,9 +549,7 @@ def test_agent_context_store_adds_compact_delta_tokens_to_non_prunable_entries(
         context_id=CONTEXT_ID,
         marker_sequence=final_marker.sequence,
     )
-    first_block_chars = payload_chars(first_user.payload) + payload_chars(
-        first_marker.payload
-    )
+    first_block_chars = payload_chars(first_user.payload) + payload_chars(first_marker.payload)
     tool_block_chars = (
         payload_chars(tool_call.payload)
         + payload_chars(tool_result.payload)
@@ -620,12 +668,8 @@ def test_agent_context_store_normalizes_compact_keep_last_blocks(tmp_path) -> No
         keep_last_blocks=100,
     )
 
-    assert [entry.sequence for entry in below_min] == [
-        entry.sequence for entry in min_value
-    ]
-    assert [entry.sequence for entry in above_max] == [
-        entry.sequence for entry in max_value
-    ]
+    assert [entry.sequence for entry in below_min] == [entry.sequence for entry in min_value]
+    assert [entry.sequence for entry in above_max] == [entry.sequence for entry in max_value]
 
 
 def _compact_delta_tokens(db_path: Path, *, sequence: int) -> int | None:
@@ -676,8 +720,10 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
         turn_id="turn-1",
         text="Hello",
         usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
             prompt_tokens=123,
-            completion_tokens=45,
+            output_tokens=45,
             total_tokens=168,
             provider="lmstudio",
             model=model,
@@ -700,15 +746,19 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
 
     assert json.loads(raw_usage)["model"] == "google/gemma-4-12b-qat"
     assert entries[0].usage == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=123,
-        completion_tokens=45,
+        output_tokens=45,
         total_tokens=168,
         provider="lmstudio",
         model="google/gemma-4-12b-qat",
     )
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=123,
-        completion_tokens=45,
+        output_tokens=45,
         total_tokens=168,
         provider="lmstudio",
         model="google/gemma-4-12b-qat",
@@ -738,7 +788,15 @@ def test_agent_context_store_persists_delta_markers(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="First",
-        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=90,
+            output_tokens=5,
+            total_tokens=95,
+        ),
         delta_tokens=90,
         window_start_sequence=1,
         window_base=True,
@@ -751,7 +809,15 @@ def test_agent_context_store_persists_delta_markers(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Reset",
-        usage=LLMUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=1,
+            output_tokens=1,
+            total_tokens=2,
+        ),
         delta_tokens=1,
         window_start_sequence=reset_start.sequence,
         window_base=True,
@@ -763,8 +829,12 @@ def test_agent_context_store_persists_delta_markers(
     assert reset.delta_tokens == 1
     assert reset.window_start_sequence == reset_start.sequence
     assert reset.usage == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        provider=None,
+        model=None,
         prompt_tokens=1,
-        completion_tokens=1,
+        output_tokens=1,
         total_tokens=2,
     )
     assert [entry.delta_tokens for entry in entries if entry.delta_tokens] == [90, 1]
@@ -793,7 +863,15 @@ def test_agent_context_store_keeps_delta_series_markers(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="First",
-        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=90,
+            output_tokens=5,
+            total_tokens=95,
+        ),
         delta_tokens=90,
         window_start_sequence=1,
         window_base=True,
@@ -802,7 +880,15 @@ def test_agent_context_store_keeps_delta_series_markers(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Next",
-        usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=100,
+            output_tokens=5,
+            total_tokens=105,
+        ),
         delta_tokens=10,
         window_start_sequence=1,
         window_base=False,
@@ -837,7 +923,15 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Older",
-        usage=LLMUsage(prompt_tokens=90, completion_tokens=5, total_tokens=95),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=90,
+            output_tokens=5,
+            total_tokens=95,
+        ),
         delta_tokens=90,
         window_start_sequence=1,
         window_base=True,
@@ -850,7 +944,15 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Current base",
-        usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=120,
+            output_tokens=5,
+            total_tokens=125,
+        ),
         delta_tokens=25,
         window_start_sequence=start.sequence,
         window_base=True,
@@ -859,7 +961,15 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Corrupt negative",
-        usage=LLMUsage(prompt_tokens=110, completion_tokens=5, total_tokens=115),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=110,
+            output_tokens=5,
+            total_tokens=115,
+        ),
         delta_tokens=-5,
         window_start_sequence=start.sequence,
         window_base=False,
@@ -878,16 +988,27 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         context=AGENT_CONTEXT,
         turn_id="turn-4",
         text="Tail",
-        usage=LLMUsage(prompt_tokens=130, completion_tokens=5, total_tokens=135),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=130,
+            output_tokens=5,
+            total_tokens=135,
+        ),
         delta_tokens=10,
         window_start_sequence=start.sequence,
         window_base=False,
     )
 
-    assert store.estimate_window_tokens(
-        context_id=CONTEXT_ID,
-        start_sequence=start.sequence,
-    ) == 35
+    assert (
+        store.estimate_window_tokens(
+            context_id=CONTEXT_ID,
+            start_sequence=start.sequence,
+        )
+        == 35
+    )
 
 
 def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
@@ -901,7 +1022,15 @@ def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Old answer " * 20,
-        usage=LLMUsage(prompt_tokens=100, completion_tokens=5, total_tokens=105),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=100,
+            output_tokens=5,
+            total_tokens=105,
+        ),
         delta_tokens=100,
         window_start_sequence=1,
         window_base=True,
@@ -919,12 +1048,15 @@ def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
     block_chars = persisted_block_chars + payload_chars(current_payload)
     expected_delta_tokens = max(1, (block_chars + 1) // 3)
 
-    assert store.estimate_delta_tokens(
-        context_id=CONTEXT_ID,
-        window_start_sequence=1,
-        last_marker_sequence=marker.sequence,
-        payload=current_payload,
-    ) == expected_delta_tokens
+    assert (
+        store.estimate_delta_tokens(
+            context_id=CONTEXT_ID,
+            window_start_sequence=1,
+            last_marker_sequence=marker.sequence,
+            payload=current_payload,
+        )
+        == expected_delta_tokens
+    )
 
 
 def test_sqlite_agent_context_datasource_sums_payload_chars_from_sequence(
@@ -964,12 +1096,15 @@ def test_agent_context_store_estimates_delta_tokens_from_current_payload(
     block_chars = payload_chars(current_payload)
     expected_delta_tokens = max(1, (block_chars + 1) // 3)
 
-    assert store.estimate_delta_tokens(
-        context_id=CONTEXT_ID,
-        window_start_sequence=999,
-        last_marker_sequence=999,
-        payload=current_payload,
-    ) == expected_delta_tokens
+    assert (
+        store.estimate_delta_tokens(
+            context_id=CONTEXT_ID,
+            window_start_sequence=999,
+            last_marker_sequence=999,
+            payload=current_payload,
+        )
+        == expected_delta_tokens
+    )
 
 
 def test_agent_context_store_returns_stats_from_latest_usage_marker(
@@ -995,7 +1130,15 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Base final",
-        usage=LLMUsage(prompt_tokens=35, completion_tokens=5, total_tokens=40),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=35,
+            output_tokens=5,
+            total_tokens=40,
+        ),
         delta_tokens=35,
         window_start_sequence=1,
         window_base=True,
@@ -1008,7 +1151,15 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Previous current final",
-        usage=LLMUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=25,
+            output_tokens=5,
+            total_tokens=30,
+        ),
         delta_tokens=25,
         window_start_sequence=3,
         window_base=True,
@@ -1017,7 +1168,15 @@ def test_agent_context_store_returns_stats_from_latest_usage_marker(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest current final",
-        usage=LLMUsage(prompt_tokens=45, completion_tokens=5, total_tokens=50),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=45,
+            output_tokens=5,
+            total_tokens=50,
+        ),
         delta_tokens=20,
         window_start_sequence=3,
         window_base=False,
@@ -1065,7 +1224,15 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Older base",
-        usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=80,
+            output_tokens=5,
+            total_tokens=85,
+        ),
         delta_tokens=80,
         window_start_sequence=1,
         window_base=True,
@@ -1078,7 +1245,15 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Old series inside current window",
-        usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=120,
+            output_tokens=5,
+            total_tokens=125,
+        ),
         delta_tokens=40,
         window_start_sequence=1,
         window_base=True,
@@ -1091,7 +1266,15 @@ def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Current base",
-        usage=LLMUsage(prompt_tokens=30, completion_tokens=5, total_tokens=35),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=30,
+            output_tokens=5,
+            total_tokens=35,
+        ),
         delta_tokens=30,
         window_start_sequence=current_start.sequence,
         window_base=True,
@@ -1132,7 +1315,15 @@ def test_sqlite_agent_context_datasource_window_start_sequence_keeps_oversized_l
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Oversized",
-        usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=80,
+            output_tokens=5,
+            total_tokens=85,
+        ),
         delta_tokens=80,
         window_start_sequence=1,
         window_base=True,
@@ -1172,7 +1363,15 @@ def test_agent_context_store_stops_at_active_window_start_without_base_marker(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Older base",
-        usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=80,
+            output_tokens=5,
+            total_tokens=85,
+        ),
         delta_tokens=80,
         window_start_sequence=1,
         window_base=True,
@@ -1185,7 +1384,15 @@ def test_agent_context_store_stops_at_active_window_start_without_base_marker(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Latest current delta",
-        usage=LLMUsage(prompt_tokens=35, completion_tokens=5, total_tokens=40),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=35,
+            output_tokens=5,
+            total_tokens=40,
+        ),
         delta_tokens=10,
         window_start_sequence=current_start.sequence,
         window_base=False,
@@ -1227,7 +1434,15 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Older base",
-        usage=LLMUsage(prompt_tokens=80, completion_tokens=5, total_tokens=85),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=80,
+            output_tokens=5,
+            total_tokens=85,
+        ),
         delta_tokens=80,
         window_start_sequence=1,
         window_base=True,
@@ -1240,7 +1455,15 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Old series marker inside current window",
-        usage=LLMUsage(prompt_tokens=120, completion_tokens=5, total_tokens=125),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=120,
+            output_tokens=5,
+            total_tokens=125,
+        ),
         delta_tokens=40,
         window_start_sequence=1,
         window_base=True,
@@ -1253,7 +1476,15 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Current base",
-        usage=LLMUsage(prompt_tokens=30, completion_tokens=5, total_tokens=35),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=30,
+            output_tokens=5,
+            total_tokens=35,
+        ),
         delta_tokens=30,
         window_start_sequence=current_start.sequence,
         window_base=True,
@@ -1288,7 +1519,15 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="Older final",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=10,
+            output_tokens=1,
+            total_tokens=11,
+        ),
         delta_tokens=10,
         window_start_sequence=1,
         window_base=True,
@@ -1297,7 +1536,15 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Corrupt negative delta",
-        usage=LLMUsage(prompt_tokens=5, completion_tokens=1, total_tokens=6),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=5,
+            output_tokens=1,
+            total_tokens=6,
+        ),
         delta_tokens=-5,
         window_start_sequence=1,
         window_base=False,
@@ -1306,7 +1553,15 @@ def test_agent_context_store_ignores_negative_delta_when_selecting_window(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest final",
-        usage=LLMUsage(prompt_tokens=15, completion_tokens=1, total_tokens=16),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=15,
+            output_tokens=1,
+            total_tokens=16,
+        ),
         delta_tokens=10,
         window_start_sequence=1,
         window_base=False,
@@ -1484,7 +1739,15 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Done",
-        usage=LLMUsage(prompt_tokens=None, completion_tokens=12, total_tokens=None),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=None,
+            output_tokens=12,
+            total_tokens=None,
+        ),
         delta_tokens=0,
         window_start_sequence=1,
         window_base=True,
@@ -1541,7 +1804,15 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="First final",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=10,
+            output_tokens=5,
+            total_tokens=15,
+        ),
         delta_tokens=10,
         window_start_sequence=1,
         window_base=True,
@@ -1559,7 +1830,15 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest final",
-        usage=LLMUsage(prompt_tokens=30, completion_tokens=9, total_tokens=39),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=30,
+            output_tokens=9,
+            total_tokens=39,
+        ),
         delta_tokens=20,
         window_start_sequence=1,
         window_base=False,
@@ -1571,8 +1850,12 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
     assert isinstance(latest.payload, AgentAssistantMessagePayload)
     assert latest.window_start_sequence == 1
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        provider=None,
+        model=None,
         prompt_tokens=30,
-        completion_tokens=9,
+        output_tokens=9,
         total_tokens=39,
     )
     assert stats.entries == 3
@@ -1603,7 +1886,15 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
         context=AGENT_CONTEXT,
         turn_id="turn-1",
         text="First final",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=10,
+            output_tokens=5,
+            total_tokens=15,
+        ),
         delta_tokens=10,
         window_start_sequence=1,
         window_base=True,
@@ -1612,7 +1903,15 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Usage without prompt",
-        usage=LLMUsage(prompt_tokens=None, completion_tokens=5, total_tokens=None),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=None,
+            output_tokens=5,
+            total_tokens=None,
+        ),
         delta_tokens=0,
         window_start_sequence=1,
         window_base=False,

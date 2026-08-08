@@ -90,10 +90,16 @@ def test_llm_response_exposes_semantic_properties() -> None:
 
 def test_llm_usage_normalizes_model_like_values_to_model_name() -> None:
     usage = LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        prompt_tokens=None,
+        output_tokens=None,
+        total_tokens=None,
+        provider=None,
         model=LLMCustomModel(
             value="local/custom",
             model_context_window_tokens=4096,
-        )
+        ),
     )
 
     assert usage.model == "local/custom"
@@ -101,4 +107,12 @@ def test_llm_usage_normalizes_model_like_values_to_model_name() -> None:
 
 def test_llm_usage_rejects_invalid_model_name() -> None:
     with pytest.raises(TypeError, match="LLMUsage model must be a non-empty string"):
-        LLMUsage(model="")
+        LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            prompt_tokens=None,
+            output_tokens=None,
+            total_tokens=None,
+            provider=None,
+            model="",
+        )

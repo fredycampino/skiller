@@ -78,9 +78,7 @@ class AgentStepExecutionMapper:
         runner_result: AgentRunnerResult,
     ) -> StepExecution:
         response_model = (
-            runner_result.response_model.value
-            if runner_result.response_model is not None
-            else None
+            runner_result.response_model.value if runner_result.response_model is not None else None
         )
         return StepExecution(
             step_type=current_step.step_type,
@@ -158,8 +156,10 @@ def _stop_message(stop_reason: AgentStopReason) -> str:
 def _usage_output(usage: LLMUsage) -> AgentUsageOutput:
     return AgentUsageOutput(
         prompt_tokens=usage.prompt_tokens,
-        completion_tokens=usage.completion_tokens,
+        output_tokens=usage.output_tokens,
         total_tokens=usage.total_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_write_tokens=usage.cache_write_tokens,
         provider=usage.provider,
         model=usage.model,
     )

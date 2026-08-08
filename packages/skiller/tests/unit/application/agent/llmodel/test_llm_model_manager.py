@@ -95,7 +95,15 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         ok=True,
         model=AgentFakeLLMModel.MODEL1,
         content="fake",
-        usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=10,
+            output_tokens=5,
+            total_tokens=15,
+        ),
     )
     manager = LLMModelManager(client_resolver=_FakeClientResolver(response))
 
@@ -105,8 +113,10 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
     )
 
     assert result.usage == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=10,
-        completion_tokens=5,
+        output_tokens=5,
         total_tokens=15,
         provider="fake",
         model=AgentFakeLLMModel.MODEL1,
@@ -161,9 +171,7 @@ def test_llm_model_manager_rejects_provider_request_mismatch(
     provider: AgentLLMProvider,
     error: str,
 ) -> None:
-    client_resolver = _FakeClientResolver(
-        LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1)
-    )
+    client_resolver = _FakeClientResolver(LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1))
     manager = LLMModelManager(client_resolver=client_resolver)
 
     with pytest.raises(RuntimeError, match=error):

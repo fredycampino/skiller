@@ -214,9 +214,17 @@ def _to_port_usage(raw_usage: object) -> LLMUsage | None:
     if raw_usage is None:
         return None
     return LLMUsage(
+        provider=None,
+        model=None,
         prompt_tokens=_optional_int(_value(raw_usage, "prompt_tokens")),
-        completion_tokens=_optional_int(_value(raw_usage, "completion_tokens")),
+        output_tokens=_optional_int(_value(raw_usage, "completion_tokens")),
         total_tokens=_optional_int(_value(raw_usage, "total_tokens")),
+        cache_read_tokens=_optional_int(
+            _value(_value(raw_usage, "prompt_tokens_details"), "cached_tokens")
+        ),
+        cache_write_tokens=_optional_int(
+            _value(_value(raw_usage, "prompt_tokens_details"), "cache_write_tokens")
+        ),
     )
 
 

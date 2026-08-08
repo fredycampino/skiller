@@ -16,6 +16,32 @@ from skiller.infrastructure.llm.bedrock.bedrock_mapper import to_bedrock_kwargs
 pytestmark = pytest.mark.unit
 
 
+def test_to_bedrock_kwargs_adds_cache_point_before_last_message() -> None:
+    request = BedrockLLMRequest(
+        messages=(LLMUserMessage("history"), LLMUserMessage("new")),
+        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        max_tokens=4096,
+    )
+
+    kwargs = to_bedrock_kwargs(request, max_tokens=4096)
+
+    assert kwargs["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"text": "history"},
+                {"cachePoint": {"type": "default"}},
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"text": "new"},
+            ],
+        }
+    ]
+
+
 def test_to_bedrock_kwargs_groups_consecutive_tool_results() -> None:
     request = BedrockLLMRequest(
         messages=(
@@ -59,14 +85,15 @@ def test_to_bedrock_kwargs_groups_consecutive_tool_results() -> None:
                         "input": {"command": "pwd"},
                     }
                 },
-                {
-                    "toolUse": {
-                        "toolUseId": "tooluse_2",
-                        "name": "shell",
-                        "input": {"command": "whoami"},
-                    }
-                },
-            ],
+                    {
+                        "toolUse": {
+                            "toolUseId": "tooluse_2",
+                            "name": "shell",
+                            "input": {"command": "whoami"},
+                        }
+                    },
+                    {"cachePoint": {"type": "default"}},
+                ],
         },
         {
             "role": "user",

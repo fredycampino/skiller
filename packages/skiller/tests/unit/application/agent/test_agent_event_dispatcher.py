@@ -48,7 +48,15 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=LLMUsage(total_tokens=2144),
+            usage=LLMUsage(
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
+                model=None,
+                prompt_tokens=None,
+                output_tokens=None,
+                total_tokens=2144,
+            ),
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="tool_calls",
@@ -89,7 +97,15 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             context_id="ctx-1",
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
-            usage=LLMUsage(total_tokens=2144),
+            usage=LLMUsage(
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
+                model=None,
+                prompt_tokens=None,
+                output_tokens=None,
+                total_tokens=2144,
+            ),
             payload=AgentAssistantMessagePayload(
                 turn_id="turn-4",
                 message_type="final",

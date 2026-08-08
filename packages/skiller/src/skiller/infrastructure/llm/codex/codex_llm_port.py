@@ -6,6 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
@@ -22,6 +23,7 @@ from skiller.infrastructure.llm.codex.codex_mapper import (
     to_codex_tool_payload,
     to_port_llm_response,
 )
+from skiller.infrastructure.llm.logger.request_logger import LLMRequestLogger
 
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token"
@@ -56,14 +58,28 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
         credentials_file: str,
         timeout_seconds: float,
         credentials_datasource: CodexCredentialsDatasource,
+        request_logger: LLMRequestLogger,
     ) -> None:
         self.credentials_file = credentials_file
         self.timeout_seconds = timeout_seconds
         self.credentials_datasource = credentials_datasource
+        self.request_logger = request_logger
 
     def generate(self, request: CodexLLMRequest) -> LLMResponse:
+        kwargs = _to_codex_kwargs(request)
+        kwargs["stream"] = True
+        log_file = request.log_request_file
+        if log_file is not None:
+            self.request_logger.log_request(
+                request=kwargs,
+                file=Path(log_file).expanduser(),
+                overwrite=request.log_override_file,
+            )
+
         token = self._get_token()
         if isinstance(token, CodexError):
+            if log_file is not None:
+                self.request_logger.log_error(error=token.error)
             return LLMResponse(
                 ok=False,
                 model=request.model,
@@ -72,8 +88,6 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
             )
 
         client = self._build_client(token)
-        kwargs = _to_codex_kwargs(request)
-        kwargs["stream"] = True
         response: object | None = None
         text_deltas: list[object] = []
         output_items: list[object] = []
@@ -91,6 +105,8 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
                     output_items.append(getattr(event, "item", None))
                     continue
                 if event_type == "error":
+                    if log_file is not None:
+                        self.request_logger.log_error(error="Codex stream emitted an error event")
                     return LLMResponse(
                         ok=False,
                         model=request.model,
@@ -98,6 +114,11 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
                         error_code="stream_error",
                     )
         except Exception as exc:  # noqa: BLE001
+            if log_file is not None:
+                if response is not None:
+                    self.request_logger.log_response(response=response)
+                else:
+                    self.request_logger.log_error(error=f"Codex request failed: {exc}")
             if text_deltas or output_items:
                 stream_result = CodexStreamResult(
                     response=response,
@@ -114,6 +135,14 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
                 error=f"Codex request failed: {exc}",
                 error_code="request_failed",
             )
+
+        if log_file is not None:
+            if response is not None:
+                self.request_logger.log_response(response=response)
+            else:
+                self.request_logger.log_error(
+                    error="Codex stream completed without response.completed"
+                )
 
         stream_result = CodexStreamResult(
             response=response,
@@ -214,6 +243,11 @@ def _to_codex_kwargs(request: CodexLLMRequest) -> dict[str, object]:
         "model": request.model.value,
         "instructions": instructions,
         "input": input_items,
+        "prompt_cache_key": request.session_id,
+        "extra_headers": {
+            "session_id": request.session_id,
+            "x-client-request-id": request.session_id,
+        },
         "store": False,
         "tool_choice": "auto",
         "parallel_tool_calls": request.parallel_tool_calls,

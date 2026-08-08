@@ -44,6 +44,7 @@ class AgentPromptBuilder:
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],
+        context_id: str,
         log_request_file: str | None,
         log_override_file: bool,
     ) -> LLMRequest:
@@ -92,6 +93,7 @@ class AgentPromptBuilder:
                 messages=messages,
                 model=provider.model,
                 parallel_tool_calls=provider.parallel_tool_calls,
+                session_id=context_id,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,

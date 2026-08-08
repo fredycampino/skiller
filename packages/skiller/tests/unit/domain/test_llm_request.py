@@ -134,6 +134,7 @@ def test_codex_llm_request_requires_codex_model() -> None:
         messages=(LLMUserMessage("hello"),),
         model=AgentCodexLLMModel.GPT_5_5,
         parallel_tool_calls=True,
+        session_id="context-1",
     )
 
     assert request.model == AgentCodexLLMModel.GPT_5_5
@@ -146,6 +147,7 @@ def test_codex_llm_request_requires_codex_model() -> None:
             messages=(LLMUserMessage("hello"),),
             model=AgentMiniMaxLLMModel.M2_7,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
 
 

@@ -18,10 +18,7 @@ def test_llm_request_includes_provider_error_and_code() -> None:
         ),
     )
 
-    assert (
-        message
-        == "Agent 'support_agent' LLM request failed: invalid params (error_code=2013)"
-    )
+    assert message == "Agent 'support_agent' LLM request failed: invalid params (error_code=2013)"
 
 
 def test_llm_request_falls_back_to_finish_reason() -> None:
@@ -58,8 +55,12 @@ def test_invalid_final_message_embeds_response_json() -> None:
             content=None,
             finish_reason="end_turn",
             usage=LLMUsage(
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
+                model=None,
                 prompt_tokens=42688,
-                completion_tokens=2155,
+                output_tokens=2155,
                 total_tokens=44843,
             ),
         ),
@@ -69,7 +70,8 @@ def test_invalid_final_message_embeds_response_json() -> None:
         "Agent step 'support_agent' returned no final answer: "
         '{"ok":true,"model":"model1","content":null,"tool_calls":[],'
         '"finish_reason":"end_turn",'
-        '"usage":{"prompt_tokens":42688,"completion_tokens":2155,'
-        '"total_tokens":44843,"provider":null,"model":null},'
+        '"usage":{"prompt_tokens":42688,"output_tokens":2155,'
+        '"total_tokens":44843,"cache_read_tokens":null,'
+        '"cache_write_tokens":null,"provider":null,"model":null},'
         '"error":null,"error_code":null}'
     )

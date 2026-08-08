@@ -58,9 +58,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
             LLMUserMessage("hello", name="tester"),
         ),
         model=AgentMiniMaxLLMModel.M2_7,
-        tools=(
-            _ShellTool(),
-        ),
+        tools=(_ShellTool(),),
         tool_choice=LLMToolChoiceMode.REQUIRED,
         response_format=LLMResponseFormat(
             type=LLMResponseFormatType.JSON_SCHEMA,
@@ -132,6 +130,10 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
             prompt_tokens=100,
             completion_tokens=25,
             total_tokens=125,
+            prompt_tokens_details=SimpleNamespace(
+                cached_tokens=80,
+                cache_write_tokens=20,
+            ),
         ),
         choices=[
             SimpleNamespace(
@@ -163,8 +165,10 @@ def test_to_port_llm_response_maps_openai_payload_to_port_response() -> None:
     assert result.content is None
     assert result.usage is not None
     assert result.usage.prompt_tokens == 100
-    assert result.usage.completion_tokens == 25
+    assert result.usage.output_tokens == 25
     assert result.usage.total_tokens == 125
+    assert result.usage.cache_read_tokens == 80
+    assert result.usage.cache_write_tokens == 20
     assert result.tool_calls == (
         LLMToolCall(
             id="call_1",
@@ -202,5 +206,5 @@ def test_to_port_llm_response_maps_dict_usage_to_port_response() -> None:
     assert result.content == "Hello"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 42
-    assert result.usage.completion_tokens == 38
+    assert result.usage.output_tokens == 38
     assert result.usage.total_tokens == 80

@@ -63,10 +63,7 @@ class AgentContextManager:
             run_id=context.run_id,
             agent_id=context.agent_id,
         )
-        window_base = (
-            run_agent is None
-            or run_agent.window_start_sequence != window_start_sequence
-        )
+        window_base = run_agent is None or run_agent.window_start_sequence != window_start_sequence
         self.run_agent_store.update_agent_window(
             run_id=context.run_id,
             window=RunAgentWindow(
@@ -84,6 +81,7 @@ class AgentContextManager:
             system=config.system,
             entries=entries,
             tools=config.tools,
+            context_id=context.context_id,
             log_request_file=log_request_file,
             log_override_file=config.config.debug.log_override_file,
         )

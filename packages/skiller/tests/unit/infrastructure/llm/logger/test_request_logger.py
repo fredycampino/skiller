@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -45,12 +46,11 @@ def test_file_llm_request_logger_writes_one_file_per_request(tmp_path) -> None:
     logger.log_request(request={"message": "third"}, file=file)
     logger.log_response(response={"content": "done"})
 
-    assert sorted(path.name for path in tmp_path.glob("*.json")) == [
-        "llm-0001.json",
-        "llm-0002.json",
-        "llm-0003.json",
-    ]
-    assert _read_json(tmp_path / "llm-0003.json") == {
+    paths = sorted(tmp_path.glob("*.json"))
+    assert len(paths) == 3
+    assert all(re.fullmatch(r"llm-\d{8}-\d{6}-\d{3}(?:-\d{3})?\.json", path.name) for path in paths)
+    assert logger.current_path is not None
+    assert _read_json(logger.current_path) == {
         "sequence": 3,
         "request": {"message": "third"},
         "response": {"content": "done"},
@@ -99,7 +99,9 @@ def test_file_llm_request_logger_uses_provider_redaction_hooks(tmp_path) -> None
         },
     )
 
-    payload = _read_json(tmp_path / "llm-0001.json")
+    paths = list(tmp_path.glob("*.json"))
+    assert len(paths) == 1
+    payload = _read_json(paths[0])
 
     assert payload["request"] == {
         "api_key": REDACTED_VALUE,

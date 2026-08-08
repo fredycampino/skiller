@@ -46,7 +46,13 @@ def test_bedrock_llm_port_generates_response(monkeypatch: pytest.MonkeyPatch) ->
     _FakeSession.response = {
         "stopReason": "end_turn",
         "output": {"message": {"content": [{"text": "OK"}]}},
-        "usage": {"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+        "usage": {
+            "inputTokens": 10,
+            "outputTokens": 5,
+            "totalTokens": 15,
+            "cacheReadInputTokens": 8,
+            "cacheWriteInputTokens": 2,
+        },
     }
     monkeypatch.setattr(bedrock_llm_port, "_load_boto3_session_class", lambda: _FakeSession)
     monkeypatch.setattr(bedrock_llm_port, "_load_botocore_config_class", lambda: _FakeConfig)
@@ -81,9 +87,11 @@ def test_bedrock_llm_port_generates_response(monkeypatch: pytest.MonkeyPatch) ->
     assert response.content == "OK"
     assert response.finish_reason == "end_turn"
     assert response.usage is not None
-    assert response.usage.prompt_tokens == 10
-    assert response.usage.completion_tokens == 5
+    assert response.usage.prompt_tokens == 20
+    assert response.usage.output_tokens == 5
     assert response.usage.total_tokens == 15
+    assert response.usage.cache_read_tokens == 8
+    assert response.usage.cache_write_tokens == 2
 
 
 def test_bedrock_llm_port_maps_tool_use_to_tool_calls(

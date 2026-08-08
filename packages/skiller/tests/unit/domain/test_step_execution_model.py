@@ -40,10 +40,10 @@ def test_notify_open_url_action_serializes_and_restores_typed_data() -> None:
         "value": {
             "message": "Authorize the app",
             "format": "simple",
-                "action": {
-                    "uid": "action-open-url-1",
-                    "type": "open_url",
-                    "label": "Open authorization",
+            "action": {
+                "uid": "action-open-url-1",
+                "type": "open_url",
+                "label": "Open authorization",
                 "message": "Continue in the browser.",
                 "url": "https://example.com/oauth/start",
                 "auto": True,
@@ -77,10 +77,10 @@ def test_notify_run_action_serializes_and_restores_typed_data() -> None:
         "value": {
             "message": "Debug failure",
             "format": "simple",
-                "action": {
-                    "uid": "action-run-1",
-                    "type": "run",
-                    "label": "Debug failure",
+            "action": {
+                "uid": "action-run-1",
+                "type": "run",
+                "label": "Debug failure",
                 "arg": "--file ./flows/debug.yaml",
                 "params": "--mood nice --path .",
                 "auto": True,
@@ -103,8 +103,10 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 turn_count=2,
                 tool_call_count=1,
                 usage=AgentUsageOutput(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
                     prompt_tokens=100,
-                    completion_tokens=25,
+                    output_tokens=25,
                     total_tokens=125,
                     provider=AgentLLMProviderType.CODEX,
                     model=AgentCodexLLMModel.GPT_5_5.value,
@@ -128,8 +130,10 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 "tool_call_count": 1,
                 "usage": {
                     "prompt_tokens": 100,
-                    "completion_tokens": 25,
+                    "output_tokens": 25,
                     "total_tokens": 125,
+                    "cache_read_tokens": None,
+                    "cache_write_tokens": None,
                     "provider": "codex",
                     "model": "gpt-5.5",
                 },
@@ -157,8 +161,10 @@ def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:
                     "tool_call_count": 0,
                     "usage": {
                         "prompt_tokens": 100,
-                        "completion_tokens": 25,
+                        "output_tokens": 25,
                         "total_tokens": 125,
+                        "cache_read_tokens": None,
+                        "cache_write_tokens": None,
                         "provider": "lmstudio",
                         "model": "google/gemma-4-12b-qat",
                     },
@@ -172,8 +178,10 @@ def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:
     assert isinstance(execution.output, AgentOutput)
     assert isinstance(execution.output.data, AgentFinalOutputData)
     assert execution.output.data.usage == AgentUsageOutput(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=100,
-        completion_tokens=25,
+        output_tokens=25,
         total_tokens=125,
         provider=AgentLLMProviderType.LMSTUDIO,
         model="google/gemma-4-12b-qat",
@@ -192,8 +200,10 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
                 turn_count=1,
                 tool_call_count=0,
                 usage=AgentUsageOutput(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
                     prompt_tokens=100,
-                    completion_tokens=25,
+                    output_tokens=25,
                     total_tokens=125,
                     provider=AgentLLMProviderType.LMSTUDIO,
                     model="google/gemma-4-12b-qat",
@@ -204,9 +214,7 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
 
     persisted = execution.to_persisted_dict()
 
-    assert persisted["output"]["value"]["data"]["usage"]["model"] == (
-        "google/gemma-4-12b-qat"
-    )
+    assert persisted["output"]["value"]["data"]["usage"]["model"] == ("google/gemma-4-12b-qat")
     assert StepExecution.from_dict(persisted) == execution
 
 

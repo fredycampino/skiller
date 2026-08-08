@@ -1510,7 +1510,7 @@ wheels = [
 
 [[package]]
 name = "skiller"
-version = "0.1.0b22"
+version = "0.1.0b24"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },

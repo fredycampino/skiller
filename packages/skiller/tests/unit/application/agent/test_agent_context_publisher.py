@@ -125,7 +125,15 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
     )
     publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
     request = _tool_request()
-    usage = LLMUsage(prompt_tokens=10, completion_tokens=3, total_tokens=13)
+    usage = LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        provider=None,
+        model=None,
+        prompt_tokens=10,
+        output_tokens=3,
+        total_tokens=13,
+    )
 
     entry = publisher.publish_final_assistant_message(
         context=request.context,
@@ -191,8 +199,12 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
         turn_id="turn-153",
         text="Create branch",
         usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
             prompt_tokens=81_624,
-            completion_tokens=194,
+            output_tokens=194,
             total_tokens=81_818,
         ),
     )
@@ -240,7 +252,15 @@ def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
         context=request.context,
         turn_id="turn-2",
         text="More.",
-        usage=LLMUsage(prompt_tokens=620, completion_tokens=5, total_tokens=625),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=620,
+            output_tokens=5,
+            total_tokens=625,
+        ),
     )
 
     assert store.estimate_delta_calls == []
@@ -273,7 +293,15 @@ def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease
         context=request.context,
         turn_id="turn-2",
         text="Short.",
-        usage=LLMUsage(prompt_tokens=300, completion_tokens=5, total_tokens=305),
+        usage=LLMUsage(
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=300,
+            output_tokens=5,
+            total_tokens=305,
+        ),
     )
 
     assert store.estimate_delta_calls == [
@@ -517,9 +545,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
         context: AgentContext,
         tool_call: AgentToolCall,
     ) -> AgentContextEntry:
-        self.calls.append(
-            {"kind": "tool_call", "tool": tool_call.tool, "args": tool_call.args}
-        )
+        self.calls.append({"kind": "tool_call", "tool": tool_call.tool, "args": tool_call.args})
         return AgentContextEntry(
             id=f"entry-{len(self.calls)}",
             run_id=context.run_id,

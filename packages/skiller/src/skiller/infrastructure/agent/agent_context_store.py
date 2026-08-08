@@ -315,8 +315,10 @@ def _is_prunable_entry(entry: AgentContextEntry) -> bool:
 
 def _empty_usage() -> LLMUsage:
     return LLMUsage(
+        provider=None,
+        model=None,
         prompt_tokens=0,
-        completion_tokens=0,
+        output_tokens=0,
         total_tokens=0,
     )
 

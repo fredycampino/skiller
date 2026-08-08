@@ -126,7 +126,7 @@ print(
             "tool_calls": len(response.tool_calls),
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
+                "output_tokens": response.usage.output_tokens,
                 "total_tokens": response.usage.total_tokens,
             },
         },

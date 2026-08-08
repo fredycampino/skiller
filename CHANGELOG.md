@@ -19,6 +19,18 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.25 - 2026-08-09
+
+### Added
+- Add LLM usage tracking across agent context, provider integrations, and the TUI.
+- Add Codex request logging and Bedrock prompt caching support.
+
+### Changed
+- Include Bedrock cache read and write tokens in prompt usage totals.
+
+### Notes
+- Includes PR #111.
+
 ## 0.1.0-beta.24 - 2026-08-05
 
 ### Added

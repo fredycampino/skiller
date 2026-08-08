@@ -33,6 +33,9 @@ from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
 from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
+from skiller.infrastructure.llm.codex.codex_request_logger import (
+    CodexFileLLMRequestLogger,
+)
 from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
@@ -118,6 +121,7 @@ class LLMClientFactory:
             credentials_file=provider.credentials_file,
             timeout_seconds=provider.timeout_seconds,
             credentials_datasource=credentials_datasource,
+            request_logger=CodexFileLLMRequestLogger(),
         )
 
     def _bedrock_client(self, provider: AgentBedrockProvider) -> BedrockStreamingLLMPort:

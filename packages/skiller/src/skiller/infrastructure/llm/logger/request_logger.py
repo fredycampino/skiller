@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Protocol
@@ -46,7 +47,7 @@ class FileLLMRequestLogger:
         file.parent.mkdir(parents=True, exist_ok=True)
         self._sequence += 1
         should_overwrite = self.overwrite if overwrite is None else overwrite
-        path = file if should_overwrite else _sequenced_path(file, self._sequence)
+        path = file if should_overwrite else _timestamped_path(file)
         safe_request = self.redact_request(request=request)
         payload = {
             "sequence": self._sequence,
@@ -149,15 +150,18 @@ def _redact_keys(
                 )
         return redacted
     if isinstance(value, list | tuple):
-        return [
-            _redact_keys(item, keys=keys, replacement=replacement)
-            for item in value
-        ]
+        return [_redact_keys(item, keys=keys, replacement=replacement) for item in value]
     return value
 
 
-def _sequenced_path(file: Path, sequence: int) -> Path:
-    return file.with_name(f"{file.stem}-{sequence:04d}{file.suffix}")
+def _timestamped_path(file: Path) -> Path:
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    path = file.with_name(f"{file.stem}-{timestamp}{file.suffix}")
+    collision = 1
+    while path.exists():
+        path = file.with_name(f"{file.stem}-{timestamp}-{collision:03d}{file.suffix}")
+        collision += 1
+    return path
 
 
 def _read_json(path: Path) -> dict[str, object]:

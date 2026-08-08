@@ -22,6 +22,7 @@ from skiller.infrastructure.llm.codex.codex_llm_port import (
     CODEX_USER_AGENT,
     CodexLLMPort,
 )
+from skiller.infrastructure.llm.logger.request_logger import FileLLMRequestLogger
 
 pytestmark = pytest.mark.unit
 
@@ -149,12 +150,14 @@ def test_codex_llm_port_builds_client_with_codex_headers(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=datasource,
+        request_logger=FileLLMRequestLogger(),
     )
     llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
     )
 
@@ -189,6 +192,7 @@ def test_codex_llm_port_streams_response(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
+        request_logger=FileLLMRequestLogger(),
     )
 
     response = llm.generate(
@@ -196,6 +200,7 @@ def test_codex_llm_port_streams_response(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
     )
 
@@ -206,6 +211,11 @@ def test_codex_llm_port_streams_response(
             "model": "gpt-5.4",
             "instructions": "",
             "input": [{"role": "user", "content": "hello"}],
+            "prompt_cache_key": "context-1",
+            "extra_headers": {
+                "session_id": "context-1",
+                "x-client-request-id": "context-1",
+            },
             "store": False,
             "tool_choice": "auto",
             "parallel_tool_calls": True,
@@ -216,6 +226,7 @@ def test_codex_llm_port_streams_response(
 
 def test_codex_llm_port_reads_completed_event_usage(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     _FakeOpenAI.instances = []
     _FakeOpenAI.error_after_events = None
@@ -231,6 +242,10 @@ def test_codex_llm_port_reads_completed_event_usage(
                     input_tokens=10,
                     output_tokens=5,
                     total_tokens=15,
+                    input_tokens_details=SimpleNamespace(
+                        cached_tokens=8,
+                        cache_write_tokens=2,
+                    ),
                 ),
             ),
         ),
@@ -240,10 +255,12 @@ def test_codex_llm_port_reads_completed_event_usage(
         "_load_openai_client_class",
         lambda: _FakeOpenAI,
     )
+    log_file = tmp_path / "request.json"
     llm = CodexLLMPort(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
+        request_logger=FileLLMRequestLogger(),
     )
 
     response = llm.generate(
@@ -251,14 +268,28 @@ def test_codex_llm_port_reads_completed_event_usage(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
+            log_request_file=str(log_file),
+            log_override_file=False,
         )
     )
 
     assert response.ok is True
     assert response.usage is not None
     assert response.usage.prompt_tokens == 10
-    assert response.usage.completion_tokens == 5
+    assert response.usage.output_tokens == 5
     assert response.usage.total_tokens == 15
+    assert response.usage.cache_read_tokens == 8
+    assert response.usage.cache_write_tokens == 2
+    log_paths = list(tmp_path.glob("request-*.json"))
+    assert len(log_paths) == 1
+    logged = json.loads(log_paths[0].read_text(encoding="utf-8"))
+    assert logged["request"]["instructions"] == ""
+    assert logged["request"]["input"] == [{"role": "user", "content": "hello"}]
+    assert logged["response"]["usage"]["input_tokens_details"] == {
+        "cached_tokens": 8,
+        "cache_write_tokens": 2,
+    }
 
 
 def test_codex_llm_port_keeps_stream_items_when_raw_stream_fails(
@@ -284,6 +315,7 @@ def test_codex_llm_port_keeps_stream_items_when_raw_stream_fails(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
+        request_logger=FileLLMRequestLogger(),
     )
 
     response = llm.generate(
@@ -291,6 +323,7 @@ def test_codex_llm_port_keeps_stream_items_when_raw_stream_fails(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
     )
 
@@ -315,6 +348,7 @@ def test_codex_llm_port_returns_credentials_error_before_building_client(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=_BrokenCredentialsDatasource(),
+        request_logger=FileLLMRequestLogger(),
     )
 
     response = llm.generate(
@@ -322,6 +356,7 @@ def test_codex_llm_port_returns_credentials_error_before_building_client(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
     )
 
@@ -363,6 +398,7 @@ def test_codex_llm_port_refreshes_expired_token_before_request(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=datasource,
+        request_logger=FileLLMRequestLogger(),
     )
 
     llm.generate(
@@ -370,6 +406,7 @@ def test_codex_llm_port_refreshes_expired_token_before_request(
             messages=(LLMUserMessage("hello"),),
             model=AgentCodexLLMModel.GPT_5_4,
             parallel_tool_calls=True,
+            session_id="context-1",
         )
     )
 
@@ -415,6 +452,7 @@ def test_codex_llm_port_refresh_token(
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         credentials_datasource=datasource,
+        request_logger=FileLLMRequestLogger(),
     )
 
     token = llm._refresh_token(datasource.credentials)

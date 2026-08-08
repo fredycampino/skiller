@@ -179,7 +179,7 @@ def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> No
               120,
               80,
               '{"type":"assistant_message","turn_id":"turn-1","message_type":"final","text":"ok"}',
-              '{"prompt_tokens":120,"completion_tokens":10,"total_tokens":130}',
+              '{"prompt_tokens":120,"output_tokens":10,"total_tokens":130}',
               'support_agent'
             );
             PRAGMA user_version = 6;

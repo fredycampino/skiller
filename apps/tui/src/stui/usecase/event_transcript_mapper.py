@@ -178,10 +178,10 @@ class EventTranscriptMapper:
         }:
             return None
 
-        if (
-            event.event_type == LogEventType.STEP_STARTED
-            and event.step_type in {"wait_input", "wait_webhook"}
-        ):
+        if event.event_type == LogEventType.STEP_STARTED and event.step_type in {
+            "wait_input",
+            "wait_webhook",
+        }:
             return None
 
         if event.event_type == LogEventType.STEP_STARTED:
@@ -207,8 +207,10 @@ class EventTranscriptMapper:
             usage = (
                 AgentStepUsage(
                     prompt_tokens=cast(int, usage_data["prompt_tokens"]),
-                    completion_tokens=cast(int, usage_data["completion_tokens"]),
+                    output_tokens=cast(int, usage_data["output_tokens"]),
                     total_tokens=cast(int, usage_data["total_tokens"]),
+                    cache_read_tokens=cast(int | None, usage_data["cache_read_tokens"]),
+                    cache_write_tokens=cast(int | None, usage_data["cache_write_tokens"]),
                     provider=cast(str, usage_data["provider"]),
                     model=cast(str, usage_data["model"]),
                 )
@@ -225,10 +227,7 @@ class EventTranscriptMapper:
                 format=OutputFormat.MARKDOWN,
             )
 
-        if (
-            event.event_type == LogEventType.STEP_SUCCESS
-            and event.step_type == "agent"
-        ):
+        if event.event_type == LogEventType.STEP_SUCCESS and event.step_type == "agent":
             payload = _payload(event, StepSuccessPayload)
             value = cast(AgentOutputValue, payload.output.value)
             data = cast(dict[str, object], value.data)
@@ -253,16 +252,10 @@ class EventTranscriptMapper:
                 format=format,
             )
 
-        if (
-            event.event_type == LogEventType.STEP_SUCCESS
-            and event.step_type == "wait_input"
-        ):
+        if event.event_type == LogEventType.STEP_SUCCESS and event.step_type == "wait_input":
             return None
 
-        if (
-            event.event_type == LogEventType.STEP_SUCCESS
-            and event.step_type == "notify"
-        ):
+        if event.event_type == LogEventType.STEP_SUCCESS and event.step_type == "notify":
             payload = _payload(event, StepSuccessPayload)
             if isinstance(payload.output.value, NotifyActionValue):
                 output_value = payload.output.value
@@ -285,10 +278,7 @@ class EventTranscriptMapper:
                 muted=False,
             )
 
-        if (
-            event.event_type == LogEventType.STEP_SUCCESS
-            and event.step_type == "shell"
-        ):
+        if event.event_type == LogEventType.STEP_SUCCESS and event.step_type == "shell":
             payload = _payload(event, StepSuccessPayload)
             return StepShellOutputItem(
                 sequence=event.sequence,
@@ -326,10 +316,7 @@ class EventTranscriptMapper:
             payload = _payload(event, ErrorPayload)
             return DispatchErrorItem(sequence=event.sequence, message=payload.error)
 
-        if (
-            event.event_type == LogEventType.RUN_WAITING
-            and event.step_type == "wait_input"
-        ):
+        if event.event_type == LogEventType.RUN_WAITING and event.step_type == "wait_input":
             payload = _payload(event, RunWaitingPayload)
             return RunWaitingInputItem(
                 sequence=event.sequence,
@@ -339,10 +326,7 @@ class EventTranscriptMapper:
                 prompt=_waiting_prompt(payload.output),
             )
 
-        if (
-            event.event_type == LogEventType.RUN_WAITING
-            and event.step_type == "wait_webhook"
-        ):
+        if event.event_type == LogEventType.RUN_WAITING and event.step_type == "wait_webhook":
             payload = _payload(event, RunWaitingPayload)
             value = cast(WaitWebhookOutputValue, payload.output.value)
             return RunWaitingWebhookItem(
@@ -366,22 +350,14 @@ class EventTranscriptMapper:
                     sequence=event.sequence,
                     run_id=event.run_id,
                     status="succeeded",
-                    action=(
-                        _action_item(payload.action)
-                        if payload.action is not None
-                        else None
-                    ),
+                    action=(_action_item(payload.action) if payload.action is not None else None),
                 )
             return RunFinishedItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 status="error",
                 message="failed",
-                action=(
-                    _action_item(payload.action)
-                    if payload.action is not None
-                    else None
-                ),
+                action=(_action_item(payload.action) if payload.action is not None else None),
             )
 
         return None
@@ -453,11 +429,7 @@ def _shell_output_text(output: OutputPayload) -> str:
     value = cast(ShellOutputValue, output.value)
     stdout = value.stdout
     stderr = value.stderr
-    parts = [
-        value
-        for value in (stdout, stderr)
-        if value
-    ]
+    parts = [value for value in (stdout, stderr) if value]
     if parts:
         return "\n".join(parts)
     return output.text

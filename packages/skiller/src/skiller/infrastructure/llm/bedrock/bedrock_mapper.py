@@ -168,6 +168,10 @@ def _messages_to_payload(
             continue
         payload_messages.append({"role": role, "content": [{"text": message.content}]})
     flush_tool_results()
+    if len(payload_messages) > 1:
+        content = payload_messages[-2]["content"]
+        if isinstance(content, list):
+            content.append({"cachePoint": {"type": "default"}})
     return system, payload_messages
 
 
@@ -196,11 +200,33 @@ def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
 def _to_usage(raw_usage: object) -> LLMUsage | None:
     if not isinstance(raw_usage, Mapping):
         return None
+    prompt_tokens = _optional_int(raw_usage.get("inputTokens"))
+    cache_read_tokens = _optional_int(raw_usage.get("cacheReadInputTokens"))
+    cache_write_tokens = _optional_int(raw_usage.get("cacheWriteInputTokens"))
     return LLMUsage(
-        prompt_tokens=_optional_int(raw_usage.get("inputTokens")),
-        completion_tokens=_optional_int(raw_usage.get("outputTokens")),
+        provider=None,
+        model=None,
+        prompt_tokens=_total_prompt_tokens(
+            prompt_tokens=prompt_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+        ),
+        output_tokens=_optional_int(raw_usage.get("outputTokens")),
         total_tokens=_optional_int(raw_usage.get("totalTokens")),
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
     )
+
+
+def _total_prompt_tokens(
+    *,
+    prompt_tokens: int | None,
+    cache_read_tokens: int | None,
+    cache_write_tokens: int | None,
+) -> int | None:
+    if prompt_tokens is None:
+        return None
+    return prompt_tokens + (cache_read_tokens or 0) + (cache_write_tokens or 0)
 
 
 def _optional_int(value: object) -> int | None:

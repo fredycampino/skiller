@@ -121,6 +121,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         system="Be useful.",
         entries=entries,
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -200,6 +201,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         system="Be useful.",
         entries=entries,
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -289,6 +291,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         system="Be useful.",
         entries=entries,
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -333,13 +336,12 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
 
-    assert request.messages == (
-        LLMSystemMessage("Be useful."),
-    )
+    assert request.messages == (LLMSystemMessage("Be useful."),)
 
 
 def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
@@ -357,6 +359,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -381,6 +384,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -406,6 +410,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -413,6 +418,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
     assert isinstance(request, CodexLLMRequest)
     assert request.model == AgentCodexLLMModel.GPT_5_5
     assert request.parallel_tool_calls is True
+    assert request.session_id == "context-1"
     assert not hasattr(request, "temperature")
     assert not hasattr(request, "max_tokens")
     assert not hasattr(request, "top_p")
@@ -433,6 +439,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )
@@ -452,6 +459,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
         system="Be useful.",
         entries=[],
         tools=(tool,),
+        context_id="context-1",
         log_request_file=None,
         log_override_file=True,
     )

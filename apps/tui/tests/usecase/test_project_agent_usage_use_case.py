@@ -26,7 +26,7 @@ def test_project_agent_usage_from_latest_agent_step_final_output() -> None:
             format=OutputFormat.MARKDOWN,
             usage=AgentStepUsage(
                 prompt_tokens=3000,
-                completion_tokens=155,
+                output_tokens=155,
                 total_tokens=3155,
                 provider="minimax",
                 model="MiniMax-M2.5",
@@ -42,9 +42,7 @@ def test_project_agent_usage_from_latest_agent_step_final_output() -> None:
 
 
 def test_project_agent_usage_clears_when_agent_step_has_no_usage() -> None:
-    state = ConsoleScreenState(
-        agent_usage=AgentUsageState(model="MiniMax-M2.5", total_tokens=3155)
-    )
+    state = ConsoleScreenState(agent_usage=AgentUsageState(model="MiniMax-M2.5", total_tokens=3155))
     state.transcript.items.append(
         AgentStepFinalOutputItem(
             run_id="run-1234",

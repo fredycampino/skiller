@@ -56,8 +56,10 @@ def _usage_payload(usage: LLMUsage | None) -> dict[str, object] | None:
         return None
     return {
         "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
+        "output_tokens": usage.output_tokens,
         "total_tokens": usage.total_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
         "provider": usage.provider.value if usage.provider is not None else None,
         "model": usage.model,
     }

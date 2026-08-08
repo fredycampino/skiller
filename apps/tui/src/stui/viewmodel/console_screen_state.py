@@ -124,8 +124,10 @@ class AgentFinalAssistantMessageItem(TranscriptItem):
 @dataclass(frozen=True)
 class AgentStepUsage:
     prompt_tokens: int | None = None
-    completion_tokens: int | None = None
+    output_tokens: int | None = None
     total_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
     provider: str | None = None
     model: str | None = None
 

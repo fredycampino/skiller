@@ -225,11 +225,7 @@ class _FakeAgentContextStore:
         return entry
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
-        return [
-            entry
-            for entry in self.entries
-            if entry.context_id == context_id
-        ]
+        return [entry for entry in self.entries if entry.context_id == context_id]
 
     def list_entries_from_sequence(
         self,
@@ -266,11 +262,7 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
     ) -> AgentContextUsageMarker | None:
-        entries = [
-            entry
-            for entry in self.entries
-            if entry.context_id == context_id
-        ]
+        entries = [entry for entry in self.entries if entry.context_id == context_id]
         for entry in reversed(entries):
             if entry.usage is None:
                 continue
@@ -336,11 +328,7 @@ class _FakeAgentContextStore:
         _ = context_id, marker_sequence
 
     def next_turn_id(self, *, context_id: str) -> str:
-        entries = [
-            entry
-            for entry in self.entries
-            if entry.context_id == context_id
-        ]
+        entries = [entry for entry in self.entries if entry.context_id == context_id]
         turn_entries = sum(
             1
             for entry in entries
@@ -438,9 +426,7 @@ class _FakeAppendRuntimeEventUseCase:
                 "run_id": run_id,
                 "event_type": event_type,
                 "payload": (
-                    runtime_event_payload_to_dict(payload)
-                    if payload is not None
-                    else None
+                    runtime_event_payload_to_dict(payload) if payload is not None else None
                 ),
                 "step_id": step_id,
                 "step_type": step_type,
@@ -592,6 +578,7 @@ def test_agent_runner_interrupts_inside_tool_execution() -> None:
     assert append_event.calls[-1]["step_id"] == "support_agent"
     assert append_event.calls[-1]["step_type"] == "agent"
 
+
 def test_agent_runner_executes_tool_and_emits_events() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
@@ -614,7 +601,15 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
                 ok=True,
                 content="Done.",
                 model=AgentFakeLLMModel.MODEL1,
-                usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
+                usage=LLMUsage(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
+                    provider=None,
+                    model=None,
+                    prompt_tokens=100,
+                    output_tokens=25,
+                    total_tokens=125,
+                ),
             ),
         ]
     )
@@ -654,8 +649,10 @@ def test_agent_runner_executes_tool_and_emits_events() -> None:
     assert result.tool_call_count == 1
     assert result.finish == AgentStopReason.FINAL
     assert result.usage == LLMUsage(
+        cache_read_tokens=None,
+        cache_write_tokens=None,
         prompt_tokens=100,
-        completion_tokens=25,
+        output_tokens=25,
         total_tokens=125,
         provider="fake",
         model=AgentFakeLLMModel.MODEL1,
@@ -716,13 +713,29 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
                     ),
                 ),
                 finish_reason="tool_calls",
-                usage=LLMUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60),
+                usage=LLMUsage(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
+                    provider=None,
+                    model=None,
+                    prompt_tokens=50,
+                    output_tokens=10,
+                    total_tokens=60,
+                ),
             ),
             LLMResponse(
                 ok=True,
                 content="Done.",
                 model=AgentFakeLLMModel.MODEL1,
-                usage=LLMUsage(prompt_tokens=100, completion_tokens=25, total_tokens=125),
+                usage=LLMUsage(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
+                    provider=None,
+                    model=None,
+                    prompt_tokens=100,
+                    output_tokens=25,
+                    total_tokens=125,
+                ),
             ),
         ]
     )
@@ -787,6 +800,7 @@ def test_agent_runner_preserves_assistant_content_with_native_tool_call() -> Non
         ),
     )
 
+
 def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
@@ -842,8 +856,12 @@ def test_agent_runner_reprompts_when_native_tool_call_arguments_are_invalid() ->
         LLMSystemMessage("Be useful."),
         LLMUserMessage("Hi"),
     )
-    assert llm.calls[1].messages[2].content.startswith(
-        "[Skiller] Invalid tool call arguments in step 'support_agent' for tool 'notify':"
+    assert (
+        llm.calls[1]
+        .messages[2]
+        .content.startswith(
+            "[Skiller] Invalid tool call arguments in step 'support_agent' for tool 'notify':"
+        )
     )
     assert [item["entry_type"] for item in context_store.appended] == [
         AgentContextEntryType.USER_MESSAGE,
@@ -917,9 +935,7 @@ def test_agent_runner_waits_when_reaching_max_turns_without_final_answer() -> No
             "Otherwise stop and wait for the user to continue."
         ),
     }
-    assert append_event.calls[-1]["event_type"] == (
-        RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED
-    )
+    assert append_event.calls[-1]["event_type"] == (RuntimeEventType.AGENT_MAX_TURNS_EXHAUSTED)
     assert append_event.calls[-1]["payload"] == {
         "turn_id": "turn-2",
         "stop_reason": "max_turns_exhausted",

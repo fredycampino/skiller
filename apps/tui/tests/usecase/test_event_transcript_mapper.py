@@ -272,8 +272,10 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
                                 "stop_reason": "final",
                                 "usage": {
                                     "prompt_tokens": 100,
-                                    "completion_tokens": 25,
+                                    "output_tokens": 25,
                                     "total_tokens": 125,
+                                    "cache_read_tokens": None,
+                                    "cache_write_tokens": None,
                                     "provider": "openai",
                                     "model": "fake",
                                 },
@@ -292,7 +294,7 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
     assert items[0].final == "Hecho completo."
     assert items[0].usage is not None
     assert items[0].usage.prompt_tokens == 100
-    assert items[0].usage.completion_tokens == 25
+    assert items[0].usage.output_tokens == 25
     assert items[0].usage.total_tokens == 125
     assert items[0].usage.provider == "openai"
     assert items[0].usage.model == "fake"
@@ -580,9 +582,7 @@ def test_event_transcript_mapper_orders_events_by_created_at_and_sequence() -> N
 
 
 def test_event_transcript_mapper_uses_agent_step_stop_and_ignores_lifecycle_stop() -> None:
-    mapper = EventTranscriptMapper(
-        strings=TuiStrings(agent_interrupted_notice="Stopped by user")
-    )
+    mapper = EventTranscriptMapper(strings=TuiStrings(agent_interrupted_notice="Stopped by user"))
 
     items = mapper.to_transcript(
         [
@@ -807,8 +807,7 @@ def test_event_transcript_mapper_uses_step_error_item_for_step_error() -> None:
     assert items[0].message == "shell command path escapes allowed_paths"
 
 
-def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished(
-) -> None:
+def test_event_transcript_mapper_uses_muted_run_status_for_failed_run_finished() -> None:
     mapper = EventTranscriptMapper()
 
     items = mapper.to_transcript(

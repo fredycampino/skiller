@@ -9,7 +9,7 @@
   },
   "context": {
     "compaction": {
-      "enabled": true,
+      "enabled": false,
       "max_total_tokens_ratio": 0.8,
       "keep_last": 10
     }
@@ -52,5 +52,8 @@
       ],
       "all": []
     }
+  },
+  "llm": {
+    "default_provider": "codex"
   }
 }

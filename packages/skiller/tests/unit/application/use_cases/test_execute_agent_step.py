@@ -305,11 +305,7 @@ class _FakeAgentContextStore:
         return entry
 
     def list_entries(self, *, context_id: str) -> list[AgentContextEntry]:
-        return [
-            entry
-            for entry in self.entries
-            if entry.context_id == context_id
-        ]
+        return [entry for entry in self.entries if entry.context_id == context_id]
 
     def list_entries_from_sequence(
         self,
@@ -341,11 +337,7 @@ class _FakeAgentContextStore:
         *,
         context_id: str,
     ) -> AgentContextUsageMarker | None:
-        entries = [
-            entry
-            for entry in self.entries
-            if entry.context_id == context_id
-        ]
+        entries = [entry for entry in self.entries if entry.context_id == context_id]
         for entry in reversed(entries):
             if entry.usage is None:
                 continue
@@ -446,9 +438,9 @@ class _FakeLLM:
         if isinstance(value, dict):
             return LLMResponse(
                 ok=bool(value.get("ok")),
-                content=value.get("content") if isinstance(value.get("content"), str) else (
-                    None if value.get("content") is None else str(value.get("content"))
-                ),
+                content=value.get("content")
+                if isinstance(value.get("content"), str)
+                else (None if value.get("content") is None else str(value.get("content"))),
                 model=AgentFakeLLMModel.MODEL1,
                 error=value.get("error") if isinstance(value.get("error"), str) else None,
             )
@@ -551,9 +543,7 @@ class _FakeAppendRuntimeEventUseCase:
                 "run_id": run_id,
                 "event_type": event_type,
                 "payload": (
-                    runtime_event_payload_to_dict(payload)
-                    if payload is not None
-                    else None
+                    runtime_event_payload_to_dict(payload) if payload is not None else None
                 ),
                 "step_id": step_id,
                 "step_type": step_type,
@@ -757,8 +747,12 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 content="Done.",
                 model=AgentFakeLLMModel.MODEL1,
                 usage=LLMUsage(
+                    cache_read_tokens=None,
+                    cache_write_tokens=None,
+                    provider=None,
+                    model=None,
                     prompt_tokens=100,
-                    completion_tokens=25,
+                    output_tokens=25,
                     total_tokens=125,
                 ),
             ),
@@ -811,19 +805,19 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             final="Done.",
             turn_count=2,
             tool_call_count=1,
-                usage=AgentUsageOutput(
-                    prompt_tokens=100,
-                    completion_tokens=25,
-                    total_tokens=125,
-                    provider=AgentLLMProviderType.FAKE,
-                    model=AgentFakeLLMModel.MODEL1,
-                ),
+            usage=AgentUsageOutput(
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                prompt_tokens=100,
+                output_tokens=25,
+                total_tokens=125,
+                provider=AgentLLMProviderType.FAKE,
+                model=AgentFakeLLMModel.MODEL1,
+            ),
         ),
     )
     assert tool_manager.get_tool_definitions_calls == [["notify"]]
-    executed_requests = [
-        prepared.request for prepared in tool_manager.execute_prepared_calls
-    ]
+    executed_requests = [prepared.request for prepared in tool_manager.execute_prepared_calls]
     assert executed_requests == [
         AgentToolRequest(
             run_id="run-1",
@@ -1051,10 +1045,7 @@ def test_execute_agent_step_advances_when_agent_returns_invalid_final_message() 
     assert result.next_step_id == "send_reply"
     assert result.execution is not None
     assert isinstance(result.execution.output.data, AgentStopOutputData)
-    assert (
-        result.execution.output.data.stop_reason
-        == AgentStopReason.INVALID_FINAL_MESSAGE
-    )
+    assert result.execution.output.data.stop_reason == AgentStopReason.INVALID_FINAL_MESSAGE
     assert result.execution.output.data.context_id
     assert result.execution.output.data.message == (
         "Agent step 'support_agent' returned no final answer: "

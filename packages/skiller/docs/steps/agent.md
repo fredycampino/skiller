@@ -139,8 +139,10 @@ The output follows the standard output envelope:
         "stop_reason": "final",
         "usage": {
           "prompt_tokens": 123,
-          "completion_tokens": 45,
+          "output_tokens": 45,
           "total_tokens": 168,
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
           "provider": "minimax",
           "model": "MiniMax-M2.5"
         }
@@ -166,8 +168,10 @@ Final output:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 123,
-      "completion_tokens": 45,
+      "output_tokens": 45,
       "total_tokens": 168,
+      "cache_read_tokens": null,
+      "cache_write_tokens": null,
       "provider": "minimax",
       "model": "MiniMax-M2.5"
     }
@@ -206,7 +210,7 @@ Stop output:
 - `data.usage`
   - optional latest LLM usage for the agent step
   - present when the LLM provider returned usage for the last response
-  - includes `prompt_tokens`, `completion_tokens`, `total_tokens`, `provider`, and `model`
+  - includes `prompt_tokens`, `output_tokens`, `total_tokens`, `provider`, and `model`
   - this is copied into the `STEP_SUCCESS` output; detailed per-entry usage still lives in agent context
 
 ### `stop_reason`
@@ -244,8 +248,10 @@ Successful final response:
         "stop_reason": "final",
         "usage": {
           "prompt_tokens": 123,
-          "completion_tokens": 45,
+          "output_tokens": 45,
           "total_tokens": 168,
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
           "provider": "minimax",
           "model": "MiniMax-M2.5"
         }
@@ -268,8 +274,10 @@ Successful final response:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 123,
-      "completion_tokens": 45,
+      "output_tokens": 45,
       "total_tokens": 168,
+      "cache_read_tokens": null,
+      "cache_write_tokens": null,
       "provider": "minimax",
       "model": "MiniMax-M2.5"
     }

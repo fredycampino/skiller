@@ -186,8 +186,10 @@ Final output:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 100,
-      "completion_tokens": 20,
+      "output_tokens": 20,
       "total_tokens": 120,
+      "cache_read_tokens": null,
+      "cache_write_tokens": null,
       "provider": "minimax",
       "model": "MiniMax-M2.5"
     }

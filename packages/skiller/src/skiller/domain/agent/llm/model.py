@@ -141,12 +141,7 @@ class LLMToolMessage:
     )
 
 
-LLMMessage: TypeAlias = (
-    LLMSystemMessage
-    | LLMUserMessage
-    | LLMAssistantMessage
-    | LLMToolMessage
-)
+LLMMessage: TypeAlias = LLMSystemMessage | LLMUserMessage | LLMAssistantMessage | LLMToolMessage
 
 
 @dataclass(frozen=True)
@@ -159,11 +154,13 @@ class LLMResponseFormat:
 
 @dataclass(frozen=True)
 class LLMUsage:
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    total_tokens: int | None = None
-    provider: AgentLLMProviderType | None = None
-    model: str | None = None
+    prompt_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
+    provider: AgentLLMProviderType | None
+    model: str | None
 
     def __post_init__(self) -> None:
         if self.provider is not None:

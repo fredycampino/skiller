@@ -30,6 +30,7 @@ CODEX_MODELS = (
 class CodexLLMRequest(LLMRequest):
     model: AgentCodexLLMModel
     parallel_tool_calls: bool
+    session_id: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.model, AgentCodexLLMModel):

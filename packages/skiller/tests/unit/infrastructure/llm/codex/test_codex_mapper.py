@@ -44,6 +44,10 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
                 input_tokens=10,
                 output_tokens=5,
                 total_tokens=15,
+                input_tokens_details=SimpleNamespace(
+                    cached_tokens=8,
+                    cache_write_tokens=2,
+                ),
             ),
             output=[
                 SimpleNamespace(
@@ -67,8 +71,10 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
     assert result.finish_reason == "completed"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 5
+    assert result.usage.output_tokens == 5
     assert result.usage.total_tokens == 15
+    assert result.usage.cache_read_tokens == 8
+    assert result.usage.cache_write_tokens == 2
     assert result.tool_calls == (
         LLMToolCall(
             id="call_1",

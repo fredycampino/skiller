@@ -82,7 +82,6 @@ provider = AgentBedrockProvider(
     models=BEDROCK_MODELS,
     profile=os.environ["AGENT_BEDROCK_PROFILE"],
     timeout_seconds=float(os.environ["AGENT_BEDROCK_TIMEOUT_SECONDS"]),
-    window_width_tokens=model.model_context_window_tokens,
 )
 client = LLMClientFactory(
     request_log_dir=Path(tempfile.mkdtemp(prefix="skiller-bedrock-e2e-")),

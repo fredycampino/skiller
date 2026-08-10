@@ -572,7 +572,7 @@ def test_notify_updates_agent_status_context() -> None:
     assert viewmodel._run_event_context.agent_id == "support_agent"  # noqa: SLF001
 
 
-def test_notify_refreshes_visible_agent_context_stats() -> None:
+def test_notify_does_not_refresh_visible_agent_context_stats() -> None:
     async def run() -> None:
         agent_port = FakeAgentPort(
             stats=AgentStatsResult(
@@ -626,13 +626,13 @@ def test_notify_refreshes_visible_agent_context_stats() -> None:
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        assert agent_port.stats_called_with == [("run-1234", "support_agent")]
+        assert agent_port.stats_called_with == []
         assert viewmodel.state.agent_context_stats == AgentContextStatsState(
-            entries=1001,
-            estimated_tokens=4000,
-            start_sequence=100,
-            end_sequence=1100,
-            current_tokens=4000,
+            entries=24,
+            estimated_tokens=2618,
+            start_sequence=1,
+            end_sequence=24,
+            current_tokens=2618,
             limit_tokens=80000,
             capacity_tokens=100000,
         )

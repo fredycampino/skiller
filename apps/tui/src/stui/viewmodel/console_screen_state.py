@@ -109,6 +109,9 @@ class AgentAssistantMessageItem(TranscriptItem):
     step_id: str
     message_type: str
     text: str
+    total_tokens: int
+    usage: AgentStepUsage | None
+    context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
 
@@ -118,18 +121,26 @@ class AgentFinalAssistantMessageItem(TranscriptItem):
     step_id: str
     text: str
     total_tokens: int
+    usage: AgentStepUsage | None
+    context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
 
 @dataclass(frozen=True)
 class AgentStepUsage:
-    prompt_tokens: int | None = None
-    output_tokens: int | None = None
-    total_tokens: int | None = None
-    cache_read_tokens: int | None = None
-    cache_write_tokens: int | None = None
-    provider: str | None = None
-    model: str | None = None
+    prompt_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
+    provider: str | None
+    model: str | None
+
+
+@dataclass(frozen=True)
+class AgentStepContext:
+    effective_window_tokens: int | None
+    max_total_tokens_ratio: float | None
 
 
 @dataclass(frozen=True)
@@ -138,7 +149,8 @@ class AgentStepFinalOutputItem(TranscriptItem):
     step_id: str
     stop_reason: AgentStepStopReason
     final: str
-    usage: AgentStepUsage | None = None
+    usage: AgentStepUsage | None
+    context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
 
@@ -334,9 +346,9 @@ class ModelsTableState:
 
 
 @dataclass
-class AgentUsageState:
-    model: str
-    total_tokens: int = 0
+class AgentMetricsState:
+    usage: AgentStepUsage | None
+    context: AgentStepContext | None
 
 
 @dataclass
@@ -345,14 +357,6 @@ class AgentContextStatsState:
     estimated_tokens: int
     start_sequence: int
     end_sequence: int
-    current_tokens: int
-    limit_tokens: int
-    capacity_tokens: int
-
-
-@dataclass
-class FooterContextState:
-    model: str
     current_tokens: int
     limit_tokens: int
     capacity_tokens: int
@@ -379,9 +383,8 @@ class ConsoleScreenState:
     prompt: PromptState = field(default_factory=PromptState)
     runs_table: RunsTableState = field(default_factory=RunsTableState)
     models_table: ModelsTableState = field(default_factory=ModelsTableState)
-    agent_usage: AgentUsageState | None = None
+    agent_metrics: AgentMetricsState | None = None
     agent_context_stats: AgentContextStatsState | None = None
-    footer_context: FooterContextState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
     autocompletion: CompletionState | None = None
     notify_action: NotifyActionState | None = None
@@ -445,20 +448,14 @@ class ConsoleScreenState:
         self.models_table.command = command
         self.models_table.rows = tuple(rows)
 
-    def set_agent_usage(self, agent_usage: AgentUsageState | None) -> None:
-        self.agent_usage = agent_usage
+    def set_agent_metrics(self, agent_metrics: AgentMetricsState | None) -> None:
+        self.agent_metrics = agent_metrics
 
     def set_agent_context_stats(
         self,
         agent_context_stats: AgentContextStatsState | None = None,
     ) -> None:
         self.agent_context_stats = agent_context_stats
-
-    def set_footer_context(
-        self,
-        footer_context: FooterContextState | None = None,
-    ) -> None:
-        self.footer_context = footer_context
 
     def set_notify_action(
         self,
@@ -472,5 +469,6 @@ class ConsoleScreenState:
         run_id: str,
         run_name: str = "",
     ) -> None:
+        self.agent_metrics = None
         self.session_key = run_id
         self.run_name = run_name

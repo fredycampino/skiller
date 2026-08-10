@@ -16,6 +16,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextMetrics,
     AgentContextPayload,
     AgentContextUsageMarker,
     AgentToolCallPayload,
@@ -397,6 +398,10 @@ def _tool_request() -> ToolExecutionRequest:
         event_config=_event_output_config(),
         max_tool_calls=5,
         max_tool_result_bytes=40_000,
+        context_metrics=AgentContextMetrics(
+            effective_window_tokens=100_000,
+            max_total_tokens_ratio=0.8,
+        ),
         turn_loop=AgentLoop(max_turns=10),
     )
 

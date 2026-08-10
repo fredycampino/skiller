@@ -138,11 +138,12 @@ steps:
 
       llm = config.setdefault("llm", {})
       llm["default_provider"] = "codex"
+      context = config.setdefault("context", {})
+      context["window_width_tokens"] = 100000
       providers = config.setdefault("providers", {})
       providers["codex"] = {
           "model": "gpt-5.5",
           "timeout_seconds": 120,
-          "window_width_tokens": 100000,
           "credentials_file": credentials_file,
       }
 

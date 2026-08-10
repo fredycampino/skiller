@@ -349,6 +349,8 @@ def test_final_assistant_message_view_renders_blank_line() -> None:
             step_id="agent",
             text="truncated",
             total_tokens=3155,
+            usage=None,
+            context=None,
         )
     )
     console = Console(width=80, record=True)

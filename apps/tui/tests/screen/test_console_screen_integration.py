@@ -43,10 +43,11 @@ from stui.usecase.run_event_context import RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
     ActionOpenUrlItem,
     AgentContextStatsState,
+    AgentMetricsState,
+    AgentStepContext,
     AgentStepFinalOutputItem,
     AgentStepStopReason,
-    AgentUsageState,
-    FooterContextState,
+    AgentStepUsage,
     InfoItem,
     NotifyActionState,
     OutputFormat,
@@ -477,13 +478,20 @@ def test_console_screen_limits_wide_footer_context_bar_width() -> None:
             waiting_port=NeverCalledWaitingPort(),
             runs_port=FakeRunsPort(),
         )
-        viewmodel.state.set_footer_context(
-            FooterContextState(
+        viewmodel.state.agent_metrics = AgentMetricsState(
+            usage=AgentStepUsage(
+                prompt_tokens=59500,
+                output_tokens=None,
+                total_tokens=None,
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
                 model="gpt-5.5",
-                current_tokens=59500,
-                limit_tokens=80000,
-                capacity_tokens=100000,
-            )
+            ),
+            context=AgentStepContext(
+                effective_window_tokens=100000,
+                max_total_tokens_ratio=0.8,
+            ),
         )
         app = ConsoleScreen(viewmodel=viewmodel)
         async with app.run_test(size=(140, 24)) as pilot:
@@ -508,17 +516,20 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
             run_id="0a76a0b2-8a37-4cb3-80ac-c319d1dfcba3",
             run_name="stui.yaml",
         )
-        viewmodel.state.agent_usage = AgentUsageState(
-            model="gpt-5.5",
-            total_tokens=79200,
-        )
-        viewmodel.state.set_footer_context(
-            FooterContextState(
+        viewmodel.state.agent_metrics = AgentMetricsState(
+            usage=AgentStepUsage(
+                    prompt_tokens=79200,
+                output_tokens=None,
+                total_tokens=79200,
+                cache_read_tokens=None,
+                cache_write_tokens=None,
+                provider=None,
                 model="gpt-5.5",
-                current_tokens=79200,
-                limit_tokens=80000,
-                capacity_tokens=100000,
-            )
+            ),
+            context=AgentStepContext(
+                effective_window_tokens=100000,
+                max_total_tokens_ratio=0.8,
+            ),
         )
         app = ConsoleScreen(viewmodel=viewmodel)
         async with app.run_test(size=(60, 24)) as pilot:
@@ -1124,6 +1135,8 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
                     step_id="support_agent",
                     stop_reason=AgentStepStopReason.FINAL,
                     final='{"text":"Hola **mundo**\\n\\n- **uno**\\n- dos"}',
+                    usage=None,
+                    context=None,
                     format=OutputFormat.MARKDOWN,
                 ),
             ]
@@ -1167,6 +1180,8 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
                         '{"text":"```diff\\n@@ -1 +1 @@\\n-old\\n+new\\n```\\n\\n'
                         'Cambios:\\n\\n1. Uno"}'
                     ),
+                    usage=None,
+                    context=None,
                     format=OutputFormat.MARKDOWN,
                 ),
             ]

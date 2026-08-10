@@ -200,11 +200,12 @@ steps:
 
       llm = config.setdefault("llm", {})
       llm["default_provider"] = "minimax"
+      context = config.setdefault("context", {})
+      context["window_width_tokens"] = 80000
       providers = config.setdefault("providers", {})
       providers["minimax"] = {
           "model": "MiniMax-M2.7",
           "timeout_seconds": 60,
-          "window_width_tokens": 80000,
           "api_key_file": secret_file,
       }
 

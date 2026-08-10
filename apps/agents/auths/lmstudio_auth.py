@@ -87,6 +87,8 @@ def write_config(base_url: str = "http://localhost:1234/v1") -> None:
         config = {}
 
     ensure_lmstudio_llm_fallback(config)
+    context = config.setdefault("context", {})
+    context.setdefault("window_width_tokens", 100000)
     provider = default_lmstudio_provider()
     provider["base_url"] = normalize_lmstudio_base_url(base_url)
     providers = config.setdefault("providers", {})
@@ -178,7 +180,6 @@ def default_lmstudio_provider() -> dict:
         "model": None,
         "models": [],
         "timeout_seconds": 120,
-        "window_width_tokens": 100000,
     }
 
 

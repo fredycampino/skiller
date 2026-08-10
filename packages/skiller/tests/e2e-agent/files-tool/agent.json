@@ -2,12 +2,14 @@
   "llm": {
     "default_provider": "minimax"
   },
+  "context": {
+    "window_width_tokens": 1000000
+  },
   "providers": {
     "minimax": {
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.5",
-      "timeout_seconds": 30,
-      "window_width_tokens": 1000000
+      "timeout_seconds": 30
     }
   },
   "loop": {

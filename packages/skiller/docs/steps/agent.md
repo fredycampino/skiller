@@ -145,6 +145,10 @@ The output follows the standard output envelope:
           "cache_write_tokens": null,
           "provider": "minimax",
           "model": "MiniMax-M2.5"
+        },
+        "context": {
+          "effective_window_tokens": 100000,
+          "max_total_tokens_ratio": 0.8
         }
       }
     },
@@ -174,6 +178,10 @@ Final output:
       "cache_write_tokens": null,
       "provider": "minimax",
       "model": "MiniMax-M2.5"
+    },
+    "context": {
+      "effective_window_tokens": 100000,
+      "max_total_tokens_ratio": 0.8
     }
   }
 }
@@ -212,6 +220,9 @@ Stop output:
   - present when the LLM provider returned usage for the last response
   - includes `prompt_tokens`, `output_tokens`, `total_tokens`, `provider`, and `model`
   - this is copied into the `STEP_SUCCESS` output; detailed per-entry usage still lives in agent context
+- `data.context`
+  - effective context window and compaction ratio used for this agent execution
+  - `effective_window_tokens` is the minimum of the configured context window and the model context window
 
 ### `stop_reason`
 
@@ -254,6 +265,10 @@ Successful final response:
           "cache_write_tokens": null,
           "provider": "minimax",
           "model": "MiniMax-M2.5"
+        },
+        "context": {
+          "effective_window_tokens": 100000,
+          "max_total_tokens_ratio": 0.8
         }
       }
     },
@@ -280,6 +295,10 @@ Successful final response:
       "cache_write_tokens": null,
       "provider": "minimax",
       "model": "MiniMax-M2.5"
+    },
+    "context": {
+      "effective_window_tokens": 100000,
+      "max_total_tokens_ratio": 0.8
     }
   }
 }

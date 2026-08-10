@@ -4,6 +4,14 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class FooterBarStyle:
+    cached_token: str = "╍"
+    filled_token: str = "━"
+    empty_token: str = "─"
+    limit_marker: str = "▾"
+
+
+@dataclass(frozen=True)
 class TuiTheme:
     color_background: str = "#282C34"
     color_text_primary: str = "white"
@@ -16,6 +24,7 @@ class TuiTheme:
     color_text_accent_secondary: str = "#B48EAD"
     color_text_selected: str = "white"
     color_text_inline_code: str = "#9b9d9d"
+    footer_bar: FooterBarStyle = FooterBarStyle()
     color_code_block_background: str = "#2A2F37"
 
     color_prompt_border: str = "#444444"

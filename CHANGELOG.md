@@ -19,6 +19,18 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.26 - 2026-08-10
+
+### Added
+- Propagate agent usage and context through Stui events and transcript items.
+- Project agent metrics for the footer from prompt usage and effective context data.
+
+### Changed
+- Render the Stui footer with the agent model, prompt tokens, cache tokens, and context capacity.
+
+### Notes
+- Includes PR #113.
+
 ## 0.1.0-beta.25 - 2026-08-09
 
 ### Added

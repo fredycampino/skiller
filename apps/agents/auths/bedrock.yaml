@@ -164,11 +164,12 @@ steps:
 
       llm = config.setdefault("llm", {})
       llm["default_provider"] = "bedrock"
+      context = config.setdefault("context", {})
+      context["window_width_tokens"] = 200000
       providers = config.setdefault("providers", {})
       providers["bedrock"] = {
           "model": model,
           "timeout_seconds": 120,
-          "window_width_tokens": 200000,
           "profile": profile,
       }
 
@@ -215,11 +216,12 @@ steps:
 
       llm = config.setdefault("llm", {})
       llm["default_provider"] = "bedrock"
+      context = config.setdefault("context", {})
+      context["window_width_tokens"] = 200000
       providers = config.setdefault("providers", {})
       providers["bedrock"] = {
           "model": model,
           "timeout_seconds": 120,
-          "window_width_tokens": 200000,
           "profile": profile,
       }
 

@@ -108,8 +108,11 @@ class ListAgentContextUseCase:
         config_path = self._resolve_agent_config_path(run.source, run.ref)
         config = self.agent_config.get_config(config_path=config_path)
         provider = config.llm.default()
-        compaction = config.context.compaction
-        limit_tokens = provider.context_max_tokens(ratio=compaction.max_total_tokens_ratio)
+        context_config = config.context
+        compaction = context_config.compaction
+        limit_tokens = context_config.compaction_window_tokens(
+            model_context_window_tokens=provider.model.model_context_window_tokens,
+        )
         if compaction.enabled:
             mode = "compact"
             context_window = self.agent_context_store.list_compact_entries(

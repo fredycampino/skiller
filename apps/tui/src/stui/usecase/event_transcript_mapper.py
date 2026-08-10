@@ -11,10 +11,12 @@ from stui.port.event_models import (
     ActionRunValue,
     ActionValue,
     AgentAssistantMessagePayload,
+    AgentContextPayload,
     AgentFinalAssistantMessagePayload,
     AgentOutputValue,
     AgentToolCallPayload,
     AgentToolResultPayload,
+    AgentUsagePayload,
     ErrorPayload,
     InputReceivedPayload,
     LogEvent,
@@ -40,6 +42,7 @@ from stui.viewmodel.console_screen_state import (
     ActionRunItem,
     AgentAssistantMessageItem,
     AgentFinalAssistantMessageItem,
+    AgentStepContext,
     AgentStepFinalOutputItem,
     AgentStepStopReason,
     AgentStepUsage,
@@ -133,6 +136,9 @@ class EventTranscriptMapper:
                 step_id=event.step_id or "",
                 message_type="assistant",
                 text=payload.text,
+                total_tokens=payload.total_tokens,
+                usage=_agent_step_usage(payload.usage),
+                context=_agent_step_context(payload.context),
             )
 
         if event.event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
@@ -145,6 +151,8 @@ class EventTranscriptMapper:
                 step_id=event.step_id or "",
                 text=payload.text,
                 total_tokens=payload.total_tokens,
+                usage=_agent_step_usage(payload.usage),
+                context=_agent_step_context(payload.context),
             )
 
         if event.event_type == LogEventType.AGENT_TOOL_CALL:
@@ -204,19 +212,8 @@ class EventTranscriptMapper:
             stop_reason = get_stop_reason(event)
             final = cast(str, data["final"])
             usage_data = cast(dict[str, object], data["usage"]) if "usage" in data else None
-            usage = (
-                AgentStepUsage(
-                    prompt_tokens=cast(int, usage_data["prompt_tokens"]),
-                    output_tokens=cast(int, usage_data["output_tokens"]),
-                    total_tokens=cast(int, usage_data["total_tokens"]),
-                    cache_read_tokens=cast(int | None, usage_data["cache_read_tokens"]),
-                    cache_write_tokens=cast(int | None, usage_data["cache_write_tokens"]),
-                    provider=cast(str, usage_data["provider"]),
-                    model=cast(str, usage_data["model"]),
-                )
-                if usage_data is not None
-                else None
-            )
+            usage = _agent_step_usage(usage_data)
+            context_data = cast(dict[str, object], data["context"]) if "context" in data else None
             return AgentStepFinalOutputItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
@@ -224,6 +221,7 @@ class EventTranscriptMapper:
                 stop_reason=stop_reason,
                 final=final,
                 usage=usage,
+                context=_agent_step_context(context_data),
                 format=OutputFormat.MARKDOWN,
             )
 
@@ -367,6 +365,48 @@ def _payload(event: LogEvent, expected: type) -> object:
     if not isinstance(event.payload, expected):
         raise RuntimeError(f"unexpected payload for {event.event_type}")
     return event.payload
+
+
+def _agent_step_usage(
+    value: AgentUsagePayload | dict[str, object] | None,
+) -> AgentStepUsage | None:
+    if value is None:
+        return None
+    if isinstance(value, AgentUsagePayload):
+        return AgentStepUsage(
+            prompt_tokens=value.prompt_tokens,
+            output_tokens=value.output_tokens,
+            total_tokens=value.total_tokens,
+            cache_read_tokens=value.cache_read_tokens,
+            cache_write_tokens=value.cache_write_tokens,
+            provider=value.provider,
+            model=value.model,
+        )
+    return AgentStepUsage(
+        prompt_tokens=cast(int | None, value.get("prompt_tokens")),
+        output_tokens=cast(int | None, value.get("output_tokens")),
+        total_tokens=cast(int | None, value.get("total_tokens")),
+        cache_read_tokens=cast(int | None, value.get("cache_read_tokens")),
+        cache_write_tokens=cast(int | None, value.get("cache_write_tokens")),
+        provider=cast(str | None, value.get("provider")),
+        model=cast(str | None, value.get("model")),
+    )
+
+
+def _agent_step_context(
+    value: AgentContextPayload | dict[str, object] | None,
+) -> AgentStepContext | None:
+    if value is None:
+        return None
+    if isinstance(value, AgentContextPayload):
+        return AgentStepContext(
+            effective_window_tokens=value.effective_window_tokens,
+            max_total_tokens_ratio=value.max_total_tokens_ratio,
+        )
+    return AgentStepContext(
+        effective_window_tokens=cast(int | None, value.get("effective_window_tokens")),
+        max_total_tokens_ratio=cast(float | None, value.get("max_total_tokens_ratio")),
+    )
 
 
 def _action_item(action: ActionValue) -> ActionItem:

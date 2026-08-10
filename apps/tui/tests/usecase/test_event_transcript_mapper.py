@@ -8,6 +8,7 @@ from stui.port.event_models import (
     ActionOpenUrlValue,
     ActionRunValue,
     AgentAssistantMessagePayload,
+    AgentContextPayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentOutputValue,
@@ -15,6 +16,7 @@ from stui.port.event_models import (
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentToolResultStatus,
+    AgentUsagePayload,
     AssignOutputValue,
     ErrorPayload,
     InputReceivedPayload,
@@ -81,6 +83,19 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
                 payload=AgentAssistantMessagePayload(
                     text="I will inspect the repository state.",
                     total_tokens=1000,
+                    usage=AgentUsagePayload(
+                        prompt_tokens=3000,
+                        output_tokens=500,
+                        total_tokens=3500,
+                        cache_read_tokens=None,
+                        cache_write_tokens=None,
+                        provider="codex",
+                        model="gpt-5",
+                    ),
+                    context=AgentContextPayload(
+                        effective_window_tokens=100000,
+                        max_total_tokens_ratio=0.8,
+                    ),
                 ),
             ),
             _event(
@@ -118,6 +133,12 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
     )
 
     assert isinstance(items[0], AgentAssistantMessageItem)
+    assert items[0].total_tokens == 1000
+    assert items[0].usage is not None
+    assert items[0].usage.cache_read_tokens is None
+    assert items[0].usage.cache_write_tokens is None
+    assert items[0].context is not None
+    assert items[0].context.effective_window_tokens == 100000
     assert isinstance(items[1], AgentToolCallItem)
     assert isinstance(items[2], AgentToolResultItem)
     assert items[1].command == "git status --short"
@@ -242,6 +263,19 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
                 payload=AgentFinalAssistantMessagePayload(
                     text="Hecho completo.",
                     total_tokens=2144,
+                    usage=AgentUsagePayload(
+                        prompt_tokens=3000,
+                        output_tokens=500,
+                        total_tokens=3500,
+                        cache_read_tokens=1800,
+                        cache_write_tokens=120,
+                        provider="codex",
+                        model="gpt-5",
+                    ),
+                    context=AgentContextPayload(
+                        effective_window_tokens=100000,
+                        max_total_tokens_ratio=0.8,
+                    ),
                 ),
             ),
         ],
@@ -251,6 +285,15 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
     assert isinstance(items[0], AgentFinalAssistantMessageItem)
     assert items[0].text == "Hecho completo."
     assert items[0].total_tokens == 2144
+    assert items[0].usage is not None
+    assert items[0].usage.prompt_tokens == 3000
+    assert items[0].usage.cache_read_tokens == 1800
+    assert items[0].usage.cache_write_tokens == 120
+    assert items[0].usage.provider == "codex"
+    assert items[0].usage.model == "gpt-5"
+    assert items[0].context is not None
+    assert items[0].context.effective_window_tokens == 100000
+    assert items[0].context.max_total_tokens_ratio == 0.8
 
 
 def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> None:
@@ -279,6 +322,10 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
                                     "provider": "openai",
                                     "model": "fake",
                                 },
+                                "context": {
+                                    "effective_window_tokens": 100000,
+                                    "max_total_tokens_ratio": 0.8,
+                                },
                             }
                         ),
                         body_ref=None,
@@ -298,6 +345,9 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
     assert items[0].usage.total_tokens == 125
     assert items[0].usage.provider == "openai"
     assert items[0].usage.model == "fake"
+    assert items[0].context is not None
+    assert items[0].context.effective_window_tokens == 100000
+    assert items[0].context.max_total_tokens_ratio == 0.8
 
 
 def test_event_transcript_mapper_uses_notify_step_success_as_step_notify_output() -> None:

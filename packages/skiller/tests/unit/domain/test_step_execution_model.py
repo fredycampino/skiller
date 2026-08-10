@@ -1,6 +1,7 @@
 import pytest
 
 from skiller.domain.action.action_model import OpenUrlAction, RunAction
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel, AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
@@ -102,6 +103,10 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 final="Done.",
                 turn_count=2,
                 tool_call_count=1,
+                context=AgentContextMetrics(
+                    effective_window_tokens=100_000,
+                    max_total_tokens_ratio=0.8,
+                ),
                 usage=AgentUsageOutput(
                     cache_read_tokens=None,
                     cache_write_tokens=None,
@@ -128,6 +133,10 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 "final": "Done.",
                 "turn_count": 2,
                 "tool_call_count": 1,
+                "context": {
+                    "effective_window_tokens": 100000,
+                    "max_total_tokens_ratio": 0.8,
+                },
                 "usage": {
                     "prompt_tokens": 100,
                     "output_tokens": 25,
@@ -199,6 +208,7 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
                 final="Done.",
                 turn_count=1,
                 tool_call_count=0,
+                context=None,
                 usage=AgentUsageOutput(
                     cache_read_tokens=None,
                     cache_write_tokens=None,

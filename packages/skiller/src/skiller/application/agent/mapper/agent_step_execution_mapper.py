@@ -1,6 +1,7 @@
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.application.agent.runner_state import AgentRunnerResult
 from skiller.domain.agent.config.validation import AgentConfigValidation
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.current_step_model import CurrentStep
@@ -90,6 +91,7 @@ class AgentStepExecutionMapper:
                 turn_count=runner_result.turn_count,
                 tool_call_count=runner_result.tool_call_count,
                 stop_reason=runner_result.finish,
+                context=runner_result.context_metrics,
                 usage=runner_result.usage,
             ),
         )
@@ -117,6 +119,7 @@ def _agent_output(
     turn_count: int,
     tool_call_count: int,
     stop_reason: AgentStopReason,
+    context: AgentContextMetrics,
     usage: LLMUsage | None,
 ) -> AgentOutput:
     if final_text is None:
@@ -140,6 +143,7 @@ def _agent_output(
             final=final_text,
             turn_count=turn_count,
             tool_call_count=tool_call_count,
+            context=context,
             usage=_usage_output(usage) if usage is not None else None,
         ),
     )

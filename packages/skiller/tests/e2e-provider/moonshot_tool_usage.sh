@@ -96,7 +96,6 @@ provider = AgentMoonshotProvider(
     models=MOONSHOT_MODELS,
     api_key=os.environ["AGENT_MOONSHOT_API_KEY"],
     timeout_seconds=float(os.environ.get("AGENT_MOONSHOT_TIMEOUT_SECONDS", "120")),
-    window_width_tokens=100000,
 )
 client = LLMClientFactory().resolve(provider)
 

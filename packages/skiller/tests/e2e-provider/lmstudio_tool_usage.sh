@@ -152,7 +152,6 @@ provider = AgentLMStudioProvider(
     api_key=os.environ["LMSTUDIO_API_KEY"],
     base_url=os.environ["LMSTUDIO_BASE_URL"],
     timeout_seconds=float(os.environ["LMSTUDIO_TIMEOUT_SECONDS"]),
-    window_width_tokens=model.model_context_window_tokens,
 )
 client = LLMClientFactory().resolve(provider)
 

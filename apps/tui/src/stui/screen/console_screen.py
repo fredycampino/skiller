@@ -131,9 +131,8 @@ class ConsoleScreen(App[str]):
             Container(
                 Horizontal(
                     FooterContextView(
-                        state=self.state.footer_context,
+                        metrics=self.state.agent_metrics,
                         theme=self.ui_theme,
-                        fallback_text=_build_footer_usage_text(state=self.state),
                         max_bar_width=30,
                         id="footer-wide-context",
                     ),
@@ -155,9 +154,8 @@ class ConsoleScreen(App[str]):
                         id="footer-narrow-session",
                     ),
                     FooterContextView(
-                        state=self.state.footer_context,
+                        metrics=self.state.agent_metrics,
                         theme=self.ui_theme,
-                        fallback_text=_build_footer_usage_text(state=self.state),
                         id="footer-narrow-context",
                     ),
                     id="footer-narrow",
@@ -439,15 +437,18 @@ class ConsoleScreen(App[str]):
         except NoMatches:
             return
 
-        usage_text = _build_footer_usage_text(state=new_state)
         session_text = _build_footer_right_text(
             state=new_state,
             empty_icon=self.ui_theme.session_empty_icon,
         )
-        wide_context.set_state(new_state.footer_context, fallback_text=usage_text)
+        wide_context.set_state(
+            metrics=new_state.agent_metrics,
+        )
         wide_session.update(session_text)
         narrow_session.update(session_text)
-        narrow_context.set_state(new_state.footer_context, fallback_text=usage_text)
+        narrow_context.set_state(
+            metrics=new_state.agent_metrics,
+        )
 
         is_narrow = self.size.width < _NARROW_FOOTER_WIDTH
         footer_wide.display = not is_narrow
@@ -694,21 +695,6 @@ def _format_run_updated_at(value: str) -> str:
         except ValueError:
             continue
     return "-"
-
-
-def _format_agent_tokens(value: int) -> str:
-    if value < 1000:
-        return str(value)
-    return f"{value / 1000:.1f}k"
-
-
-def _build_footer_usage_text(*, state: ConsoleScreenState) -> str:
-    if state.agent_usage is None:
-        return "/ for commands"
-    return (
-        f"{state.agent_usage.model}\n"
-        f"{_format_agent_tokens(state.agent_usage.total_tokens)}"
-    )
 
 
 def _build_footer_right_text(*, state: ConsoleScreenState, empty_icon: str) -> str:

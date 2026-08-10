@@ -55,7 +55,6 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._emit_state()
         if start_result.started_auth or resumed:
             self._schedule_refresh_agent_context_stats()
-            self._schedule_refresh_footer_context()
 
     def notify(self, events: list[LogEvent]) -> None:
         result = self._use_cases.event_state.execute(
@@ -67,11 +66,15 @@ class ConsoleScreenViewModel(LogEventsListener):
             context=self._run_event_context,
             events=events,
         )
-        agent_usage_result = self._use_cases.agent_usage.execute(
+        metrics = self._use_cases.project_agent_metrics.execute(
+            items=result.state.transcript.items,
+        )
+        agent_metrics_result = self._use_cases.refresh_agent_metrics.execute(
             state=result.state,
+            metrics=metrics,
         )
         notify_action_result = self._use_cases.notify_action.execute(
-            state=agent_usage_result.state,
+            state=agent_metrics_result.state,
         )
         post_result = self._use_cases.load_session_from_post.execute(
             self,
@@ -83,8 +86,6 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state = post_result.state
 
         self._emit_state()
-        self._schedule_refresh_agent_context_stats()
-        self._schedule_refresh_footer_context()
         if post_result.status == LoadSessionFromPostStatus.INTRO_REQUIRED:
             intro_result = self._use_cases.get_intro_post_command.execute()
             asyncio.create_task(self._execute_post_command(intro_result.command))
@@ -136,20 +137,6 @@ class ConsoleScreenViewModel(LogEventsListener):
 
     async def _refresh_agent_context_stats(self) -> None:
         result = await self._use_cases.refresh_agent_context_stats.execute(
-            state=self.state,
-        )
-        self.state = result.state
-        self._emit_state()
-
-    def _schedule_refresh_footer_context(self) -> None:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.create_task(self._refresh_footer_context())
-
-    async def _refresh_footer_context(self) -> None:
-        result = await self._use_cases.refresh_footer_context.execute(
             state=self.state,
         )
         self.state = result.state
@@ -470,9 +457,8 @@ class ConsoleScreenViewModel(LogEventsListener):
             command=self.state.models_table.command,
             rows=self.state.models_table.rows,
         )
-        state.set_agent_usage(self.state.agent_usage)
+        state.set_agent_metrics(self.state.agent_metrics)
         state.set_agent_context_stats(self.state.agent_context_stats)
-        state.set_footer_context(self.state.footer_context)
         state.set_autocompletion(self.state.autocompletion)
         state.set_notify_action(self.state.notify_action)
         return state

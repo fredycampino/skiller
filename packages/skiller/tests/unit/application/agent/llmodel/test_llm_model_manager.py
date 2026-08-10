@@ -132,7 +132,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 models=MINIMAX_MODELS,
                 api_key="secret",
                 timeout_seconds=30,
-                window_width_tokens=100_000,
             ),
             "MiniMax LLM provider requires MiniMaxLLMRequest",
         ),
@@ -141,7 +140,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 model=_lmstudio_model(),
                 models=(_lmstudio_model(),),
                 timeout_seconds=30,
-                window_width_tokens=131_072,
             ),
             "LM Studio LLM provider requires LMStudioLLMRequest",
         ),
@@ -151,7 +149,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 models=CODEX_MODELS,
                 credentials_file="/tmp/openai-codex.json",
                 timeout_seconds=120,
-                window_width_tokens=100_000,
             ),
             "Codex LLM provider requires CodexLLMRequest",
         ),
@@ -161,7 +158,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 models=BEDROCK_MODELS,
                 profile="claude-bedrock",
                 timeout_seconds=120,
-                window_width_tokens=100_000,
             ),
             "Bedrock LLM provider requires BedrockLLMRequest",
         ),
@@ -188,7 +184,6 @@ def _provider(
         model=model,
         models=FAKE_MODELS,
         timeout_seconds=30,
-        window_width_tokens=100_000,
     )
 
 

@@ -47,6 +47,7 @@ class AgentRunner:
     def execute(self, request: AgentRunnerRequest) -> AgentRunnerResult:
         config = request.config
         tools_enabled = bool(config.tools)
+        context_metrics = config.context_metrics()
         context = self.context_publisher.attach_context(
             agent=request.agent,
         )
@@ -109,6 +110,7 @@ class AgentRunner:
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
                     config=config.config.event_output,
+                    context_metrics=context_metrics,
                 )
                 state.finish_final(final_text)
                 turn_loop.advance()
@@ -117,6 +119,7 @@ class AgentRunner:
             allowed_tools = [tool.name for tool in config.tools]
             max_tool_calls = config.config.loop.max_tool_calls
             provider = config.config.llm.default()
+            context_config = config.config.context
             tool_execution_request = ToolExecutionRequest(
                 context=context,
                 turn_id=turn_id,
@@ -125,7 +128,10 @@ class AgentRunner:
                 runtime_configs=config.config.tools,
                 event_config=config.config.event_output,
                 max_tool_calls=max_tool_calls,
-                max_tool_result_bytes=provider.tool_result_max_bytes,
+                max_tool_result_bytes=context_config.tool_result_max_bytes(
+                    model_context_window_tokens=provider.model.model_context_window_tokens,
+                ),
+                context_metrics=context_metrics,
                 turn_loop=turn_loop,
             )
             tool_execution_results = self.tool_execution.execute(tool_execution_request)
@@ -153,6 +159,7 @@ class AgentRunner:
                 self.event_publisher.emit_final_assistant_message(
                     entry=entry,
                     config=config.config.event_output,
+                    context_metrics=context_metrics,
                 )
                 state.finish_final(final_text)
                 break
@@ -188,5 +195,6 @@ class AgentRunner:
             finish=state.finish or AgentStopReason.FINAL,
             response_model=state.response_model,
             usage=state.usage,
+            context_metrics=context_metrics,
             error=state.error,
         )

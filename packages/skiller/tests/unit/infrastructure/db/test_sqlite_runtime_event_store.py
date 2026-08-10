@@ -6,6 +6,8 @@ from skiller.domain.action.action_model import (
     PostAction,
     RunAction,
 )
+from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -381,6 +383,19 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                 body=AgentMessageEventBody(
                     total_tokens=1000,
                     text="I will inspect.",
+                    context=AgentContextMetrics(
+                        effective_window_tokens=100_000,
+                        max_total_tokens_ratio=0.8,
+                    ),
+                    usage=LLMUsage(
+                        prompt_tokens=1200,
+                        output_tokens=300,
+                        total_tokens=1000,
+                        cache_read_tokens=700,
+                        cache_write_tokens=20,
+                        provider="codex",
+                        model="gpt-5",
+                    ),
                 ),
             ),
         )
@@ -399,11 +414,37 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
         body=AgentMessageEventBody(
             total_tokens=1000,
             text="I will inspect.",
+            context=AgentContextMetrics(
+                effective_window_tokens=100_000,
+                max_total_tokens_ratio=0.8,
+            ),
+            usage=LLMUsage(
+                prompt_tokens=1200,
+                output_tokens=300,
+                total_tokens=1000,
+                cache_read_tokens=700,
+                cache_write_tokens=20,
+                provider="codex",
+                model="gpt-5",
+            ),
         ),
     )
     assert event.model_dump(mode="json")["payload"] == {
         "total_tokens": 1000,
         "text": "I will inspect.",
+        "usage": {
+            "prompt_tokens": 1200,
+            "output_tokens": 300,
+            "total_tokens": 1000,
+            "cache_read_tokens": 700,
+            "cache_write_tokens": 20,
+            "provider": "codex",
+            "model": "gpt-5",
+        },
+        "context": {
+            "effective_window_tokens": 100000,
+            "max_total_tokens_ratio": 0.8,
+        },
     }
 
 
@@ -432,6 +473,11 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                 body=AgentMessageEventBody(
                     total_tokens=2144,
                     text="Done.",
+                    usage=None,
+                    context=AgentContextMetrics(
+                        effective_window_tokens=100_000,
+                        max_total_tokens_ratio=0.8,
+                    ),
                 ),
             ),
         )
@@ -448,9 +494,88 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
         body=AgentMessageEventBody(
             total_tokens=2144,
             text="Done.",
+            usage=None,
+            context=AgentContextMetrics(
+                effective_window_tokens=100_000,
+                max_total_tokens_ratio=0.8,
+            ),
         ),
     )
     assert event.model_dump(mode="json")["payload"] == {
         "total_tokens": 2144,
         "text": "Done.",
+        "context": {
+            "effective_window_tokens": 100000,
+            "max_total_tokens_ratio": 0.8,
+        },
     }
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+    ],
+)
+def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
+    tmp_path,
+    event_type: RuntimeEventType,
+) -> None:
+    db_path = tmp_path / f"runtime-{event_type.value.lower()}-null-cache.db"
+    run_store = SqliteRunStorePort(str(db_path))
+    runtime_event_store = SqliteRuntimeEventStore(str(db_path))
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+    run_id = "550e8400-e29b-41d4-a716-446655440035"
+    run_store.create_run(
+        "internal",
+        "skill",
+        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        RunContext(inputs={}, step_executions={}),
+        run_id=run_id,
+    )
+
+    runtime_event_store.append_event(
+        RuntimeEventDraft(
+            run_id=run_id,
+            type=event_type,
+            payload=AgentEventPayload(
+                step_id="support_agent",
+                turn_id="turn-4",
+                agent_sequence=7,
+                body=AgentMessageEventBody(
+                    total_tokens=125,
+                    text="Done.",
+                    usage=LLMUsage(
+                        prompt_tokens=100,
+                        output_tokens=25,
+                        total_tokens=125,
+                        cache_read_tokens=None,
+                        cache_write_tokens=None,
+                        provider="codex",
+                        model="gpt-5",
+                    ),
+                    context=AgentContextMetrics(
+                        effective_window_tokens=100_000,
+                        max_total_tokens_ratio=0.8,
+                    ),
+                ),
+            ),
+        )
+    )
+
+    event = runtime_event_store.get_last_event(run_id)
+
+    assert event is not None
+    assert event.payload.body.usage == LLMUsage(
+        prompt_tokens=100,
+        output_tokens=25,
+        total_tokens=125,
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        provider="codex",
+        model="gpt-5",
+    )
+    usage = event.model_dump(mode="json")["payload"]["usage"]
+    assert usage["cache_read_tokens"] is None
+    assert usage["cache_write_tokens"] is None

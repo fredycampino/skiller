@@ -95,10 +95,17 @@ class AgentConfigMapper:
                 provider_type=provider_type,
                 provider=provider,
                 selected=selected,
-                selected_window_width_tokens=config.llm.window_width_tokens,
                 env=self.env,
             )
             providers.append(llm_provider)
+
+        llm = AgentLLMProviderList(
+            default_provider=default_provider,
+            providers=tuple(providers),
+        )
+        window_width_tokens = config.context.window_width_tokens
+        if window_width_tokens is None:
+            window_width_tokens = llm.default().model.model_context_window_tokens
 
         compaction = AgentContextCompactionConfig(
             enabled=config.context.compaction.enabled,
@@ -106,11 +113,8 @@ class AgentConfigMapper:
             keep_last=config.context.compaction.keep_last,
         )
         context = AgentContextConfig(
+            window_width_tokens=window_width_tokens,
             compaction=compaction,
-        )
-        llm = AgentLLMProviderList(
-            default_provider=default_provider,
-            providers=tuple(providers),
         )
         debug = AgentDebugConfig(
             log_request=config.debug.log_request,
@@ -153,7 +157,6 @@ def _build_provider(
     provider_type: AgentLLMProviderType,
     provider: LLMProviderConfigModel,
     selected: bool,
-    selected_window_width_tokens: int | None,
     env: Mapping[str, str],
 ) -> AgentLLMProvider:
     raw_model = _provider_env(provider_type, selected, "MODEL", env) or provider.model
@@ -163,10 +166,6 @@ def _build_provider(
         selected=selected,
         env=env,
     )
-    window_width_tokens = provider.window_width_tokens
-    if selected and selected_window_width_tokens is not None:
-        window_width_tokens = selected_window_width_tokens
-
     if provider.models is not None and provider_type != AgentLLMProviderType.LMSTUDIO:
         raise ValueError(
             f"Provider models config is not supported for provider='{provider_type.value}'"
@@ -177,14 +176,12 @@ def _build_provider(
             model=_null_model(raw_model),
             models=NULL_MODELS,
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.FAKE:
         return AgentFakeProvider(
             model=_fake_model(raw_model),
             models=FAKE_MODELS,
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.MINIMAX:
         api_key = _resolve_api_key(
@@ -198,7 +195,6 @@ def _build_provider(
             models=MINIMAX_MODELS,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.MOONSHOT:
         api_key = _resolve_api_key(
@@ -212,7 +208,6 @@ def _build_provider(
             models=MOONSHOT_MODELS,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.LMSTUDIO:
         lmstudio_models = _lmstudio_models(provider)
@@ -234,7 +229,6 @@ def _build_provider(
                 default=LMSTUDIO_DEFAULT_BASE_URL,
             ),
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.CODEX:
         return AgentCodexProvider(
@@ -242,7 +236,6 @@ def _build_provider(
             models=CODEX_MODELS,
             credentials_file=_required_credentials_file(provider.credentials_file),
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
     if provider_type == AgentLLMProviderType.BEDROCK:
         return AgentBedrockProvider(
@@ -250,7 +243,6 @@ def _build_provider(
             models=BEDROCK_MODELS,
             profile=_required_profile(provider.profile),
             timeout_seconds=timeout_seconds,
-            window_width_tokens=window_width_tokens,
         )
 
     raise ValueError(f"Unsupported LLM provider: {provider_type.value}")

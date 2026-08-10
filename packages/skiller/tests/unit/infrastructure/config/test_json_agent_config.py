@@ -41,6 +41,7 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
         llm=_minimax_llm(api_key_file=str(secret_path)),
         loop={"max_turns": 12, "max_tool_calls": 7},
         context={
+            "window_width_tokens": 1_000_000,
             "compaction": {
                 "enabled": True,
                 "max_total_tokens_ratio": 0.9,
@@ -65,7 +66,7 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     assert provider.api_key == "secret"
     assert provider.model == AgentMiniMaxLLMModel.M2_5
     assert provider.timeout_seconds == 30.0
-    assert provider.window_width_tokens == 1_000_000
+    assert config.context.window_width_tokens == 1_000_000
     assert config.loop.max_turns == 12
     assert config.loop.max_tool_calls == 7
     assert config.context.compaction.enabled is True
@@ -143,20 +144,47 @@ def test_json_agent_config_rejects_unsupported_moonshot_model(tmp_path) -> None:
         _provider(config_path=config_path, env={}).get_config()
 
 
-def test_json_agent_config_applies_llm_window_width_tokens_to_selected_provider(
+def test_json_agent_config_reads_context_window_width_tokens(
     tmp_path,
 ) -> None:
     config_path = tmp_path / "agent.json"
     payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {
-        "default_provider": "minimax",
-        "window_width_tokens": 80_000,
-    }
+    payload["context"] = {"window_width_tokens": 80_000}
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
     config = _provider(config_path=config_path, env={}).get_config()
 
-    assert config.llm.default().window_width_tokens == 80_000
+    assert config.context.window_width_tokens == 80_000
+
+
+def test_json_agent_config_rejects_provider_window_width_tokens(tmp_path) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(
+        api_key="secret",
+        extra={"window_width_tokens": 80_000},
+    )
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="window_width_tokens"):
+        _provider(config_path=config_path, env={}).get_config()
+
+
+@pytest.mark.parametrize("context", [{}, None], ids=["empty-context", "missing-context"])
+def test_json_agent_config_uses_model_window_when_context_window_is_missing(
+    tmp_path,
+    context,
+) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _minimax_llm(api_key="secret")
+    if context is None:
+        payload.pop("context")
+    else:
+        payload["context"] = context
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = _provider(config_path=config_path, env={}).get_config()
+
+    assert config.context.window_width_tokens == 204_800
 
 
 def test_json_agent_config_reads_debug_log_request_file(tmp_path) -> None:
@@ -818,13 +846,11 @@ def test_json_agent_config_lists_provider_sources(tmp_path) -> None:
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 1_000_000,
                 },
                 "codex": {
                     "credentials_file": "/secret/codex.json",
                     "model": "gpt-5.5",
                     "timeout_seconds": 120,
-                    "window_width_tokens": 1_000_000,
                 },
             },
         },
@@ -874,13 +900,11 @@ def test_json_agent_config_sets_model_in_single_config_file(tmp_path) -> None:
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 204_800,
                 },
                 "codex": {
                     "credentials_file": "/secret/codex.json",
                     "model": "gpt-5.5",
                     "timeout_seconds": 120,
-                    "window_width_tokens": 1_050_000,
                 },
             },
         },
@@ -913,13 +937,11 @@ def test_json_agent_config_sets_local_default_and_global_provider_model(
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 204_800,
                 },
                 "codex": {
                     "credentials_file": "/secret/codex.json",
                     "model": "gpt-5.5",
                     "timeout_seconds": 120,
-                    "window_width_tokens": 1_050_000,
                 },
             },
         },
@@ -942,7 +964,10 @@ def test_json_agent_config_sets_local_default_and_global_provider_model(
     config = _provider(config_path=global_config_path, env={}).get_config(
         config_path=context_config_path
     )
-    assert local_payload == {"llm": {"default_provider": "codex"}}
+    assert local_payload == {
+        "llm": {"default_provider": "codex"},
+        "context": {"window_width_tokens": 100_000},
+    }
     assert global_payload["providers"]["codex"]["model"] == "gpt-5.4"
     assert config.llm.default_provider == AgentLLMProviderType.CODEX
     assert config.llm.default().model.value == "gpt-5.4"
@@ -1025,12 +1050,10 @@ def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) ->
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 1_000_000,
                 },
                 "fake": {
                     "model": "model1",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 100_000,
                 },
             },
         },
@@ -1077,7 +1100,6 @@ def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
                     "api_key": "secret",
                     "model": "model",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 100_000,
                 }
             },
         },
@@ -1100,13 +1122,11 @@ def test_json_agent_config_ignores_unknown_provider_when_default_is_known(
                     "api_key": "secret",
                     "model": "MiniMax-M2.5",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 100_000,
                 },
                 "future-provider": {
                     "api_key": "secret",
                     "model": "kimi-k3",
                     "timeout_seconds": 30,
-                    "window_width_tokens": 256_000,
                     "future_option": True,
                 },
             },
@@ -1143,6 +1163,11 @@ def _write_config(
 ) -> None:
     payload: dict[str, object] = dict(llm)
     payload.update(sections)
+    context = payload.get("context")
+    if not isinstance(context, dict):
+        payload["context"] = {"window_width_tokens": 100_000}
+    elif "window_width_tokens" not in context:
+        context["window_width_tokens"] = 100_000
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -1157,7 +1182,6 @@ def _minimax_llm(
     provider: dict[str, object] = {
         "model": model,
         "timeout_seconds": 30,
-        "window_width_tokens": 1_000_000,
     }
     if api_key is not None:
         provider["api_key"] = api_key
@@ -1173,6 +1197,7 @@ def _minimax_llm(
         "providers": {
             "minimax": provider,
         },
+        "context": {"window_width_tokens": 1_000_000},
     }
 
 
@@ -1188,9 +1213,9 @@ def _moonshot_llm(
                 "api_key": api_key,
                 "model": model,
                 "timeout_seconds": 30,
-                "window_width_tokens": 256_000,
             },
         },
+        "context": {"window_width_tokens": 256_000},
     }
 
 
@@ -1198,7 +1223,6 @@ def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
     provider: dict[str, object] = {
         "model": "gpt-5.5",
         "timeout_seconds": 120,
-        "window_width_tokens": 100_000,
     }
     if credentials_file is not None:
         provider["credentials_file"] = credentials_file
@@ -1208,6 +1232,7 @@ def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
         "providers": {
             "codex": provider,
         },
+        "context": {"window_width_tokens": 100_000},
     }
 
 
@@ -1215,7 +1240,6 @@ def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
     provider: dict[str, object] = {
         "model": "us.anthropic.claude-opus-4-6-v1",
         "timeout_seconds": 120,
-        "window_width_tokens": 200_000,
     }
     if profile is not None:
         provider["profile"] = profile
@@ -1225,6 +1249,7 @@ def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
         "providers": {
             "bedrock": provider,
         },
+        "context": {"window_width_tokens": 200_000},
     }
 
 
@@ -1241,7 +1266,6 @@ def _lmstudio_llm(
     provider: dict[str, object] = {
         "model": model,
         "timeout_seconds": 30,
-        "window_width_tokens": 131_072,
     }
     if models is not None:
         provider["models"] = models
@@ -1266,6 +1290,7 @@ def _lmstudio_llm(
         "providers": {
             "lmstudio": provider,
         },
+        "context": {"window_width_tokens": 131_072},
     }
 
 
@@ -1276,9 +1301,9 @@ def _fake_llm() -> dict[str, object]:
             "fake": {
                 "model": "model1",
                 "timeout_seconds": 30,
-                "window_width_tokens": 100_000,
             }
         },
+        "context": {"window_width_tokens": 100_000},
     }
 
 
@@ -1289,9 +1314,9 @@ def _null_llm() -> dict[str, object]:
             "null": {
                 "model": "null1",
                 "timeout_seconds": 30,
-                "window_width_tokens": 100_000,
             }
         },
+        "context": {"window_width_tokens": 100_000},
     }
 
 

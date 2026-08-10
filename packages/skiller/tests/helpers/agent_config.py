@@ -58,7 +58,6 @@ def agent_config(
                     model=AgentFakeLLMModel.MODEL1,
                     models=FAKE_MODELS,
                     timeout_seconds=30,
-                    window_width_tokens=window_width_tokens,
                 ),
             ),
         ),
@@ -67,6 +66,7 @@ def agent_config(
             max_tool_calls=max_tool_calls,
         ),
         context=AgentContextConfig(
+            window_width_tokens=window_width_tokens,
             compaction=AgentContextCompactionConfig(
                 enabled=False,
                 max_total_tokens_ratio=0.8,

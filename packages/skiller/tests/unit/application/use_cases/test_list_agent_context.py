@@ -282,7 +282,6 @@ def _agent_config(*, compaction_enabled: bool = False) -> AgentConfig:
         model=AgentNullLLMModel.NULL1,
         models=NULL_MODELS,
         timeout_seconds=30,
-        window_width_tokens=100000,
     )
     return AgentConfig(
         llm=AgentLLMProviderList(
@@ -291,6 +290,7 @@ def _agent_config(*, compaction_enabled: bool = False) -> AgentConfig:
         ),
         loop=AgentLoopConfig(max_turns=2, max_tool_calls=3),
         context=AgentContextConfig(
+            window_width_tokens=100000,
             compaction=AgentContextCompactionConfig(
                 enabled=compaction_enabled,
                 max_total_tokens_ratio=0.8,

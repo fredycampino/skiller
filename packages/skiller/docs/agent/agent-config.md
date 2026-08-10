@@ -32,8 +32,10 @@ If neither the global config nor an override file exists, config loading fails.
 ## Root Shape
 
 After global and override files are combined, `llm` and `providers` are
-required. A local override can contain only `llm.default_provider` when the
-global file already provides the referenced provider.
+required. `context.window_width_tokens` is optional; when omitted, the mapper
+uses the selected model's native context window. A local override can contain
+only `llm.default_provider` when the global file already provides the
+referenced provider and context configuration.
 
 The other root fields are optional and use mapper/model defaults.
 
@@ -51,8 +53,7 @@ The other root fields are optional and use mapper/model defaults.
     "minimax": {
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.5",
-      "timeout_seconds": 30,
-      "window_width_tokens": 1000000
+      "timeout_seconds": 30
     }
   },
   "loop": {
@@ -60,6 +61,7 @@ The other root fields are optional and use mapper/model defaults.
     "max_tool_calls": 10
   },
   "context": {
+    "window_width_tokens": 1000000,
     "compaction": {
       "enabled": false,
       "max_total_tokens_ratio": 0.8,
@@ -85,15 +87,15 @@ Unknown fields inside known sections are rejected.
 
 `llm.default_provider` is a logical key into the root `providers` section.
 
-`llm.window_width_tokens` is optional. When present, it is the effective window
-width for the selected provider. When absent, the selected provider uses its own
-`window_width_tokens`.
+`context.window_width_tokens` optionally caps the context window configured for
+the agent. When omitted, the selected model's native `context_window_tokens` is
+used. The effective window is always the minimum of the resolved value and the
+selected model's native `context_window_tokens`.
 
 Each provider entry requires:
 
 - `model`
 - `timeout_seconds`
-- `window_width_tokens`
 - credentials required by that provider
 
 Provider entries are keyed by the logical provider id:
@@ -101,23 +103,24 @@ Provider entries are keyed by the logical provider id:
 ```json
 {
   "llm": {
-    "default_provider": "minimax",
+    "default_provider": "minimax"
+  },
+  "context": {
     "window_width_tokens": 80000
   },
   "providers": {
     "minimax": {
       "api_key_env": "AGENT_MINIMAX_API_KEY",
       "model": "MiniMax-M2.5",
-      "timeout_seconds": 30,
-      "window_width_tokens": 1000000
+      "timeout_seconds": 30
     }
   }
 }
 ```
 
-In this example the provider declares `1000000` tokens, but this agent uses
-`80000` as its effective context limit before applying
-`context.compaction.max_total_tokens_ratio`.
+In this example the agent uses `80000` as its configured context limit. The
+effective limit is the minimum of that value and the selected model's native
+context window before applying `context.compaction.max_total_tokens_ratio`.
 
 ## Debug
 
@@ -151,8 +154,6 @@ All providers require these common fields:
 
 - `model`: selected model id
 - `timeout_seconds`: request timeout
-- `window_width_tokens`: provider context window used by Skiller unless
-  `llm.window_width_tokens` overrides it for the selected provider
 
 Supported provider/model combinations:
 
@@ -174,8 +175,7 @@ Supported provider/model combinations:
   "providers": {
     "null": {
       "model": "null1",
-      "timeout_seconds": 1,
-      "window_width_tokens": 1000
+      "timeout_seconds": 1
     }
   }
 }
@@ -190,8 +190,7 @@ Supported provider/model combinations:
   "providers": {
     "fake": {
       "model": "model1",
-      "timeout_seconds": 1,
-      "window_width_tokens": 1000
+      "timeout_seconds": 1
     }
   }
 }
@@ -216,8 +215,7 @@ Accepted credential fields:
     "minimax": {
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.7",
-      "timeout_seconds": 60,
-      "window_width_tokens": 80000
+      "timeout_seconds": 60
     }
   }
 }
@@ -251,17 +249,17 @@ Accepted fields:
           "context_window_tokens": 30000
         }
       ],
-      "timeout_seconds": 120,
-      "window_width_tokens": 50000
+      "timeout_seconds": 120
     }
   }
 }
 ```
 
-For LM Studio, keep `window_width_tokens` and each configured
-`context_window_tokens` aligned with the model instance loaded in LM Studio
-(`lms ps --json` shows `contextLength`). Skiller does not load or resize LM
-Studio models; it only uses the OpenAI-compatible endpoint.
+For LM Studio, keep each configured `context_window_tokens` aligned with the
+model instance loaded in LM Studio (`lms ps --json` shows `contextLength`).
+Skiller does not load or resize LM Studio models; it only uses the
+OpenAI-compatible endpoint. The agent-level `context.window_width_tokens` is
+still capped by the selected model's configured context window.
 
 Example using an API key file:
 
@@ -277,8 +275,7 @@ Example using an API key file:
           "context_window_tokens": 30000
         }
       ],
-      "timeout_seconds": 120,
-      "window_width_tokens": 30000
+      "timeout_seconds": 120
     }
   }
 }
@@ -301,8 +298,7 @@ Accepted credential fields:
     "codex": {
       "credentials_file": "~/.skiller/secrets/openai-codex.json",
       "model": "gpt-5.5",
-      "timeout_seconds": 120,
-      "window_width_tokens": 100000
+      "timeout_seconds": 120
     }
   }
 }
@@ -326,8 +322,7 @@ direct model IDs.
     "bedrock": {
       "profile": "claude-bedrock",
       "model": "us.anthropic.claude-opus-4-6-v1",
-      "timeout_seconds": 120,
-      "window_width_tokens": 200000
+      "timeout_seconds": 120
     }
   }
 }
@@ -370,18 +365,19 @@ common model settings outside individual agents:
   "llm": {
     "default_provider": "minimax"
   },
+  "context": {
+    "window_width_tokens": 100000
+  },
   "providers": {
     "minimax": {
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "model": "MiniMax-M2.7",
-      "timeout_seconds": 60,
-      "window_width_tokens": 80000
+      "timeout_seconds": 60
     },
     "codex": {
       "credentials_file": "~/.skiller/secrets/openai-codex.json",
       "model": "gpt-5.5",
-      "timeout_seconds": 120,
-      "window_width_tokens": 100000
+      "timeout_seconds": 120
     },
     "lmstudio": {
       "base_url": "http://127.0.0.1:1234/v1",
@@ -396,14 +392,12 @@ common model settings outside individual agents:
           "context_window_tokens": 40000
         }
       ],
-      "timeout_seconds": 120,
-      "window_width_tokens": 50000
+      "timeout_seconds": 120
     },
     "bedrock": {
       "profile": "claude-bedrock",
       "model": "us.anthropic.claude-opus-4-6-v1",
-      "timeout_seconds": 120,
-      "window_width_tokens": 200000
+      "timeout_seconds": 120
     }
   }
 }
@@ -507,6 +501,7 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 ```json
 {
   "context": {
+    "window_width_tokens": 100000,
     "compaction": {
       "enabled": false,
       "max_total_tokens_ratio": 0.8,
@@ -519,8 +514,10 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 Fields:
 
 - `context.compaction.enabled`: enables compact context window selection for agent prompts
-- `context.compaction.max_total_tokens_ratio`: ratio applied to `llm.window_width_tokens`
-  when present, otherwise to the selected provider `window_width_tokens`
+- `context.window_width_tokens`: optional maximum context window configured for the agent;
+  defaults to the selected model's native context window
+- `context.compaction.max_total_tokens_ratio`: ratio applied to the effective
+  context window
 - `context.compaction.keep_last`: number of recent usage marker blocks kept complete
   before older tool history can be pruned
 
@@ -529,6 +526,7 @@ Defaults:
 - `context.compaction.enabled = false`
 - `context.compaction.max_total_tokens_ratio = 0.8`
 - `context.compaction.keep_last = 5`
+- omitted `context.window_width_tokens`: selected model's native context window
 
 Validation:
 
@@ -537,7 +535,10 @@ Validation:
 
 There are no context env overrides in the current mapper.
 
-Context config is not deep-merged between global and local `agent.json`. If a local file defines `context`, it replaces the whole global `context` section; omitted context fields then use defaults.
+Context config is not deep-merged between global and local `agent.json`. If a
+local file defines `context`, it replaces the whole global `context` section.
+An omitted `window_width_tokens` then uses the selected model's native context
+window.
 
 Related context pruning details: [`./agent-context-prune.md`](./agent-context-prune.md).
 

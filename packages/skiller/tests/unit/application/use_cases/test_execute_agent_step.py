@@ -26,6 +26,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextMetrics,
     AgentContextPayload,
     AgentContextUsageMarker,
     AgentContextWindowEntries,
@@ -699,6 +700,10 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
             final="Hello back.",
             turn_count=1,
             tool_call_count=0,
+            context=AgentContextMetrics(
+                effective_window_tokens=100_000,
+                max_total_tokens_ratio=0.8,
+            ),
         ),
     )
     assert context.step_executions["support_agent"] == result.execution
@@ -805,6 +810,10 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             final="Done.",
             turn_count=2,
             tool_call_count=1,
+            context=AgentContextMetrics(
+                effective_window_tokens=100_000,
+                max_total_tokens_ratio=0.8,
+            ),
             usage=AgentUsageOutput(
                 cache_read_tokens=None,
                 cache_write_tokens=None,

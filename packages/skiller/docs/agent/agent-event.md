@@ -32,6 +32,10 @@ Rules:
 - `agent_sequence` is the matching `agent_context_entries.sequence` for events
   backed by an agent context entry.
 - `payload` mirrors the matching agent context entry payload.
+- `payload.usage` mirrors the matching agent context entry usage when it is
+  available.
+- `payload.context` contains the effective context window and compaction ratio
+  used for the agent execution.
 - `payload.parent_sequence` links a tool call or result to the assistant message
   that introduced the tool block, when that assistant message exists.
 
@@ -63,7 +67,20 @@ tool calls.
   "created_at": "2026-05-12T10:30:16Z",
   "payload": {
     "total_tokens": 1000,
-    "text": "I will inspect the branch state before continuing."
+    "text": "I will inspect the branch state before continuing.",
+    "usage": {
+      "prompt_tokens": 3000,
+      "output_tokens": 500,
+      "total_tokens": 1000,
+      "cache_read_tokens": 1800,
+      "cache_write_tokens": 120,
+      "provider": "codex",
+      "model": "gpt-5"
+    },
+    "context": {
+      "effective_window_tokens": 100000,
+      "max_total_tokens_ratio": 0.8
+    }
   }
 }
 ```
@@ -72,8 +89,14 @@ Rules:
 
 - only tool-call assistant messages use this event type.
 - `total_tokens` is the `usage.total_tokens` reported by the LLM for that request.
+- `usage` is the optional usage reported by the LLM for that request. It uses the
+  same field shape as the persisted `LLMUsage` object and includes cache read and
+  cache write counters when the provider reports them.
+- `context` contains `effective_window_tokens`, calculated as the minimum of
+  the configured context window and the model context window, plus
+  `max_total_tokens_ratio`.
 - truncation: `text` is truncated by the agent event output policy.
-- not truncated: `total_tokens`.
+- not truncated: `total_tokens` and `usage`.
 
 ## `AGENT_FINAL_ASSISTANT_MESSAGE`
 
@@ -91,7 +114,20 @@ Emitted when the agent finishes with a final assistant message.
   "created_at": "2026-05-12T10:30:18Z",
   "payload": {
     "total_tokens": 2144,
-    "text": "Done"
+    "text": "Done",
+    "usage": {
+      "prompt_tokens": 5000,
+      "output_tokens": 1200,
+      "total_tokens": 6200,
+      "cache_read_tokens": 3500,
+      "cache_write_tokens": 100,
+      "provider": "codex",
+      "model": "gpt-5"
+    },
+    "context": {
+      "effective_window_tokens": 100000,
+      "max_total_tokens_ratio": 0.8
+    }
   }
 }
 ```
@@ -99,9 +135,15 @@ Emitted when the agent finishes with a final assistant message.
 Rules:
 
 - `total_tokens` is the `usage.total_tokens` reported by the LLM for that request.
+- `usage` is the optional usage reported by the LLM for that request. It uses the
+  same field shape as the persisted `LLMUsage` object and includes cache read and
+  cache write counters when the provider reports them.
+- `context` uses the same shape as the assistant message event context.
 - truncation: `text` is truncated by the agent event output policy.
-- not truncated: `total_tokens`.
+- not truncated: `total_tokens` and `usage`.
 - if the provider returns no visible content, this event is omitted.
+
+Older persisted events may not contain `usage`; consumers must treat it as absent.
 
 ## `AGENT_TOOL_CALL`
 

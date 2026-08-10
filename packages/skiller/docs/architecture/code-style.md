@@ -34,6 +34,11 @@ if is_ready and current_step.step_type == StepType.MCP:
   sites and tests so the required dependency is visible.
 - Use `| None` only when absence is part of the contract. Do not use it as a fallback for missing
   wiring, delayed validation, or convenience.
+- Do not add defaults `= None` to hide missing wiring or simplify tests. Pass the value explicitly,
+  including `None` when the domain state is absent.
+- Parsers may map a missing external field to `None`; internal constructors must not do it
+  implicitly.
+
 - Do not scatter `.strip()` across internal logic. Normalize text once at the boundary, parser, or
   dedicated mapper; after that, trust the normalized contract.
 - Do not extract private helpers by default. Keep the flow inline when it is short and readable.

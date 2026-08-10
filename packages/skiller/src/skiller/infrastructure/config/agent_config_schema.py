@@ -24,7 +24,6 @@ class LLMProviderConfigModel(BaseModel):
     model: str
     models: tuple[LLMProviderModelConfigModel, ...] | None = None
     timeout_seconds: float = Field(gt=0)
-    window_width_tokens: int = Field(gt=0)
     api_key: str | None = None
     api_key_env: str | None = None
     api_key_file: str | None = None
@@ -37,7 +36,6 @@ class LLMConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_provider: str
-    window_width_tokens: int | None = Field(default=None, gt=0)
 
 
 class DebugConfigModel(BaseModel):
@@ -70,6 +68,7 @@ class CompactionConfigModel(BaseModel):
 class ContextConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    window_width_tokens: int | None = Field(default=None, gt=0)
     compaction: CompactionConfigModel = Field(default_factory=CompactionConfigModel)
 
 

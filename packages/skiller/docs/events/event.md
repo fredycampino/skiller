@@ -244,7 +244,26 @@ step is no longer present in the new definition.
     "output": {
       "text": "hello",
       "value": {
-        "reply": "hello"
+        "data": {
+          "stop_reason": "final",
+          "context_id": "ctx-123",
+          "final": "hello",
+          "turn_count": 1,
+          "tool_call_count": 0,
+          "usage": {
+            "prompt_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "provider": "codex",
+            "model": "gpt-5"
+          },
+          "context": {
+            "effective_window_tokens": 100000,
+            "max_total_tokens_ratio": 0.8
+          }
+        }
       },
       "body_ref": null
     },

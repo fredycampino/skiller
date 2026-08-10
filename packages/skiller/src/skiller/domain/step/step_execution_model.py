@@ -7,6 +7,7 @@ from skiller.domain.action.action_model import (
     action_from_dict,
     action_to_public_dict,
 )
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_type import StepType
@@ -56,6 +57,7 @@ class AgentFinalOutputData:
     final: str
     turn_count: int
     tool_call_count: int
+    context: AgentContextMetrics | None
     usage: AgentUsageOutput | None = None
 
 
@@ -220,6 +222,7 @@ def _build_agent_output_data(raw_data: dict[str, Any]) -> AgentOutputData:
             final=str(raw_data.get("final", "")),
             turn_count=int(raw_data.get("turn_count", 0)),
             tool_call_count=int(raw_data.get("tool_call_count", 0)),
+            context=_agent_context_metrics(raw_data.get("context")),
             usage=usage,
         )
 
@@ -243,6 +246,25 @@ def _build_agent_usage_output(raw_usage: object) -> AgentUsageOutput:
         cache_write_tokens=_optional_int(raw_usage.get("cache_write_tokens")),
         provider=_optional_provider(raw_usage.get("provider")),
         model=_optional_model(raw_usage.get("model")),
+    )
+
+
+def _agent_context_metrics(raw_context: object) -> AgentContextMetrics | None:
+    if not isinstance(raw_context, dict):
+        return None
+
+    effective_window_tokens = raw_context.get("effective_window_tokens")
+    max_total_tokens_ratio = raw_context.get("max_total_tokens_ratio")
+    if isinstance(effective_window_tokens, bool) or not isinstance(effective_window_tokens, int):
+        return None
+    if isinstance(max_total_tokens_ratio, bool):
+        return None
+    if not isinstance(max_total_tokens_ratio, (float, int)):
+        return None
+
+    return AgentContextMetrics(
+        effective_window_tokens=effective_window_tokens,
+        max_total_tokens_ratio=float(max_total_tokens_ratio),
     )
 
 

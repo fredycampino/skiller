@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import LLMModelLike, LLMResponse, LLMUsage
 from skiller.domain.agent.run.identity import AgentRun
 from skiller.domain.agent.run.model import AgentStopReason
@@ -69,4 +70,5 @@ class AgentRunnerResult:
     finish: AgentStopReason
     response_model: LLMModelLike | None
     usage: LLMUsage | None
+    context_metrics: AgentContextMetrics
     error: str | None = None

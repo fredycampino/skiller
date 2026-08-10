@@ -86,7 +86,6 @@ model = AgentCodexLLMModel(os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.5
 provider = AgentCodexProvider(
     model=model,
     timeout_seconds=120,
-    window_width_tokens=100000,
     credentials_file=os.environ["SKILLER_OPENAI_CODEX_CREDENTIALS_FILE"],
 )
 client = LLMClientFactory().resolve(provider)

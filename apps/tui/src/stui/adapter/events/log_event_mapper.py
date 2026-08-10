@@ -13,6 +13,7 @@ from stui.port.event_models import (
     ActionPostValue,
     ActionRunValue,
     AgentAssistantMessagePayload,
+    AgentContextPayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
     AgentOutputValue,
@@ -20,6 +21,7 @@ from stui.port.event_models import (
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentToolResultStatus,
+    AgentUsagePayload,
     AssignOutputValue,
     InputReceivedPayload,
     LogEvent,
@@ -256,11 +258,32 @@ class ActionDoneModel(BaseModel):
     status: NotifyActionStatus
 
 
+class AgentUsageModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
+    provider: str | None
+    model: str | None
+
+
+class AgentContextModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effective_window_tokens: int | None
+    max_total_tokens_ratio: float | None
+
+
 class AgentAssistantMessageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str
     total_tokens: int
+    usage: AgentUsageModel | None
+    context: AgentContextModel | None
 
 
 class AgentFinalAssistantMessageModel(BaseModel):
@@ -268,6 +291,8 @@ class AgentFinalAssistantMessageModel(BaseModel):
 
     text: str
     total_tokens: int
+    usage: AgentUsageModel | None
+    context: AgentContextModel | None
 
 
 class AgentToolCallModel(BaseModel):
@@ -392,17 +417,29 @@ class LogEventMapper:
             return InputReceivedPayload(payload=model.payload)
 
         if event_type == LogEventType.AGENT_ASSISTANT_MESSAGE:
-            model = _validate_model(AgentAssistantMessageModel, payload, "payload")
+            model = _validate_model(
+                AgentAssistantMessageModel,
+                _agent_message_payload(payload),
+                "payload",
+            )
             return AgentAssistantMessagePayload(
                 text=model.text,
                 total_tokens=model.total_tokens,
+                usage=_to_agent_usage_payload(model.usage),
+                context=_to_agent_context_payload(model.context),
             )
 
         if event_type == LogEventType.AGENT_FINAL_ASSISTANT_MESSAGE:
-            model = _validate_model(AgentFinalAssistantMessageModel, payload, "payload")
+            model = _validate_model(
+                AgentFinalAssistantMessageModel,
+                _agent_message_payload(payload),
+                "payload",
+            )
             return AgentFinalAssistantMessagePayload(
                 text=model.text,
                 total_tokens=model.total_tokens,
+                usage=_to_agent_usage_payload(model.usage),
+                context=_to_agent_context_payload(model.context),
             )
 
         if event_type == LogEventType.AGENT_TOOL_CALL:
@@ -450,6 +487,38 @@ def _to_output_payload(step_type: str | None, model: OutputModel) -> OutputPaylo
         body_ref=model.body_ref,
         text_ref=model.text_ref,
     )
+
+
+def _to_agent_usage_payload(model: AgentUsageModel | None) -> AgentUsagePayload | None:
+    if model is None:
+        return None
+    return AgentUsagePayload(
+        prompt_tokens=model.prompt_tokens,
+        output_tokens=model.output_tokens,
+        total_tokens=model.total_tokens,
+        cache_read_tokens=model.cache_read_tokens,
+        cache_write_tokens=model.cache_write_tokens,
+        provider=model.provider,
+        model=model.model,
+    )
+
+
+def _to_agent_context_payload(model: AgentContextModel | None) -> AgentContextPayload | None:
+    if model is None:
+        return None
+    return AgentContextPayload(
+        effective_window_tokens=model.effective_window_tokens,
+        max_total_tokens_ratio=model.max_total_tokens_ratio,
+    )
+
+
+def _agent_message_payload(payload: JsonObject) -> JsonObject:
+    normalized = dict(payload)
+    if "usage" not in normalized:
+        normalized["usage"] = None
+    if "context" not in normalized:
+        normalized["context"] = None
+    return normalized
 
 
 def _to_output_value(step_type: str | None, value: JsonObject | None) -> OutputValue:

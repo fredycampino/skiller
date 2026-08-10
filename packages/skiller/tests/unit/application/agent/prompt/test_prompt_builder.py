@@ -48,7 +48,6 @@ def _provider() -> AgentFakeProvider:
         model=AgentFakeLLMModel.MODEL1,
         models=FAKE_MODELS,
         timeout_seconds=30,
-        window_width_tokens=100_000,
     )
 
 
@@ -351,7 +350,6 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         models=MINIMAX_MODELS,
         api_key="secret",
         timeout_seconds=30,
-        window_width_tokens=100_000,
     )
 
     request = builder.build_request(
@@ -376,7 +374,6 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         model=_lmstudio_model(),
         models=(_lmstudio_model(),),
         timeout_seconds=30,
-        window_width_tokens=131_072,
     )
 
     request = builder.build_request(
@@ -402,7 +399,6 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         models=CODEX_MODELS,
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
-        window_width_tokens=100_000,
     )
 
     request = builder.build_request(
@@ -431,7 +427,6 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         models=BEDROCK_MODELS,
         profile="claude-bedrock",
         timeout_seconds=120,
-        window_width_tokens=200_000,
     )
 
     request = builder.build_request(

@@ -53,7 +53,7 @@ from stui.usecase.normalize_command_use_case import (
     NormalizeCommandUseCase,
 )
 from stui.usecase.open_notify_action_use_case import OpenNotifyActionUseCase
-from stui.usecase.project_agent_usage_use_case import ProjectAgentUsageUseCase
+from stui.usecase.project_agent_metrics_use_case import ProjectAgentMetricsUseCase
 from stui.usecase.project_notify_action_use_case import (
     ProjectNotifyActionUseCase,
 )
@@ -64,7 +64,7 @@ from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
-from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
+from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
@@ -186,12 +186,9 @@ def build_tui_container(
         open_notify_action=OpenNotifyActionUseCase(
             notify_action_port=resolved_notify_action_port,
         ),
-        agent_usage=ProjectAgentUsageUseCase(),
+        project_agent_metrics=ProjectAgentMetricsUseCase(),
+        refresh_agent_metrics=RefreshAgentMetricsUseCase(),
         refresh_agent_context_stats=RefreshAgentContextStatsUseCase(
-            agent_port=resolved_agent_port,
-            context=run_event_context,
-        ),
-        refresh_footer_context=RefreshFooterContextUseCase(
             agent_port=resolved_agent_port,
             context=run_event_context,
         ),

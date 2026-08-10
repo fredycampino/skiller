@@ -1,7 +1,12 @@
 from dataclasses import dataclass, field
 
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.provider_registry import AgentLLMProviderList
 from skiller.domain.tool.tool_contract import ToolRuntimeConfigs
+
+TOOL_RESULT_APPROX_BYTES_PER_TOKEN = 4
+TOOL_RESULT_CONTEXT_RATIO = 0.10
+TOOL_RESULT_MAX_BYTES = 50_000
 
 
 @dataclass(frozen=True)
@@ -19,7 +24,41 @@ class AgentContextCompactionConfig:
 
 @dataclass(frozen=True)
 class AgentContextConfig:
+    window_width_tokens: int
     compaction: AgentContextCompactionConfig
+
+    def metrics(self, *, model_context_window_tokens: int) -> AgentContextMetrics:
+        return AgentContextMetrics(
+            effective_window_tokens=self.effective_context_tokens(
+                model_context_window_tokens=model_context_window_tokens,
+            ),
+            max_total_tokens_ratio=self.compaction.max_total_tokens_ratio,
+        )
+
+    def effective_context_tokens(self, *, model_context_window_tokens: int) -> int:
+        return min(
+            self.window_width_tokens,
+            model_context_window_tokens,
+        )
+
+    def compaction_window_tokens(self, *, model_context_window_tokens: int) -> int:
+        effective_context_tokens = self.effective_context_tokens(
+            model_context_window_tokens=model_context_window_tokens,
+        )
+        return int(effective_context_tokens * self.compaction.max_total_tokens_ratio)
+
+    def tool_result_max_bytes(self, *, model_context_window_tokens: int) -> int:
+        effective_context_tokens = self.effective_context_tokens(
+            model_context_window_tokens=model_context_window_tokens,
+        )
+        return min(
+            TOOL_RESULT_MAX_BYTES,
+            int(
+                effective_context_tokens
+                * TOOL_RESULT_CONTEXT_RATIO
+                * TOOL_RESULT_APPROX_BYTES_PER_TOKEN
+            ),
+        )
 
 
 @dataclass(frozen=True)

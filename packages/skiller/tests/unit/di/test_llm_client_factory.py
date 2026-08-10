@@ -14,11 +14,10 @@ pytestmark = pytest.mark.unit
 
 def test_resolve_moonshot_creates_openai_compatible_client() -> None:
     provider = AgentMoonshotProvider(
-        model=AgentMoonshotLLMModel.KIMI_K3,
-        models=MOONSHOT_MODELS,
-        api_key="secret",
-        timeout_seconds=30,
-        window_width_tokens=256_000,
+            model=AgentMoonshotLLMModel.KIMI_K3,
+            models=MOONSHOT_MODELS,
+            api_key="secret",
+            timeout_seconds=30,
     )
 
     client = LLMClientFactory().resolve(provider)

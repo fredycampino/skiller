@@ -137,7 +137,6 @@ def test_select_agent_model_supports_lmstudio_custom_model() -> None:
                 model=custom_model,
                 models=(custom_model,),
                 timeout_seconds=30,
-                window_width_tokens=10_000,
             )
         )
     )
@@ -326,6 +325,7 @@ def _agent_config(
         ),
         loop=AgentLoopConfig(max_turns=2, max_tool_calls=3),
         context=AgentContextConfig(
+            window_width_tokens=100000,
             compaction=AgentContextCompactionConfig(
                 enabled=False,
                 max_total_tokens_ratio=0.8,
@@ -354,7 +354,6 @@ def _codex_provider() -> AgentCodexProvider:
         models=CODEX_MODELS,
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
-        window_width_tokens=1_050_000,
     )
 
 
@@ -370,7 +369,6 @@ def _lmstudio_provider() -> AgentLMStudioProvider:
         model=_lmstudio_model(),
         models=(_lmstudio_model(),),
         timeout_seconds=30,
-        window_width_tokens=131_072,
     )
 
 
@@ -380,7 +378,6 @@ def _moonshot_provider() -> AgentMoonshotProvider:
         models=MOONSHOT_MODELS,
         api_key="secret",
         timeout_seconds=30,
-        window_width_tokens=256_000,
     )
 
 
@@ -389,5 +386,4 @@ def _fake_provider() -> AgentFakeProvider:
         model=AgentFakeLLMModel.MODEL1,
         models=FAKE_MODELS,
         timeout_seconds=30,
-        window_width_tokens=100_000,
     )

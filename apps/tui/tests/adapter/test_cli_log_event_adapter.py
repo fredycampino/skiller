@@ -780,6 +780,19 @@ def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> 
                 "payload": {
                     "text": "summary",
                     "total_tokens": 2144,
+                    "usage": {
+                        "prompt_tokens": 3000,
+                        "output_tokens": 500,
+                        "total_tokens": 3500,
+                        "cache_read_tokens": None,
+                        "cache_write_tokens": None,
+                        "provider": "codex",
+                        "model": "gpt-5",
+                    },
+                    "context": {
+                        "effective_window_tokens": 100000,
+                        "max_total_tokens_ratio": 0.8,
+                    },
                 },
             }
         ]
@@ -789,6 +802,17 @@ def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> 
     assert isinstance(event.payload, AgentAssistantMessagePayload)
     assert event.payload.text == "summary"
     assert event.payload.total_tokens == 2144
+    assert event.payload.usage is not None
+    assert event.payload.usage.prompt_tokens == 3000
+    assert event.payload.usage.output_tokens == 500
+    assert event.payload.usage.total_tokens == 3500
+    assert event.payload.usage.cache_read_tokens is None
+    assert event.payload.usage.cache_write_tokens is None
+    assert event.payload.usage.provider == "codex"
+    assert event.payload.usage.model == "gpt-5"
+    assert event.payload.context is not None
+    assert event.payload.context.effective_window_tokens == 100000
+    assert event.payload.context.max_total_tokens_ratio == 0.8
 
 
 def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() -> None:
@@ -806,6 +830,19 @@ def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() ->
                 "payload": {
                     "text": "Done",
                     "total_tokens": 2144,
+                    "usage": {
+                        "prompt_tokens": 3000,
+                        "output_tokens": 500,
+                        "total_tokens": 3500,
+                        "cache_read_tokens": 1800,
+                        "cache_write_tokens": 120,
+                        "provider": "codex",
+                        "model": "gpt-5",
+                    },
+                    "context": {
+                        "effective_window_tokens": 100000,
+                        "max_total_tokens_ratio": 0.8,
+                    },
                 },
             }
         ]
@@ -815,6 +852,14 @@ def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() ->
     assert isinstance(event.payload, AgentFinalAssistantMessagePayload)
     assert event.payload.text == "Done"
     assert event.payload.total_tokens == 2144
+    assert event.payload.usage is not None
+    assert event.payload.usage.cache_read_tokens == 1800
+    assert event.payload.usage.cache_write_tokens == 120
+    assert event.payload.usage.provider == "codex"
+    assert event.payload.usage.model == "gpt-5"
+    assert event.payload.context is not None
+    assert event.payload.context.effective_window_tokens == 100000
+    assert event.payload.context.max_total_tokens_ratio == 0.8
 
 
 def test_cli_log_event_adapter_parses_agent_lifecycle_payload() -> None:

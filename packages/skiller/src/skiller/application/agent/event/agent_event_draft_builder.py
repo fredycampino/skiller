@@ -3,6 +3,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextMetrics,
     AgentToolCallPayload,
     AgentToolResultPayload,
 )
@@ -21,6 +22,7 @@ class AgentEventDraftBuilder:
         self,
         *,
         entry: AgentContextEntry,
+        context_metrics: AgentContextMetrics,
     ) -> RuntimeEventDraft:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Assistant event requires assistant_message entry")
@@ -39,6 +41,8 @@ class AgentEventDraftBuilder:
                 body=AgentMessageEventBody(
                     total_tokens=_usage_total_tokens(entry),
                     text=entry.payload.text,
+                    usage=entry.usage,
+                    context=context_metrics,
                 ),
             ),
         )
@@ -47,6 +51,7 @@ class AgentEventDraftBuilder:
         self,
         *,
         entry: AgentContextEntry,
+        context_metrics: AgentContextMetrics,
     ) -> RuntimeEventDraft:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Final assistant event requires assistant_message entry")
@@ -65,6 +70,8 @@ class AgentEventDraftBuilder:
                 body=AgentMessageEventBody(
                     total_tokens=_usage_total_tokens(entry),
                     text=entry.payload.text,
+                    usage=entry.usage,
+                    context=context_metrics,
                 ),
             ),
         )

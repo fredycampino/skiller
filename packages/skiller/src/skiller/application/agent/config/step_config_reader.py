@@ -5,6 +5,7 @@ from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.domain.agent.config.model import AgentConfig
 from skiller.domain.agent.config.port import AgentConfigPort
 from skiller.domain.agent.config.validation import AgentConfigValidation
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep
@@ -28,6 +29,12 @@ class AgentRunnerConfig:
     task: str
     tools: tuple[ToolDefinition, ...]
     config: AgentConfig
+
+    def context_metrics(self) -> AgentContextMetrics:
+        provider = self.config.llm.default()
+        return self.config.context.metrics(
+            model_context_window_tokens=provider.model.model_context_window_tokens,
+        )
 
 
 class AgentStepConfigReader:

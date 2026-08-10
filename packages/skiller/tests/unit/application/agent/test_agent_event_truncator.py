@@ -5,6 +5,8 @@ from skiller.application.agent.event.agent_event_truncator import (
     AgentEventOutputPolicy,
     AgentEventTruncator,
 )
+from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentMessageEventBody,
     AgentToolCallEventBody,
@@ -29,10 +31,36 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
         AgentMessageEventBody(
             total_tokens=125,
             text="abcdefghijklmnopqrstuvwxyz",
+            usage=LLMUsage(
+                prompt_tokens=100,
+                output_tokens=25,
+                total_tokens=125,
+                cache_read_tokens=80,
+                cache_write_tokens=5,
+                provider="codex",
+                model="gpt-5",
+            ),
+            context=AgentContextMetrics(
+                effective_window_tokens=100_000,
+                max_total_tokens_ratio=0.8,
+            ),
         )
     )
 
     assert payload.text == "abcdefghij..."
+    assert payload.usage == LLMUsage(
+        prompt_tokens=100,
+        output_tokens=25,
+        total_tokens=125,
+        cache_read_tokens=80,
+        cache_write_tokens=5,
+        provider="codex",
+        model="gpt-5",
+    )
+    assert payload.context == AgentContextMetrics(
+        effective_window_tokens=100_000,
+        max_total_tokens_ratio=0.8,
+    )
 
 
 def test_agent_event_truncator_truncates_tool_call_args() -> None:

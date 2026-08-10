@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any
 
 from skiller.domain.agent.config.model import AgentEventOutputConfig
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.agent.run.loop import AgentLoop
@@ -34,6 +35,7 @@ class ToolExecutionRequest:
     event_config: AgentEventOutputConfig
     max_tool_calls: int
     max_tool_result_bytes: int
+    context_metrics: AgentContextMetrics
     turn_loop: AgentLoop
 
     @property

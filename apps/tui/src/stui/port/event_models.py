@@ -237,12 +237,33 @@ class ActionDonePayload:
 class AgentAssistantMessagePayload:
     text: str
     total_tokens: int
+    usage: AgentUsagePayload | None
+    context: AgentContextPayload | None
 
 
 @dataclass(frozen=True)
 class AgentFinalAssistantMessagePayload:
     text: str
     total_tokens: int
+    usage: AgentUsagePayload | None
+    context: AgentContextPayload | None
+
+
+@dataclass(frozen=True)
+class AgentUsagePayload:
+    prompt_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
+    provider: str | None
+    model: str | None
+
+
+@dataclass(frozen=True)
+class AgentContextPayload:
+    effective_window_tokens: int | None
+    max_total_tokens_ratio: float | None
 
 
 @dataclass(frozen=True)

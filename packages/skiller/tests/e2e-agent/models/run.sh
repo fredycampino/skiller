@@ -28,24 +28,24 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
   "llm": {
     "default_provider": "codex"
   },
+  "context": {
+    "window_width_tokens": 1050000
+  },
   "providers": {
     "codex": {
       "credentials_file": "~/.skiller/secrets/codex.json",
       "model": "gpt-5.5",
-      "timeout_seconds": 120,
-      "window_width_tokens": 1050000
+      "timeout_seconds": 120
     },
     "minimax": {
       "api_key": "test-minimax-key",
       "model": "MiniMax-M2.7",
-      "timeout_seconds": 30,
-      "window_width_tokens": 204800
+      "timeout_seconds": 30
     },
     "bedrock": {
       "profile": "test-bedrock-profile",
       "model": "us.anthropic.claude-sonnet-4-6",
-      "timeout_seconds": 120,
-      "window_width_tokens": 200000
+      "timeout_seconds": 120
     }
   }
 }
@@ -82,13 +82,13 @@ assert set(payload) == {"run_id", "status", "ok", "providers"}, payload
 
 providers = payload["providers"]
 provider_names = [provider["name"] for provider in providers]
-assert provider_names == ["minimax", "lmstudio", "codex", "bedrock"], provider_names
+assert provider_names == ["minimax", "lmstudio", "codex", "bedrock", "moonshot"], provider_names
 assert "null" not in provider_names
 assert "fake" not in provider_names
 
 for provider in providers:
     assert set(provider) == {"name", "source", "models"}, provider
-    expected_source = "none" if provider["name"] == "lmstudio" else "global"
+    expected_source = "none" if provider["name"] in {"lmstudio", "moonshot"} else "global"
     assert provider["source"] == expected_source, provider
     for model in provider["models"]:
         assert set(model) == {"name", "active"}, model
@@ -96,10 +96,12 @@ for provider in providers:
 codex = next(provider for provider in providers if provider["name"] == "codex")
 minimax = next(provider for provider in providers if provider["name"] == "minimax")
 bedrock = next(provider for provider in providers if provider["name"] == "bedrock")
+moonshot = next(provider for provider in providers if provider["name"] == "moonshot")
 
 codex_models = {model["name"]: model for model in codex["models"]}
 minimax_models = {model["name"]: model for model in minimax["models"]}
 bedrock_models = {model["name"]: model for model in bedrock["models"]}
+moonshot_models = {model["name"]: model for model in moonshot["models"]}
 
 assert codex_models["gpt-5.5"]["active"] is True, codex
 assert codex_models["gpt-5.4"]["active"] is False, codex
@@ -108,6 +110,7 @@ assert codex_models["gpt-5.6-terra"]["active"] is False, codex
 assert codex_models["gpt-5.6-luna"]["active"] is False, codex
 assert minimax_models["MiniMax-M2.7"]["active"] is False, minimax
 assert bedrock_models["us.anthropic.claude-sonnet-4-6"]["active"] is False, bedrock
+assert moonshot_models["kimi-k3"]["active"] is False, moonshot
 
 serialized = json.dumps(payload)
 for forbidden in (

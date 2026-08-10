@@ -91,7 +91,6 @@ provider = AgentMiniMaxProvider(
     model=model,
     api_key=os.environ["AGENT_MINIMAX_API_KEY"],
     timeout_seconds=float(os.environ.get("AGENT_MINIMAX_TIMEOUT_SECONDS", "120")),
-    window_width_tokens=100000,
 )
 client = LLMClientFactory().resolve(provider)
 

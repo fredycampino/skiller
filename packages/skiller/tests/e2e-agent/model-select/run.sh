@@ -28,18 +28,19 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
   "llm": {
     "default_provider": "codex"
   },
+  "context": {
+    "window_width_tokens": 1050000
+  },
   "providers": {
     "codex": {
       "credentials_file": "~/.skiller/secrets/codex.json",
       "model": "gpt-5.5",
-      "timeout_seconds": 120,
-      "window_width_tokens": 1050000
+      "timeout_seconds": 120
     },
     "minimax": {
       "api_key": "test-minimax-key",
       "model": "MiniMax-M2.7",
-      "timeout_seconds": 30,
-      "window_width_tokens": 204800
+      "timeout_seconds": 30
     }
   }
 }

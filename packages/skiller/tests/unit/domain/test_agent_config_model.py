@@ -1,5 +1,10 @@
 import pytest
 
+from skiller.domain.agent.config.model import (
+    AgentContextCompactionConfig,
+    AgentContextConfig,
+)
+from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import LLMCustomModel
 from skiller.domain.agent.llm.provider_registry import (
     BEDROCK_MODELS,
@@ -56,7 +61,6 @@ def test_agent_llm_providers_require_typed_model() -> None:
             model=AgentCodexLLMModel.GPT_5_5,
             models=MINIMAX_MODELS,
             timeout_seconds=30.0,
-            window_width_tokens=1_000_000,
         )
 
     with pytest.raises(
@@ -68,7 +72,6 @@ def test_agent_llm_providers_require_typed_model() -> None:
             model=AgentMiniMaxLLMModel.M2_5,
             models=CODEX_MODELS,
             timeout_seconds=120.0,
-            window_width_tokens=1_000_000,
         )
 
     with pytest.raises(
@@ -80,7 +83,6 @@ def test_agent_llm_providers_require_typed_model() -> None:
             model=AgentMiniMaxLLMModel.M2_5,
             models=BEDROCK_MODELS,
             timeout_seconds=30.0,
-            window_width_tokens=1_000_000,
         )
 
 
@@ -94,33 +96,76 @@ def test_agent_llm_provider_rejects_model_outside_allowed_models() -> None:
             model=AgentMiniMaxLLMModel.M2_7,
             models=(AgentMiniMaxLLMModel.M2_5,),
             timeout_seconds=30.0,
-            window_width_tokens=1_000_000,
         )
 
 
-def test_agent_llm_provider_model_and_context_max_tokens_use_smaller_limit() -> None:
+def test_agent_context_window_uses_smaller_model_limit() -> None:
     model = _lmstudio_model()
-    config_larger_than_model = AgentLMStudioProvider(
-        base_url="http://127.0.0.1:1234/v1",
-        model=model,
-        models=(model,),
-        timeout_seconds=30.0,
+    context_larger_than_model = AgentContextConfig(
         window_width_tokens=200_000,
+        compaction=AgentContextCompactionConfig(
+            enabled=False,
+            max_total_tokens_ratio=0.8,
+            keep_last=5,
+        ),
     )
-    config_smaller_than_model = AgentLMStudioProvider(
-        base_url="http://127.0.0.1:1234/v1",
-        model=model,
-        models=(model,),
-        timeout_seconds=30.0,
+    context_smaller_than_model = AgentContextConfig(
         window_width_tokens=100_000,
+        compaction=AgentContextCompactionConfig(
+            enabled=False,
+            max_total_tokens_ratio=0.8,
+            keep_last=5,
+        ),
     )
 
-    assert config_larger_than_model.model_max_tokens == 131_072
-    assert config_larger_than_model.context_max_tokens(ratio=0.8) == 104_857
-    assert config_larger_than_model.tool_result_max_bytes == 50_000
-    assert config_smaller_than_model.model_max_tokens == 100_000
-    assert config_smaller_than_model.context_max_tokens(ratio=0.8) == 80_000
-    assert config_smaller_than_model.tool_result_max_bytes == 40_000
+    assert (
+        context_larger_than_model.effective_context_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 131_072
+    )
+    assert (
+        context_larger_than_model.compaction_window_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 104_857
+    )
+    assert (
+        context_larger_than_model.tool_result_max_bytes(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 50_000
+    )
+    assert context_larger_than_model.metrics(
+        model_context_window_tokens=model.model_context_window_tokens,
+    ) == AgentContextMetrics(
+        effective_window_tokens=131_072,
+        max_total_tokens_ratio=0.8,
+    )
+    assert (
+        context_smaller_than_model.effective_context_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 100_000
+    )
+    assert (
+        context_smaller_than_model.compaction_window_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 80_000
+    )
+    assert (
+        context_smaller_than_model.tool_result_max_bytes(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 40_000
+    )
+    assert context_smaller_than_model.metrics(
+        model_context_window_tokens=model.model_context_window_tokens,
+    ) == AgentContextMetrics(
+        effective_window_tokens=100_000,
+        max_total_tokens_ratio=0.8,
+    )
 
 
 def test_bedrock_provider_requires_profile() -> None:
@@ -130,7 +175,6 @@ def test_bedrock_provider_requires_profile() -> None:
             model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
             models=BEDROCK_MODELS,
             timeout_seconds=30.0,
-            window_width_tokens=1_000_000,
         )
 
 
@@ -141,7 +185,6 @@ def test_lmstudio_provider_requires_base_url() -> None:
             model=_lmstudio_model(),
             models=(_lmstudio_model(),),
             timeout_seconds=30.0,
-            window_width_tokens=131_072,
         )
 
 
@@ -151,7 +194,6 @@ def _minimax_provider() -> AgentLLMProvider:
         model=AgentMiniMaxLLMModel.M2_5,
         models=MINIMAX_MODELS,
         timeout_seconds=30.0,
-        window_width_tokens=1_000_000,
     )
 
 

@@ -45,14 +45,12 @@ def test_list_agent_models_returns_configured_and_active_model() -> None:
                     model=AgentCodexLLMModel.GPT_5_5,
                     models=CODEX_MODELS,
                     timeout_seconds=120,
-                    window_width_tokens=1050000,
                     credentials_file="/secret/codex.json",
                 ),
                 AgentMiniMaxProvider(
                     model=AgentMiniMaxLLMModel.M2_7,
                     models=MINIMAX_MODELS,
                     timeout_seconds=30,
-                    window_width_tokens=204800,
                     api_key="secret",
                 ),
             ),
@@ -125,7 +123,6 @@ def test_list_agent_models_returns_configured_lmstudio_models() -> None:
         model=custom_model,
         models=(custom_model,),
         timeout_seconds=30,
-        window_width_tokens=10_000,
     )
     agent_config = _FakeAgentConfig(
         _agent_config(
@@ -211,7 +208,6 @@ def _codex_config() -> AgentConfig:
         model=AgentCodexLLMModel.GPT_5_5,
         models=CODEX_MODELS,
         timeout_seconds=120,
-        window_width_tokens=1050000,
         credentials_file="/secret/codex.json",
     )
     return _agent_config(
@@ -238,6 +234,7 @@ def _agent_config(
             max_tool_calls=3,
         ),
         context=AgentContextConfig(
+            window_width_tokens=100000,
             compaction=AgentContextCompactionConfig(
                 enabled=False,
                 max_total_tokens_ratio=0.8,

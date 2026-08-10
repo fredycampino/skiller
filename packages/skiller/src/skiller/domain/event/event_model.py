@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Any, TypeAlias
 
 from skiller.domain.action.action_model import (
@@ -11,6 +11,8 @@ from skiller.domain.action.action_model import (
     action_from_dict,
     action_to_public_dict,
 )
+from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventBody,
     AgentEventPayload,
@@ -195,10 +197,15 @@ def agent_event_body_to_dict(
     payload: AgentEventBody,
 ) -> dict[str, Any]:
     if isinstance(payload, AgentMessageEventBody):
-        return {
+        result: dict[str, Any] = {
             "total_tokens": payload.total_tokens,
             "text": payload.text,
         }
+        if payload.usage is not None:
+            result["usage"] = _to_public_value(asdict(payload.usage))
+        if payload.context is not None:
+            result["context"] = _to_public_value(asdict(payload.context))
+        return result
     if isinstance(payload, AgentToolCallEventBody):
         return {
             "type": payload.type,
@@ -363,6 +370,8 @@ def _agent_event_body_from_dict(
         return AgentMessageEventBody(
             total_tokens=_int_value(value.get("total_tokens")),
             text=str(value.get("text", "")),
+            usage=_llm_usage_from_dict(value.get("usage")),
+            context=_agent_context_metrics_from_dict(value.get("context")),
         )
     if event_type == RuntimeEventType.AGENT_TOOL_CALL:
         args = value.get("args")
@@ -403,6 +412,59 @@ def _optional_int(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+def _llm_usage_from_dict(value: object) -> LLMUsage | None:
+    if not isinstance(value, dict):
+        return None
+
+    provider = value.get("provider")
+    model = value.get("model")
+    return LLMUsage(
+        prompt_tokens=_optional_int(value.get("prompt_tokens")),
+        output_tokens=_optional_int(value.get("output_tokens")),
+        total_tokens=_optional_int(value.get("total_tokens")),
+        cache_read_tokens=_optional_int(value.get("cache_read_tokens")),
+        cache_write_tokens=_optional_int(value.get("cache_write_tokens")),
+        provider=_optional_string(provider),
+        model=_optional_string(model),
+    )
+
+
+def _agent_context_metrics_from_dict(value: object) -> AgentContextMetrics | None:
+    if not isinstance(value, dict):
+        return None
+
+    effective_window_tokens = _optional_int(value.get("effective_window_tokens"))
+    max_total_tokens_ratio = value.get("max_total_tokens_ratio")
+    if effective_window_tokens is None:
+        return None
+    if isinstance(max_total_tokens_ratio, bool):
+        return None
+    if not isinstance(max_total_tokens_ratio, (float, int)):
+        return None
+
+    return AgentContextMetrics(
+        effective_window_tokens=effective_window_tokens,
+        max_total_tokens_ratio=float(max_total_tokens_ratio),
+    )
+
+
+def _to_public_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _to_public_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_public_value(item) for item in value]
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
 
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:

@@ -20,7 +20,7 @@ from stui.usecase.move_completion_use_case import (
 )
 from stui.usecase.normalize_command_use_case import NormalizeCommandUseCase
 from stui.usecase.open_notify_action_use_case import OpenNotifyActionUseCase
-from stui.usecase.project_agent_usage_use_case import ProjectAgentUsageUseCase
+from stui.usecase.project_agent_metrics_use_case import ProjectAgentMetricsUseCase
 from stui.usecase.project_notify_action_use_case import (
     ProjectNotifyActionUseCase,
 )
@@ -31,7 +31,7 @@ from stui.usecase.prompt_enter_use_case import PromptEnterUseCase
 from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
-from stui.usecase.refresh_footer_context_use_case import RefreshFooterContextUseCase
+from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.select_model_use_case import SelectModelUseCase
@@ -62,9 +62,9 @@ class ConsoleScreenUseCases:
     done_notify_action: DoneNotifyActionUseCase
     open_notify_action: OpenNotifyActionUseCase
     prompt_enter: PromptEnterUseCase
-    agent_usage: ProjectAgentUsageUseCase
+    project_agent_metrics: ProjectAgentMetricsUseCase
+    refresh_agent_metrics: RefreshAgentMetricsUseCase
     refresh_agent_context_stats: RefreshAgentContextStatsUseCase
-    refresh_footer_context: RefreshFooterContextUseCase
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase

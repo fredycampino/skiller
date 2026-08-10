@@ -5,6 +5,12 @@ from typing import Any, Literal, TypeAlias
 from skiller.domain.agent.llm.model import LLMUsage
 
 
+@dataclass(frozen=True)
+class AgentContextMetrics:
+    effective_window_tokens: int
+    max_total_tokens_ratio: float
+
+
 class AgentContextEntryType(str, Enum):
     USER_MESSAGE = "user_message"
     ASSISTANT_MESSAGE = "assistant_message"

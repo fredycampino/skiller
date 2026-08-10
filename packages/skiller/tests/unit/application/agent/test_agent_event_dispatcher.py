@@ -15,6 +15,7 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextMetrics,
     AgentToolCallPayload,
 )
 from skiller.domain.agent.llm.model import LLMUsage
@@ -30,6 +31,11 @@ from skiller.domain.event.event_model import (
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 
 pytestmark = pytest.mark.unit
+
+CONTEXT_METRICS = AgentContextMetrics(
+    effective_window_tokens=100_000,
+    max_total_tokens_ratio=0.8,
+)
 
 
 def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> None:
@@ -49,12 +55,12 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=LLMUsage(
-                cache_read_tokens=None,
-                cache_write_tokens=None,
-                provider=None,
-                model=None,
-                prompt_tokens=None,
-                output_tokens=None,
+                cache_read_tokens=1800,
+                cache_write_tokens=120,
+                provider="codex",
+                model="gpt-5",
+                prompt_tokens=3000,
+                output_tokens=500,
                 total_tokens=2144,
             ),
             payload=AgentAssistantMessagePayload(
@@ -66,6 +72,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             created_at="2026-05-15T00:00:00Z",
         ),
         config=event_output,
+        context_metrics=CONTEXT_METRICS,
     )
 
     assert len(store.events) == 1
@@ -79,6 +86,16 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     assert isinstance(event.payload.body, AgentMessageEventBody)
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "I will cal..."
+    assert event.payload.body.usage == LLMUsage(
+        prompt_tokens=3000,
+        output_tokens=500,
+        total_tokens=2144,
+        cache_read_tokens=1800,
+        cache_write_tokens=120,
+        provider="codex",
+        model="gpt-5",
+    )
+    assert event.payload.body.context == CONTEXT_METRICS
 
 
 def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload() -> None:
@@ -98,12 +115,12 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=LLMUsage(
-                cache_read_tokens=None,
-                cache_write_tokens=None,
-                provider=None,
-                model=None,
-                prompt_tokens=None,
-                output_tokens=None,
+                cache_read_tokens=1800,
+                cache_write_tokens=120,
+                provider="codex",
+                model="gpt-5",
+                prompt_tokens=3000,
+                output_tokens=500,
                 total_tokens=2144,
             ),
             payload=AgentAssistantMessagePayload(
@@ -115,6 +132,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             created_at="2026-05-15T00:00:00Z",
         ),
         config=event_output,
+        context_metrics=CONTEXT_METRICS,
     )
 
     event = store.events[0]
@@ -123,6 +141,16 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
     assert isinstance(event.payload.body, AgentMessageEventBody)
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "Final answ..."
+    assert event.payload.body.usage == LLMUsage(
+        prompt_tokens=3000,
+        output_tokens=500,
+        total_tokens=2144,
+        cache_read_tokens=1800,
+        cache_write_tokens=120,
+        provider="codex",
+        model="gpt-5",
+    )
+    assert event.payload.body.context == CONTEXT_METRICS
 
 
 def test_agent_event_publisher_emits_agent_lifecycle_events() -> None:

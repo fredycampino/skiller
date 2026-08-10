@@ -131,6 +131,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 self.event_publisher.emit_assistant_message(
                     entry=assistant_message_entry,
                     config=request.event_config,
+                    context_metrics=request.context_metrics,
                 )
 
             agent_tool_call = AgentToolCall(

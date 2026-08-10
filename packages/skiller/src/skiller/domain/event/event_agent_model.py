@@ -3,11 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
+from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMUsage
+
 
 @dataclass(frozen=True)
 class AgentMessageEventBody:
     total_tokens: int
     text: str
+    usage: LLMUsage | None
+    context: AgentContextMetrics | None
 
 
 @dataclass(frozen=True)

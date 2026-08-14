@@ -375,6 +375,7 @@ def _agent_step_usage(
     if isinstance(value, AgentUsagePayload):
         return AgentStepUsage(
             prompt_tokens=value.prompt_tokens,
+            estimated_system_tokens=value.estimated_system_tokens,
             output_tokens=value.output_tokens,
             total_tokens=value.total_tokens,
             cache_read_tokens=value.cache_read_tokens,
@@ -384,6 +385,7 @@ def _agent_step_usage(
         )
     return AgentStepUsage(
         prompt_tokens=cast(int | None, value.get("prompt_tokens")),
+        estimated_system_tokens=cast(int | None, value.get("estimated_system_tokens")),
         output_tokens=cast(int | None, value.get("output_tokens")),
         total_tokens=cast(int | None, value.get("total_tokens")),
         cache_read_tokens=cast(int | None, value.get("cache_read_tokens")),

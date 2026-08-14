@@ -186,6 +186,7 @@ Final output:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 100,
+      "estimated_system_tokens": 20,
       "output_tokens": 20,
       "total_tokens": 120,
       "cache_read_tokens": null,

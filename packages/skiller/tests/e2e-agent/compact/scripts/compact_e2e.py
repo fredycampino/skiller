@@ -180,8 +180,7 @@ def context_rows(db_path: Path) -> list[sqlite3.Row]:
                message_type,
                delta_tokens,
                delta_compact_tokens,
-               window_start_sequence,
-               window_base,
+               compaction_id,
                usage_json
         FROM agent_context_entries
         ORDER BY sequence ASC
@@ -226,6 +225,7 @@ def marker_rows(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
                 "prompt_tokens": prompt_tokens,
                 "delta_tokens": row["delta_tokens"],
                 "delta_compact_tokens": row["delta_compact_tokens"],
+                "compaction_id": row["compaction_id"],
                 "prunable": prunable,
                 "result": expected_row == actual[index],
             }
@@ -259,10 +259,9 @@ def context_snapshot(db_path: Path) -> list[dict[str, object]]:
             "message_type": row["message_type"],
             "usage_json": row["usage_json"] is not None,
             "prompt_tokens": prompt_tokens_from_usage(row["usage_json"]),
-            "delta_tokens": row["delta_tokens"],
-            "delta_compact_tokens": row["delta_compact_tokens"],
-            "window_start_sequence": row["window_start_sequence"],
-            "window_base": bool(row["window_base"]),
+                "delta_tokens": row["delta_tokens"],
+                "delta_compact_tokens": row["delta_compact_tokens"],
+                "compaction_id": row["compaction_id"],
         }
         for row in rows
     ]

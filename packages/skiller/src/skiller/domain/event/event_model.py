@@ -422,6 +422,7 @@ def _llm_usage_from_dict(value: object) -> LLMUsage | None:
     model = value.get("model")
     return LLMUsage(
         prompt_tokens=_optional_int(value.get("prompt_tokens")),
+        estimated_system_tokens=_optional_int(value.get("estimated_system_tokens")),
         output_tokens=_optional_int(value.get("output_tokens")),
         total_tokens=_optional_int(value.get("total_tokens")),
         cache_read_tokens=_optional_int(value.get("cache_read_tokens")),

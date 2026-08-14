@@ -262,6 +262,7 @@ class AgentUsageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt_tokens: int | None
+    estimated_system_tokens: int | None = None
     output_tokens: int | None
     total_tokens: int | None
     cache_read_tokens: int | None
@@ -494,6 +495,7 @@ def _to_agent_usage_payload(model: AgentUsageModel | None) -> AgentUsagePayload 
         return None
     return AgentUsagePayload(
         prompt_tokens=model.prompt_tokens,
+        estimated_system_tokens=model.estimated_system_tokens,
         output_tokens=model.output_tokens,
         total_tokens=model.total_tokens,
         cache_read_tokens=model.cache_read_tokens,

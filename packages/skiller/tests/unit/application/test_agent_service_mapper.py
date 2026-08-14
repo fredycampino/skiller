@@ -138,8 +138,7 @@ def test_mapper_serializes_agent_context_result_without_payload() -> None:
                 payload_bytes=128,
                 usage=True,
                 prunable=False,
-                window_start_sequence=1,
-                window_base=True,
+                compaction_id=0,
             ),
         ),
     )
@@ -171,8 +170,7 @@ def test_mapper_serializes_agent_context_result_without_payload() -> None:
                 "payload_bytes": 128,
                 "usage": True,
                 "prunable": False,
-                "window_start_sequence": 1,
-                "window_base": True,
+                "compaction_id": 0,
             },
         ],
     }

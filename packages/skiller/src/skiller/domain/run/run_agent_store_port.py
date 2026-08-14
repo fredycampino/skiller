@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from skiller.domain.run.run_model import RunAgent, RunAgentWindow
+from skiller.domain.run.run_model import RunAgent
 
 
 class RunAgentStorePort(Protocol):
@@ -19,11 +19,4 @@ class RunAgentStorePort(Protocol):
         run_id: str,
         agent_id: str,
         context_id: str,
-    ) -> None: ...
-
-    def update_agent_window(
-        self,
-        *,
-        run_id: str,
-        window: RunAgentWindow,
     ) -> None: ...

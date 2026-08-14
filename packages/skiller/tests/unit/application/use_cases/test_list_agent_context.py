@@ -18,8 +18,9 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextState,
     AgentContextWindowEntries,
-    AgentToolResultPayload,
+    AgentContextWindowQuery,
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.llm.model import LLMUsage
@@ -37,19 +38,26 @@ pytestmark = pytest.mark.unit
 
 
 def test_list_agent_context_uses_compact_window_and_returns_metadata_without_payload() -> None:
+    compacted_entry = _user_entry(1, "hello", compact=4)
+    raw_entry = _assistant_entry(2, AgentAssistantMessageType.FINAL, "hi", delta=20, compact=5)
     context_store = _FakeAgentContextStore(
-        entries=[
-            _user_entry(1, "hello", compact=4),
-            _assistant_entry(2, AgentAssistantMessageType.FINAL, "hi", delta=20, compact=5),
-            _assistant_entry(3, AgentAssistantMessageType.TOOL_CALLS, "", delta=8),
-            _tool_result_entry(4, "x" * 10),
-        ],
+        compacted_entries=AgentContextWindowEntries(entries=[compacted_entry], estimated_tokens=4),
+        raw_entries=AgentContextWindowEntries(entries=[raw_entry], estimated_tokens=20),
+    )
+    state_store = _FakeAgentContextState(
+        state=AgentContextState(
+            context_id="ctx-1",
+            start_sequence=1,
+            compacted_sequence=1,
+            compaction_id=1,
+        )
     )
     use_case = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "ctx-1")),
         agent_context_store=context_store,
-        agent_config=_FakeAgentConfig(_agent_config(compaction_enabled=True)),
+        agent_context_state=state_store,
+        agent_config=_FakeAgentConfig(_agent_config()),
         skill_runner=_FakeSkillRunner(),
     )
 
@@ -59,65 +67,88 @@ def test_list_agent_context_uses_compact_window_and_returns_metadata_without_pay
     assert result.context_id == "ctx-1"
     assert result.window is not None
     assert result.window.mode == "compact"
-    assert result.window.entries == 4
+    assert result.window.entries == 2
     assert result.window.start_sequence == 1
-    assert result.window.end_sequence == 4
-    assert result.window.limit_tokens == 80000
-    assert result.window.estimated_tokens == 33
-    assert result.window.payload_bytes == sum(entry.payload_bytes for entry in result.entries)
+    assert result.window.end_sequence == 2
+    assert result.window.estimated_tokens == 24
     assert result.window.keep_last == 5
-    assert context_store.compact_calls == [("ctx-1", 80000, 5)]
-    assert context_store.window_calls == []
-    assert [entry.role for entry in result.entries] == ["user", "assistant", "assistant", "tool"]
-    assert [entry.type for entry in result.entries] == [
-        "message",
-        "final",
-        "tool_calls",
-        "tool_result",
+    assert context_store.compact_queries == [
+        AgentContextWindowQuery(context_id="ctx-1", start_sequence=1, compacted_sequence=1)
     ]
-    assert [entry.prunable for entry in result.entries] == [False, False, True, True]
+    assert context_store.raw_queries == [
+        AgentContextWindowQuery(context_id="ctx-1", start_sequence=1, compacted_sequence=1)
+    ]
+    assert [entry.role for entry in result.entries] == ["user", "assistant"]
+    assert [entry.type for entry in result.entries] == ["message", "final"]
+    assert [entry.prunable for entry in result.entries] == [False, False]
     assert result.entries[0].delta_compact_tokens == 4
     assert result.entries[1].delta_tokens == 20
-    assert result.entries[2].usage is True
-    assert result.entries[3].payload_bytes > 10
 
 
-def test_list_agent_context_uses_normal_window_when_compaction_is_disabled() -> None:
-    context_store = _FakeAgentContextStore(entries=[_user_entry(3, "recent", compact=3)])
+def test_list_agent_context_uses_raw_window_when_no_compaction_state() -> None:
+    raw_entry = _user_entry(3, "recent", compact=3)
+    context_store = _FakeAgentContextStore(
+        compacted_entries=AgentContextWindowEntries(entries=[], estimated_tokens=0),
+        raw_entries=AgentContextWindowEntries(entries=[raw_entry], estimated_tokens=3),
+    )
+    state_store = _FakeAgentContextState(
+        state=AgentContextState(
+            context_id="ctx-1",
+            start_sequence=1,
+            compacted_sequence=None,
+            compaction_id=0,
+        )
+    )
     result = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "ctx-1")),
         agent_context_store=context_store,
-        agent_config=_FakeAgentConfig(_agent_config(compaction_enabled=False)),
+        agent_context_state=state_store,
+        agent_config=_FakeAgentConfig(_agent_config()),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == ListAgentContextStatus.OK
     assert result.window is not None
-    assert result.window.mode == "window"
-    assert context_store.window_calls == [("ctx-1", 80000)]
-    assert context_store.compact_calls == []
+    assert result.window.mode == "raw"
+    assert result.window.entries == 1
+    assert result.window.start_sequence == 1
+    assert context_store.compact_queries == [
+        AgentContextWindowQuery(context_id="ctx-1", start_sequence=1, compacted_sequence=None)
+    ]
+    assert context_store.raw_queries == [
+        AgentContextWindowQuery(context_id="ctx-1", start_sequence=1, compacted_sequence=None)
+    ]
 
 
 def test_list_agent_context_returns_not_found_statuses() -> None:
+    state_store = _FakeAgentContextState()
+    context_store = _FakeAgentContextStore(
+        compacted_entries=AgentContextWindowEntries(entries=[], estimated_tokens=0),
+        raw_entries=AgentContextWindowEntries(entries=[], estimated_tokens=0),
+    )
+
     missing_run = ListAgentContextUseCase(
         run_store=_FakeRunStore(None),
         run_agent_store=_FakeRunAgentStore(None),
-        agent_context_store=_FakeAgentContextStore(entries=[]),
+        agent_context_store=context_store,
+        agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(None),
-        agent_context_store=_FakeAgentContextStore(entries=[]),
+        agent_context_store=context_store,
+        agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
     no_context = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", None)),
-        agent_context_store=_FakeAgentContextStore(entries=[]),
+        agent_context_store=context_store,
+        agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
@@ -128,10 +159,16 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
 
 
 def test_list_agent_context_rejects_invalid_programmer_input() -> None:
+    state_store = _FakeAgentContextState()
+    context_store = _FakeAgentContextStore(
+        compacted_entries=AgentContextWindowEntries(entries=[], estimated_tokens=0),
+        raw_entries=AgentContextWindowEntries(entries=[], estimated_tokens=0),
+    )
     use_case = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(None),
-        agent_context_store=_FakeAgentContextStore(entries=[]),
+        agent_context_store=context_store,
+        agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         skill_runner=_FakeSkillRunner(),
     )
@@ -162,29 +199,40 @@ class _FakeRunAgentStore:
 
 
 class _FakeAgentContextStore:
-    def __init__(self, *, entries: list[AgentContextEntry]) -> None:
-        self.entries = entries
-        self.compact_calls: list[tuple[str, int, int]] = []
-        self.window_calls: list[tuple[str, int]] = []
-
-    def list_compact_entries(
+    def __init__(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
-        keep_last_blocks: int,
-    ) -> AgentContextWindowEntries:
-        self.compact_calls.append((context_id, window_width_tokens, keep_last_blocks))
-        return AgentContextWindowEntries(entries=self.entries, estimated_tokens=33)
+        compacted_entries: AgentContextWindowEntries,
+        raw_entries: AgentContextWindowEntries,
+    ) -> None:
+        self.compacted_entries = compacted_entries
+        self.raw_entries = raw_entries
+        self.compact_queries: list[AgentContextWindowQuery] = []
+        self.raw_queries: list[AgentContextWindowQuery] = []
 
-    def list_window_entries(
-        self,
-        *,
-        context_id: str,
-        window_width_tokens: int,
-    ) -> AgentContextWindowEntries:
-        self.window_calls.append((context_id, window_width_tokens))
-        return AgentContextWindowEntries(entries=self.entries, estimated_tokens=7)
+    def list_compact_entries(self, *, query: AgentContextWindowQuery) -> AgentContextWindowEntries:
+        self.compact_queries.append(query)
+        return self.compacted_entries
+
+    def list_raw_entries(self, *, query: AgentContextWindowQuery) -> AgentContextWindowEntries:
+        self.raw_queries.append(query)
+        return self.raw_entries
+
+
+class _FakeAgentContextState:
+    def __init__(self, state: AgentContextState | None = None) -> None:
+        self.state = state
+
+    def get_state(self, *, context_id: str) -> AgentContextState:
+        _ = context_id
+        if self.state is not None:
+            return self.state
+        return AgentContextState(
+            context_id=context_id,
+            start_sequence=1,
+            compacted_sequence=None,
+            compaction_id=0,
+        )
 
 
 class _FakeAgentConfig:
@@ -238,6 +286,7 @@ def _assistant_entry(
             text=text,
         ),
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -250,34 +299,11 @@ def _assistant_entry(
         created_at="2026-05-16T00:00:00Z",
         delta_tokens=delta,
         delta_compact_tokens=compact,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=0,
     )
 
 
-def _tool_result_entry(sequence: int, value: str) -> AgentContextEntry:
-    return AgentContextEntry(
-        id=f"entry-{sequence}",
-        run_id="run-1",
-        context_id="ctx-1",
-        sequence=sequence,
-        entry_type=AgentContextEntryType.TOOL_RESULT,
-        payload=AgentToolResultPayload(
-            turn_id="turn-1",
-            parent_sequence=3,
-            tool_call_id="call-1",
-            tool="shell",
-            status="ok",
-            data={"stdout": value},
-            error=None,
-        ),
-        usage=None,
-        source_step_id="support_agent",
-        created_at="2026-05-16T00:00:00Z",
-    )
-
-
-def _agent_config(*, compaction_enabled: bool = False) -> AgentConfig:
+def _agent_config() -> AgentConfig:
     provider = AgentNullProvider(
         model=AgentNullLLMModel.NULL1,
         models=NULL_MODELS,
@@ -292,9 +318,9 @@ def _agent_config(*, compaction_enabled: bool = False) -> AgentConfig:
         context=AgentContextConfig(
             window_width_tokens=100000,
             compaction=AgentContextCompactionConfig(
-                enabled=compaction_enabled,
-                max_total_tokens_ratio=0.8,
-                keep_last=5,
+                compaction_trigger_ratio=0.8,
+                compaction_target_ratio=0.5,
+                keep_last_blocks=5,
             ),
         ),
         event_output=AgentEventOutputConfig(

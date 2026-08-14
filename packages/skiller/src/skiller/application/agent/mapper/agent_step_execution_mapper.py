@@ -160,6 +160,7 @@ def _stop_message(stop_reason: AgentStopReason) -> str:
 def _usage_output(usage: LLMUsage) -> AgentUsageOutput:
     return AgentUsageOutput(
         prompt_tokens=usage.prompt_tokens,
+        estimated_system_tokens=usage.estimated_system_tokens,
         output_tokens=usage.output_tokens,
         total_tokens=usage.total_tokens,
         cache_read_tokens=usage.cache_read_tokens,

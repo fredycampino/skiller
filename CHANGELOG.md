@@ -19,6 +19,21 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.27 - 2026-08-14
+
+### Added
+- Add persisted agent context state and context marker calculation.
+- Propagate agent context and LLM usage through runtime and TUI event models.
+
+### Changed
+- Refine agent context management, usage mapping, and context-related documentation.
+
+### Fixed
+- Improve event transcript and log mapping for context and usage information.
+
+### Notes
+- Includes PR #115.
+
 ## 0.1.0-beta.26 - 2026-08-10
 
 ### Added

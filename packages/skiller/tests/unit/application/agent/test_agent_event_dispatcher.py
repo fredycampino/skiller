@@ -55,6 +55,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=LLMUsage(
+                estimated_system_tokens=None,
                 cache_read_tokens=1800,
                 cache_write_tokens=120,
                 provider="codex",
@@ -87,6 +88,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "I will cal..."
     assert event.payload.body.usage == LLMUsage(
+        estimated_system_tokens=None,
         prompt_tokens=3000,
         output_tokens=500,
         total_tokens=2144,
@@ -115,6 +117,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
             sequence=7,
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=LLMUsage(
+                estimated_system_tokens=None,
                 cache_read_tokens=1800,
                 cache_write_tokens=120,
                 provider="codex",
@@ -142,6 +145,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
     assert event.payload.body.total_tokens == 2144
     assert event.payload.body.text == "Final answ..."
     assert event.payload.body.usage == LLMUsage(
+        estimated_system_tokens=None,
         prompt_tokens=3000,
         output_tokens=500,
         total_tokens=2144,

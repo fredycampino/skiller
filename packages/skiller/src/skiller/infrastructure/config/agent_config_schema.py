@@ -1,10 +1,12 @@
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_AGENT_LOOP_MAX_TURNS = 30
 DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS = 10
-DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED = False
-DEFAULT_AGENT_CONTEXT_COMPACTION_MAX_TOTAL_TOKENS_RATIO = 0.8
-DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_LAST = 5
+DEFAULT_AGENT_CONTEXT_COMPACTION_TRIGGER_RATIO = 0.8
+DEFAULT_AGENT_CONTEXT_COMPACTION_TARGET_RATIO = 0.5
+DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_LAST_BLOCKS = 5
 DEFAULT_AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED = True
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS = 600
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS = 4000
@@ -56,13 +58,27 @@ class LoopConfigModel(BaseModel):
 class CompactionConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED
-    max_total_tokens_ratio: float = Field(
-        default=DEFAULT_AGENT_CONTEXT_COMPACTION_MAX_TOTAL_TOKENS_RATIO,
+    compaction_trigger_ratio: float = Field(
+        default=DEFAULT_AGENT_CONTEXT_COMPACTION_TRIGGER_RATIO,
         gt=0,
         le=1,
     )
-    keep_last: int = Field(default=DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_LAST, gt=0, le=100)
+    compaction_target_ratio: float = Field(
+        default=DEFAULT_AGENT_CONTEXT_COMPACTION_TARGET_RATIO,
+        gt=0,
+        le=1,
+    )
+    keep_last_blocks: int = Field(
+        default=DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_LAST_BLOCKS,
+        gt=0,
+        le=100,
+    )
+
+    @model_validator(mode="after")
+    def validate_compaction_ratios(self) -> Self:
+        if self.compaction_target_ratio >= self.compaction_trigger_ratio:
+            raise ValueError("compaction_target_ratio must be lower than compaction_trigger_ratio")
+        return self
 
 
 class ContextConfigModel(BaseModel):

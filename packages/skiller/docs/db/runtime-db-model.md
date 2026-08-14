@@ -106,12 +106,14 @@ The context has its own `sequence` per `context_id`. That sequence is not the sa
 
 Measured assistant messages can carry token markers:
 - `delta_tokens`
-- `window_start_sequence`
-- `window_base`
+- `compaction_id`
 - `usage_json`
 
 `delta_tokens` is the prompt-token delta attributed to that measured response. The active
-window start is stored in the run's agent state and copied to measured entries for diagnostics.
+compaction generation is stored in `agent_context_state.compaction_id` and copied to measured
+entries for diagnostics. Entries without `usage.prompt_tokens` are not markers and keep
+`compaction_id = NULL`, but still persist an estimated `delta_tokens`.
+`delta_compact_tokens` is a separate compacted-block weight.
 
 ## Cleanup And Deletion Boundary
 

@@ -50,9 +50,11 @@ from skiller.domain.tool.tool_contract import (
 from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
     BedrockFileLLMRequestLogger,
 )
+from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.bedrock.bedrock_streaming_port import (
     BedrockStreamingLLMPort,
 )
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 
 class ShellSmokeTool(ToolDefinition[ToolRequest]):
@@ -84,6 +86,7 @@ client = BedrockStreamingLLMPort(
     profile=os.environ["AGENT_BEDROCK_PROFILE"],
     timeout_seconds=float(os.environ["AGENT_BEDROCK_TIMEOUT_SECONDS"]),
     request_logger=BedrockFileLLMRequestLogger(overwrite=True),
+    mapper=BedrockMapper(usage_mapper=DefaultLLMUsageMapper()),
 )
 
 command = "echo skiller-bedrock-streaming-tool-usage-ok"

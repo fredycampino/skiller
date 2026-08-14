@@ -327,9 +327,9 @@ def _agent_config(
         context=AgentContextConfig(
             window_width_tokens=100000,
             compaction=AgentContextCompactionConfig(
-                enabled=False,
-                max_total_tokens_ratio=0.8,
-                keep_last=5,
+                compaction_trigger_ratio=0.8,
+                compaction_target_ratio=0.5,
+                keep_last_blocks=5,
             ),
         ),
         event_output=AgentEventOutputConfig(

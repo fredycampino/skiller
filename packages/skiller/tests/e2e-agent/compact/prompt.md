@@ -17,22 +17,22 @@ Runtime files stay under `workspace/`. The final report is written under
 
 ## Expected Context
 
-| sequence | entry | usage_json | prompt_tokens | delta_tokens | delta_compact_tokens | window_start_sequence | window_base | prunable |
+| sequence | entry | usage_json | prompt_tokens | delta_tokens | delta_compact_tokens | compaction_id | prunable |
 |---:|---|---|---:|---:|---:|---:|---|---|
-| 1 | user: final `COMPACT-E2E-HOLA` | no | null | null | entry estimate | null | no | no |
-| 2 | assistant final | yes | reported | marker delta | entry estimate | 1 | yes | no |
-| 3 | user: run shell `echo compact-e2e-tool` | no | null | null | entry estimate | null | no | no |
-| 4 | assistant tool_calls | yes | reported | marker delta | null | 1 | no | yes |
-| 5 | tool_call: shell `echo compact-e2e-tool` | no | null | null | null | null | no | yes |
-| 6 | tool_result: shell stdout | no | null | null | null | null | no | yes |
-| 7 | assistant final | yes | reported | marker delta | entry estimate | 1 | no | no |
-| 8 | user: run shell `echo compact-e2e-tool` again | no | null | null | entry estimate | null | no | no |
-| 9 | assistant tool_calls | yes | reported | marker delta | null | 1 | no | yes |
-| 10 | tool_call: shell `echo compact-e2e-tool` | no | null | null | null | null | no | yes |
-| 11 | tool_result: shell stdout | no | null | null | null | null | no | yes |
-| 12 | assistant final | yes | reported | marker delta | entry estimate | 1 | no | no |
-| 13 | user: final from prior shell result | no | null | null | entry estimate | null | no | no |
-| 14 | assistant final | yes | reported | marker delta | entry estimate | 1 | yes | no |
+| 1 | user: final `COMPACT-E2E-HOLA` | no | null | null | entry estimate | null | no |
+| 2 | assistant final | yes | reported | marker delta | entry estimate | 0 | no |
+| 3 | user: run shell `echo compact-e2e-tool` | no | null | null | entry estimate | null | no |
+| 4 | assistant tool_calls | yes | reported | marker delta | null | 0 | yes |
+| 5 | tool_call: shell `echo compact-e2e-tool` | no | null | null | null | null | yes |
+| 6 | tool_result: shell stdout | no | null | null | null | null | yes |
+| 7 | assistant final | yes | reported | marker delta | entry estimate | 0 | no |
+| 8 | user: run shell `echo compact-e2e-tool` again | no | null | null | entry estimate | null | no |
+| 9 | assistant tool_calls | yes | reported | marker delta | null | 0 | yes |
+| 10 | tool_call: shell `echo compact-e2e-tool` | no | null | null | null | null | yes |
+| 11 | tool_result: shell stdout | no | null | null | null | null | yes |
+| 12 | assistant final | yes | reported | marker delta | entry estimate | 0 | no |
+| 13 | user: final from prior shell result | no | null | null | entry estimate | null | no |
+| 14 | assistant final | yes | reported | marker delta | entry estimate | 0 | no |
 
 Expected request logs: `0001.json` through `0006.json`.
 
@@ -103,10 +103,10 @@ Expected run state: `WAITING`.
 
 ### Context Expected
 
-| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | window_start_sequence | window_base |
+| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | compaction_id |
 |---:|---|---|---|---|---:|---|
-| 1 | `user_message` | no | no | yes | null | no |
-| 2 | `assistant final` | yes | yes | yes | 1 | yes |
+| 1 | `user_message` | no | no | yes | null |
+| 2 | `assistant final` | yes | yes | yes | 0 |
 
 ### Context Validation
 
@@ -148,15 +148,15 @@ Expected run state: `WAITING`.
 
 ### Context Expected
 
-| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | window_start_sequence | window_base |
+| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | compaction_id |
 |---:|---|---|---|---|---:|---|
-| 1 | `user_message` | no | no | yes | null | no |
-| 2 | `assistant final` | yes | yes | yes | 1 | yes |
-| 3 | `user_message` | no | no | yes | null | no |
-| 4 | `assistant tool_calls` | yes | yes | no | 1 | no |
-| 5 | `tool_call` | no | no | no | null | no |
-| 6 | `tool_result` | no | no | no | null | no |
-| 7 | `assistant final` | yes | yes | yes | 1 | no |
+| 1 | `user_message` | no | no | yes | null |
+| 2 | `assistant final` | yes | yes | yes | 0 |
+| 3 | `user_message` | no | no | yes | null |
+| 4 | `assistant tool_calls` | yes | yes | no | 0 |
+| 5 | `tool_call` | no | no | no | null |
+| 6 | `tool_result` | no | no | no | null |
+| 7 | `assistant final` | yes | yes | yes | 0 |
 
 ### Context Validation
 
@@ -220,20 +220,20 @@ Expected run state: `WAITING`.
 
 ### Context Expected
 
-| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | window_start_sequence | window_base |
+| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | compaction_id |
 |---:|---|---|---|---|---:|---|
-| 1 | `user_message` | no | no | yes | null | no |
-| 2 | `assistant final` | yes | yes | yes | 1 | yes |
-| 3 | `user_message` | no | no | yes | null | no |
-| 4 | `assistant tool_calls` | yes | yes | no | 1 | no |
-| 5 | `tool_call` | no | no | no | null | no |
-| 6 | `tool_result` | no | no | no | null | no |
-| 7 | `assistant final` | yes | yes | yes | 1 | no |
-| 8 | `user_message` | no | no | yes | null | no |
-| 9 | `assistant tool_calls` | yes | yes | no | 1 | no |
-| 10 | `tool_call` | no | no | no | null | no |
-| 11 | `tool_result` | no | no | no | null | no |
-| 12 | `assistant final` | yes | yes | yes | 1 | no |
+| 1 | `user_message` | no | no | yes | null |
+| 2 | `assistant final` | yes | yes | yes | 0 |
+| 3 | `user_message` | no | no | yes | null |
+| 4 | `assistant tool_calls` | yes | yes | no | 0 |
+| 5 | `tool_call` | no | no | no | null |
+| 6 | `tool_result` | no | no | no | null |
+| 7 | `assistant final` | yes | yes | yes | 0 |
+| 8 | `user_message` | no | no | yes | null |
+| 9 | `assistant tool_calls` | yes | yes | no | 0 |
+| 10 | `tool_call` | no | no | no | null |
+| 11 | `tool_result` | no | no | no | null |
+| 12 | `assistant final` | yes | yes | yes | 0 |
 
 ### Context Validation
 
@@ -307,22 +307,22 @@ Expected run state: `WAITING`.
 
 ### Context Expected
 
-| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | window_start_sequence | window_base |
+| seq | entry_type | usage_json | delta_tokens | delta_compact_tokens | compaction_id |
 |---:|---|---|---|---|---:|---|
-| 1 | `user_message` | no | no | yes | null | no |
-| 2 | `assistant final` | yes | yes | yes | 1 | yes |
-| 3 | `user_message` | no | no | yes | null | no |
-| 4 | `assistant tool_calls` | yes | yes | no | 1 | no |
-| 5 | `tool_call` | no | no | no | null | no |
-| 6 | `tool_result` | no | no | no | null | no |
-| 7 | `assistant final` | yes | yes | yes | 1 | no |
-| 8 | `user_message` | no | no | yes | null | no |
-| 9 | `assistant tool_calls` | yes | yes | no | 1 | no |
-| 10 | `tool_call` | no | no | no | null | no |
-| 11 | `tool_result` | no | no | no | null | no |
-| 12 | `assistant final` | yes | yes | yes | 1 | no |
-| 13 | `user_message` | no | no | yes | null | no |
-| 14 | `assistant final` | yes | yes | yes | 1 | yes |
+| 1 | `user_message` | no | no | yes | null |
+| 2 | `assistant final` | yes | yes | yes | 0 |
+| 3 | `user_message` | no | no | yes | null |
+| 4 | `assistant tool_calls` | yes | yes | no | 0 |
+| 5 | `tool_call` | no | no | no | null |
+| 6 | `tool_result` | no | no | no | null |
+| 7 | `assistant final` | yes | yes | yes | 0 |
+| 8 | `user_message` | no | no | yes | null |
+| 9 | `assistant tool_calls` | yes | yes | no | 0 |
+| 10 | `tool_call` | no | no | no | null |
+| 11 | `tool_result` | no | no | no | null |
+| 12 | `assistant final` | yes | yes | yes | 0 |
+| 13 | `user_message` | no | no | yes | null |
+| 14 | `assistant final` | yes | yes | yes | 0 |
 
 ### Context Validation
 

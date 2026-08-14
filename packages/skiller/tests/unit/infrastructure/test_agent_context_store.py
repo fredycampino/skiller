@@ -8,7 +8,10 @@ from skiller.domain.agent.context.compact_delta import payload_chars
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
+    AgentContextCompactionQuery,
     AgentContextEntryType,
+    AgentContextState,
+    AgentContextWindowQuery,
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
@@ -21,6 +24,9 @@ from skiller.domain.tool.tool_execution_model import AgentToolCall, AgentToolRes
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
+)
+from skiller.infrastructure.db.datasource.sqlite_agent_context_state_datasource import (
+    SqliteAgentContextStateDatasource,
 )
 from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
@@ -62,6 +68,7 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         turn_id="turn-1",
         text="Old answer",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -71,8 +78,7 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
             total_tokens=105,
         ),
         delta_tokens=100,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=None,
     )
     store.append_user_message(context=AGENT_CONTEXT, text="Inspect file")
     store.append_tool_calls_assistant_message(
@@ -80,6 +86,7 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         turn_id="turn-2",
         text="I will inspect.",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -89,8 +96,7 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
             total_tokens=195,
         ),
         delta_tokens=90,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=1,
     )
     tool_call = AgentToolCall(
         turn_id="turn-2",
@@ -120,6 +126,7 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
         turn_id="turn-2",
         text="File inspected.",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -129,9 +136,95 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
             total_tokens=235,
         ),
         delta_tokens=40,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=1,
     )
+
+
+
+
+def _set_compact_delta_tokens(
+    db_path,
+    *,
+    sequence: int,
+    value: int | None,
+    context_id: str = CONTEXT_ID,
+) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE agent_context_entries
+            SET delta_compact_tokens = ?
+            WHERE context_id = ? AND sequence = ?
+            """,
+            (value, context_id, sequence),
+        )
+
+
+
+def _selected_window_tokens(db_path: Path, *, state: AgentContextState) -> int:
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COALESCE(
+              SUM(
+                CASE
+                  WHEN sequence <= ? THEN
+                    CASE
+                      WHEN delta_compact_tokens > 0 THEN delta_compact_tokens
+                      ELSE 0
+                    END
+                  WHEN usage_json IS NOT NULL AND delta_tokens > 0 THEN delta_tokens
+                  ELSE 0
+                END
+              ),
+              0
+            )
+            FROM agent_context_entries
+            WHERE context_id = ?
+              AND sequence >= ?
+            """,
+            (
+                state.compacted_sequence,
+                state.context_id,
+                state.start_sequence,
+            ),
+        ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+def _append_compaction_selection_block(
+    store: AgentContextStore,
+    db_path: Path,
+    *,
+    turn: int,
+    raw_tokens: int,
+    compact_tokens: int | None,
+) -> tuple[int, int]:
+    first = store.append_user_message(
+        context=AGENT_CONTEXT,
+        text=f"User message {turn}",
+    )
+    marker = store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id=f"turn-{turn}",
+        text=f"Assistant message {turn}",
+        usage=LLMUsage(
+            estimated_system_tokens=None,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=raw_tokens,
+            output_tokens=1,
+            total_tokens=raw_tokens + 1,
+        ),
+        delta_tokens=raw_tokens,
+        compaction_id=1,
+    )
+    if compact_tokens is not None:
+        _set_compact_delta_tokens(db_path, sequence=first.sequence, value=compact_tokens)
+        _set_compact_delta_tokens(db_path, sequence=marker.sequence, value=0)
+    return first.sequence, marker.sequence
 
 
 def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
@@ -156,6 +249,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         turn_id="turn-1",
         text="Hello",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             prompt_tokens=123,
@@ -165,8 +259,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             model=AgentMiniMaxLLMModel.M2_5,
         ),
         delta_tokens=123,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
@@ -175,10 +268,9 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             """
             SELECT
               message_type,
-              window_start_sequence,
+              compaction_id,
               delta_tokens,
               delta_compact_tokens,
-              window_base,
               usage_json
             FROM agent_context_entries
             WHERE id = ?
@@ -198,6 +290,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     assert entries[0].usage is None
     assert entries[1].delta_compact_tokens is None
     assert entries[1].usage == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=123,
@@ -210,9 +303,10 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     assert raw_row[1] == 1
     assert raw_row[2] == 123
     assert raw_row[3] is None
-    assert raw_row[4] == 1
-    assert json.loads(raw_row[5]) == {
+    assert raw_row[4] is not None
+    assert json.loads(raw_row[4]) == {
         "prompt_tokens": 123,
+        "estimated_system_tokens": None,
         "output_tokens": 45,
         "total_tokens": 168,
         "cache_read_tokens": None,
@@ -221,6 +315,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         "model": "MiniMax-M2.5",
     }
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=123,
@@ -256,446 +351,590 @@ def test_agent_context_store_lists_entries_from_sequence(tmp_path) -> None:
     assert [entry.sequence for entry in entries] == [second.sequence, third.sequence]
 
 
-def test_sqlite_agent_context_datasource_lists_protected_tail_by_blocks(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-protected-tail.db"
+
+def test_agent_context_store_lists_fixed_compact_range_and_prunes_entries(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-fixed-compact-range.db"
     store = _store_with_run(db_path)
-    datasource = SqliteAgentContextDatasource(str(db_path))
     _append_compact_fixture(store)
+    _set_compact_delta_tokens(db_path, sequence=1, value=30)
+    _set_compact_delta_tokens(db_path, sequence=2, value=20)
+    _set_compact_delta_tokens(db_path, sequence=3, value=25)
+    _set_compact_delta_tokens(db_path, sequence=4, value=15)
+    _set_compact_delta_tokens(db_path, sequence=5, value=100)
+    _set_compact_delta_tokens(db_path, sequence=6, value=100)
+    _set_compact_delta_tokens(db_path, sequence=7, value=10)
 
-    latest_block = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-        keep_last_blocks=1,
-    )
-    large_window_tail = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=1,
-    )
-    two_blocks_small_window_tail = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-        keep_last_blocks=2,
-    )
-    two_blocks_tail = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=2,
-    )
-    latest_block_over_window = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=30,
-        keep_last_blocks=2,
-    )
-    oversized_window_tail = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=500,
-        keep_last_blocks=1,
-    )
-
-    assert [entry.sequence for entry in latest_block.entries] == [5, 6, 7]
-    assert latest_block.tokens == 40
-    assert [entry.sequence for entry in large_window_tail.entries] == [5, 6, 7]
-    assert large_window_tail.tokens == 40
-    assert [entry.sequence for entry in two_blocks_small_window_tail.entries] == [
-        5,
-        6,
-        7,
-    ]
-    assert two_blocks_small_window_tail.tokens == 40
-    assert [entry.sequence for entry in two_blocks_tail.entries] == [3, 4, 5, 6, 7]
-    assert two_blocks_tail.tokens == 130
-    assert [entry.sequence for entry in latest_block_over_window.entries] == [
-        5,
-        6,
-        7,
-    ]
-    assert latest_block_over_window.tokens == 40
-    assert [entry.sequence for entry in oversized_window_tail.entries] == [5, 6, 7]
-    assert oversized_window_tail.tokens == 40
-
-
-def test_sqlite_agent_context_datasource_protected_tail_keeps_blocks_that_fit(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-protected-tail-fit.db"
-    store = _store_with_run(db_path)
-    datasource = SqliteAgentContextDatasource(str(db_path))
-
-    for index, delta_tokens in enumerate((10, 20, 20, 15, 40, 50), 1):
-        store.append_final_assistant_message(
-            context=AGENT_CONTEXT,
-            turn_id=f"turn-{index}",
-            text=f"block {index}",
-            usage=LLMUsage(
-                cache_read_tokens=None,
-                cache_write_tokens=None,
-                provider=None,
-                model=None,
-                prompt_tokens=delta_tokens,
-                output_tokens=1,
-                total_tokens=delta_tokens + 1,
-            ),
-            delta_tokens=delta_tokens,
-            window_start_sequence=1,
-            window_base=index == 1,
+    compact = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=2,
+            compacted_sequence=7,
         )
-
-    protected = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=100,
-        keep_last_blocks=5,
     )
-    max_blocks = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=200,
-        keep_last_blocks=5,
+    empty = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=8,
+            compacted_sequence=7,
+        )
+    )
+    uncompacted = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=None,
+        )
     )
 
-    assert [entry.sequence for entry in protected.entries] == [5, 6]
-    assert protected.tokens == 90
-    assert [entry.sequence for entry in max_blocks.entries] == [2, 3, 4, 5, 6]
-    assert max_blocks.tokens == 145
+    assert [entry.sequence for entry in compact.entries] == [2, 3, 7]
+    assert compact.estimated_tokens == 55
+    assert empty.entries == []
+    assert empty.estimated_tokens == 0
+    assert uncompacted.entries == []
+    assert uncompacted.estimated_tokens == 0
 
 
-def test_sqlite_agent_context_datasource_returns_empty_protected_entries_without_usage(
+def test_agent_context_store_returns_empty_compact_range_with_only_prunable_entries(
     tmp_path,
 ) -> None:
-    db_path = tmp_path / "agent-context-protected-empty.db"
+    db_path = tmp_path / "agent-context-only-prunable-compact-range.db"
     store = _store_with_run(db_path)
-    datasource = SqliteAgentContextDatasource(str(db_path))
-    store.append_user_message(context=AGENT_CONTEXT, text="First")
-    store.append_user_message(context=AGENT_CONTEXT, text="Second")
-
-    protected = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=100,
-        keep_last_blocks=1,
-    )
-
-    assert protected.entries == []
-    assert protected.tokens == 0
-
-
-def test_sqlite_agent_context_datasource_lists_compact_entries_from_sequence(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-list.db"
-    store = _store_with_run(db_path)
-    datasource = SqliteAgentContextDatasource(str(db_path))
     _append_compact_fixture(store)
-    _set_compact_delta_tokens(db_path, sequence=1, value=20)
-    _set_compact_delta_tokens(db_path, sequence=2, value=30)
-    _set_compact_delta_tokens(db_path, sequence=3, value=35)
-    _set_compact_delta_tokens(db_path, sequence=7, value=40)
 
-    entries_before_tools = datasource.list_compact_entries(
-        context_id=CONTEXT_ID,
-        start_sequence=6,
-        window_width_tokens=65,
-    )
-    entries_with_pruned_tools = datasource.list_compact_entries(
-        context_id=CONTEXT_ID,
-        start_sequence=7,
-        window_width_tokens=75,
-    )
-    empty_when_first_marker_exceeds_budget = datasource.list_compact_entries(
-        context_id=CONTEXT_ID,
-        start_sequence=7,
-        window_width_tokens=30,
-    )
-    empty_without_compact_markers = datasource.list_compact_entries(
-        context_id=CONTEXT_ID,
-        start_sequence=0,
-        window_width_tokens=100,
+    compact = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=4,
+            compacted_sequence=6,
+        )
     )
 
-    assert [entry.sequence for entry in entries_before_tools] == [2, 3]
-    assert [entry.sequence for entry in entries_with_pruned_tools] == [3, 7]
-    assert empty_when_first_marker_exceeds_budget == []
-    assert empty_without_compact_markers == []
+    assert compact.entries == []
+    assert compact.estimated_tokens == 0
 
 
-def test_sqlite_agent_context_datasource_compact_and_protected_ranges_do_not_overlap(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-protected-boundary.db"
+
+def test_agent_context_store_keeps_unweighted_compact_entries_at_zero_tokens(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-unweighted-compact-entries.db"
     store = _store_with_run(db_path)
-    datasource = SqliteAgentContextDatasource(str(db_path))
     _append_compact_fixture(store)
-    _set_compact_delta_tokens(db_path, sequence=1, value=20)
-    _set_compact_delta_tokens(db_path, sequence=2, value=30)
-    _set_compact_delta_tokens(db_path, sequence=3, value=35)
+    _set_compact_delta_tokens(db_path, sequence=1, value=0)
+    _set_compact_delta_tokens(db_path, sequence=2, value=-10)
+    _set_compact_delta_tokens(db_path, sequence=3, value=30)
+    _set_compact_delta_tokens(db_path, sequence=7, value=None)
 
-    protected = datasource.list_protected_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-        keep_last_blocks=1,
-    )
-    compact = datasource.list_compact_entries(
-        context_id=CONTEXT_ID,
-        start_sequence=protected.entries[0].sequence - 1,
-        window_width_tokens=85,
+    compact = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=7,
+        )
     )
 
-    assert [entry.sequence for entry in compact] == [1, 2, 3]
-    assert [entry.sequence for entry in protected.entries] == [5, 6, 7]
-    assert compact[-1].sequence < protected.entries[0].sequence
+    assert [entry.sequence for entry in compact.entries] == [1, 2, 3, 7]
+    assert compact.estimated_tokens == 30
 
 
-def test_agent_context_store_lists_all_entries_without_usage_markers(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-compact-without-usage.db"
+def test_agent_context_store_lists_fixed_raw_range_without_pruning(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-fixed-raw-range.db"
     store = _store_with_run(db_path)
-    first = store.append_user_message(context=AGENT_CONTEXT, text="First")
-    second = store.append_user_message(context=AGENT_CONTEXT, text="Second")
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=100,
-        keep_last_blocks=1,
-    )
-
-    assert [entry.sequence for entry in entries] == [first.sequence, second.sequence]
-
-
-def test_agent_context_store_returns_empty_compact_entries_for_empty_context(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-empty.db"
-    store = _store_with_run(db_path)
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=100,
-        keep_last_blocks=1,
-    )
-
-    assert entries == []
-
-
-def test_agent_context_store_adds_compact_delta_tokens_to_non_prunable_entries(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-delta-markers.db"
-    store = _store_with_run(db_path)
-
-    first_user = store.append_user_message(context=AGENT_CONTEXT, text="Inspect files")
-    first_marker = store.append_tool_calls_assistant_message(
+    _append_compact_fixture(store)
+    no_prompt_marker = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="I will inspect.",
+        turn_id="turn-3",
+        text="Usage without prompt tokens",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
             model=None,
-            prompt_tokens=90,
+            prompt_tokens=None,
             output_tokens=5,
-            total_tokens=95,
+            total_tokens=None,
         ),
-        delta_tokens=90,
-        window_start_sequence=1,
-        window_base=True,
+        delta_tokens=500,
+        compaction_id=None,
     )
-    store.add_compact_delta_tokens(
-        context_id=CONTEXT_ID,
-        marker_sequence=first_marker.sequence,
+    open_entry = store.append_user_message(context=AGENT_CONTEXT, text="Open raw entry")
+
+    raw = store.list_raw_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=2,
+        )
     )
-    tool_call = store.append_tool_call(
-        context=AGENT_CONTEXT,
-        tool_call=AgentToolCall(
-            turn_id="turn-1",
-            parent_sequence=first_marker.sequence,
-            tool_call_id="call-1",
-            tool="read_file",
-            args={"path": "README.md"},
-        ),
+    empty = store.list_raw_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=open_entry.sequence,
+        )
     )
-    tool_result = store.append_tool_result(
-        context=AGENT_CONTEXT,
-        tool_result=AgentToolResult(
-            turn_id="turn-1",
-            tool_call_id="call-1",
-            parent_sequence=first_marker.sequence,
-            result=ToolResult(
-                name="read_file",
-                status=ToolResultStatus.COMPLETED,
-                data={"content": "x" * 200},
-                text="x" * 200,
-                error=None,
-            ),
-        ),
+
+    assert [entry.sequence for entry in raw.entries] == [
+        3,
+        4,
+        5,
+        6,
+        7,
+        no_prompt_marker.sequence,
+        open_entry.sequence,
+    ]
+    assert no_prompt_marker.delta_tokens == 500
+    assert no_prompt_marker.compaction_id is None
+    assert raw.estimated_tokens == 130
+    assert empty.entries == []
+    assert empty.estimated_tokens == 0
+
+
+def test_agent_context_store_resolves_raw_start_from_window_state(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-raw-window-state.db"
+    store = _store_with_run(db_path)
+    _append_compact_fixture(store)
+
+    empty_compacted_range = store.list_raw_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=5,
+            compacted_sequence=4,
+        )
     )
-    final_marker = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="File inspected.",
+    uncompacted = store.list_raw_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=5,
+            compacted_sequence=None,
+        )
+    )
+
+    assert [entry.sequence for entry in empty_compacted_range.entries] == [5, 6, 7]
+    assert empty_compacted_range.estimated_tokens == 40
+    assert [entry.sequence for entry in uncompacted.entries] == [5, 6, 7]
+    assert uncompacted.estimated_tokens == 40
+
+
+def test_agent_context_store_fixed_entry_queries_isolate_contexts(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-fixed-ranges-isolation.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    other_context = AgentContext(
+        run_id=RUN_ID,
+        agent_id=SOURCE_STEP_ID,
+        context_id="thread-2",
+    )
+    other_user = store.append_user_message(context=other_context, text="Other context")
+    other_marker = store.append_final_assistant_message(
+        context=other_context,
+        turn_id="turn-other",
+        text="Other response",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
             model=None,
-            prompt_tokens=200,
-            output_tokens=5,
-            total_tokens=205,
+            prompt_tokens=900,
+            output_tokens=1,
+            total_tokens=901,
         ),
-        delta_tokens=110,
-        window_start_sequence=1,
-        window_base=False,
+        delta_tokens=900,
+        compaction_id=1,
     )
-    store.add_compact_delta_tokens(
-        context_id=CONTEXT_ID,
-        marker_sequence=final_marker.sequence,
+    _set_compact_delta_tokens(
+        db_path,
+        context_id=other_context.context_id,
+        sequence=other_user.sequence,
+        value=450,
     )
-    first_block_chars = payload_chars(first_user.payload) + payload_chars(first_marker.payload)
-    tool_block_chars = (
-        payload_chars(tool_call.payload)
-        + payload_chars(tool_result.payload)
-        + payload_chars(final_marker.payload)
-    )
-
-    assert _compact_delta_tokens(db_path, sequence=first_user.sequence) == round(
-        90 * payload_chars(first_user.payload) / first_block_chars
-    )
-    assert _compact_delta_tokens(db_path, sequence=first_marker.sequence) is None
-    assert _compact_delta_tokens(db_path, sequence=tool_call.sequence) is None
-    assert _compact_delta_tokens(db_path, sequence=tool_result.sequence) is None
-    assert _compact_delta_tokens(db_path, sequence=final_marker.sequence) == round(
-        110 * payload_chars(final_marker.payload) / tool_block_chars
-    )
-    assert [entry.delta_tokens for entry in store.list_entries(context_id=CONTEXT_ID)] == [
-        None,
-        90,
-        None,
-        None,
-        110,
-    ]
-
-
-def test_agent_context_store_lists_compact_entries_with_protected_tail(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-compact-window.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=1,
+    _set_compact_delta_tokens(
+        db_path,
+        context_id=other_context.context_id,
+        sequence=other_marker.sequence,
+        value=450,
     )
 
-    assert [entry.sequence for entry in entries] == [5, 6, 7]
-    assert entries[0].entry_type == AgentContextEntryType.TOOL_CALL
-    assert entries[1].entry_type == AgentContextEntryType.TOOL_RESULT
-
-
-def test_agent_context_store_compact_entries_match_normal_window_when_tail_fills(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-window-tail.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-
-    compact_entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-        keep_last_blocks=1,
-    )
-    normal_entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-    )
-
-    assert [entry.sequence for entry in compact_entries] == [
-        entry.sequence for entry in normal_entries
-    ]
-
-
-def test_agent_context_store_keeps_maximum_protected_blocks_when_they_fit(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-compact-window-min-blocks.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=2,
-    )
-
-    assert [entry.sequence for entry in entries] == [3, 4, 5, 6, 7]
-
-
-def test_agent_context_store_keeps_only_protected_blocks_that_fit_window(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-compact-window-fit-blocks.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-
-    entries = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=40,
-        keep_last_blocks=2,
-    )
-
-    assert [entry.sequence for entry in entries] == [5, 6, 7]
-
-
-def test_agent_context_store_normalizes_compact_keep_last_blocks(tmp_path) -> None:
-    db_path = tmp_path / "agent-context-compact-window-normalize.db"
-    store = _store_with_run(db_path)
-    _append_compact_fixture(store)
-
-    below_min = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=0,
-    )
-    min_value = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=1,
-    )
-    above_max = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=101,
-    )
-    max_value = store.list_compact_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=130,
-        keep_last_blocks=100,
-    )
-
-    assert [entry.sequence for entry in below_min] == [entry.sequence for entry in min_value]
-    assert [entry.sequence for entry in above_max] == [entry.sequence for entry in max_value]
-
-
-def _compact_delta_tokens(db_path: Path, *, sequence: int) -> int | None:
-    with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT delta_compact_tokens
-            FROM agent_context_entries
-            WHERE context_id = ? AND sequence = ?
-            """,
-            (CONTEXT_ID, sequence),
-        ).fetchone()
-    assert row is not None
-    return row[0]
-
-
-def _set_compact_delta_tokens(db_path: Path, *, sequence: int, value: int) -> None:
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE agent_context_entries
-            SET delta_compact_tokens = ?
-            WHERE context_id = ? AND sequence = ?
-            """,
-            (value, CONTEXT_ID, sequence),
+    raw = store.list_raw_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=None,
         )
+    )
+    compact = store.list_compact_entries(
+        query=AgentContextWindowQuery(
+            context_id=CONTEXT_ID,
+            start_sequence=1,
+            compacted_sequence=2,
+        )
+    )
+
+    assert [entry.context_id for entry in raw.entries] == [CONTEXT_ID, CONTEXT_ID]
+    assert raw.estimated_tokens == 60
+    assert [entry.context_id for entry in compact.entries] == [CONTEXT_ID, CONTEXT_ID]
+    assert compact.estimated_tokens == 30
+
+
+def test_agent_context_store_selects_compaction_state_with_compact_and_raw_ranges(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-select-compaction.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    second_start, second_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=4,
+        raw_tokens=30,
+        compact_tokens=15,
+    )
+    store.append_user_message(context=AGENT_CONTEXT, text="Open raw block")
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=2,
+        target_tokens=100,
+    )
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=second_start,
+        compacted_sequence=second_marker,
+        compaction_id=1,
+    )
+
+
+def test_agent_context_store_reduces_protected_raw_blocks_to_fit_target(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-select-reduced-raw.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    second_start, second_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=3,
+        target_tokens=70,
+    )
+
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=second_start,
+        compacted_sequence=second_marker,
+        compaction_id=1,
+    )
+    assert _selected_window_tokens(db_path, state=selected) <= query.target_tokens
+
+
+def test_agent_context_store_selects_empty_compact_range_when_raw_equals_target(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-select-raw-target.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    raw_start, _ = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=4,
+        raw_tokens=30,
+        compact_tokens=15,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=2,
+        target_tokens=70,
+    )
+
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=raw_start,
+        compacted_sequence=raw_start - 1,
+        compaction_id=1,
+    )
+    assert _selected_window_tokens(db_path, state=selected) == query.target_tokens
+
+
+def test_agent_context_store_counts_missing_compact_weights_as_zero(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-select-null-weights.db"
+    store = _store_with_run(db_path)
+    first_start, first_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=None,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=1,
+        target_tokens=50,
+    )
+
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=first_start,
+        compacted_sequence=first_marker,
+        compaction_id=1,
+    )
+
+
+def test_agent_context_store_ignores_open_raw_block_when_selecting_state(tmp_path) -> None:
+    db_path = tmp_path / "agent-context-select-open-raw.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    second_start, second_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=1,
+        target_tokens=70,
+    )
+    selected_without_open_block = store.select_compaction_state(query=query)
+    store.append_user_message(context=AGENT_CONTEXT, text="Open entry 1")
+    store.append_final_assistant_message(
+        context=AGENT_CONTEXT,
+        turn_id="turn-open",
+        text="Open response without prompt tokens",
+        usage=LLMUsage(
+            estimated_system_tokens=None,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=None,
+            output_tokens=5,
+            total_tokens=None,
+        ),
+        delta_tokens=500,
+        compaction_id=1,
+    )
+    store.append_user_message(context=AGENT_CONTEXT, text="Open entry 2")
+
+    selected_with_open_block = store.select_compaction_state(query=query)
+
+    expected = AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=second_start,
+        compacted_sequence=second_marker,
+        compaction_id=1,
+    )
+    assert selected_without_open_block == expected
+    assert selected_with_open_block == expected
+
+
+def test_agent_context_store_selects_empty_compact_range_when_latest_raw_is_oversized(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-select-oversized-raw.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    latest_start, _ = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=4,
+        raw_tokens=120,
+        compact_tokens=15,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=1,
+        compacted_sequence=None,
+        compaction_id=0,
+        keep_last_blocks=2,
+        target_tokens=80,
+    )
+
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=latest_start,
+        compacted_sequence=latest_start - 1,
+        compaction_id=1,
+    )
+
+
+def test_agent_context_store_selects_repeated_compaction_from_current_state(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "agent-context-select-repeated-compaction.db"
+    store = _store_with_run(db_path)
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=1,
+        raw_tokens=60,
+        compact_tokens=30,
+    )
+    second_start, second_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=2,
+        raw_tokens=50,
+        compact_tokens=25,
+    )
+    third_start, third_marker = _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=3,
+        raw_tokens=40,
+        compact_tokens=20,
+    )
+    _append_compaction_selection_block(
+        store,
+        db_path,
+        turn=4,
+        raw_tokens=30,
+        compact_tokens=15,
+    )
+    query = AgentContextCompactionQuery(
+        context_id=CONTEXT_ID,
+        start_sequence=second_start,
+        compacted_sequence=second_marker,
+        compaction_id=3,
+        keep_last_blocks=1,
+        target_tokens=70,
+    )
+
+    selected = store.select_compaction_state(query=query)
+
+    assert selected == AgentContextState(
+        context_id=CONTEXT_ID,
+        start_sequence=third_start,
+        compacted_sequence=third_marker,
+        compaction_id=4,
+    )
+
 
 
 def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
@@ -720,6 +959,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
         turn_id="turn-1",
         text="Hello",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             prompt_tokens=123,
@@ -729,8 +969,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
             model=model,
         ),
         delta_tokens=123,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
@@ -746,6 +985,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
 
     assert json.loads(raw_usage)["model"] == "google/gemma-4-12b-qat"
     assert entries[0].usage == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=123,
@@ -755,6 +995,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
         model="google/gemma-4-12b-qat",
     )
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=123,
@@ -789,6 +1030,7 @@ def test_agent_context_store_persists_delta_markers(
         turn_id="turn-1",
         text="First",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -798,10 +1040,9 @@ def test_agent_context_store_persists_delta_markers(
             total_tokens=95,
         ),
         delta_tokens=90,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
-    reset_start = store.append_user_message(
+    store.append_user_message(
         context=AGENT_CONTEXT,
         text="Smaller window task",
     )
@@ -810,6 +1051,7 @@ def test_agent_context_store_persists_delta_markers(
         turn_id="turn-2",
         text="Reset",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -819,16 +1061,16 @@ def test_agent_context_store_persists_delta_markers(
             total_tokens=2,
         ),
         delta_tokens=1,
-        window_start_sequence=reset_start.sequence,
-        window_base=True,
+        compaction_id=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
 
     assert first.delta_tokens == 90
     assert reset.delta_tokens == 1
-    assert reset.window_start_sequence == reset_start.sequence
+    assert reset.compaction_id == 1
     assert reset.usage == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         provider=None,
@@ -864,6 +1106,7 @@ def test_agent_context_store_keeps_delta_series_markers(
         turn_id="turn-1",
         text="First",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -873,14 +1116,14 @@ def test_agent_context_store_keeps_delta_series_markers(
             total_tokens=95,
         ),
         delta_tokens=90,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     next_final = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Next",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -890,14 +1133,11 @@ def test_agent_context_store_keeps_delta_series_markers(
             total_tokens=105,
         ),
         delta_tokens=10,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=1,
     )
 
     assert first.delta_tokens == 90
-    assert first.window_base is True
     assert next_final.delta_tokens == 10
-    assert next_final.window_base is False
 
 
 def test_agent_context_store_estimates_window_tokens_from_start_sequence(
@@ -924,6 +1164,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         turn_id="turn-1",
         text="Older",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -933,8 +1174,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
             total_tokens=95,
         ),
         delta_tokens=90,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     start = store.append_user_message(
         context=AGENT_CONTEXT,
@@ -945,6 +1185,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         turn_id="turn-2",
         text="Current base",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -954,14 +1195,14 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
             total_tokens=125,
         ),
         delta_tokens=25,
-        window_start_sequence=start.sequence,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Corrupt negative",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -971,8 +1212,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
             total_tokens=115,
         ),
         delta_tokens=-5,
-        window_start_sequence=start.sequence,
-        window_base=False,
+        compaction_id=1,
     )
     store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -989,6 +1229,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
         turn_id="turn-4",
         text="Tail",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -998,8 +1239,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
             total_tokens=135,
         ),
         delta_tokens=10,
-        window_start_sequence=start.sequence,
-        window_base=False,
+        compaction_id=1,
     )
 
     assert (
@@ -1023,6 +1263,7 @@ def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
         turn_id="turn-1",
         text="Old answer " * 20,
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1032,8 +1273,7 @@ def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
             total_tokens=105,
         ),
         delta_tokens=100,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_user_message(context=AGENT_CONTEXT, text="Current task " * 10)
     current_payload = AgentAssistantMessagePayload(
@@ -1051,7 +1291,7 @@ def test_agent_context_store_estimates_delta_tokens_from_payload_chars(
     assert (
         store.estimate_delta_tokens(
             context_id=CONTEXT_ID,
-            window_start_sequence=1,
+            start_sequence=1,
             last_marker_sequence=marker.sequence,
             payload=current_payload,
         )
@@ -1073,8 +1313,7 @@ def test_sqlite_agent_context_datasource_sums_payload_chars_from_sequence(
         text="Final",
         usage=None,
         delta_tokens=0,
-        window_start_sequence=0,
-        window_base=False,
+        compaction_id=0,
     )
 
     assert store.datasource.payload_chars_from_sequence(
@@ -1099,7 +1338,7 @@ def test_agent_context_store_estimates_delta_tokens_from_current_payload(
     assert (
         store.estimate_delta_tokens(
             context_id=CONTEXT_ID,
-            window_start_sequence=999,
+            start_sequence=999,
             last_marker_sequence=999,
             payload=current_payload,
         )
@@ -1107,308 +1346,6 @@ def test_agent_context_store_estimates_delta_tokens_from_current_payload(
     )
 
 
-def test_agent_context_store_returns_stats_from_latest_usage_marker(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-final-start.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Initial task",
-    )
-    base = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Base final",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=35,
-            output_tokens=5,
-            total_tokens=40,
-        ),
-        delta_tokens=35,
-        window_start_sequence=1,
-        window_base=True,
-    )
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Current window task",
-    )
-    previous = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="Previous current final",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=25,
-            output_tokens=5,
-            total_tokens=30,
-        ),
-        delta_tokens=25,
-        window_start_sequence=3,
-        window_base=True,
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-3",
-        text="Latest current final",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=45,
-            output_tokens=5,
-            total_tokens=50,
-        ),
-        delta_tokens=20,
-        window_start_sequence=3,
-        window_base=False,
-    )
-
-    stats = store.get_stats(context_id=CONTEXT_ID)
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=45,
-    )
-
-    assert base.delta_tokens == 35
-    assert previous.delta_tokens == 25
-    assert latest.delta_tokens == 20
-    assert latest.window_start_sequence == 3
-    assert [entry.sequence for entry in entries] == [3, 4, 5]
-    assert stats.entries == 5
-    assert stats.estimated_tokens == 80
-    assert stats.window.start_sequence == 3
-    assert stats.window.end_sequence == 5
-    assert stats.window.current_tokens == 45
-
-
-def test_sqlite_agent_context_datasource_window_start_sequence_from_token_limit(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-start-query.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    datasource = SqliteAgentContextDatasource(str(db_path))
-    store = AgentContextStore(datasource)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Older task",
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Older base",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=80,
-            output_tokens=5,
-            total_tokens=85,
-        ),
-        delta_tokens=80,
-        window_start_sequence=1,
-        window_base=True,
-    )
-    current_start = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Current start",
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="Old series inside current window",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=120,
-            output_tokens=5,
-            total_tokens=125,
-        ),
-        delta_tokens=40,
-        window_start_sequence=1,
-        window_base=True,
-    )
-    current_tail = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Current tail",
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-3",
-        text="Current base",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=30,
-            output_tokens=5,
-            total_tokens=35,
-        ),
-        delta_tokens=30,
-        window_start_sequence=current_start.sequence,
-        window_base=True,
-    )
-
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        start_sequence = datasource.window_start_sequence(
-            conn,
-            context_id=CONTEXT_ID,
-            window_width_tokens=50,
-        )
-
-    assert start_sequence == current_tail.sequence
-
-
-def test_sqlite_agent_context_datasource_window_start_sequence_keeps_oversized_latest(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-start-oversized.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    datasource = SqliteAgentContextDatasource(str(db_path))
-    store = AgentContextStore(datasource)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Older task",
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Oversized",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=80,
-            output_tokens=5,
-            total_tokens=85,
-        ),
-        delta_tokens=80,
-        window_start_sequence=1,
-        window_base=True,
-    )
-
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        start_sequence = datasource.window_start_sequence(
-            conn,
-            context_id=CONTEXT_ID,
-            window_width_tokens=50,
-        )
-
-    assert start_sequence == latest.sequence
-
-
-def test_agent_context_store_stops_at_active_window_start_without_base_marker(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-start-without-base-marker.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Older task",
-    )
-    old_base = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Older base",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=80,
-            output_tokens=5,
-            total_tokens=85,
-        ),
-        delta_tokens=80,
-        window_start_sequence=1,
-        window_base=True,
-    )
-    current_start = store.append_user_message(
-        context=AGENT_CONTEXT,
-        text="Current start",
-    )
-    latest = store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="Latest current delta",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=35,
-            output_tokens=5,
-            total_tokens=40,
-        ),
-        delta_tokens=10,
-        window_start_sequence=current_start.sequence,
-        window_base=False,
-    )
-
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=50,
-    )
-
-    assert old_base.window_base is True
-    assert latest.window_base is False
-    assert [entry.sequence for entry in entries] == [
-        current_start.sequence,
-        latest.sequence,
-    ]
 
 
 def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
@@ -1435,6 +1372,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         turn_id="turn-1",
         text="Older base",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1444,8 +1382,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
             total_tokens=85,
         ),
         delta_tokens=80,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     current_start = store.append_user_message(
         context=AGENT_CONTEXT,
@@ -1456,6 +1393,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         turn_id="turn-2",
         text="Old series marker inside current window",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1465,8 +1403,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
             total_tokens=125,
         ),
         delta_tokens=40,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_user_message(
         context=AGENT_CONTEXT,
@@ -1477,6 +1414,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
         turn_id="turn-3",
         text="Current base",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1486,93 +1424,26 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
             total_tokens=35,
         ),
         delta_tokens=30,
-        window_start_sequence=current_start.sequence,
-        window_base=True,
+        compaction_id=1,
+    )
+    SqliteAgentContextStateDatasource(str(db_path)).save_state(
+        state=AgentContextState(
+            context_id=CONTEXT_ID,
+            start_sequence=current_start.sequence,
+            compacted_sequence=current_start.sequence - 1,
+            compaction_id=1,
+        )
     )
 
     stats = store.get_stats(context_id=CONTEXT_ID)
 
-    assert latest.window_start_sequence == current_start.sequence
+    assert latest.compaction_id == 1
     assert stats.entries == 6
     assert stats.estimated_tokens == 150
     assert stats.window.start_sequence == current_start.sequence
     assert stats.window.end_sequence == latest.sequence
     assert stats.window.current_tokens == 30
 
-
-def test_agent_context_store_ignores_negative_delta_when_selecting_window(
-    tmp_path,
-) -> None:
-    db_path = tmp_path / "agent-context-window-negative-delta.db"
-    run_store = SqliteRunStorePort(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-    run_store.create_run(
-        "internal",
-        "demo",
-        {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
-        RunContext(inputs={}, step_executions={}),
-        run_id=RUN_ID,
-    )
-    store = _store(db_path)
-
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-1",
-        text="Older final",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=10,
-            output_tokens=1,
-            total_tokens=11,
-        ),
-        delta_tokens=10,
-        window_start_sequence=1,
-        window_base=True,
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-2",
-        text="Corrupt negative delta",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=5,
-            output_tokens=1,
-            total_tokens=6,
-        ),
-        delta_tokens=-5,
-        window_start_sequence=1,
-        window_base=False,
-    )
-    store.append_final_assistant_message(
-        context=AGENT_CONTEXT,
-        turn_id="turn-3",
-        text="Latest final",
-        usage=LLMUsage(
-            cache_read_tokens=None,
-            cache_write_tokens=None,
-            provider=None,
-            model=None,
-            prompt_tokens=15,
-            output_tokens=1,
-            total_tokens=16,
-        ),
-        delta_tokens=10,
-        window_start_sequence=1,
-        window_base=False,
-    )
-
-    entries = store.list_window_entries(
-        context_id=CONTEXT_ID,
-        window_width_tokens=15,
-    )
-
-    assert [entry.sequence for entry in entries] == [2, 3]
 
 
 def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:
@@ -1691,8 +1562,7 @@ def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
         text="I will inspect this.",
         usage=None,
         delta_tokens=0,
-        window_start_sequence=0,
-        window_base=False,
+        compaction_id=0,
     )
     assert store.next_turn_id(context_id=CONTEXT_ID) == "turn-2"
 
@@ -1732,14 +1602,14 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
         text="I will call a tool.",
         usage=None,
         delta_tokens=0,
-        window_start_sequence=0,
-        window_base=False,
+        compaction_id=0,
     )
     store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Done",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1749,8 +1619,7 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
             total_tokens=None,
         ),
         delta_tokens=0,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_tool_call(
         context=AGENT_CONTEXT,
@@ -1805,6 +1674,7 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         turn_id="turn-1",
         text="First final",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1814,8 +1684,7 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
             total_tokens=15,
         ),
         delta_tokens=10,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_tool_calls_assistant_message(
         context=AGENT_CONTEXT,
@@ -1823,14 +1692,14 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
         text="Not final",
         usage=None,
         delta_tokens=0,
-        window_start_sequence=0,
-        window_base=False,
+        compaction_id=0,
     )
     latest = store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-3",
         text="Latest final",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1840,16 +1709,16 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
             total_tokens=39,
         ),
         delta_tokens=20,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=1,
     )
 
     entries = store.list_entries(context_id=CONTEXT_ID)
     stats = store.get_stats(context_id=CONTEXT_ID)
 
     assert isinstance(latest.payload, AgentAssistantMessagePayload)
-    assert latest.window_start_sequence == 1
+    assert latest.compaction_id == 1
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         provider=None,
@@ -1887,6 +1756,7 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
         turn_id="turn-1",
         text="First final",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1896,14 +1766,14 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
             total_tokens=15,
         ),
         delta_tokens=10,
-        window_start_sequence=1,
-        window_base=True,
+        compaction_id=1,
     )
     store.append_final_assistant_message(
         context=AGENT_CONTEXT,
         turn_id="turn-2",
         text="Usage without prompt",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -1913,8 +1783,7 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
             total_tokens=None,
         ),
         delta_tokens=0,
-        window_start_sequence=1,
-        window_base=False,
+        compaction_id=1,
     )
 
     marker = store.get_last_usage_marker(context_id=CONTEXT_ID)

@@ -55,6 +55,7 @@ def test_invalid_final_message_embeds_response_json() -> None:
             content=None,
             finish_reason="end_turn",
             usage=LLMUsage(
+                estimated_system_tokens=None,
                 cache_read_tokens=None,
                 cache_write_tokens=None,
                 provider=None,
@@ -70,7 +71,8 @@ def test_invalid_final_message_embeds_response_json() -> None:
         "Agent step 'support_agent' returned no final answer: "
         '{"ok":true,"model":"model1","content":null,"tool_calls":[],'
         '"finish_reason":"end_turn",'
-        '"usage":{"prompt_tokens":42688,"output_tokens":2155,'
+        '"usage":{"prompt_tokens":42688,"estimated_system_tokens":null,'
+        '"output_tokens":2155,'
         '"total_tokens":44843,"cache_read_tokens":null,'
         '"cache_write_tokens":null,"provider":null,"model":null},'
         '"error":null,"error_code":null}'

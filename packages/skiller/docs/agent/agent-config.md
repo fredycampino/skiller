@@ -63,7 +63,6 @@ The other root fields are optional and use mapper/model defaults.
   "context": {
     "window_width_tokens": 1000000,
     "compaction": {
-      "enabled": false,
       "max_total_tokens_ratio": 0.8,
       "keep_last": 5
     }
@@ -503,7 +502,6 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
   "context": {
     "window_width_tokens": 100000,
     "compaction": {
-      "enabled": false,
       "max_total_tokens_ratio": 0.8,
       "keep_last": 5
     }
@@ -513,7 +511,6 @@ Step YAML `max_turns` and `max_tool_calls` override these values for that step.
 
 Fields:
 
-- `context.compaction.enabled`: enables compact context window selection for agent prompts
 - `context.window_width_tokens`: optional maximum context window configured for the agent;
   defaults to the selected model's native context window
 - `context.compaction.max_total_tokens_ratio`: ratio applied to the effective
@@ -523,7 +520,6 @@ Fields:
 
 Defaults:
 
-- `context.compaction.enabled = false`
 - `context.compaction.max_total_tokens_ratio = 0.8`
 - `context.compaction.keep_last = 5`
 - omitted `context.window_width_tokens`: selected model's native context window

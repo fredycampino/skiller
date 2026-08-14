@@ -65,6 +65,7 @@ def test_build_footer_usage_text_shows_usage_when_available() -> None:
     state = ConsoleScreenState(
         agent_metrics=AgentMetricsState(
             usage=AgentStepUsage(
+                estimated_system_tokens=None,
                 prompt_tokens=3155,
                 output_tokens=None,
                 total_tokens=3155,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
@@ -10,43 +11,59 @@ from skiller.domain.agent.llm.model import (
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolMessage,
-    LLMUsage,
 )
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
-from skiller.domain.agent.llm.provider_registry import AgentLLMModel
 from skiller.domain.tool.tool_contract import ToolDefinition
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
+    LLMProviderUsage,
+    LLMUsageMapper,
+)
 
 
-def to_bedrock_kwargs(
-    request: BedrockLLMRequest,
-    *,
-    max_tokens: int,
-) -> dict[str, object]:
-    system, messages = _messages_to_payload(request.messages)
-    payload: dict[str, object] = {
-        "modelId": request.model.value,
-        "messages": messages,
-        "inferenceConfig": {"maxTokens": max_tokens},
-    }
-    if system:
-        payload["system"] = system
-    if request.tools:
-        payload["toolConfig"] = {
-            "tools": [_tool_definition_to_payload(tool) for tool in request.tools],
-            "toolChoice": {"auto": {}},
+@dataclass(frozen=True)
+class BedrockMapper(LLMProtocolMapper[BedrockLLMRequest, object]):
+    usage_mapper: LLMUsageMapper
+
+    def to_kwargs(self, request: BedrockLLMRequest) -> dict[str, object]:
+        system, messages = _messages_to_payload(request.messages)
+        payload: dict[str, object] = {
+            "modelId": request.model.value,
+            "messages": messages,
+            "inferenceConfig": {"maxTokens": request.max_tokens},
         }
-    return payload
+        if system:
+            payload["system"] = system
+        if request.tools:
+            payload["toolConfig"] = {
+                "tools": [_tool_definition_to_payload(tool) for tool in request.tools],
+                "toolChoice": {"auto": {}},
+            }
+        return payload
+
+    def to_response(
+        self,
+        raw_response: object,
+        *,
+        request: BedrockLLMRequest,
+    ) -> LLMResponse:
+        return _to_port_llm_response(
+            raw_response,
+            request=request,
+            usage_mapper=self.usage_mapper,
+        )
 
 
-def to_port_llm_response(
+def _to_port_llm_response(
     response: object,
     *,
-    fallback_model: AgentLLMModel,
+    request: BedrockLLMRequest,
+    usage_mapper: LLMUsageMapper,
 ) -> LLMResponse:
     if not isinstance(response, Mapping):
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="Bedrock response must be a JSON object",
             error_code="invalid_response",
         )
@@ -55,7 +72,7 @@ def to_port_llm_response(
     if not isinstance(output, Mapping):
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="Bedrock response missing output payload",
             error_code="missing_output",
         )
@@ -63,7 +80,7 @@ def to_port_llm_response(
     if not isinstance(message, Mapping):
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="Bedrock response missing output message",
             error_code="missing_message",
         )
@@ -72,7 +89,7 @@ def to_port_llm_response(
     if not isinstance(content_blocks, list):
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="Bedrock response message content must be a list",
             error_code="invalid_content",
         )
@@ -108,11 +125,12 @@ def to_port_llm_response(
             )
         )
 
-    usage = _to_usage(response.get("usage"))
+    provider_usage = _to_provider_usage(response.get("usage"))
+    usage = usage_mapper.to_usage(provider_usage, request=request)
     finish_reason = response.get("stopReason")
     return LLMResponse(
         ok=True,
-        model=fallback_model,
+        model=request.model,
         content="".join(text_parts) if text_parts else None,
         tool_calls=tuple(tool_calls),
         finish_reason=finish_reason if isinstance(finish_reason, str) else None,
@@ -197,15 +215,13 @@ def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
     }
 
 
-def _to_usage(raw_usage: object) -> LLMUsage | None:
+def _to_provider_usage(raw_usage: object) -> LLMProviderUsage | None:
     if not isinstance(raw_usage, Mapping):
         return None
     prompt_tokens = _optional_int(raw_usage.get("inputTokens"))
     cache_read_tokens = _optional_int(raw_usage.get("cacheReadInputTokens"))
     cache_write_tokens = _optional_int(raw_usage.get("cacheWriteInputTokens"))
-    return LLMUsage(
-        provider=None,
-        model=None,
+    return LLMProviderUsage(
         prompt_tokens=_total_prompt_tokens(
             prompt_tokens=prompt_tokens,
             cache_read_tokens=cache_read_tokens,

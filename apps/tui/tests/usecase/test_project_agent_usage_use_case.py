@@ -24,6 +24,7 @@ def test_project_agent_metrics_from_latest_agent_step_final_output() -> None:
             final="Done",
             format=OutputFormat.MARKDOWN,
             usage=AgentStepUsage(
+                estimated_system_tokens=None,
                 prompt_tokens=3000,
                 output_tokens=155,
                 total_tokens=3155,

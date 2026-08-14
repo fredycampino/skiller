@@ -42,6 +42,7 @@ class AssignOutput(OutputBase):
 @dataclass(frozen=True)
 class AgentUsageOutput:
     prompt_tokens: int | None
+    estimated_system_tokens: int | None
     output_tokens: int | None
     total_tokens: int | None
     cache_read_tokens: int | None
@@ -240,6 +241,7 @@ def _build_agent_usage_output(raw_usage: object) -> AgentUsageOutput:
         raise ValueError("agent usage output must be an object")
     return AgentUsageOutput(
         prompt_tokens=_optional_int(raw_usage.get("prompt_tokens")),
+        estimated_system_tokens=_optional_int(raw_usage.get("estimated_system_tokens")),
         output_tokens=_optional_int(raw_usage.get("output_tokens")),
         total_tokens=_optional_int(raw_usage.get("total_tokens")),
         cache_read_tokens=_optional_int(raw_usage.get("cache_read_tokens")),

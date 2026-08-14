@@ -26,6 +26,7 @@ from skiller.domain.agent.llm.provider_registry import (
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 from skiller.infrastructure.config.agent_config_schema import (
     DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS,
+    CompactionConfigModel,
 )
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 
@@ -43,9 +44,9 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
         context={
             "window_width_tokens": 1_000_000,
             "compaction": {
-                "enabled": True,
-                "max_total_tokens_ratio": 0.9,
-                "keep_last": 5,
+                "compaction_trigger_ratio": 0.9,
+                "compaction_target_ratio": 0.5,
+                "keep_last_blocks": 5,
             }
         },
         event_output={
@@ -69,13 +70,26 @@ def test_json_agent_config_reads_agent_config(tmp_path) -> None:
     assert config.context.window_width_tokens == 1_000_000
     assert config.loop.max_turns == 12
     assert config.loop.max_tool_calls == 7
-    assert config.context.compaction.enabled is True
-    assert config.context.compaction.max_total_tokens_ratio == 0.9
-    assert config.context.compaction.keep_last == 5
+    assert config.context.compaction.compaction_trigger_ratio == 0.9
+    assert config.context.compaction.compaction_target_ratio == 0.5
+    assert config.context.compaction.keep_last_blocks == 5
     assert config.event_output.truncate.enabled is False
     assert config.event_output.truncate.max_text_chars == 300
     assert config.event_output.truncate.max_json_chars == 2000
     assert config.event_output.truncate.max_array_items == 8
+
+
+def test_compaction_config_requires_target_below_trigger() -> None:
+    with pytest.raises(ValueError, match="compaction_target_ratio must be lower"):
+        CompactionConfigModel(
+            compaction_trigger_ratio=0.5,
+            compaction_target_ratio=0.5,
+        )
+
+
+def test_compaction_config_rejects_removed_enabled_field() -> None:
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        CompactionConfigModel.model_validate({"enabled": True})
 
 
 def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> None:

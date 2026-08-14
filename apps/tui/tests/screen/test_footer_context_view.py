@@ -17,6 +17,7 @@ def test_render_footer_context_shows_model_tokens_capacity_and_bar() -> None:
     rendered = _render_footer_context(
         metrics=_metrics(
             current_tokens=59500,
+            estimated_system_tokens=0,
             limit_tokens=80000,
             capacity_tokens=100000,
             cached_tokens=42000,
@@ -31,13 +32,14 @@ def test_render_footer_context_shows_model_tokens_capacity_and_bar() -> None:
     assert "100K" in plain
     assert "┴" not in plain
     assert "▾" in plain
-    assert plain.splitlines()[2] == "╍╍╍╍╍╍╍╍╍╍╍╍╍━━━━━─────▾──────"
+    assert plain.splitlines()[2] == "━━━━━━━━━━━━━━━━━━─────▾──────"
 
 
 def test_render_footer_context_keeps_one_visible_non_cached_token() -> None:
     rendered = _render_footer_context(
         metrics=_metrics(
             current_tokens=100000,
+            estimated_system_tokens=0,
             limit_tokens=80000,
             capacity_tokens=100000,
             cached_tokens=99999,
@@ -49,7 +51,7 @@ def test_render_footer_context_keeps_one_visible_non_cached_token() -> None:
 
     bar = rendered.plain.splitlines()[2]
     assert "━" in bar
-    assert bar.count("╍") == 22
+    assert "╍" not in bar
 
 
 
@@ -57,6 +59,7 @@ def test_render_footer_context_keeps_limit_marker_fixed_when_usage_overflows() -
     rendered = _render_footer_context(
         metrics=_metrics(
             current_tokens=85000,
+            estimated_system_tokens=0,
             limit_tokens=80000,
             capacity_tokens=100000,
             cached_tokens=0,
@@ -71,6 +74,40 @@ def test_render_footer_context_keeps_limit_marker_fixed_when_usage_overflows() -
     assert bar[24:] == "──────"
     assert bar[:23] == "━━━━━━━━━━━━━━━━━━━━━━━"
 
+
+
+def test_render_footer_context_draws_estimated_system_tokens_first_in_primary_color() -> None:
+    rendered = _render_footer_context(
+        metrics=_metrics(
+            current_tokens=59500,
+            estimated_system_tokens=10000,
+            limit_tokens=80000,
+            capacity_tokens=100000,
+            cached_tokens=42000,
+        ),
+        fallback_text="/ for commands",
+        theme=DEFAULT_TUI_THEME,
+        bar_width=30,
+    )
+
+    bar = rendered.plain.splitlines()[2]
+    assert bar == "━━━━━━━━━━━━━━━━━━─────▾──────"
+
+    bar_start = rendered.plain.index(bar)
+    bar_spans = [
+        span
+        for span in rendered.spans
+        if span.start >= bar_start and span.end <= bar_start + len(bar)
+    ]
+    assert [span.style for span in bar_spans[:3]] == [
+        DEFAULT_TUI_THEME.color_text_secondary
+    ] * 3
+    assert [span.style for span in bar_spans[3:13]] == [
+        DEFAULT_TUI_THEME.color_text_muted
+    ] * 10
+    assert [span.style for span in bar_spans[13:18]] == [
+        DEFAULT_TUI_THEME.color_text_primary
+    ] * 5
 
 
 def test_token_style_uses_limit_as_warning_threshold() -> None:
@@ -120,12 +157,14 @@ def test_render_footer_context_uses_fallback_without_context() -> None:
 def _metrics(
     *,
     current_tokens: int,
+    estimated_system_tokens: int,
     limit_tokens: int,
     capacity_tokens: int,
     cached_tokens: int,
 ) -> AgentMetricsState:
     return AgentMetricsState(
         usage=AgentStepUsage(
+            estimated_system_tokens=estimated_system_tokens,
             prompt_tokens=current_tokens,
             output_tokens=None,
             total_tokens=None,

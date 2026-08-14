@@ -10,9 +10,9 @@
   "context": {
     "window_width_tokens": 100000,
     "compaction": {
-      "enabled": false,
-      "max_total_tokens_ratio": 0.8,
-      "keep_last": 10
+      "compaction_trigger_ratio": 0.8,
+      "compaction_target_ratio": 0.5,
+      "keep_last_blocks": 10
     }
   },
   "tools": {

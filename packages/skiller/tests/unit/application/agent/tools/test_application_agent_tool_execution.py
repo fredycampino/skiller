@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from skiller.application.agent.config.output_truncator import OutputTruncator
+from skiller.application.agent.context.agent_context_marker_calculator import (
+    AgentContextMarkerCalculator,
+)
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -36,6 +39,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntryType,
     AgentContextMetrics,
     AgentContextPayload,
+    AgentContextState,
     AgentContextUsageMarker,
 )
 from skiller.domain.agent.context.stats_model import (
@@ -53,7 +57,7 @@ from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
-from skiller.domain.run.run_model import RunAgent, RunAgentWindow
+from skiller.domain.run.run_model import RunAgent
 from skiller.domain.run.steering_model import (
     SteeringAgentInterrupt,
     SteeringItem,
@@ -464,9 +468,16 @@ def _build_executor(
     runtime_event_store: "_FakeRuntimeEventStore" | None = None,
     tool_manager=None,
 ) -> AgentToolExecutor:
+    run_agent_store = _FakeRunAgentStore()
+    agent_context_state = _FakeAgentContextState()
+    marker_calculator = AgentContextMarkerCalculator(
+        agent_context_store=context_store,
+        agent_context_state=agent_context_state,
+    )
     context_publisher = AgentContextPublisher(
         context_store,
-        _FakeRunAgentStore(),
+        run_agent_store,
+        marker_calculator,
         AgentRunnerFeedback(),
     )
     store = runtime_event_store or _FakeRuntimeEventStore()
@@ -637,9 +648,8 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None = None,
-        delta_tokens: int = 0,
-        window_start_sequence: int = 0,
-        window_base: bool = False,
+        delta_tokens: int | None = 0,
+        compaction_id: int | None = 0,
     ) -> AgentContextEntry:
         return self._append(
             run_id=context.run_id,
@@ -654,9 +664,8 @@ class _FakeAgentContextStore:
             },
             usage=usage,
             message_type=AgentAssistantMessageType.TOOL_CALLS,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
         )
 
     def append_final_assistant_message(
@@ -666,9 +675,8 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        delta_tokens: int | None,
+        compaction_id: int | None,
     ) -> AgentContextEntry:
         return self._append(
             run_id=context.run_id,
@@ -683,9 +691,8 @@ class _FakeAgentContextStore:
             },
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
         )
 
     def append_tool_call(
@@ -743,18 +750,16 @@ class _FakeAgentContextStore:
         payload: dict[str, object],
         usage: LLMUsage | None = None,
         message_type: AgentAssistantMessageType | None = None,
-        window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
-        window_base: bool | None = None,
+        compaction_id: int | None = None,
     ) -> AgentContextEntry:
         self.appended.append(
             {
                 "entry_type": entry_type,
                 "payload": payload,
                 "message_type": message_type.value if message_type else None,
-                "window_start_sequence": window_start_sequence,
                 "delta_tokens": delta_tokens,
-                "window_base": window_base,
+                "compaction_id": compaction_id,
             }
         )
         entry = AgentContextEntry(
@@ -766,9 +771,8 @@ class _FakeAgentContextStore:
             payload=payload,
             usage=usage,
             message_type=message_type,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=source_step_id,
             created_at="2026-05-09T00:00:00Z",
         )
@@ -811,11 +815,11 @@ class _FakeAgentContextStore:
         self,
         *,
         context_id: str,
-        window_start_sequence: int,
+        start_sequence: int,
         last_marker_sequence: int,
         payload: AgentContextPayload,
     ) -> int:
-        _ = context_id, window_start_sequence, last_marker_sequence, payload
+        _ = context_id, start_sequence, last_marker_sequence, payload
         large_delta_estimate = 1_000_000_000
         return large_delta_estimate
 
@@ -836,8 +840,14 @@ class _FakeRunAgentStore:
     def attach_agent(self, *, run_id: str, agent_id: str, context_id: str) -> None:
         _ = run_id, agent_id, context_id
 
-    def update_agent_window(self, *, run_id: str, window: RunAgentWindow) -> None:
-        _ = run_id, window
+class _FakeAgentContextState:
+    def get_state(self, *, context_id: str) -> AgentContextState:
+        return AgentContextState(
+            context_id=context_id,
+            start_sequence=1,
+            compacted_sequence=None,
+            compaction_id=0,
+        )
 
 
 class _FakeProcessRunner:

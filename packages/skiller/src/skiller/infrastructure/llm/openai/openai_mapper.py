@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
 
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
-    LLMModelLike,
     LLMResponse,
     LLMResponseFormat,
     LLMResponseFormatType,
@@ -16,73 +14,65 @@ from skiller.domain.agent.llm.model import (
     LLMToolCallFunction,
     LLMToolChoiceMode,
     LLMToolMessage,
-    LLMUsage,
 )
-from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
+from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
-
-RequestT = TypeVar("RequestT", bound=LLMRequest, contravariant=True)
-
-
-class OpenAIMapper(Protocol[RequestT]):
-    def to_kwargs(self, request: RequestT) -> dict[str, object]: ...
-
-    def to_response(
-        self,
-        response: object,
-        *,
-        fallback_model: LLMModelLike,
-    ) -> LLMResponse: ...
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
+    LLMProviderUsage,
+    LLMUsageMapper,
+)
 
 
 @dataclass(frozen=True)
-class DefaultOpenAIMapper(OpenAIMapper[OpenAILLMRequest]):
+class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
+    usage_mapper: LLMUsageMapper
     extra_body: Mapping[str, object] | None = None
 
     def to_kwargs(self, request: OpenAILLMRequest) -> dict[str, object]:
-        payload = to_openai_kwargs(request)
+        payload: dict[str, object] = {
+            "model": request.model.value,
+            "messages": [_message_to_payload(message) for message in request.messages],
+        }
+        if request.tools:
+            payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
+        payload["tool_choice"] = _tool_choice_value(request.tool_choice)
+        if request.response_format is not None:
+            payload["response_format"] = _response_format_value(request.response_format)
+        payload["temperature"] = request.temperature
+        payload["max_tokens"] = request.max_tokens
+        payload["top_p"] = request.top_p
+        payload["parallel_tool_calls"] = request.parallel_tool_calls
         if self.extra_body is not None:
             payload["extra_body"] = dict(self.extra_body)
         return payload
 
     def to_response(
         self,
-        response: object,
+        raw_response: object,
         *,
-        fallback_model: LLMModelLike,
+        request: OpenAILLMRequest,
     ) -> LLMResponse:
-        return to_port_llm_response(response, fallback_model=fallback_model)
+        return _to_port_llm_response(
+            raw_response,
+            request=request,
+            usage_mapper=self.usage_mapper,
+        )
 
 
-def to_openai_kwargs(request: OpenAILLMRequest) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "model": request.model.value,
-        "messages": [_message_to_payload(message) for message in request.messages],
-    }
-    if request.tools:
-        payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
-    payload["tool_choice"] = _tool_choice_value(request.tool_choice)
-    if request.response_format is not None:
-        payload["response_format"] = _response_format_value(request.response_format)
-    payload["temperature"] = request.temperature
-    payload["max_tokens"] = request.max_tokens
-    payload["top_p"] = request.top_p
-    payload["parallel_tool_calls"] = request.parallel_tool_calls
-    return payload
-
-
-def to_port_llm_response(
-    response: object,
+def _to_port_llm_response(
+    raw_response: object,
     *,
-    fallback_model: LLMModelLike,
+    request: OpenAILLMRequest,
+    usage_mapper: LLMUsageMapper,
 ) -> LLMResponse:
-    choices = getattr(response, "choices", None)
-    if choices is None and isinstance(response, Mapping):
-        choices = response.get("choices")
+    choices = getattr(raw_response, "choices", None)
+    if choices is None and isinstance(raw_response, Mapping):
+        choices = raw_response.get("choices")
     if not isinstance(choices, list) or not choices:
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="OpenAI response missing choices",
             error_code="missing_choices",
         )
@@ -94,7 +84,7 @@ def to_port_llm_response(
     if message is None:
         return LLMResponse(
             ok=False,
-            model=fallback_model,
+            model=request.model,
             error="OpenAI response missing message payload",
             error_code="missing_message",
         )
@@ -107,36 +97,23 @@ def to_port_llm_response(
     if content is None and isinstance(message, Mapping):
         content = _to_port_content(message.get("content"))
 
-    response_model = getattr(response, "model", None)
-    if response_model is None and isinstance(response, Mapping):
-        response_model = response.get("model")
-
     finish_reason = getattr(first_choice, "finish_reason", None)
     if finish_reason is None and isinstance(first_choice, Mapping):
         finish_reason = first_choice.get("finish_reason")
 
-    usage = _to_port_usage(getattr(response, "usage", None))
-    if usage is None and isinstance(response, Mapping):
-        usage = _to_port_usage(response.get("usage"))
+    provider_usage = _to_provider_usage(getattr(raw_response, "usage", None))
+    if provider_usage is None and isinstance(raw_response, Mapping):
+        provider_usage = _to_provider_usage(raw_response.get("usage"))
+    usage = usage_mapper.to_usage(provider_usage, request=request)
 
     return LLMResponse(
         ok=True,
         content=content,
-        model=_response_model(response_model, fallback_model=fallback_model),
+        model=request.model,
         tool_calls=tool_calls,
         finish_reason=finish_reason if isinstance(finish_reason, str) else None,
         usage=usage,
     )
-
-
-def _response_model(
-    response_model: object,
-    *,
-    fallback_model: LLMModelLike,
-) -> LLMModelLike:
-    if response_model == fallback_model.value:
-        return fallback_model
-    return fallback_model
 
 
 def _message_to_payload(message: LLMMessage) -> dict[str, object]:
@@ -210,12 +187,10 @@ def _to_port_content(raw_content: object) -> str | None:
     return str(raw_content)
 
 
-def _to_port_usage(raw_usage: object) -> LLMUsage | None:
+def _to_provider_usage(raw_usage: object) -> LLMProviderUsage | None:
     if raw_usage is None:
         return None
-    return LLMUsage(
-        provider=None,
-        model=None,
+    return LLMProviderUsage(
         prompt_tokens=_optional_int(_value(raw_usage, "prompt_tokens")),
         output_tokens=_optional_int(_value(raw_usage, "completion_tokens")),
         total_tokens=_optional_int(_value(raw_usage, "total_tokens")),

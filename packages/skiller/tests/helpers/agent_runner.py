@@ -3,6 +3,9 @@ from __future__ import annotations
 from skiller.application.agent.agent_runner import AgentRunner
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
+from skiller.application.agent.context.agent_context_marker_calculator import (
+    AgentContextMarkerCalculator,
+)
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -18,11 +21,12 @@ from skiller.application.agent.tools.agent_tool_executor import AgentToolExecuto
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.domain.agent.context.context_store_port import AgentContextStorePort
+from skiller.domain.agent.context.model import AgentContextState
 from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
 from skiller.domain.agent.llm.provider_registry import AgentLLMProvider
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
-from skiller.domain.run.run_model import RunAgent, RunAgentWindow
+from skiller.domain.run.run_model import RunAgent
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_process_model import (
@@ -66,14 +70,23 @@ class _FakeRunAgentStore:
             context_id=context_id,
         )
 
-    def update_agent_window(self, *, run_id: str, window: RunAgentWindow) -> None:
-        current_agent = self.agents.get((run_id, window.agent_id))
-        self.agents[(run_id, window.agent_id)] = RunAgent(
-            agent_id=window.agent_id,
-            context_id=current_agent.context_id if current_agent is not None else None,
-            window_start_sequence=window.window_start_sequence,
-            window_base=window.window_base,
+class _FakeAgentContextState:
+    def __init__(self) -> None:
+        self.states: dict[str, AgentContextState] = {}
+
+    def get_state(self, *, context_id: str) -> AgentContextState:
+        state = self.states.get(context_id)
+        if state is not None:
+            return state
+        return AgentContextState(
+            context_id=context_id,
+            start_sequence=1,
+            compacted_sequence=None,
+            compaction_id=0,
         )
+
+    def save_state(self, *, state: AgentContextState) -> None:
+        self.states[state.context_id] = state
 
 
 class _UseCaseRuntimeEventStore(RuntimeEventStorePort):
@@ -110,9 +123,16 @@ def build_tool_execution(
     tool_manager: ToolManager | None = None,
     append_runtime_event_use_case: AppendRuntimeEventUseCase | None = None,
 ) -> AgentToolExecutor:
+    run_agent_store = _FakeRunAgentStore()
+    agent_context_state = _FakeAgentContextState()
+    marker_calculator = AgentContextMarkerCalculator(
+        agent_context_store=agent_context_store,
+        agent_context_state=agent_context_state,
+    )
     context_publisher = AgentContextPublisher(
         agent_context_store,
-        _FakeRunAgentStore(),
+        run_agent_store,
+        marker_calculator,
         AgentRunnerFeedback(),
     )
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
@@ -140,13 +160,18 @@ def build_agent_runner(
 ) -> AgentRunner:
     runtime_event_store = _UseCaseRuntimeEventStore(append_runtime_event_use_case)
     run_agent_store = _FakeRunAgentStore()
+    agent_context_state = _FakeAgentContextState()
     llm_model = LLMModelManager(client_resolver=_FakeLLMClientResolver(llm))
+    marker_calculator = AgentContextMarkerCalculator(
+        agent_context_store=agent_context_store,
+        agent_context_state=agent_context_state,
+    )
     return AgentRunner(
         agent_context_store=agent_context_store,
         llm_model=llm_model,
         context_manager=AgentContextManager(
             agent_context_store=agent_context_store,
-            run_agent_store=run_agent_store,
+            agent_context_state=agent_context_state,
             prompt_builder=AgentPromptBuilder(),
         ),
         error_mapper=AgentErrorMapper(),
@@ -154,6 +179,7 @@ def build_agent_runner(
         context_publisher=AgentContextPublisher(
             agent_context_store,
             run_agent_store,
+            marker_calculator,
             AgentRunnerFeedback(),
         ),
         event_publisher=AgentEventPublisher(

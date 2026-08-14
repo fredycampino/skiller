@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FooterBarStyle:
-    cached_token: str = "╍"
+    cached_token: str = "━"
     filled_token: str = "━"
     empty_token: str = "─"
     limit_marker: str = "▾"

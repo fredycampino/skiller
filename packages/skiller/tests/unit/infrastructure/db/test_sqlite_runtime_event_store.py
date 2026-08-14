@@ -388,6 +388,7 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                         max_total_tokens_ratio=0.8,
                     ),
                     usage=LLMUsage(
+                        estimated_system_tokens=None,
                         prompt_tokens=1200,
                         output_tokens=300,
                         total_tokens=1000,
@@ -419,6 +420,7 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                 max_total_tokens_ratio=0.8,
             ),
             usage=LLMUsage(
+                estimated_system_tokens=None,
                 prompt_tokens=1200,
                 output_tokens=300,
                 total_tokens=1000,
@@ -432,9 +434,10 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
     assert event.model_dump(mode="json")["payload"] == {
         "total_tokens": 1000,
         "text": "I will inspect.",
-        "usage": {
-            "prompt_tokens": 1200,
-            "output_tokens": 300,
+            "usage": {
+                "prompt_tokens": 1200,
+                "estimated_system_tokens": None,
+                "output_tokens": 300,
             "total_tokens": 1000,
             "cache_read_tokens": 700,
             "cache_write_tokens": 20,
@@ -547,6 +550,7 @@ def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
                     total_tokens=125,
                     text="Done.",
                     usage=LLMUsage(
+                        estimated_system_tokens=None,
                         prompt_tokens=100,
                         output_tokens=25,
                         total_tokens=125,
@@ -568,6 +572,7 @@ def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
 
     assert event is not None
     assert event.payload.body.usage == LLMUsage(
+        estimated_system_tokens=None,
         prompt_tokens=100,
         output_tokens=25,
         total_tokens=125,

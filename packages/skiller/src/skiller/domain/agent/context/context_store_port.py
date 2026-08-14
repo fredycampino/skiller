@@ -1,10 +1,13 @@
 from typing import Protocol
 
 from skiller.domain.agent.context.model import (
+    AgentContextCompactionQuery,
     AgentContextEntry,
     AgentContextPayload,
+    AgentContextState,
     AgentContextUsageMarker,
     AgentContextWindowEntries,
+    AgentContextWindowQuery,
 )
 from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.agent.run.identity import AgentContext
@@ -27,8 +30,7 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        compaction_id: int | None,
     ) -> AgentContextEntry: ...
 
     def append_final_assistant_message(
@@ -39,8 +41,7 @@ class AgentContextStorePort(Protocol):
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        compaction_id: int | None,
     ) -> AgentContextEntry: ...
 
     def append_tool_call(
@@ -66,20 +67,23 @@ class AgentContextStorePort(Protocol):
         start_sequence: int,
     ) -> list[AgentContextEntry]: ...
 
-    def list_window_entries(
+    def list_raw_entries(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
+        query: AgentContextWindowQuery,
     ) -> AgentContextWindowEntries: ...
 
     def list_compact_entries(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
-        keep_last_blocks: int,
+        query: AgentContextWindowQuery,
     ) -> AgentContextWindowEntries: ...
+
+    def select_compaction_state(
+        self,
+        *,
+        query: AgentContextCompactionQuery,
+    ) -> AgentContextState: ...
 
     def get_last_usage_marker(
         self,
@@ -98,7 +102,7 @@ class AgentContextStorePort(Protocol):
         self,
         *,
         context_id: str,
-        window_start_sequence: int,
+        start_sequence: int,
         last_marker_sequence: int,
         payload: AgentContextPayload,
     ) -> int: ...

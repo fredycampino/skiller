@@ -32,6 +32,7 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
             total_tokens=125,
             text="abcdefghijklmnopqrstuvwxyz",
             usage=LLMUsage(
+                estimated_system_tokens=None,
                 prompt_tokens=100,
                 output_tokens=25,
                 total_tokens=125,
@@ -49,6 +50,7 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
 
     assert payload.text == "abcdefghij..."
     assert payload.usage == LLMUsage(
+        estimated_system_tokens=None,
         prompt_tokens=100,
         output_tokens=25,
         total_tokens=125,

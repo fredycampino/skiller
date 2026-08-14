@@ -84,6 +84,7 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
                     text="I will inspect the repository state.",
                     total_tokens=1000,
                     usage=AgentUsagePayload(
+                        estimated_system_tokens=None,
                         prompt_tokens=3000,
                         output_tokens=500,
                         total_tokens=3500,
@@ -264,6 +265,7 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
                     text="Hecho completo.",
                     total_tokens=2144,
                     usage=AgentUsagePayload(
+                        estimated_system_tokens=750,
                         prompt_tokens=3000,
                         output_tokens=500,
                         total_tokens=3500,
@@ -287,6 +289,7 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
     assert items[0].total_tokens == 2144
     assert items[0].usage is not None
     assert items[0].usage.prompt_tokens == 3000
+    assert items[0].usage.estimated_system_tokens == 750
     assert items[0].usage.cache_read_tokens == 1800
     assert items[0].usage.cache_write_tokens == 120
     assert items[0].usage.provider == "codex"

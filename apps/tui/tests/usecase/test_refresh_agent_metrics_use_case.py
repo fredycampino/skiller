@@ -17,6 +17,7 @@ def test_refresh_agent_metrics_updates_state() -> None:
     state = ConsoleScreenState()
     metrics = AgentMetricsState(
         usage=AgentStepUsage(
+            estimated_system_tokens=None,
             prompt_tokens=3000,
             output_tokens=500,
             total_tokens=3500,

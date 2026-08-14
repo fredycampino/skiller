@@ -85,6 +85,7 @@ def _render_footer_context(
     ):
         return Text(fallback_text, style=theme.color_text_secondary)
     current_tokens = usage.prompt_tokens
+    estimated_system_tokens = usage.estimated_system_tokens or 0
     capacity_tokens = context.effective_window_tokens
     limit_tokens = int(capacity_tokens * context.max_total_tokens_ratio)
     cached_tokens = usage.cache_read_tokens or 0
@@ -102,6 +103,7 @@ def _render_footer_context(
     _append_token_bar(
         text,
         current_tokens=current_tokens,
+        estimated_system_tokens=estimated_system_tokens,
         limit_tokens=limit_tokens,
         capacity_tokens=capacity_tokens,
         cached_tokens=cached_tokens,
@@ -134,6 +136,7 @@ def _append_token_bar(
     text: Text,
     *,
     current_tokens: int,
+    estimated_system_tokens: int,
     limit_tokens: int,
     capacity_tokens: int,
     cached_tokens: int,
@@ -152,6 +155,16 @@ def _append_token_bar(
         bar_width=bar_width,
     )
     occupied_marker_index = min(current_marker_index, limit_marker_index - 1)
+    system_marker_index = -1
+    if estimated_system_tokens > 0:
+        system_marker_index = min(
+            _token_current_marker_index(
+                current_tokens=estimated_system_tokens,
+                capacity_tokens=capacity_tokens,
+                bar_width=bar_width,
+            ),
+            occupied_marker_index,
+        )
     cached_marker_index = min(
         _token_cached_marker_index(
             current_tokens=current_tokens,
@@ -167,7 +180,7 @@ def _append_token_bar(
         current_marker_index=occupied_marker_index,
         cached_marker_index=cached_marker_index,
     )
-    token_style = _token_style(
+    system_style = _token_style(
         current_tokens=current_tokens,
         limit_tokens=limit_tokens,
         capacity_tokens=capacity_tokens,
@@ -178,12 +191,13 @@ def _append_token_bar(
             text.append(theme.footer_bar.limit_marker, style=theme.color_text_secondary)
             continue
         if index <= occupied_marker_index:
-            token = (
-                theme.footer_bar.cached_token
-                if index <= cached_marker_index and index != non_cached_marker_index
-                else theme.footer_bar.filled_token
-            )
-            text.append(token, style=token_style)
+            if index <= system_marker_index:
+                text.append(theme.footer_bar.filled_token, style=system_style)
+                continue
+            if index <= cached_marker_index and index != non_cached_marker_index:
+                text.append(theme.footer_bar.cached_token, style=theme.color_text_muted)
+                continue
+            text.append(theme.footer_bar.filled_token, style=theme.color_text_primary)
             continue
         text.append(theme.footer_bar.empty_token, style=theme.color_text_muted)
 

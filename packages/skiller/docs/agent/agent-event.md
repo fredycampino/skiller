@@ -70,6 +70,7 @@ tool calls.
     "text": "I will inspect the branch state before continuing.",
     "usage": {
       "prompt_tokens": 3000,
+      "estimated_system_tokens": 600,
       "output_tokens": 500,
       "total_tokens": 1000,
       "cache_read_tokens": 1800,
@@ -117,6 +118,7 @@ Emitted when the agent finishes with a final assistant message.
     "text": "Done",
     "usage": {
       "prompt_tokens": 5000,
+      "estimated_system_tokens": 1000,
       "output_tokens": 1200,
       "total_tokens": 6200,
       "cache_read_tokens": 3500,

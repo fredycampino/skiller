@@ -2,6 +2,9 @@ from uuid import UUID
 
 import pytest
 
+from skiller.application.agent.context.agent_context_marker_calculator import (
+    AgentContextMarkerCalculator,
+)
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -18,6 +21,7 @@ from skiller.domain.agent.context.model import (
     AgentContextEntryType,
     AgentContextMetrics,
     AgentContextPayload,
+    AgentContextState,
     AgentContextUsageMarker,
     AgentToolCallPayload,
     AgentToolResultPayload,
@@ -45,7 +49,7 @@ pytestmark = pytest.mark.unit
 
 def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -> None:
     store = _FakeAgentContextStore()
-    publisher = AgentContextPublisher(store, _FakeRunAgentStore(), AgentRunnerFeedback())
+    publisher = _publisher(store, _FakeRunAgentStore())
     request = _tool_request()
     tool_call_entry = publisher.publish_tool_call(
         request=request,
@@ -89,7 +93,7 @@ def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -
 
 def test_agent_context_publisher_publishes_tool_feedback_messages() -> None:
     store = _FakeAgentContextStore()
-    publisher = AgentContextPublisher(store, _FakeRunAgentStore(), AgentRunnerFeedback())
+    publisher = _publisher(store, _FakeRunAgentStore())
     request = _tool_request()
 
     limit_entry = publisher.publish_tool_limit_feedback(
@@ -118,15 +122,10 @@ def test_agent_context_publisher_publishes_tool_feedback_messages() -> None:
 def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
     store = _FakeAgentContextStore(estimated_delta_tokens=4)
     run_agent_store = _FakeRunAgentStore()
-    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
-        agent_id="agent-1",
-        context_id="ctx-1",
-        window_start_sequence=1,
-        window_base=True,
-    )
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store, compaction_id=1)
     request = _tool_request()
     usage = LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         provider=None,
@@ -151,13 +150,12 @@ def test_agent_context_publisher_passes_assistant_usage_to_store() -> None:
         "text": "Done.",
         "usage": usage,
         "delta_tokens": 4,
-        "window_start_sequence": 1,
-        "window_base": True,
+        "compaction_id": 1,
     }
     assert store.estimate_delta_calls == [
         {
             "context_id": "ctx-1",
-            "window_start_sequence": 1,
+            "start_sequence": 1,
             "last_marker_sequence": 0,
             "payload": AgentAssistantMessagePayload(
                 turn_id="turn-1",
@@ -180,19 +178,12 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
             sequence=249,
             prompt_tokens=80_048,
             delta_tokens=317,
-            window_start_sequence=1,
-            window_base=False,
+            compaction_id=1,
         ),
         estimated_delta_tokens=90_000,
     )
     run_agent_store = _FakeRunAgentStore()
-    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
-        agent_id="agent-1",
-        context_id="ctx-1",
-        window_start_sequence=3,
-        window_base=True,
-    )
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store, compaction_id=3)
     request = _tool_request()
 
     publisher.publish_tool_calls_assistant_message(
@@ -200,6 +191,7 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
         turn_id="turn-153",
         text="Create branch",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -214,7 +206,7 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
     assert store.estimate_delta_calls == [
         {
             "context_id": "ctx-1",
-            "window_start_sequence": 3,
+            "start_sequence": 1,
             "last_marker_sequence": 249,
             "payload": AgentAssistantMessagePayload(
                 turn_id="turn-153",
@@ -224,8 +216,7 @@ def test_agent_context_publisher_uses_delta_estimate_for_base_delta() -> None:
         }
     ]
     assert store.calls[-1]["delta_tokens"] == 90_000
-    assert store.calls[-1]["window_start_sequence"] == 3
-    assert store.calls[-1]["window_base"] is True
+    assert store.calls[-1]["compaction_id"] == 3
 
 
 def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
@@ -234,19 +225,12 @@ def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
             sequence=10,
             prompt_tokens=500,
             delta_tokens=200,
-            window_start_sequence=1,
-            window_base=False,
+            compaction_id=1,
         ),
         estimated_delta_tokens=99,
     )
     run_agent_store = _FakeRunAgentStore()
-    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
-        agent_id="agent-1",
-        context_id="ctx-1",
-        window_start_sequence=1,
-        window_base=False,
-    )
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store, compaction_id=1)
     request = _tool_request()
 
     publisher.publish_final_assistant_message(
@@ -254,6 +238,7 @@ def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
         turn_id="turn-2",
         text="More.",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -266,7 +251,6 @@ def test_agent_context_publisher_uses_prompt_delta_for_stable_window() -> None:
 
     assert store.estimate_delta_calls == []
     assert store.calls[-1]["delta_tokens"] == 120
-    assert store.calls[-1]["window_base"] is False
 
 
 def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease() -> None:
@@ -275,19 +259,12 @@ def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease
             sequence=10,
             prompt_tokens=500,
             delta_tokens=200,
-            window_start_sequence=1,
-            window_base=False,
+            compaction_id=1,
         ),
         estimated_delta_tokens=33,
     )
     run_agent_store = _FakeRunAgentStore()
-    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
-        agent_id="agent-1",
-        context_id="ctx-1",
-        window_start_sequence=1,
-        window_base=False,
-    )
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store, compaction_id=1)
     request = _tool_request()
 
     publisher.publish_final_assistant_message(
@@ -295,6 +272,7 @@ def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease
         turn_id="turn-2",
         text="Short.",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -308,7 +286,7 @@ def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease
     assert store.estimate_delta_calls == [
         {
             "context_id": "ctx-1",
-            "window_start_sequence": 1,
+            "start_sequence": 1,
             "last_marker_sequence": 10,
             "payload": AgentAssistantMessagePayload(
                 turn_id="turn-2",
@@ -318,19 +296,12 @@ def test_agent_context_publisher_uses_delta_estimate_when_prompt_tokens_decrease
         }
     ]
     assert store.calls[-1]["delta_tokens"] == 33
-    assert store.calls[-1]["window_base"] is True
 
 
-def test_agent_context_publisher_estimates_delta_without_prompt_tokens() -> None:
+def test_agent_context_publisher_estimates_delta_without_usage() -> None:
     store = _FakeAgentContextStore(estimated_delta_tokens=37)
     run_agent_store = _FakeRunAgentStore()
-    run_agent_store.agents[("run-1", "agent-1")] = RunAgent(
-        agent_id="agent-1",
-        context_id="ctx-1",
-        window_start_sequence=1,
-        window_base=True,
-    )
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store, compaction_id=1)
     request = _tool_request()
 
     publisher.publish_final_assistant_message(
@@ -340,25 +311,43 @@ def test_agent_context_publisher_estimates_delta_without_prompt_tokens() -> None
         usage=None,
     )
 
-    assert store.estimate_delta_calls == [
-        {
-            "context_id": "ctx-1",
-            "window_start_sequence": 1,
-            "last_marker_sequence": 0,
-            "payload": AgentAssistantMessagePayload(
-                turn_id="turn-1",
-                message_type=AgentAssistantMessageType.FINAL,
-                text="Done.",
-            ),
-        }
-    ]
+    assert store.estimate_delta_calls != []
     assert store.calls[-1]["delta_tokens"] == 37
+    assert store.calls[-1]["compaction_id"] is None
+    assert store.compact_delta_calls == []
+
+
+def test_agent_context_publisher_estimates_delta_without_prompt_tokens() -> None:
+    store = _FakeAgentContextStore(estimated_delta_tokens=37)
+    publisher = _publisher(store, _FakeRunAgentStore(), compaction_id=1)
+    request = _tool_request()
+
+    publisher.publish_final_assistant_message(
+        context=request.context,
+        turn_id="turn-1",
+        text="Done.",
+        usage=LLMUsage(
+            estimated_system_tokens=None,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider=None,
+            model=None,
+            prompt_tokens=None,
+            output_tokens=3,
+            total_tokens=None,
+        ),
+    )
+
+    assert store.estimate_delta_calls != []
+    assert store.calls[-1]["delta_tokens"] == 37
+    assert store.calls[-1]["compaction_id"] is None
+    assert store.compact_delta_calls == []
 
 
 def test_agent_context_publisher_attaches_agent_context_once() -> None:
     store = _FakeAgentContextStore()
     run_agent_store = _FakeRunAgentStore()
-    publisher = AgentContextPublisher(store, run_agent_store, AgentRunnerFeedback())
+    publisher = _publisher(store, run_agent_store)
     agent = AgentRun(run_id="run-1", agent_id="agent-1")
 
     context = publisher.attach_context(agent=agent)
@@ -403,6 +392,24 @@ def _tool_request() -> ToolExecutionRequest:
             max_total_tokens_ratio=0.8,
         ),
         turn_loop=AgentLoop(max_turns=10),
+    )
+
+
+def _publisher(
+    store: "_FakeAgentContextStore",
+    run_agent_store: "_FakeRunAgentStore",
+    *,
+    compaction_id: int = 0,
+) -> AgentContextPublisher:
+    marker_calculator = AgentContextMarkerCalculator(
+        agent_context_store=store,
+        agent_context_state=_FakeAgentContextState(compaction_id=compaction_id),
+    )
+    return AgentContextPublisher(
+        store,
+        run_agent_store,
+        marker_calculator,
+        AgentRunnerFeedback(),
     )
 
 
@@ -465,9 +472,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
         turn_id: str,
         text: str,
         usage: LLMUsage | None = None,
-        delta_tokens: int = 0,
-        window_start_sequence: int = 0,
-        window_base: bool = False,
+        delta_tokens: int | None = 0,
+        compaction_id: int | None = 0,
     ) -> AgentContextEntry:
         self.calls.append(
             {
@@ -477,8 +483,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "text": text,
                 "usage": usage,
                 "delta_tokens": delta_tokens,
-                "window_start_sequence": window_start_sequence,
-                "window_base": window_base,
+                "compaction_id": compaction_id,
             }
         )
         return AgentContextEntry(
@@ -489,9 +494,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
             message_type=AgentAssistantMessageType.TOOL_CALLS,
-            window_start_sequence=window_start_sequence,
+            compaction_id=compaction_id,
             delta_tokens=delta_tokens,
-            window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
                 message_type=AgentAssistantMessageType.TOOL_CALLS,
@@ -508,9 +512,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        delta_tokens: int | None,
+        compaction_id: int | None,
     ) -> AgentContextEntry:
         self.calls.append(
             {
@@ -520,8 +523,7 @@ class _FakeAgentContextStore(AgentContextStorePort):
                 "text": text,
                 "usage": usage,
                 "delta_tokens": delta_tokens,
-                "window_start_sequence": window_start_sequence,
-                "window_base": window_base,
+                "compaction_id": compaction_id,
             }
         )
         return AgentContextEntry(
@@ -532,9 +534,8 @@ class _FakeAgentContextStore(AgentContextStorePort):
             entry_type=AgentContextEntryType.ASSISTANT_MESSAGE,
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
-            window_start_sequence=window_start_sequence,
+            compaction_id=compaction_id,
             delta_tokens=delta_tokens,
-            window_base=window_base,
             payload=AgentAssistantMessagePayload(
                 turn_id=turn_id,
                 message_type=AgentAssistantMessageType.FINAL,
@@ -615,14 +616,6 @@ class _FakeAgentContextStore(AgentContextStorePort):
         )
         return [entry for entry in self.entries if entry.sequence >= start_sequence]
 
-    def list_window_entries(
-        self,
-        *,
-        context_id: str,
-        window_width_tokens: int,
-    ) -> list[AgentContextEntry]:
-        _ = context_id, window_width_tokens
-        raise NotImplementedError
 
     def get_last_usage_marker(
         self,
@@ -650,14 +643,14 @@ class _FakeAgentContextStore(AgentContextStorePort):
         self,
         *,
         context_id: str,
-        window_start_sequence: int,
+        start_sequence: int,
         last_marker_sequence: int,
         payload: AgentContextPayload,
     ) -> int:
         self.estimate_delta_calls.append(
             {
                 "context_id": context_id,
-                "window_start_sequence": window_start_sequence,
+                "start_sequence": start_sequence,
                 "last_marker_sequence": last_marker_sequence,
                 "payload": payload,
             }
@@ -703,4 +696,17 @@ class _FakeRunAgentStore:
         self.agents[(run_id, agent_id)] = RunAgent(
             agent_id=agent_id,
             context_id=context_id,
+        )
+
+
+class _FakeAgentContextState:
+    def __init__(self, *, compaction_id: int) -> None:
+        self.compaction_id = compaction_id
+
+    def get_state(self, *, context_id: str) -> AgentContextState:
+        return AgentContextState(
+            context_id=context_id,
+            start_sequence=1,
+            compacted_sequence=None,
+            compaction_id=self.compaction_id,
         )

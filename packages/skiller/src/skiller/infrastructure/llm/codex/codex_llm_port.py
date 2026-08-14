@@ -18,12 +18,9 @@ from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
 )
 from skiller.infrastructure.llm.codex.codex_mapper import (
     CodexStreamResult,
-    to_codex_prompt_payload,
-    to_codex_response_format_payload,
-    to_codex_tool_payload,
-    to_port_llm_response,
 )
 from skiller.infrastructure.llm.logger.request_logger import LLMRequestLogger
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
 
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token"
@@ -59,14 +56,16 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
         timeout_seconds: float,
         credentials_datasource: CodexCredentialsDatasource,
         request_logger: LLMRequestLogger,
+        mapper: LLMProtocolMapper[CodexLLMRequest, CodexStreamResult],
     ) -> None:
         self.credentials_file = credentials_file
         self.timeout_seconds = timeout_seconds
         self.credentials_datasource = credentials_datasource
         self.request_logger = request_logger
+        self.mapper = mapper
 
     def generate(self, request: CodexLLMRequest) -> LLMResponse:
-        kwargs = _to_codex_kwargs(request)
+        kwargs = self.mapper.to_kwargs(request)
         kwargs["stream"] = True
         log_file = request.log_request_file
         if log_file is not None:
@@ -125,9 +124,9 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
                     text_deltas=tuple(text_deltas),
                     output_items=tuple(output_items),
                 )
-                return to_port_llm_response(
+                return self.mapper.to_response(
                     stream_result,
-                    fallback_model=request.model,
+                    request=request,
                 )
             return LLMResponse(
                 ok=False,
@@ -149,7 +148,7 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
             text_deltas=tuple(text_deltas),
             output_items=tuple(output_items),
         )
-        return to_port_llm_response(stream_result, fallback_model=request.model)
+        return self.mapper.to_response(stream_result, request=request)
 
     def _get_token(self) -> CodexToken | CodexError:
         try:
@@ -235,32 +234,6 @@ class CodexLLMPort(LLMPort[CodexLLMRequest]):
             access_token=refreshed.access_token,
             account_id=refreshed.account_id,
         )
-
-
-def _to_codex_kwargs(request: CodexLLMRequest) -> dict[str, object]:
-    instructions, input_items = to_codex_prompt_payload(request.messages)
-    payload: dict[str, object] = {
-        "model": request.model.value,
-        "instructions": instructions,
-        "input": input_items,
-        "prompt_cache_key": request.session_id,
-        "extra_headers": {
-            "session_id": request.session_id,
-            "x-client-request-id": request.session_id,
-        },
-        "store": False,
-        "tool_choice": "auto",
-        "parallel_tool_calls": request.parallel_tool_calls,
-    }
-    if request.tools:
-        payload["tools"] = [to_codex_tool_payload(tool) for tool in request.tools]
-    if request.response_format is not None:
-        payload["text"] = {
-            "format": to_codex_response_format_payload(
-                request.response_format,
-            )
-        }
-    return payload
 
 
 def _codex_headers(account_id: str | None) -> dict[str, str]:

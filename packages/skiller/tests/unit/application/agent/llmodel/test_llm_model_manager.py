@@ -96,6 +96,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
         model=AgentFakeLLMModel.MODEL1,
         content="fake",
         usage=LLMUsage(
+            estimated_system_tokens=None,
             cache_read_tokens=None,
             cache_write_tokens=None,
             provider=None,
@@ -113,6 +114,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
     )
 
     assert result.usage == LLMUsage(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=10,

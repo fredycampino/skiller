@@ -139,6 +139,7 @@ The output follows the standard output envelope:
         "stop_reason": "final",
         "usage": {
           "prompt_tokens": 123,
+          "estimated_system_tokens": 25,
           "output_tokens": 45,
           "total_tokens": 168,
           "cache_read_tokens": null,
@@ -172,6 +173,7 @@ Final output:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 123,
+      "estimated_system_tokens": 25,
       "output_tokens": 45,
       "total_tokens": 168,
       "cache_read_tokens": null,
@@ -218,7 +220,7 @@ Stop output:
 - `data.usage`
   - optional latest LLM usage for the agent step
   - present when the LLM provider returned usage for the last response
-  - includes `prompt_tokens`, `output_tokens`, `total_tokens`, `provider`, and `model`
+  - includes `prompt_tokens`, `estimated_system_tokens`, `output_tokens`, `total_tokens`, `provider`, and `model`
   - this is copied into the `STEP_SUCCESS` output; detailed per-entry usage still lives in agent context
 - `data.context`
   - effective context window and compaction ratio used for this agent execution
@@ -259,6 +261,7 @@ Successful final response:
         "stop_reason": "final",
         "usage": {
           "prompt_tokens": 123,
+          "estimated_system_tokens": 25,
           "output_tokens": 45,
           "total_tokens": 168,
           "cache_read_tokens": null,
@@ -289,6 +292,7 @@ Successful final response:
     "stop_reason": "final",
     "usage": {
       "prompt_tokens": 123,
+      "estimated_system_tokens": 25,
       "output_tokens": 45,
       "total_tokens": 168,
       "cache_read_tokens": null,

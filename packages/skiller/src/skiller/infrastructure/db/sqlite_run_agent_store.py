@@ -1,5 +1,5 @@
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
-from skiller.domain.run.run_model import RunAgent, RunAgentWindow
+from skiller.domain.run.run_model import RunAgent
 from skiller.infrastructure.db.datasource.sqlite_run_agent_datasource import (
     SqliteRunAgentDatasource,
 )
@@ -32,11 +32,3 @@ class SqliteRunAgentStore(RunAgentStorePort):
             agent_id=agent_id,
             context_id=context_id,
         )
-
-    def update_agent_window(
-        self,
-        *,
-        run_id: str,
-        window: RunAgentWindow,
-    ) -> None:
-        self.datasource.update_agent_window(run_id=run_id, window=window)

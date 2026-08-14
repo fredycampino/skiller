@@ -3,10 +3,7 @@ from __future__ import annotations
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
-from skiller.infrastructure.llm.bedrock.bedrock_mapper import (
-    to_bedrock_kwargs,
-    to_port_llm_response,
-)
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
 
 
 def _load_boto3_session_class() -> type[object]:
@@ -27,17 +24,16 @@ class BedrockLLMPort(LLMPort[BedrockLLMRequest]):
         *,
         profile: str,
         timeout_seconds: float,
+        mapper: LLMProtocolMapper[BedrockLLMRequest, object],
     ) -> None:
         self.profile = profile
         self.timeout_seconds = timeout_seconds
+        self.mapper = mapper
         self.client = self._build_client()
 
     def generate(self, request: BedrockLLMRequest) -> LLMResponse:
         try:
-            kwargs = to_bedrock_kwargs(
-                request,
-                max_tokens=request.max_tokens,
-            )
+            kwargs = self.mapper.to_kwargs(request)
             response = self.client.converse(**kwargs)
         except Exception as exc:  # noqa: BLE001
             return LLMResponse(
@@ -46,7 +42,7 @@ class BedrockLLMPort(LLMPort[BedrockLLMRequest]):
                 error=f"Bedrock request failed: {exc}",
                 error_code="request_failed",
             )
-        return to_port_llm_response(response, fallback_model=request.model)
+        return self.mapper.to_response(response, request=request)
 
     def _build_client(self) -> object:
         session_class = _load_boto3_session_class()

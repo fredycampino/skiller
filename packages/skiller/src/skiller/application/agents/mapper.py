@@ -91,11 +91,10 @@ class AgentServiceMapper:
                     "type": entry.type,
                     "delta_tokens": entry.delta_tokens,
                     "delta_compact_tokens": entry.delta_compact_tokens,
+                    "compaction_id": entry.compaction_id,
                     "payload_bytes": entry.payload_bytes,
                     "usage": entry.usage,
                     "prunable": entry.prunable,
-                    "window_start_sequence": entry.window_start_sequence,
-                    "window_base": entry.window_base,
                 }
                 for entry in result.entries
             ]

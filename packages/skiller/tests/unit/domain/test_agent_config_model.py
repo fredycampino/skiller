@@ -104,17 +104,17 @@ def test_agent_context_window_uses_smaller_model_limit() -> None:
     context_larger_than_model = AgentContextConfig(
         window_width_tokens=200_000,
         compaction=AgentContextCompactionConfig(
-            enabled=False,
-            max_total_tokens_ratio=0.8,
-            keep_last=5,
+            compaction_trigger_ratio=0.8,
+            compaction_target_ratio=0.5,
+            keep_last_blocks=5,
         ),
     )
     context_smaller_than_model = AgentContextConfig(
         window_width_tokens=100_000,
         compaction=AgentContextCompactionConfig(
-            enabled=False,
-            max_total_tokens_ratio=0.8,
-            keep_last=5,
+            compaction_trigger_ratio=0.8,
+            compaction_target_ratio=0.5,
+            keep_last_blocks=5,
         ),
     )
 
@@ -125,10 +125,16 @@ def test_agent_context_window_uses_smaller_model_limit() -> None:
         == 131_072
     )
     assert (
-        context_larger_than_model.compaction_window_tokens(
+        context_larger_than_model.compaction_trigger_tokens(
             model_context_window_tokens=model.model_context_window_tokens,
         )
         == 104_857
+    )
+    assert (
+        context_larger_than_model.compaction_target_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 65_536
     )
     assert (
         context_larger_than_model.tool_result_max_bytes(
@@ -149,10 +155,16 @@ def test_agent_context_window_uses_smaller_model_limit() -> None:
         == 100_000
     )
     assert (
-        context_smaller_than_model.compaction_window_tokens(
+        context_smaller_than_model.compaction_trigger_tokens(
             model_context_window_tokens=model.model_context_window_tokens,
         )
         == 80_000
+    )
+    assert (
+        context_smaller_than_model.compaction_target_tokens(
+            model_context_window_tokens=model.model_context_window_tokens,
+        )
+        == 50_000
     )
     assert (
         context_smaller_than_model.tool_result_max_bytes(

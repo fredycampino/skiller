@@ -11,11 +11,8 @@ from skiller.infrastructure.llm.bedrock.bedrock_llm_port import (
     _load_boto3_session_class,
     _load_botocore_config_class,
 )
-from skiller.infrastructure.llm.bedrock.bedrock_mapper import (
-    to_bedrock_kwargs,
-    to_port_llm_response,
-)
 from skiller.infrastructure.llm.logger.request_logger import LLMRequestLogger
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
 
 
 class BedrockStreamingLLMPort(LLMPort[BedrockLLMRequest]):
@@ -28,7 +25,7 @@ class BedrockStreamingLLMPort(LLMPort[BedrockLLMRequest]):
     Streaming and mapping are kept as separate concerns: this port drains the
     event stream and reassembles the *complete* response using the same shape the
     non-streaming ``converse`` API returns, then delegates to the shared
-    :func:`to_port_llm_response` mapper.
+    :class:`BedrockMapper`.
     """
 
     def __init__(
@@ -37,17 +34,16 @@ class BedrockStreamingLLMPort(LLMPort[BedrockLLMRequest]):
         profile: str,
         timeout_seconds: float,
         request_logger: LLMRequestLogger,
+        mapper: LLMProtocolMapper[BedrockLLMRequest, object],
     ) -> None:
         self.profile = profile
         self.timeout_seconds = timeout_seconds
         self.request_logger = request_logger
+        self.mapper = mapper
         self.client = self._build_client()
 
     def generate(self, request: BedrockLLMRequest) -> LLMResponse:
-        kwargs = to_bedrock_kwargs(
-            request,
-            max_tokens=request.max_tokens,
-        )
+        kwargs = self.mapper.to_kwargs(request)
         log_file = request.log_request_file
         if log_file is not None:
             self.request_logger.log_request(
@@ -73,7 +69,7 @@ class BedrockStreamingLLMPort(LLMPort[BedrockLLMRequest]):
         if log_file is not None:
             self.request_logger.log_response(response=response)
 
-        return to_port_llm_response(response, fallback_model=request.model)
+        return self.mapper.to_response(response, request=request)
 
     def _build_client(self) -> object:
         session_class = _load_boto3_session_class()

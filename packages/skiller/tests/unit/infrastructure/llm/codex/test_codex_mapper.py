@@ -7,14 +7,17 @@ import pytest
 from skiller.domain.agent.llm.model import (
     LLMToolCall,
     LLMToolCallFunction,
+    LLMUserMessage,
 )
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.agent.llm.provider_registry import (
     AgentCodexLLMModel,
 )
 from skiller.infrastructure.llm.codex.codex_mapper import (
+    CodexMapper,
     CodexStreamResult,
-    to_port_llm_response,
 )
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
 
@@ -34,7 +37,7 @@ class _ResponseWithBrokenOutputText:
         raise TypeError("'NoneType' object is not iterable")
 
 
-def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
+def test_codex_mapper_maps_final_response_to_port_response() -> None:
     stream_result = CodexStreamResult(
         response=SimpleNamespace(
             model="gpt-5.4",
@@ -60,9 +63,9 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
         )
     )
 
-    result = to_port_llm_response(
+    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         stream_result,
-        fallback_model=AgentCodexLLMModel.GPT_5_4,
+        request=_request(),
     )
 
     assert result.ok is True
@@ -71,6 +74,7 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
     assert result.finish_reason == "completed"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 10
+    assert result.usage.estimated_system_tokens == 0
     assert result.usage.output_tokens == 5
     assert result.usage.total_tokens == 15
     assert result.usage.cache_read_tokens == 8
@@ -86,7 +90,7 @@ def test_to_port_llm_response_maps_final_response_to_port_response() -> None:
     )
 
 
-def test_to_port_llm_response_prefers_streamed_text() -> None:
+def test_codex_mapper_prefers_streamed_text() -> None:
     stream_result = CodexStreamResult(
         response=SimpleNamespace(
             model="gpt-5.4",
@@ -97,15 +101,15 @@ def test_to_port_llm_response_prefers_streamed_text() -> None:
         text_deltas=("streamed", " text"),
     )
 
-    result = to_port_llm_response(
+    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         stream_result,
-        fallback_model=AgentCodexLLMModel.GPT_5_4,
+        request=_request(),
     )
 
     assert result.content == "streamed text"
 
 
-def test_to_port_llm_response_reads_text_from_message_output() -> None:
+def test_codex_mapper_reads_text_from_message_output() -> None:
     stream_result = CodexStreamResult(
         response={
             "model": "gpt-5.4",
@@ -122,15 +126,15 @@ def test_to_port_llm_response_reads_text_from_message_output() -> None:
         }
     )
 
-    result = to_port_llm_response(
+    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         stream_result,
-        fallback_model=AgentCodexLLMModel.GPT_5_4,
+        request=_request(),
     )
 
     assert result.content == "hello world"
 
 
-def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_empty() -> None:
+def test_codex_mapper_uses_streamed_output_items_when_final_output_is_empty() -> None:
     stream_result = CodexStreamResult(
         response=SimpleNamespace(model="gpt-5.4", status="completed", output=[]),
         output_items=(
@@ -143,9 +147,9 @@ def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_em
         ),
     )
 
-    result = to_port_llm_response(
+    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         stream_result,
-        fallback_model=AgentCodexLLMModel.GPT_5_4,
+        request=_request(),
     )
 
     assert result.tool_calls == (
@@ -159,7 +163,7 @@ def test_to_port_llm_response_uses_streamed_output_items_when_final_output_is_em
     )
 
 
-def test_to_port_llm_response_tolerates_codex_output_text_with_null_output() -> None:
+def test_codex_mapper_tolerates_codex_output_text_with_null_output() -> None:
     stream_result = CodexStreamResult(
         response=_ResponseWithBrokenOutputText(),
         output_items=(
@@ -172,9 +176,9 @@ def test_to_port_llm_response_tolerates_codex_output_text_with_null_output() -> 
         ),
     )
 
-    result = to_port_llm_response(
+    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         stream_result,
-        fallback_model=AgentCodexLLMModel.GPT_5_4,
+        request=_request(),
     )
 
     assert result.ok is True
@@ -189,4 +193,13 @@ def test_to_port_llm_response_tolerates_codex_output_text_with_null_output() -> 
                 arguments_json='{"command": "pwd"}',
             ),
         ),
+    )
+
+
+def _request() -> CodexLLMRequest:
+    return CodexLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=AgentCodexLLMModel.GPT_5_4,
+        parallel_tool_calls=True,
+        session_id="context-1",
     )

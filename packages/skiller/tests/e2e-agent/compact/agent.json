@@ -8,9 +8,9 @@
   "context": {
     "window_width_tokens": 8000,
     "compaction": {
-      "enabled": true,
-      "max_total_tokens_ratio": 0.8,
-      "keep_last": 2
+      "compaction_trigger_ratio": 0.8,
+      "compaction_target_ratio": 0.5,
+      "keep_last_blocks": 2
     }
   },
   "tools": {

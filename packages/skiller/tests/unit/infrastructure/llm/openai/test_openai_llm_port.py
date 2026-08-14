@@ -4,17 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from skiller.domain.agent.llm.model import (
-    LLMToolCall,
-    LLMToolCallFunction,
-    LLMToolChoiceMode,
-    LLMUserMessage,
-)
+from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
 from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
 from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 from skiller.infrastructure.llm.openai import openai_llm_port
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
-from skiller.infrastructure.llm.openai.openai_mapper import DefaultOpenAIMapper
+from skiller.infrastructure.llm.openai.openai_mapper import OpenAIMapper
 
 pytestmark = pytest.mark.unit
 
@@ -113,7 +109,10 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
-        mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
+        mapper=OpenAIMapper(
+            usage_mapper=DefaultLLMUsageMapper(),
+            extra_body={"reasoning_split": True},
+        ),
         request_logger=logger,
     )
 
@@ -141,7 +140,7 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
         api_key="",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
-        mapper=DefaultOpenAIMapper(),
+        mapper=OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()),
         request_logger=logger,
     )
 
@@ -165,7 +164,7 @@ def test_openai_llm_logs_request_and_response_when_enabled(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
-        mapper=DefaultOpenAIMapper(),
+        mapper=OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()),
         request_logger=logger,
     )
 
@@ -197,7 +196,7 @@ def test_openai_llm_logs_error_when_request_fails(
         api_key="secret-key",
         base_url="https://api.openai.com/v1",
         timeout_seconds=30.0,
-        mapper=DefaultOpenAIMapper(),
+        mapper=OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()),
         request_logger=logger,
     )
 
@@ -208,61 +207,3 @@ def test_openai_llm_logs_error_when_request_fails(
     assert logger.requests == [_expected_openai_kwargs()]
     assert logger.responses == []
     assert logger.errors == ["OpenAI request failed: network down"]
-
-
-def test_openai_llm_maps_tool_calls_from_openai_response(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class _FakeToolClient:
-        def __init__(self, **kwargs) -> None:  # noqa: ANN003
-            self.kwargs = kwargs
-            self.completions = _FakeCompletions(
-                SimpleNamespace(
-                    model="gpt-5.4",
-                    choices=[
-                        SimpleNamespace(
-                            finish_reason="tool_calls",
-                            message=SimpleNamespace(
-                                role="assistant",
-                                content=None,
-                                tool_calls=[
-                                    SimpleNamespace(
-                                        id="call_1",
-                                        function=SimpleNamespace(
-                                            name="shell",
-                                            arguments='{"command":"git status"}',
-                                        ),
-                                    )
-                                ],
-                            ),
-                        )
-                    ],
-                )
-            )
-            self.chat = SimpleNamespace(completions=self.completions)
-
-    monkeypatch.setattr(openai_llm_port, "_load_openai_client_class", lambda: _FakeToolClient)
-
-    llm = OpenAILLMPort(
-        api_key="secret-key",
-        base_url="https://api.openai.com/v1",
-        timeout_seconds=30.0,
-        mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
-        request_logger=_FakeRequestLogger(),
-    )
-
-    result = llm.generate(_minimax_request())
-
-    assert result.ok is True
-    assert result.content is None
-    assert result.model == AgentMiniMaxLLMModel.M2_7
-    assert result.finish_reason == "tool_calls"
-    assert result.tool_calls == (
-        LLMToolCall(
-            id="call_1",
-            function=LLMToolCallFunction(
-                name="shell",
-                arguments_json='{"command":"git status"}',
-            ),
-        ),
-    )

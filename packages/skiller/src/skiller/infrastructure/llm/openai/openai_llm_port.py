@@ -7,9 +7,7 @@ from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.infrastructure.llm.logger.request_logger import LLMRequestLogger
-from skiller.infrastructure.llm.openai.openai_mapper import (
-    OpenAIMapper,
-)
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
 
 RequestT = TypeVar("RequestT", bound=LLMRequest)
 
@@ -27,7 +25,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
         api_key: str,
         base_url: str,
         timeout_seconds: float,
-        mapper: OpenAIMapper[RequestT],
+        mapper: LLMProtocolMapper[RequestT, object],
         request_logger: LLMRequestLogger,
     ) -> None:
         self.api_key = api_key
@@ -74,7 +72,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
         if log_file is not None:
             self.request_logger.log_response(response=response)
 
-        return self.mapper.to_response(response, fallback_model=request.model)
+        return self.mapper.to_response(response, request=request)
 
     def _build_client(self) -> object:
         if not self.api_key.strip():

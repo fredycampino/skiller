@@ -17,9 +17,9 @@ class AgentLoopConfig:
 
 @dataclass(frozen=True)
 class AgentContextCompactionConfig:
-    enabled: bool
-    max_total_tokens_ratio: float
-    keep_last: int
+    compaction_trigger_ratio: float
+    compaction_target_ratio: float
+    keep_last_blocks: int
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class AgentContextConfig:
             effective_window_tokens=self.effective_context_tokens(
                 model_context_window_tokens=model_context_window_tokens,
             ),
-            max_total_tokens_ratio=self.compaction.max_total_tokens_ratio,
+            max_total_tokens_ratio=self.compaction.compaction_trigger_ratio,
         )
 
     def effective_context_tokens(self, *, model_context_window_tokens: int) -> int:
@@ -41,11 +41,17 @@ class AgentContextConfig:
             model_context_window_tokens,
         )
 
-    def compaction_window_tokens(self, *, model_context_window_tokens: int) -> int:
+    def compaction_trigger_tokens(self, *, model_context_window_tokens: int) -> int:
         effective_context_tokens = self.effective_context_tokens(
             model_context_window_tokens=model_context_window_tokens,
         )
-        return int(effective_context_tokens * self.compaction.max_total_tokens_ratio)
+        return int(effective_context_tokens * self.compaction.compaction_trigger_ratio)
+
+    def compaction_target_tokens(self, *, model_context_window_tokens: int) -> int:
+        effective_context_tokens = self.effective_context_tokens(
+            model_context_window_tokens=model_context_window_tokens,
+        )
+        return int(effective_context_tokens * self.compaction.compaction_target_ratio)
 
     def tool_result_max_bytes(self, *, model_context_window_tokens: int) -> int:
         effective_context_tokens = self.effective_context_tokens(

@@ -14,12 +14,14 @@ from skiller.domain.agent.llm.model import (
     LLMToolCall,
     LLMToolCallFunction,
     LLMToolMessage,
-    LLMUsage,
 )
-from skiller.domain.agent.llm.provider_registry import (
-    AgentLLMModel,
-)
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
+from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
+    LLMProviderUsage,
+    LLMUsageMapper,
+)
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,49 @@ class CodexStreamResult:
     output_items: tuple[object, ...] = ()
 
 
-def to_codex_prompt_payload(
+@dataclass(frozen=True)
+class CodexMapper(LLMProtocolMapper[CodexLLMRequest, CodexStreamResult]):
+    usage_mapper: LLMUsageMapper
+
+    def to_kwargs(self, request: CodexLLMRequest) -> dict[str, object]:
+        instructions, input_items = _to_codex_prompt_payload(request.messages)
+        payload: dict[str, object] = {
+            "model": request.model.value,
+            "instructions": instructions,
+            "input": input_items,
+            "prompt_cache_key": request.session_id,
+            "extra_headers": {
+                "session_id": request.session_id,
+                "x-client-request-id": request.session_id,
+            },
+            "store": False,
+            "tool_choice": "auto",
+            "parallel_tool_calls": request.parallel_tool_calls,
+        }
+        if request.tools:
+            payload["tools"] = [_to_codex_tool_payload(tool) for tool in request.tools]
+        if request.response_format is not None:
+            payload["text"] = {
+                "format": _to_codex_response_format_payload(
+                    request.response_format,
+                )
+            }
+        return payload
+
+    def to_response(
+        self,
+        raw_response: CodexStreamResult,
+        *,
+        request: CodexLLMRequest,
+    ) -> LLMResponse:
+        return _to_port_llm_response(
+            raw_response,
+            request=request,
+            usage_mapper=self.usage_mapper,
+        )
+
+
+def _to_codex_prompt_payload(
     messages: tuple[LLMMessage, ...],
 ) -> tuple[str, list[dict[str, object]]]:
     instructions: list[str] = []
@@ -45,7 +89,7 @@ def to_codex_prompt_payload(
     return "\n\n".join(instructions), input_items
 
 
-def to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
+def _to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     return {
         "type": "function",
         "name": tool.name,
@@ -54,7 +98,7 @@ def to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     }
 
 
-def to_codex_response_format_payload(
+def _to_codex_response_format_payload(
     response_format: LLMResponseFormat,
 ) -> dict[str, object]:
     payload: dict[str, object] = {"type": response_format.type.value}
@@ -68,10 +112,11 @@ def to_codex_response_format_payload(
     return payload
 
 
-def to_port_llm_response(
+def _to_port_llm_response(
     stream_result: CodexStreamResult,
     *,
-    fallback_model: AgentLLMModel,
+    request: CodexLLMRequest,
+    usage_mapper: LLMUsageMapper,
 ) -> LLMResponse:
     raw_output_items = _read_response_field(stream_result.response, "output")
     output_items = raw_output_items if isinstance(raw_output_items, list) else []
@@ -107,19 +152,17 @@ def to_port_llm_response(
         message_text = "".join(text_parts)
         content = message_text or None
 
-    response_model = _read_response_field(stream_result.response, "model")
-    model = fallback_model
-    if response_model == fallback_model.value:
-        model = fallback_model
-
     status = _read_response_field(stream_result.response, "status")
     finish_reason = status if isinstance(status, str) and status else None
-    usage = _to_port_usage(_read_response_field(stream_result.response, "usage"))
+    provider_usage = _to_provider_usage(
+        _read_response_field(stream_result.response, "usage")
+    )
+    usage = usage_mapper.to_usage(provider_usage, request=request)
 
     return LLMResponse(
         ok=True,
         content=content,
-        model=model,
+        model=request.model,
         tool_calls=_to_port_tool_calls(output_items),
         finish_reason=finish_reason,
         usage=usage,
@@ -197,12 +240,10 @@ def _arguments_json(arguments: object) -> str:
     return json.dumps(arguments if arguments is not None else {}, ensure_ascii=False)
 
 
-def _to_port_usage(raw_usage: object) -> LLMUsage | None:
+def _to_provider_usage(raw_usage: object) -> LLMProviderUsage | None:
     if raw_usage is None:
         return None
-    return LLMUsage(
-        provider=None,
-        model=None,
+    return LLMProviderUsage(
         prompt_tokens=_optional_int(_read_response_field(raw_usage, "input_tokens")),
         output_tokens=_optional_int(_read_response_field(raw_usage, "output_tokens")),
         total_tokens=_optional_int(_read_response_field(raw_usage, "total_tokens")),

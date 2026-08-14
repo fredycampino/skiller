@@ -83,7 +83,7 @@ class GetAgentStatsUseCase:
         capacity_tokens = context_config.effective_context_tokens(
             model_context_window_tokens=provider.model.model_context_window_tokens,
         )
-        limit_tokens = context_config.compaction_window_tokens(
+        limit_tokens = context_config.compaction_trigger_tokens(
             model_context_window_tokens=provider.model.model_context_window_tokens,
         )
         return GetAgentStatsResult(

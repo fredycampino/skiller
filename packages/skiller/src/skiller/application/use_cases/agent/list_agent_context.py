@@ -4,11 +4,14 @@ from enum import Enum
 from pathlib import Path
 
 from skiller.domain.agent.config.port import AgentConfigPort
+from skiller.domain.agent.context.context_state_port import AgentContextStatePort
 from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.context.model import (
     AgentAssistantMessageType,
     AgentContextEntry,
     AgentContextEntryType,
+    AgentContextWindowEntries,
+    AgentContextWindowQuery,
     agent_context_payload_to_dict,
 )
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
@@ -42,11 +45,10 @@ class AgentContextEntryItem:
     type: str
     delta_tokens: int | None
     delta_compact_tokens: int | None
+    compaction_id: int | None
     payload_bytes: int
     usage: bool
     prunable: bool
-    window_start_sequence: int | None
-    window_base: bool | None
 
 
 @dataclass(frozen=True)
@@ -67,12 +69,14 @@ class ListAgentContextUseCase:
         run_store: RunStorePort,
         run_agent_store: RunAgentStorePort,
         agent_context_store: AgentContextStorePort,
+        agent_context_state: AgentContextStatePort,
         agent_config: AgentConfigPort,
         skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
         self.run_agent_store = run_agent_store
         self.agent_context_store = agent_context_store
+        self.agent_context_state = agent_context_state
         self.agent_config = agent_config
         self.skill_runner = skill_runner
 
@@ -110,35 +114,24 @@ class ListAgentContextUseCase:
         provider = config.llm.default()
         context_config = config.context
         compaction = context_config.compaction
-        limit_tokens = context_config.compaction_window_tokens(
-            model_context_window_tokens=provider.model.model_context_window_tokens,
-        )
-        if compaction.enabled:
-            mode = "compact"
-            context_window = self.agent_context_store.list_compact_entries(
-                context_id=agent.context_id,
-                window_width_tokens=limit_tokens,
-                keep_last_blocks=compaction.keep_last,
-            )
-        else:
-            mode = "window"
-            context_window = self.agent_context_store.list_window_entries(
-                context_id=agent.context_id,
-                window_width_tokens=limit_tokens,
-            )
+
+        state = self.agent_context_state.get_state(context_id=agent.context_id)
+        context_window = self._recover_context_window(state=state)
 
         entries = context_window.entries
         items = tuple(_to_context_item(entry) for entry in entries)
         payload_bytes = sum(item.payload_bytes for item in items)
         window = AgentContextWindow(
-            mode=mode,
+            mode="compact" if state.compacted_sequence is not None else "raw",
             entries=len(items),
-            start_sequence=_start_sequence(entries),
+            start_sequence=state.start_sequence,
             end_sequence=_end_sequence(entries),
-            limit_tokens=limit_tokens,
+            limit_tokens=context_config.compaction_trigger_tokens(
+                model_context_window_tokens=provider.model.model_context_window_tokens,
+            ),
             estimated_tokens=context_window.estimated_tokens,
             payload_bytes=payload_bytes,
-            keep_last=compaction.keep_last,
+            keep_last=compaction.keep_last_blocks,
         )
         return ListAgentContextResult(
             status=ListAgentContextStatus.OK,
@@ -147,6 +140,25 @@ class ListAgentContextUseCase:
             context_id=agent.context_id,
             window=window,
             entries=items,
+        )
+
+    def _recover_context_window(
+        self,
+        *,
+        state,
+    ) -> AgentContextWindowEntries:
+        query = AgentContextWindowQuery(
+            context_id=state.context_id,
+            start_sequence=state.start_sequence,
+            compacted_sequence=state.compacted_sequence,
+        )
+        compacted = self.agent_context_store.list_compact_entries(query=query)
+        raw = self.agent_context_store.list_raw_entries(query=query)
+        entries = compacted.entries + raw.entries
+        estimated_tokens = compacted.estimated_tokens + raw.estimated_tokens
+        return AgentContextWindowEntries(
+            entries=entries,
+            estimated_tokens=estimated_tokens,
         )
 
     def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
@@ -167,11 +179,10 @@ def _to_context_item(entry: AgentContextEntry) -> AgentContextEntryItem:
         type=_entry_display_type(entry),
         delta_tokens=entry.delta_tokens,
         delta_compact_tokens=entry.delta_compact_tokens,
+        compaction_id=entry.compaction_id,
         payload_bytes=_payload_bytes(entry),
         usage=entry.usage is not None,
         prunable=_prunable(entry),
-        window_start_sequence=entry.window_start_sequence,
-        window_base=entry.window_base,
     )
 
 
@@ -206,12 +217,6 @@ def _prunable(entry: AgentContextEntry) -> bool:
         entry.entry_type == AgentContextEntryType.ASSISTANT_MESSAGE
         and entry.message_type == AgentAssistantMessageType.TOOL_CALLS
     )
-
-
-def _start_sequence(entries: list[AgentContextEntry]) -> int:
-    if not entries:
-        return 0
-    return entries[0].sequence
 
 
 def _end_sequence(entries: list[AgentContextEntry]) -> int:

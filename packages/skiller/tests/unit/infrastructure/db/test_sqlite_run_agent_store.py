@@ -1,7 +1,6 @@
 import pytest
 
 from skiller.domain.run.run_context_model import RunContext
-from skiller.domain.run.run_model import RunAgentWindow
 from skiller.infrastructure.db.datasource.sqlite_run_agent_datasource import (
     SqliteRunAgentDatasource,
 )
@@ -40,32 +39,8 @@ def test_run_agent_store_updates_agent_window_without_losing_context(tmp_path) -
     assert agent is not None
     assert agent.agent_id == "support_agent"
     assert agent.context_id == "thread-123"
-    assert agent.window_start_sequence == 0
-    assert agent.window_base is True
     assert run is not None
     assert run.agents["support_agent"].context_id == "thread-123"
-    assert run.agents["support_agent"].window_start_sequence == 0
-    assert run.agents["support_agent"].window_base is True
-
-    agent_store.update_agent_window(
-        run_id=run_id,
-        window=RunAgentWindow(
-            agent_id="support_agent",
-            window_start_sequence=7,
-            window_base=False,
-        ),
-    )
-
-    stored_agent = agent_store.get_agent(run_id=run_id, agent_id="support_agent")
-    stored_run = run_store.get_run(run_id)
-    assert stored_agent is not None
-    assert stored_agent.context_id == "thread-123"
-    assert stored_agent.window_start_sequence == 7
-    assert stored_agent.window_base is False
-    assert stored_run is not None
-    assert stored_run.agents["support_agent"].context_id == "thread-123"
-    assert stored_run.agents["support_agent"].window_start_sequence == 7
-    assert stored_run.agents["support_agent"].window_base is False
 
     agent_store.attach_agent(
         run_id=run_id,
@@ -76,5 +51,3 @@ def test_run_agent_store_updates_agent_window_without_losing_context(tmp_path) -
     updated_agent = agent_store.get_agent(run_id=run_id, agent_id="support_agent")
     assert updated_agent is not None
     assert updated_agent.context_id == "thread-456"
-    assert updated_agent.window_start_sequence == 7
-    assert updated_agent.window_base is False

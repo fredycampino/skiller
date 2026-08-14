@@ -30,6 +30,7 @@ from skiller.domain.agent.context.model import (
     AgentContextPayload,
     AgentContextUsageMarker,
     AgentContextWindowEntries,
+    AgentContextWindowQuery,
 )
 from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
@@ -164,9 +165,8 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None = None,
-        delta_tokens: int = 0,
-        window_start_sequence: int = 0,
-        window_base: bool = False,
+        delta_tokens: int | None = 0,
+        compaction_id: int | None = 0,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -180,9 +180,8 @@ class _FakeAgentContextStore:
             },
             usage=usage,
             message_type=AgentAssistantMessageType.TOOL_CALLS,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=context.agent_id,
         )
 
@@ -193,9 +192,8 @@ class _FakeAgentContextStore:
         turn_id: str,
         text: str,
         usage: LLMUsage | None,
-        delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        delta_tokens: int | None,
+        compaction_id: int | None,
     ) -> AgentContextEntry:
         return self._append_entry(
             run_id=context.run_id,
@@ -209,9 +207,8 @@ class _FakeAgentContextStore:
             },
             usage=usage,
             message_type=AgentAssistantMessageType.FINAL,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=context.agent_id,
         )
 
@@ -269,9 +266,8 @@ class _FakeAgentContextStore:
         payload: dict[str, object],
         usage: LLMUsage | None = None,
         message_type: AgentAssistantMessageType | None = None,
-        window_start_sequence: int | None = None,
         delta_tokens: int | None = None,
-        window_base: bool | None = None,
+        compaction_id: int | None = None,
         source_step_id: str,
     ) -> AgentContextEntry:
         self.appended.append(
@@ -281,9 +277,8 @@ class _FakeAgentContextStore:
                 "entry_type": entry_type,
                 "payload": payload,
                 "message_type": message_type.value if message_type else None,
-                "window_start_sequence": window_start_sequence,
                 "delta_tokens": delta_tokens,
-                "window_base": window_base,
+                "compaction_id": compaction_id,
                 "source_step_id": source_step_id,
             }
         )
@@ -296,9 +291,8 @@ class _FakeAgentContextStore:
             payload=payload,
             usage=usage,
             message_type=message_type,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=source_step_id,
             created_at="2026-04-22T00:00:00Z",
         )
@@ -320,17 +314,60 @@ class _FakeAgentContextStore:
             if entry.sequence >= start_sequence
         ]
 
-    def list_window_entries(
+
+    def list_raw_entries(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
+        query: AgentContextWindowQuery,
     ) -> AgentContextWindowEntries:
-        _ = window_width_tokens
-        entries = self.list_entries(context_id=context_id)
+        start_sequence = query.start_sequence
+        if query.compacted_sequence is not None:
+            start_sequence = query.compacted_sequence + 1
+        entries = [
+            entry
+            for entry in self.list_entries(context_id=query.context_id)
+            if entry.sequence >= start_sequence
+        ]
+        estimated_tokens = sum(
+            entry.delta_tokens
+            for entry in entries
+            if entry.usage is not None
+            and entry.usage.prompt_tokens is not None
+            and entry.delta_tokens is not None
+            and entry.delta_tokens > 0
+        )
         return AgentContextWindowEntries(
             entries=entries,
-            estimated_tokens=sum(entry.delta_tokens or 0 for entry in entries),
+            estimated_tokens=estimated_tokens,
+        )
+
+    def list_compact_entries(
+        self,
+        *,
+        query: AgentContextWindowQuery,
+    ) -> AgentContextWindowEntries:
+        if query.compacted_sequence is None:
+            return AgentContextWindowEntries(entries=[], estimated_tokens=0)
+        entries = [
+            entry
+            for entry in self.list_entries(context_id=query.context_id)
+            if query.start_sequence <= entry.sequence <= query.compacted_sequence
+            and entry.entry_type
+            not in (
+                AgentContextEntryType.TOOL_CALL,
+                AgentContextEntryType.TOOL_RESULT,
+            )
+            and entry.message_type != AgentAssistantMessageType.TOOL_CALLS
+        ]
+        estimated_tokens = sum(
+            entry.delta_compact_tokens
+            for entry in entries
+            if entry.delta_compact_tokens is not None
+            and entry.delta_compact_tokens > 0
+        )
+        return AgentContextWindowEntries(
+            entries=entries,
+            estimated_tokens=estimated_tokens,
         )
 
     def get_last_usage_marker(
@@ -346,16 +383,13 @@ class _FakeAgentContextStore:
                 continue
             if entry.delta_tokens is None:
                 continue
-            if entry.window_start_sequence is None:
-                continue
-            if entry.window_base is None:
+            if entry.compaction_id is None:
                 continue
             return AgentContextUsageMarker(
                 sequence=entry.sequence,
                 prompt_tokens=entry.usage.prompt_tokens,
                 delta_tokens=entry.delta_tokens,
-                window_start_sequence=entry.window_start_sequence,
-                window_base=entry.window_base,
+                compaction_id=entry.compaction_id,
             )
         return None
 
@@ -387,11 +421,11 @@ class _FakeAgentContextStore:
         self,
         *,
         context_id: str,
-        window_start_sequence: int,
+        start_sequence: int,
         last_marker_sequence: int,
         payload: AgentContextPayload,
     ) -> int:
-        _ = context_id, window_start_sequence, last_marker_sequence, payload
+        _ = context_id, start_sequence, last_marker_sequence, payload
         large_delta_estimate = 1_000_000_000
         return large_delta_estimate
 
@@ -752,6 +786,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 content="Done.",
                 model=AgentFakeLLMModel.MODEL1,
                 usage=LLMUsage(
+                    estimated_system_tokens=None,
                     cache_read_tokens=None,
                     cache_write_tokens=None,
                     provider=None,
@@ -815,6 +850,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 max_total_tokens_ratio=0.8,
             ),
             usage=AgentUsageOutput(
+                estimated_system_tokens=None,
                 cache_read_tokens=None,
                 cache_write_tokens=None,
                 prompt_tokens=100,

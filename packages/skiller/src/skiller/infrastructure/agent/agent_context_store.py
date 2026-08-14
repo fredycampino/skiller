@@ -7,11 +7,14 @@ from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextCompactDeltaUpdate,
+    AgentContextCompactionQuery,
     AgentContextEntry,
     AgentContextEntryType,
     AgentContextPayload,
+    AgentContextState,
     AgentContextUsageMarker,
     AgentContextWindowEntries,
+    AgentContextWindowQuery,
     AgentToolCallPayload,
     AgentToolResultPayload,
     AgentUserMessagePayload,
@@ -57,8 +60,7 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        compaction_id: int | None,
     ) -> AgentContextEntry:
         return self.datasource.append_entry(
             run_id=context.run_id,
@@ -70,9 +72,8 @@ class AgentContextStore(
                 text=text,
             ),
             usage=usage,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=context.agent_id,
         )
 
@@ -84,8 +85,7 @@ class AgentContextStore(
         text: str,
         usage: LLMUsage | None,
         delta_tokens: int,
-        window_start_sequence: int,
-        window_base: bool,
+        compaction_id: int | None,
     ) -> AgentContextEntry:
         return self.datasource.append_entry(
             run_id=context.run_id,
@@ -97,9 +97,8 @@ class AgentContextStore(
                 text=text,
             ),
             usage=usage,
-            window_start_sequence=window_start_sequence,
             delta_tokens=delta_tokens,
-            window_base=window_base,
+            compaction_id=compaction_id,
             source_step_id=context.agent_id,
         )
 
@@ -160,58 +159,39 @@ class AgentContextStore(
             start_sequence=start_sequence,
         )
 
-    def list_window_entries(
+    def list_raw_entries(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
+        query: AgentContextWindowQuery,
     ) -> AgentContextWindowEntries:
-        return self.datasource.list_window_entries(
-            context_id=context_id,
-            window_width_tokens=window_width_tokens,
+        raw_start_sequence = query.start_sequence
+        if query.compacted_sequence is not None:
+            raw_start_sequence = query.compacted_sequence + 1
+        return self.datasource.list_raw_entries(
+            context_id=query.context_id,
+            start_sequence=raw_start_sequence,
         )
 
     def list_compact_entries(
         self,
         *,
-        context_id: str,
-        window_width_tokens: int,
-        keep_last_blocks: int,
+        query: AgentContextWindowQuery,
     ) -> AgentContextWindowEntries:
-        keep_last_blocks = min(100, max(1, keep_last_blocks))
-        protected = self.datasource.list_protected_entries(
-            context_id=context_id,
-            window_width_tokens=window_width_tokens,
-            keep_last_blocks=keep_last_blocks,
+        compacted_sequence = query.compacted_sequence
+        if compacted_sequence is None or compacted_sequence < query.start_sequence:
+            return AgentContextWindowEntries(entries=[], estimated_tokens=0)
+        return self.datasource.list_compact_entries(
+            context_id=query.context_id,
+            start_sequence=query.start_sequence,
+            compacted_sequence=compacted_sequence,
         )
-        if not protected.entries:
-            entries = self.datasource.list_entries(context_id=context_id)
-            return AgentContextWindowEntries(
-                entries=entries,
-                estimated_tokens=sum(entry.delta_tokens or 0 for entry in entries),
-            )
-        if protected.tokens >= window_width_tokens:
-            return AgentContextWindowEntries(
-                entries=protected.entries,
-                estimated_tokens=protected.tokens,
-            )
 
-        compact_start_sequence = protected.entries[0].sequence - 1
-        if compact_start_sequence <= 0:
-            return AgentContextWindowEntries(
-                entries=protected.entries,
-                estimated_tokens=protected.tokens,
-            )
-
-        compact = self.datasource.list_compact_entries(
-            context_id=context_id,
-            start_sequence=compact_start_sequence,
-            window_width_tokens=window_width_tokens - protected.tokens,
-        )
-        return AgentContextWindowEntries(
-            entries=compact.entries + protected.entries,
-            estimated_tokens=compact.estimated_tokens + protected.tokens,
-        )
+    def select_compaction_state(
+        self,
+        *,
+        query: AgentContextCompactionQuery,
+    ) -> AgentContextState:
+        return self.datasource.select_compaction_state(query=query)
 
     def get_last_usage_marker(
         self,
@@ -235,11 +215,11 @@ class AgentContextStore(
         self,
         *,
         context_id: str,
-        window_start_sequence: int,
+        start_sequence: int,
         last_marker_sequence: int,
         payload: AgentContextPayload,
     ) -> int:
-        block_start_sequence = max(window_start_sequence, last_marker_sequence + 1)
+        block_start_sequence = max(start_sequence, last_marker_sequence + 1)
         persisted_block_chars = self.datasource.payload_chars_from_sequence(
             context_id=context_id,
             start_sequence=block_start_sequence,
@@ -318,8 +298,11 @@ def _empty_usage() -> LLMUsage:
         provider=None,
         model=None,
         prompt_tokens=0,
+        estimated_system_tokens=0,
         output_tokens=0,
         total_tokens=0,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
     )
 
 

@@ -9,6 +9,9 @@ from skiller.application.agent.config.agent_step_mapper import AgentStepMapper
 from skiller.application.agent.config.output_truncator import OutputTruncator
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.context.agent_context_manager import AgentContextManager
+from skiller.application.agent.context.agent_context_marker_calculator import (
+    AgentContextMarkerCalculator,
+)
 from skiller.application.agent.context.agent_context_publisher import (
     AgentContextPublisher,
 )
@@ -114,10 +117,16 @@ from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
+from skiller.infrastructure.db.datasource.sqlite_agent_context_state_datasource import (
+    SqliteAgentContextStateDatasource,
+)
 from skiller.infrastructure.db.datasource.sqlite_run_agent_datasource import (
     SqliteRunAgentDatasource,
 )
 from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
+from skiller.infrastructure.db.sqlite_agent_context_state_port import (
+    SqliteAgentContextStatePort,
+)
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_agent_store import SqliteRunAgentStore
@@ -165,6 +174,8 @@ def build_runtime_container(
     runtime_event_store = SqliteRuntimeEventStore(cfg.db_path)
     agent_context_datasource = SqliteAgentContextDatasource(cfg.db_path)
     agent_context_store = AgentContextStore(agent_context_datasource)
+    agent_context_state_datasource = SqliteAgentContextStateDatasource(cfg.db_path)
+    agent_context_state = SqliteAgentContextStatePort(agent_context_state_datasource)
     run_agent_datasource = SqliteRunAgentDatasource(cfg.db_path)
     run_agent_store = SqliteRunAgentStore(run_agent_datasource)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
@@ -247,14 +258,19 @@ def build_runtime_container(
     render_current_step_use_case = RenderCurrentStepUseCase(store=store, skill_runner=skill_runner)
     render_mcp_config_use_case = RenderMcpConfigUseCase(store=store, flow_runner=skill_runner)
     agent_feedback = AgentRunnerFeedback()
+    agent_context_marker_calculator = AgentContextMarkerCalculator(
+        agent_context_store=agent_context_store,
+        agent_context_state=agent_context_state,
+    )
     agent_context_publisher = AgentContextPublisher(
         agent_context_store,
         run_agent_store,
+        agent_context_marker_calculator,
         agent_feedback,
     )
     agent_context_manager = AgentContextManager(
         agent_context_store=agent_context_store,
-        run_agent_store=run_agent_store,
+        agent_context_state=agent_context_state,
         prompt_builder=AgentPromptBuilder(),
     )
     get_agent_stats_use_case = GetAgentStatsUseCase(
@@ -268,6 +284,7 @@ def build_runtime_container(
         run_store=store,
         run_agent_store=run_agent_store,
         agent_context_store=agent_context_store,
+        agent_context_state=agent_context_state,
         agent_config=agent_config,
         skill_runner=skill_runner,
     )

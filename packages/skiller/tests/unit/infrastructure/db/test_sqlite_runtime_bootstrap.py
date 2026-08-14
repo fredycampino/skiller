@@ -18,6 +18,7 @@ def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -
     assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
     assert _table_exists(db_path, "runs") is True
     assert _table_exists(db_path, "agent_context_entries") is True
+    assert _table_exists(db_path, "agent_context_state") is True
     assert _table_exists(db_path, "webhook_registrations") is True
     assert "delta_compact_tokens" in _table_columns(db_path, "agent_context_entries")
     assert _index_exists(
@@ -48,7 +49,7 @@ def test_sqlite_runtime_bootstrap_resets_version_mismatch(tmp_path) -> None:
     assert _count_rows(db_path, "runs") == 0
 
 
-def test_sqlite_runtime_bootstrap_migrates_v7_to_v8(tmp_path) -> None:
+def test_sqlite_runtime_bootstrap_resets_previous_agent_context_schema(tmp_path) -> None:
     db_path = tmp_path / "runtime.db"
     with sqlite3.connect(db_path) as conn:
         conn.executescript(
@@ -60,9 +61,8 @@ def test_sqlite_runtime_bootstrap_migrates_v7_to_v8(tmp_path) -> None:
               sequence INTEGER NOT NULL,
               entry_type TEXT NOT NULL,
               message_type TEXT NULL,
-              window_start_sequence INTEGER NULL,
+              legacy_marker INTEGER NULL,
               delta_tokens INTEGER NULL,
-              window_base INTEGER NULL,
               payload_json TEXT NOT NULL,
               usage_json TEXT NULL,
               source_step_id TEXT NOT NULL,
@@ -85,7 +85,7 @@ def test_sqlite_runtime_bootstrap_migrates_v7_to_v8(tmp_path) -> None:
               '{"type":"user_message","text":"hello"}',
               'support_agent'
             );
-            PRAGMA user_version = 7;
+            PRAGMA user_version = 8;
             """
         )
 
@@ -97,7 +97,8 @@ def test_sqlite_runtime_bootstrap_migrates_v7_to_v8(tmp_path) -> None:
         db_path,
         "idx_agent_context_usage_markers_context_sequence",
     )
-    assert _count_rows(db_path, "agent_context_entries") == 1
+    assert _table_exists(db_path, "agent_context_state") is True
+    assert _count_rows(db_path, "agent_context_entries") == 0
 
 
 def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> None:
@@ -128,9 +129,8 @@ def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> No
               sequence INTEGER NOT NULL,
               entry_type TEXT NOT NULL,
               message_type TEXT NULL,
-              window_start_sequence INTEGER NULL,
-              position_tokens INTEGER NULL,
-              window_tokens INTEGER NULL,
+              legacy_position_tokens INTEGER NULL,
+              legacy_window_tokens INTEGER NULL,
               payload_json TEXT NOT NULL,
               usage_json TEXT NULL,
               source_step_id TEXT NOT NULL,
@@ -161,9 +161,8 @@ def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> No
               sequence,
               entry_type,
               message_type,
-              window_start_sequence,
-              position_tokens,
-              window_tokens,
+              legacy_position_tokens,
+              legacy_window_tokens,
               payload_json,
               usage_json,
               source_step_id
@@ -175,7 +174,6 @@ def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> No
               1,
               'assistant_message',
               'final',
-              1,
               120,
               80,
               '{"type":"assistant_message","turn_id":"turn-1","message_type":"final","text":"ok"}',
@@ -191,9 +189,9 @@ def test_sqlite_runtime_bootstrap_resets_v6_agent_context_schema(tmp_path) -> No
     columns = _table_columns(db_path, "agent_context_entries")
     assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
     assert "delta_tokens" in columns
-    assert "window_base" in columns
-    assert "position_tokens" not in columns
-    assert "window_tokens" not in columns
+    assert "compaction_id" in columns
+    assert "legacy_position_tokens" not in columns
+    assert "legacy_window_tokens" not in columns
     assert _count_rows(db_path, "agent_context_entries") == 0
 
 

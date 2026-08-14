@@ -86,10 +86,9 @@ class AgentContextEntry:
     source_step_id: str
     created_at: str
     message_type: AgentAssistantMessageType | None = None
-    window_start_sequence: int | None = None
     delta_tokens: int | None = None
     delta_compact_tokens: int | None = None
-    window_base: bool | None = None
+    compaction_id: int | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.payload, dict):
@@ -108,8 +107,38 @@ class AgentContextUsageMarker:
     sequence: int
     prompt_tokens: int
     delta_tokens: int
-    window_start_sequence: int
-    window_base: bool
+    compaction_id: int
+
+
+@dataclass(frozen=True)
+class AgentContextMarker:
+    delta_tokens: int
+    compaction_id: int | None
+
+
+@dataclass(frozen=True)
+class AgentContextState:
+    context_id: str
+    start_sequence: int
+    compacted_sequence: int | None
+    compaction_id: int
+
+
+@dataclass(frozen=True)
+class AgentContextCompactionQuery:
+    context_id: str
+    start_sequence: int
+    compacted_sequence: int | None
+    compaction_id: int
+    keep_last_blocks: int
+    target_tokens: int
+
+
+@dataclass(frozen=True)
+class AgentContextWindowQuery:
+    context_id: str
+    start_sequence: int
+    compacted_sequence: int | None
 
 
 @dataclass(frozen=True)

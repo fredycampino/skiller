@@ -1,13 +1,14 @@
-from dataclasses import dataclass
 from uuid import uuid4
 
+from skiller.application.agent.context.agent_context_marker_calculator import (
+    AgentContextMarkerCalculator,
+)
 from skiller.application.agent.mapper.feedback import AgentRunnerFeedback
 from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.context.model import (
     AgentAssistantMessagePayload,
     AgentAssistantMessageType,
     AgentContextEntry,
-    AgentContextPayload,
 )
 from skiller.domain.agent.llm.model import LLMToolCall, LLMUsage
 from skiller.domain.agent.run.identity import AgentContext, AgentRun
@@ -24,10 +25,12 @@ class AgentContextPublisher:
         self,
         agent_context_store: AgentContextStorePort,
         run_agent_store: RunAgentStorePort,
+        marker_calculator: AgentContextMarkerCalculator,
         feedback: AgentRunnerFeedback,
     ) -> None:
         self.agent_context_store = agent_context_store
         self.run_agent_store = run_agent_store
+        self.marker_calculator = marker_calculator
         self.feedback = feedback
         self._attached_contexts: dict[AgentRun, AgentContext] = {}
 
@@ -103,20 +106,24 @@ class AgentContextPublisher:
             message_type=AgentAssistantMessageType.FINAL,
             text=text,
         )
-        marker = self._response_marker(context=context, usage=usage, payload=payload)
+        marker = self.marker_calculator.calculate(
+            context=context,
+            usage=usage,
+            payload=payload,
+        )
         entry = self.agent_context_store.append_final_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
             usage=usage,
             delta_tokens=marker.delta_tokens,
-            window_start_sequence=marker.window_start_sequence,
-            window_base=marker.window_base,
+            compaction_id=marker.compaction_id,
         )
-        self.agent_context_store.add_compact_delta_tokens(
-            context_id=entry.context_id,
-            marker_sequence=entry.sequence,
-        )
+        if marker.compaction_id is not None:
+            self.agent_context_store.add_compact_delta_tokens(
+                context_id=entry.context_id,
+                marker_sequence=entry.sequence,
+            )
         return entry
 
     def publish_tool_calls_assistant_message(
@@ -132,20 +139,24 @@ class AgentContextPublisher:
             message_type=AgentAssistantMessageType.TOOL_CALLS,
             text=text,
         )
-        marker = self._response_marker(context=context, usage=usage, payload=payload)
+        marker = self.marker_calculator.calculate(
+            context=context,
+            usage=usage,
+            payload=payload,
+        )
         entry = self.agent_context_store.append_tool_calls_assistant_message(
             context=context,
             turn_id=turn_id,
             text=text,
             usage=usage,
             delta_tokens=marker.delta_tokens,
-            window_start_sequence=marker.window_start_sequence,
-            window_base=marker.window_base,
+            compaction_id=marker.compaction_id,
         )
-        self.agent_context_store.add_compact_delta_tokens(
-            context_id=entry.context_id,
-            marker_sequence=entry.sequence,
-        )
+        if marker.compaction_id is not None:
+            self.agent_context_store.add_compact_delta_tokens(
+                context_id=entry.context_id,
+                marker_sequence=entry.sequence,
+            )
         return entry
 
     def publish_tool_call(
@@ -210,91 +221,3 @@ class AgentContextPublisher:
                 error=error,
             ),
         )
-
-    def _response_marker(
-        self,
-        *,
-        context: AgentContext,
-        usage: LLMUsage | None,
-        payload: AgentContextPayload,
-    ) -> "_ResponseMarker":
-        run_agent = self.run_agent_store.get_agent(
-            run_id=context.run_id,
-            agent_id=context.agent_id,
-        )
-        window_start_sequence = (
-            run_agent.window_start_sequence
-            if run_agent is not None
-            else 0
-        )
-        window_base = run_agent.window_base if run_agent is not None else True
-        prompt_tokens = usage.prompt_tokens if usage is not None else None
-        last_marker = self.agent_context_store.get_last_usage_marker(
-            context_id=context.context_id,
-        )
-        if prompt_tokens is None:
-            last_marker_sequence = (
-                last_marker.sequence
-                if last_marker is not None
-                else 0
-            )
-            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
-                context_id=context.context_id,
-                window_start_sequence=window_start_sequence,
-                last_marker_sequence=last_marker_sequence,
-                payload=payload,
-            )
-            return _ResponseMarker(
-                delta_tokens=estimated_delta_tokens,
-                window_start_sequence=window_start_sequence,
-                window_base=window_base,
-            )
-
-        if last_marker is None:
-            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
-                context_id=context.context_id,
-                window_start_sequence=window_start_sequence,
-                last_marker_sequence=0,
-                payload=payload,
-            )
-            return _ResponseMarker(
-                delta_tokens=estimated_delta_tokens,
-                window_start_sequence=window_start_sequence,
-                window_base=True,
-            )
-        if last_marker.window_start_sequence != window_start_sequence or window_base:
-            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
-                context_id=context.context_id,
-                window_start_sequence=window_start_sequence,
-                last_marker_sequence=last_marker.sequence,
-                payload=payload,
-            )
-            return _ResponseMarker(
-                delta_tokens=estimated_delta_tokens,
-                window_start_sequence=window_start_sequence,
-                window_base=True,
-            )
-        if prompt_tokens < last_marker.prompt_tokens:
-            estimated_delta_tokens = self.agent_context_store.estimate_delta_tokens(
-                context_id=context.context_id,
-                window_start_sequence=window_start_sequence,
-                last_marker_sequence=last_marker.sequence,
-                payload=payload,
-            )
-            return _ResponseMarker(
-                delta_tokens=estimated_delta_tokens,
-                window_start_sequence=window_start_sequence,
-                window_base=True,
-            )
-        return _ResponseMarker(
-            delta_tokens=prompt_tokens - last_marker.prompt_tokens,
-            window_start_sequence=window_start_sequence,
-            window_base=False,
-        )
-
-
-@dataclass(frozen=True)
-class _ResponseMarker:
-    delta_tokens: int
-    window_start_sequence: int
-    window_base: bool

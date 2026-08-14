@@ -283,9 +283,9 @@ Represents:
 | sequence              | INTEGER | NOT NULL, ordered per context        |
 | entry_type            | TEXT    | NOT NULL                             |
 | message_type          | TEXT    | nullable                             |
-| window_start_sequence | INTEGER | nullable                             |
 | delta_tokens          | INTEGER | nullable                             |
-| window_base           | INTEGER | nullable boolean                     |
+| delta_compact_tokens  | INTEGER | nullable                             |
+| compaction_id         | INTEGER | nullable marker generation           |
 | payload_json          | TEXT    | NOT NULL                             |
 | usage_json            | TEXT    | nullable                             |
 | source_step_id        | TEXT    | NOT NULL                             |
@@ -304,7 +304,7 @@ idx_agent_context_entries_context(context_id, sequence)
 - `runs.step_executions_json` is the source of truth for persisted step execution data.
 - `log_events.body_json` is the observability stream body used by logs, attached runs, and transcript consumers.
 - `agent_context_entries` is the source of truth for persisted agent memory.
-- `delta_tokens`, `window_start_sequence`, `window_base`, and `usage_json` are populated on measured assistant messages.
+- `delta_tokens` describes every assistant response and is estimated when provider usage is unavailable. `compaction_id` identifies usage-marker generations and is `NULL` when `usage_json.prompt_tokens` is unavailable. `delta_compact_tokens` is an optional weight for entries visible in a compacted block. `compaction_id` starts at `0` for the initial generation.
 - `waits` is the unified wait table for `wait_channel`, `wait_input`, and `wait_webhook`.
 - `wait_type` remains the step-level discriminator for wait semantics.
 - `source_*` models where an external event came from.

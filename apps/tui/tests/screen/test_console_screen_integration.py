@@ -480,6 +480,7 @@ def test_console_screen_limits_wide_footer_context_bar_width() -> None:
         )
         viewmodel.state.agent_metrics = AgentMetricsState(
             usage=AgentStepUsage(
+                estimated_system_tokens=None,
                 prompt_tokens=59500,
                 output_tokens=None,
                 total_tokens=None,
@@ -518,6 +519,7 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
         )
         viewmodel.state.agent_metrics = AgentMetricsState(
             usage=AgentStepUsage(
+                    estimated_system_tokens=None,
                     prompt_tokens=79200,
                 output_tokens=None,
                 total_tokens=79200,

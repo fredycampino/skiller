@@ -155,6 +155,7 @@ class LLMResponseFormat:
 @dataclass(frozen=True)
 class LLMUsage:
     prompt_tokens: int | None
+    estimated_system_tokens: int | None
     output_tokens: int | None
     total_tokens: int | None
     cache_read_tokens: int | None

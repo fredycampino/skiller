@@ -108,9 +108,9 @@ class AgentConfigMapper:
             window_width_tokens = llm.default().model.model_context_window_tokens
 
         compaction = AgentContextCompactionConfig(
-            enabled=config.context.compaction.enabled,
-            max_total_tokens_ratio=config.context.compaction.max_total_tokens_ratio,
-            keep_last=config.context.compaction.keep_last,
+            compaction_trigger_ratio=config.context.compaction.compaction_trigger_ratio,
+            compaction_target_ratio=config.context.compaction.compaction_target_ratio,
+            keep_last_blocks=config.context.compaction.keep_last_blocks,
         )
         context = AgentContextConfig(
             window_width_tokens=window_width_tokens,

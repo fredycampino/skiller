@@ -23,6 +23,7 @@ from skiller.domain.agent.llm.provider_registry import (
     AgentNullProvider,
 )
 from skiller.domain.agent.llm.request import LLMRequest
+from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
     BedrockFileLLMRequestLogger,
 )
@@ -33,13 +34,15 @@ from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
 from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
+from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
 from skiller.infrastructure.llm.codex.codex_request_logger import (
     CodexFileLLMRequestLogger,
 )
 from skiller.infrastructure.llm.defaults.fake_llm_port import FakeLLMPort
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
-from skiller.infrastructure.llm.openai.openai_mapper import DefaultOpenAIMapper
+from skiller.infrastructure.llm.openai.openai_mapper import OpenAIMapper
 from skiller.infrastructure.llm.openai.openai_request_logger import (
     OpenAIFileLLMRequestLogger,
 )
@@ -93,7 +96,10 @@ class LLMClientFactory:
             api_key=provider.api_key,
             base_url=MINIMAX_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
-            mapper=DefaultOpenAIMapper(extra_body={"reasoning_split": True}),
+            mapper=OpenAIMapper(
+                usage_mapper=DefaultLLMUsageMapper(),
+                extra_body={"reasoning_split": True},
+            ),
             request_logger=OpenAIFileLLMRequestLogger(),
         )
 
@@ -102,7 +108,7 @@ class LLMClientFactory:
             api_key=provider.api_key,
             base_url=MOONSHOT_BASE_URL,
             timeout_seconds=provider.timeout_seconds,
-            mapper=DefaultOpenAIMapper(),
+            mapper=OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()),
             request_logger=OpenAIFileLLMRequestLogger(),
         )
 
@@ -111,7 +117,7 @@ class LLMClientFactory:
             api_key=provider.api_key,
             base_url=provider.base_url,
             timeout_seconds=provider.timeout_seconds,
-            mapper=DefaultOpenAIMapper(),
+            mapper=OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()),
             request_logger=OpenAIFileLLMRequestLogger(),
         )
 
@@ -122,6 +128,7 @@ class LLMClientFactory:
             timeout_seconds=provider.timeout_seconds,
             credentials_datasource=credentials_datasource,
             request_logger=CodexFileLLMRequestLogger(),
+            mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
         )
 
     def _bedrock_client(self, provider: AgentBedrockProvider) -> BedrockStreamingLLMPort:
@@ -129,4 +136,5 @@ class LLMClientFactory:
             profile=provider.profile,
             timeout_seconds=provider.timeout_seconds,
             request_logger=BedrockFileLLMRequestLogger(),
+            mapper=BedrockMapper(usage_mapper=DefaultLLMUsageMapper()),
         )

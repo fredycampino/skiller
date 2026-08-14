@@ -22,7 +22,9 @@ from skiller.infrastructure.llm.codex.codex_llm_port import (
     CODEX_USER_AGENT,
     CodexLLMPort,
 )
+from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
 from skiller.infrastructure.llm.logger.request_logger import FileLLMRequestLogger
+from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
 
@@ -151,6 +153,7 @@ def test_codex_llm_port_builds_client_with_codex_headers(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
     llm.generate(
         CodexLLMRequest(
@@ -193,6 +196,7 @@ def test_codex_llm_port_streams_response(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     response = llm.generate(
@@ -261,6 +265,7 @@ def test_codex_llm_port_reads_completed_event_usage(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     response = llm.generate(
@@ -316,6 +321,7 @@ def test_codex_llm_port_keeps_stream_items_when_raw_stream_fails(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     response = llm.generate(
@@ -349,6 +355,7 @@ def test_codex_llm_port_returns_credentials_error_before_building_client(
         timeout_seconds=120,
         credentials_datasource=_BrokenCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     response = llm.generate(
@@ -399,6 +406,7 @@ def test_codex_llm_port_refreshes_expired_token_before_request(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     llm.generate(
@@ -453,6 +461,7 @@ def test_codex_llm_port_refresh_token(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
+        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
     )
 
     token = llm._refresh_token(datasource.credentials)

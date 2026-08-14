@@ -65,7 +65,7 @@ class AgentRunner:
                     context=context,
                 )
 
-            context_request = self.context_manager.build_window_context(
+            context_request = self.context_manager.build_context(
                 context=context,
                 config=config,
             )

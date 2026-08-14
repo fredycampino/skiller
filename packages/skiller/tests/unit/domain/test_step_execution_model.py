@@ -108,6 +108,7 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                     max_total_tokens_ratio=0.8,
                 ),
                 usage=AgentUsageOutput(
+                    estimated_system_tokens=None,
                     cache_read_tokens=None,
                     cache_write_tokens=None,
                     prompt_tokens=100,
@@ -139,6 +140,7 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 },
                 "usage": {
                     "prompt_tokens": 100,
+                    "estimated_system_tokens": None,
                     "output_tokens": 25,
                     "total_tokens": 125,
                     "cache_read_tokens": None,
@@ -187,6 +189,7 @@ def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:
     assert isinstance(execution.output, AgentOutput)
     assert isinstance(execution.output.data, AgentFinalOutputData)
     assert execution.output.data.usage == AgentUsageOutput(
+        estimated_system_tokens=None,
         cache_read_tokens=None,
         cache_write_tokens=None,
         prompt_tokens=100,
@@ -210,6 +213,7 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
                 tool_call_count=0,
                 context=None,
                 usage=AgentUsageOutput(
+                    estimated_system_tokens=None,
                     cache_read_tokens=None,
                     cache_write_tokens=None,
                     prompt_tokens=100,

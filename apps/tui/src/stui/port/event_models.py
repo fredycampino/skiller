@@ -145,6 +145,7 @@ class LogEventType(StrEnum):
     RUN_RESUME = "RUN_RESUME"
     RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
     RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
+    RUN_MODEL_UPDATED = "RUN_MODEL_UPDATED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -191,6 +192,12 @@ class RunSnapshotFailedPayload:
     source: str
     ref: str
     error: str
+
+
+@dataclass(frozen=True)
+class RunModelUpdatedPayload:
+    provider: str
+    model: str
 
 
 @dataclass(frozen=True)
@@ -318,6 +325,7 @@ LogEventPayload: TypeAlias = (
     | RunResumePayload
     | RunSnapshotUpdatedPayload
     | RunSnapshotFailedPayload
+    | RunModelUpdatedPayload
     | StepStartedPayload
     | StepSuccessPayload
     | StepErrorPayload

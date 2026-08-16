@@ -28,9 +28,11 @@ class TuiStrings:
     models_table_no_models_for_provider_template: str = "{provider}: no models available"
     models_table_provider_configured_marker: str = "✓"
     models_table_active_model_marker: str = "●"
+    auth_table_help: str = "↑↓ select · Enter configure · Esc close"
+    auth_table_no_providers_message: str = "No auth providers available."
     auth_unknown_provider_message: str = (
         "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
-        "/auth bedrock, or /auth moonshot."
+        "/auth bedrock, /auth moonshot, or /auth lmstudio."
     )
     autocomplete_quit_description: str = "Exit the TUI"
     autocomplete_exit_description: str = "Exit the TUI"
@@ -44,6 +46,7 @@ class TuiStrings:
     agent_context_stats_title: str = "Agent Context"
     run_snapshot_updated_notice_template: str = "Run snapshot updated: {ref}"
     run_snapshot_failed_notice_template: str = "Run snapshot sync failed: {error}"
+    run_model_updated_notice_template: str = "Model updated: {provider}/{model}"
 
 
 DEFAULT_TUI_STRINGS = TuiStrings()

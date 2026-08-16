@@ -1,0 +1,150 @@
+{
+  "providers": {
+    "minimax": {
+      "adapter": "openai",
+      "base_url": "https://api.minimax.io/v1",
+      "api_key_env": "AGENT_MINIMAX_API_KEY",
+      "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
+      "options": {
+        "reasoning_split": true
+      },
+      "models": [
+        {
+          "model": "MiniMax-M2.5",
+          "context_window_tokens": 204800
+        },
+        {
+          "model": "MiniMax-M2.7",
+          "context_window_tokens": 204800
+        },
+        {
+          "model": "MiniMax-M3",
+          "context_window_tokens": 204800
+        }
+      ]
+    },
+    "moonshot": {
+      "adapter": "openai",
+      "base_url": "https://api.moonshot.ai/v1",
+      "api_key_env": "AGENT_MOONSHOT_API_KEY",
+      "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 0.95,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
+      "models": [
+        {
+          "model": "kimi-k3",
+          "context_window_tokens": 256000
+        },
+        {
+          "model": "kimi-k2.7-code",
+          "context_window_tokens": 256000
+        }
+      ]
+    },
+    "lmstudio": {
+      "adapter": "openai",
+      "base_url": "http://127.0.0.1:1234/v1",
+      "api_key": "lm-studio",
+      "timeout_seconds": 120,
+      "temperature": 0.2,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
+      "models": [
+        {
+          "model": "ornith-1.0-9b",
+          "context_window_tokens": 100000
+        },
+        {
+          "model": "google/gemma-4-12b-qat",
+          "context_window_tokens": 50000
+        }
+      ]
+    },
+    "codex": {
+      "adapter": "codex",
+      "credentials_file": "~/.skiller/secrets/openai-codex.json",
+      "timeout_seconds": 120,
+      "parallel_tool_calls": true,
+      "models": [
+        {
+          "model": "gpt-5.4",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-5.5",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "context_window_tokens": 1050000
+        }
+      ]
+    },
+    "bedrock": {
+      "adapter": "bedrock",
+      "profile": "default",
+      "timeout_seconds": 45,
+      "max_output_tokens": 4096,
+      "models": [
+        {
+          "model": "us.anthropic.claude-opus-4-6-v1",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-opus-4-7",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-opus-4-8",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-opus-4-1-20250805-v1:0",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-sonnet-5",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-sonnet-4-6",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "us.anthropic.claude-fable-5",
+          "context_window_tokens": 200000
+        }
+      ]
+    }
+  }
+}

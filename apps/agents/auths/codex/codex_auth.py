@@ -653,12 +653,7 @@ def default_credentials_file() -> Path:
 
 
 def configured_credentials_file() -> Path | None:
-    config_path = Path(
-        os.environ.get(
-            "AGENT_AGENT_CONFIG_FILE",
-            Path.home() / ".skiller" / "settings" / "agent.json",
-        )
-    ).expanduser()
+    config_path = providers_config_file()
     if not config_path.exists():
         return None
 
@@ -680,6 +675,10 @@ def configured_credentials_file() -> Path | None:
         return None
 
     return Path(credentials_file).expanduser()
+
+
+def providers_config_file() -> Path:
+    return Path.home() / ".skiller" / "settings" / "providers.json"
 
 
 def pending_file(credentials_file: Path) -> Path:

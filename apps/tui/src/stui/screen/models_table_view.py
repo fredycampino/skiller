@@ -8,7 +8,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Static
 
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
-from stui.port.models_port import MODEL_PROVIDER_SOURCE_NONE
+from stui.port.models_port import MODEL_PROVIDER_SOURCE_USER
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 
 
@@ -313,7 +313,7 @@ def _build_table(id: str, *, show_header: bool) -> DataTable[object]:
 
 
 def provider_is_configured(provider: ModelsTableProviderRow) -> bool:
-    return provider.source != MODEL_PROVIDER_SOURCE_NONE
+    return provider.source == MODEL_PROVIDER_SOURCE_USER
 
 
 def format_provider_label(

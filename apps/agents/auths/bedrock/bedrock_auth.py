@@ -151,12 +151,7 @@ def _extract_text_from_stream_output(stdout: str) -> str:
 
 
 def _configured_profile() -> str | None:
-    config_path = Path(
-        os.environ.get(
-            "AGENT_AGENT_CONFIG_FILE",
-            Path.home() / ".skiller" / "settings" / "agent.json",
-        )
-    ).expanduser()
+    config_path = providers_config_file()
     if not config_path.exists():
         return None
     config = _read_json(config_path)
@@ -170,6 +165,10 @@ def _configured_profile() -> str | None:
     if not isinstance(profile, str) or not profile.strip():
         return None
     return profile.strip()
+
+
+def providers_config_file() -> Path:
+    return Path.home() / ".skiller" / "settings" / "providers.json"
 
 
 def _read_json(path: Path) -> dict[str, Any]:

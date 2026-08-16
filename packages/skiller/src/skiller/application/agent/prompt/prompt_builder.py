@@ -18,21 +18,15 @@ from skiller.domain.agent.llm.model import (
     LLMUserMessage,
 )
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_catalog import (
+    BedrockLLMProviderDefinition,
+    CodexLLMProviderDefinition,
+    LLMModelDefinition,
+    LLMProviderDefinition,
+    OpenAILLMProviderDefinition,
+)
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_moonshot import (
-    AgentMoonshotProvider,
-    MoonshotLLMRequest,
-)
-from skiller.domain.agent.llm.provider_registry import (
-    AgentBedrockProvider,
-    AgentCodexProvider,
-    AgentLLMProvider,
-    AgentLMStudioProvider,
-    AgentMiniMaxProvider,
-)
-from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -40,7 +34,8 @@ class AgentPromptBuilder:
     def build_request(
         self,
         *,
-        provider: AgentLLMProvider,
+        provider: LLMProviderDefinition,
+        model: LLMModelDefinition,
         system: str,
         entries: list[AgentContextEntry],
         tools: tuple[ToolDefinition, ...],
@@ -49,10 +44,10 @@ class AgentPromptBuilder:
         log_override_file: bool,
     ) -> LLMRequest:
         messages = tuple(self._build_messages(system=system, entries=entries))
-        if isinstance(provider, AgentMiniMaxProvider):
-            return MiniMaxLLMRequest(
+        if isinstance(provider, OpenAILLMProviderDefinition):
+            return OpenAILLMRequest(
                 messages=messages,
-                model=provider.model,
+                model=model,
                 tool_choice=provider.tool_choice,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 temperature=provider.temperature,
@@ -62,58 +57,26 @@ class AgentPromptBuilder:
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
             )
-        if isinstance(provider, AgentMoonshotProvider):
-            return MoonshotLLMRequest(
-                messages=messages,
-                model=provider.model,
-                tool_choice=provider.tool_choice,
-                parallel_tool_calls=provider.parallel_tool_calls,
-                temperature=provider.temperature,
-                max_tokens=provider.max_output_tokens,
-                top_p=provider.top_p,
-                tools=tools,
-                log_request_file=log_request_file,
-                log_override_file=log_override_file,
-            )
-        if isinstance(provider, AgentLMStudioProvider):
-            return LMStudioLLMRequest(
-                messages=messages,
-                model=provider.model,
-                tool_choice=provider.tool_choice,
-                parallel_tool_calls=provider.parallel_tool_calls,
-                temperature=provider.temperature,
-                max_tokens=provider.max_output_tokens,
-                top_p=provider.top_p,
-                tools=tools,
-                log_request_file=log_request_file,
-                log_override_file=log_override_file,
-            )
-        if isinstance(provider, AgentCodexProvider):
+        if isinstance(provider, CodexLLMProviderDefinition):
             return CodexLLMRequest(
                 messages=messages,
-                model=provider.model,
+                model=model,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 session_id=context_id,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
             )
-        if isinstance(provider, AgentBedrockProvider):
+        if isinstance(provider, BedrockLLMProviderDefinition):
             return BedrockLLMRequest(
                 messages=messages,
-                model=provider.model,
+                model=model,
                 max_tokens=provider.max_output_tokens,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
             )
-        return LLMRequest(
-            messages=messages,
-            model=provider.model,
-            tools=tools,
-            log_request_file=log_request_file,
-            log_override_file=log_override_file,
-        )
+        raise ValueError(f"Unsupported LLM adapter: {provider.adapter}")
 
     def _build_messages(
         self,

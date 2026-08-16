@@ -43,6 +43,7 @@ from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
+from stui.usecase.list_auth_providers_use_case import ListAuthProvidersUseCase
 from stui.usecase.list_models_use_case import ListModelsUseCase
 from stui.usecase.list_runs_use_case import ListRunsUseCase
 from stui.usecase.load_session_from_post_use_case import LoadSessionFromPostUseCase
@@ -65,6 +66,7 @@ from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
 from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
+from stui.usecase.refresh_events_use_case import RefreshEventsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
@@ -171,6 +173,10 @@ def build_tui_container(
             models_port=resolved_models_port,
             context=run_event_context,
         ),
+        list_auth_providers=ListAuthProvidersUseCase(
+            models_port=resolved_models_port,
+            context=run_event_context,
+        ),
         list_runs=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command=NormalizeCommandUseCase(),
         event_state=EventStateUseCase(
@@ -192,6 +198,7 @@ def build_tui_container(
             agent_port=resolved_agent_port,
             context=run_event_context,
         ),
+        refresh_events=RefreshEventsUseCase(events_port=resolved_events_port),
         notify_action=ProjectNotifyActionUseCase(),
         transcript=ProjectTranscriptUseCase(),
         prompt_enter=PromptEnterUseCase(),

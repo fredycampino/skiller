@@ -53,8 +53,5 @@
       ],
       "all": []
     }
-  },
-  "llm": {
-    "default_provider": "minimax"
   }
 }

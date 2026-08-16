@@ -77,43 +77,14 @@ def test_autocomplete_use_case_suggests_auth_command() -> None:
     assert state is not None
     assert [item.label for item in state.items] == ["auth"]
     assert state.items[0].description == "Configure authentication"
-    assert state.items[0].insert_text == "/auth "
+    assert state.items[0].insert_text == "/auth"
 
 
-def test_autocomplete_use_case_suggests_auth_provider_params() -> None:
+def test_autocomplete_use_case_does_not_suggest_auth_provider_params() -> None:
     use_case = AutocompleteUseCase()
 
-    state = use_case.execute(text="/auth ", cursor_position=6)
-
-    assert state is not None
-    assert state.query == ""
-    assert [item.label for item in state.items] == ["codex", "minimax", "bedrock", "moonshot"]
-    assert [item.kind for item in state.items] == ["param", "param", "param", "param"]
-    assert state.replace_from == 6
-    assert state.replace_to == 6
-
-
-@pytest.mark.parametrize(
-    ("text", "label"),
-    [
-        ("/auth c", "codex"),
-        ("/auth mi", "minimax"),
-        ("/auth b", "bedrock"),
-        ("/auth mo", "moonshot"),
-    ],
-)
-def test_autocomplete_use_case_filters_auth_provider_params(
-    text: str,
-    label: str,
-) -> None:
-    use_case = AutocompleteUseCase()
-
-    state = use_case.execute(text=text, cursor_position=len(text))
-
-    assert state is not None
-    assert [item.label for item in state.items] == [label]
-    assert state.replace_from == 6
-    assert state.replace_to == len(text)
+    assert use_case.execute(text="/auth ", cursor_position=6) is None
+    assert use_case.execute(text="/auth c", cursor_position=7) is None
 
 
 def test_autocomplete_use_case_hides_completed_auth_provider_param() -> None:

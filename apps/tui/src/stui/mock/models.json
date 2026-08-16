@@ -1,7 +1,7 @@
 [
   {
     "name": "codex",
-    "source": "global",
+    "source": "user",
     "models": [
       {"name": "gpt-5.5", "active": true},
       {"name": "gpt-5.4", "active": false}
@@ -9,7 +9,7 @@
   },
   {
     "name": "minimax",
-    "source": "global",
+    "source": "user",
     "models": [
       {"name": "MiniMax-M2.7", "active": false},
       {"name": "MiniMax-M2.5", "active": false}

@@ -19,6 +19,7 @@ class PromptMode(StrEnum):
     AUTOCOMPLETION = "autocompletion"
     RUNS_TABLE = "runs_table"
     MODELS_TABLE = "models_table"
+    AUTH_TABLE = "auth_table"
     INTERRUPT_PENDING = "interrupt_pending"
 
 
@@ -170,6 +171,13 @@ class RunSyncSnapshotItem(TranscriptItem):
     ref: str
     status: RunSnapshotStatus
     error: str = ""
+
+
+@dataclass(frozen=True)
+class RunModelUpdatedItem(TranscriptItem):
+    run_id: str
+    provider: str
+    model: str
 
 
 @dataclass(frozen=True)
@@ -347,6 +355,13 @@ class ModelsTableState:
 
 
 @dataclass
+class AuthTableState:
+    visible: bool = False
+    command: str = ""
+    rows: tuple[ModelsPortProviderItem, ...] = field(default_factory=tuple)
+
+
+@dataclass
 class AgentMetricsState:
     usage: AgentStepUsage | None
     context: AgentStepContext | None
@@ -384,6 +399,7 @@ class ConsoleScreenState:
     prompt: PromptState = field(default_factory=PromptState)
     runs_table: RunsTableState = field(default_factory=RunsTableState)
     models_table: ModelsTableState = field(default_factory=ModelsTableState)
+    auth_table: AuthTableState = field(default_factory=AuthTableState)
     agent_metrics: AgentMetricsState | None = None
     agent_context_stats: AgentContextStatsState | None = None
     view_status: ViewStatusState = field(default_factory=ViewStatusState)
@@ -448,6 +464,17 @@ class ConsoleScreenState:
         self.models_table.visible = visible
         self.models_table.command = command
         self.models_table.rows = tuple(rows)
+
+    def set_auth_table(
+        self,
+        *,
+        visible: bool = False,
+        command: str = "",
+        rows: Sequence[ModelsPortProviderItem] = (),
+    ) -> None:
+        self.auth_table.visible = visible
+        self.auth_table.command = command
+        self.auth_table.rows = tuple(rows)
 
     def set_agent_metrics(self, agent_metrics: AgentMetricsState | None) -> None:
         self.agent_metrics = agent_metrics

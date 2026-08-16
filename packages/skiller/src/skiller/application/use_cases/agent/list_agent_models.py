@@ -3,15 +3,12 @@ from enum import Enum
 from pathlib import Path
 
 from skiller.domain.agent.config.model import AgentConfig
-from skiller.domain.agent.config.port import (
-    AgentConfigPort,
-    AgentConfigProviderSource,
+from skiller.domain.agent.config.port import AgentConfigPort
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMProviderCatalogSource,
+    LLMProviderDefinition,
 )
-from skiller.domain.agent.llm.model import AgentLLMProviderType
-from skiller.domain.agent.llm.provider_registry import (
-    PUBLIC_AGENT_LLM_PROVIDER_MODELS,
-    AgentLLMProvider,
-)
+from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
 
@@ -30,7 +27,7 @@ class AgentModelItem:
 @dataclass(frozen=True)
 class AgentModelsProviderItem:
     name: str
-    source: AgentConfigProviderSource
+    source: LLMProviderCatalogSource
     models: tuple[AgentModelItem, ...]
 
 
@@ -42,24 +39,18 @@ class ListAgentModelsResult:
     error: str | None = None
 
 
-_PUBLIC_PROVIDER_TYPES = (
-    AgentLLMProviderType.MINIMAX,
-    AgentLLMProviderType.LMSTUDIO,
-    AgentLLMProviderType.CODEX,
-    AgentLLMProviderType.BEDROCK,
-    AgentLLMProviderType.MOONSHOT,
-)
-
 class ListAgentModelsUseCase:
     def __init__(
         self,
         *,
         run_store: RunStorePort,
         agent_config: AgentConfigPort,
+        llm_provider_catalog: LLMProviderCatalogPort,
         skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
         self.agent_config = agent_config
+        self.llm_provider_catalog = llm_provider_catalog
         self.skill_runner = skill_runner
 
     def execute(self, run_id: str) -> ListAgentModelsResult:
@@ -76,84 +67,41 @@ class ListAgentModelsUseCase:
 
         config_path = self._resolve_agent_config_path(run.source, run.ref)
         config = self.agent_config.get_config(config_path=config_path)
-        source_by_type = {
-            item.provider_type: item.source
-            for item in self.agent_config.list_provider_sources(config_path=config_path)
-        }
-        providers = self._provider_items(config=config, source_by_type=source_by_type)
+        catalog = self.llm_provider_catalog.get_catalog()
+        providers = tuple(
+            self._provider_item(
+                provider=provider,
+                config=config,
+                source=catalog.source_for(provider.name),
+            )
+            for provider in catalog.providers
+            if provider.enabled
+        )
         return ListAgentModelsResult(
             status=ListAgentModelsStatus.OK,
             run_id=run_id,
             providers=providers,
         )
 
-    def _provider_items(
-        self,
-        *,
-        config: AgentConfig,
-        source_by_type: dict[AgentLLMProviderType, AgentConfigProviderSource],
-    ) -> tuple[AgentModelsProviderItem, ...]:
-        configured_by_type = {
-            provider.type: provider for provider in config.llm.providers
-        }
-        return tuple(
-            self._provider_item(
-                provider_type=provider_type,
-                configured_by_type=configured_by_type,
-                default_provider=config.llm.default_provider,
-                source=source_by_type.get(
-                    provider_type,
-                    AgentConfigProviderSource.NONE,
-                ),
-            )
-            for provider_type in _PUBLIC_PROVIDER_TYPES
-        )
-
     def _provider_item(
         self,
         *,
-        provider_type: AgentLLMProviderType,
-        configured_by_type: dict[AgentLLMProviderType, AgentLLMProvider],
-        default_provider: AgentLLMProviderType,
-        source: AgentConfigProviderSource,
+        provider: LLMProviderDefinition,
+        config: AgentConfig,
+        source: LLMProviderCatalogSource,
     ) -> AgentModelsProviderItem:
-        configured_provider = configured_by_type.get(provider_type)
-        provider_models = (
-            configured_provider.models
-            if configured_provider is not None
-            else PUBLIC_AGENT_LLM_PROVIDER_MODELS[provider_type]
-        )
         models = tuple(
             AgentModelItem(
-                name=model.value,
-                active=self._is_active_model(
-                    model_name=model.value,
-                    provider_type=provider_type,
-                    configured_provider=configured_provider,
-                    default_provider=default_provider,
-                ),
+                name=model.model,
+                active=(provider.name == config.llm.provider and model.model == config.llm.model),
             )
-            for model in provider_models
+            for model in provider.models
         )
         return AgentModelsProviderItem(
-            name=provider_type.value,
+            name=provider.name,
             source=source,
             models=models,
         )
-
-    def _is_active_model(
-        self,
-        *,
-        model_name: str,
-        provider_type: AgentLLMProviderType,
-        configured_provider: AgentLLMProvider | None,
-        default_provider: AgentLLMProviderType,
-    ) -> bool:
-        if configured_provider is None:
-            return False
-        if provider_type != default_provider:
-            return False
-        return configured_provider.model.value == model_name
 
     def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
         try:

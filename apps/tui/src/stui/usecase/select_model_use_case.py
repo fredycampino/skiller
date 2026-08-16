@@ -53,13 +53,13 @@ class SelectModelUseCase:
             )
 
         state.set_models_table(
-            visible=True,
-            command=state.models_table.command,
+            visible=False,
+            command="",
             rows=models,
         )
         state.set_status()
         state.set_autocompletion()
-        state.set_prompt(mode=PromptMode.MODELS_TABLE)
+        state.set_prompt(mode=PromptMode.DEFAULT)
         return SelectModelResult(state=state, selected=True)
 
 

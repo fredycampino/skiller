@@ -1,6 +1,7 @@
 {
   "llm": {
-    "default_provider": "lmstudio"
+    "provider": "lmstudio",
+    "model": "google/gemma-4-12b-qat"
   },
   "debug": {
     "log_request": true

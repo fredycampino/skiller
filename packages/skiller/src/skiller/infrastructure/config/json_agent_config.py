@@ -13,7 +13,6 @@ from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
-from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 
 
@@ -75,9 +74,7 @@ class JsonAgentConfig(AgentConfigPort):
 
         global_config_path = self.config_path_global.expanduser()
         global_payload = (
-            _load_json_object(global_config_path)
-            if global_config_path.exists()
-            else {}
+            _load_json_object(global_config_path) if global_config_path.exists() else {}
         )
         local_config_path = self._resolve_override_config_path(config_path=config_path)
         if local_config_path is None:
@@ -91,60 +88,28 @@ class JsonAgentConfig(AgentConfigPort):
             payload=local_payload,
             source=AgentConfigProviderSource.LOCAL,
         )
-        local_provider_types = {item.provider_type for item in local_sources}
+        local_providers = {item.provider for item in local_sources}
         global_sources = tuple(
             item
             for item in _provider_sources(
                 payload=global_payload,
                 source=AgentConfigProviderSource.GLOBAL,
             )
-            if item.provider_type not in local_provider_types
+            if item.provider not in local_providers
         )
         return local_sources + global_sources
 
     def set_model(
         self,
         *,
-        provider_type: AgentLLMProviderType,
+        provider: str,
         model: str,
         config_path: Path | None = None,
     ) -> None:
-        source_by_provider = {
-            item.provider_type: item.source
-            for item in self.list_provider_sources(config_path=config_path)
-        }
-        provider_source = source_by_provider.get(provider_type)
-        if provider_source is None or provider_source == AgentConfigProviderSource.NONE:
-            raise RuntimeError(f"LLM provider is not configured: {provider_type.value}")
-
-        default_path = self._resolve_default_write_path(config_path=config_path)
-        provider_path = self._resolve_provider_write_path(
-            source=provider_source,
-            config_path=config_path,
-        )
-        if default_path == provider_path:
-            payload = _load_json_object(default_path)
-            _set_default_provider(payload, provider_type=provider_type)
-            _set_provider_model(
-                payload,
-                provider_type=provider_type,
-                model=model,
-            )
-            _write_json_object(default_path, payload)
-            return
-
-        provider_payload = _load_json_object(provider_path)
-        _set_provider_model(
-            provider_payload,
-            provider_type=provider_type,
-            model=model,
-        )
-
-        default_payload = _load_json_object(default_path)
-        _set_default_provider(default_payload, provider_type=provider_type)
-
-        _write_json_object(provider_path, provider_payload)
-        _write_json_object(default_path, default_payload)
+        write_path = self._resolve_model_write_path(config_path=config_path)
+        payload = _load_json_object(write_path)
+        _set_llm_selection(payload, provider=provider, model=model)
+        _write_json_object(write_path, payload)
 
     def _load_config(self, *, config_path: Path | None = None) -> "_LoadedAgentConfig":
         global_config_path = self.config_path_global.expanduser()
@@ -197,32 +162,15 @@ class JsonAgentConfig(AgentConfigPort):
             return expanded_config_path
         return None
 
-    def _resolve_default_write_path(self, *, config_path: Path | None = None) -> Path:
+    def _resolve_model_write_path(self, *, config_path: Path | None = None) -> Path:
         explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
         if explicit_path:
             return Path(explicit_path).expanduser()
 
         override_path = self._resolve_override_config_path(config_path=config_path)
-        if override_path is not None:
+        if override_path is not None and _has_llm_selection(override_path):
             return override_path
         return self.config_path_global.expanduser()
-
-    def _resolve_provider_write_path(
-        self,
-        *,
-        source: AgentConfigProviderSource,
-        config_path: Path | None = None,
-    ) -> Path:
-        if source == AgentConfigProviderSource.ENV:
-            return self._resolve_config_path(config_path=config_path)
-        if source == AgentConfigProviderSource.LOCAL:
-            override_path = self._resolve_override_config_path(config_path=config_path)
-            if override_path is None:
-                raise RuntimeError("Local agent config file not found")
-            return override_path
-        if source == AgentConfigProviderSource.GLOBAL:
-            return self.config_path_global.expanduser()
-        raise RuntimeError("LLM provider is not configured")
 
 
 def _validation_error_code(message: str) -> AgentConfigValidationErrorCode:
@@ -273,33 +221,23 @@ def _write_json_object(path: Path, payload: dict[str, object]) -> None:
     path.write_text(f"{json.dumps(payload, indent=2)}\n", encoding="utf-8")
 
 
-def _set_default_provider(
+def _set_llm_selection(
     payload: dict[str, object],
     *,
-    provider_type: AgentLLMProviderType,
+    provider: str,
+    model: str,
 ) -> None:
     llm = payload.get("llm")
     if not isinstance(llm, dict):
         llm = {}
         payload["llm"] = llm
-    llm["default_provider"] = provider_type.value
+    llm["provider"] = provider
+    llm["model"] = model
 
 
-def _set_provider_model(
-    payload: dict[str, object],
-    *,
-    provider_type: AgentLLMProviderType,
-    model: str,
-) -> None:
-    providers = payload.get("providers")
-    if not isinstance(providers, dict):
-        raise RuntimeError(f"LLM provider is not configured: {provider_type.value}")
-
-    provider = providers.get(provider_type.value)
-    if not isinstance(provider, dict):
-        raise RuntimeError(f"LLM provider is not configured: {provider_type.value}")
-
-    provider["model"] = model
+def _has_llm_selection(path: Path) -> bool:
+    payload = _load_json_object(path)
+    return "llm" in payload
 
 
 def _override_config(
@@ -316,22 +254,15 @@ def _provider_sources(
     payload: dict[str, object],
     source: AgentConfigProviderSource,
 ) -> tuple[AgentConfigProviderSourceItem, ...]:
-    providers = payload.get("providers")
-    if not isinstance(providers, dict):
+    llm = payload.get("llm")
+    if not isinstance(llm, dict):
         return ()
-
-    items: list[AgentConfigProviderSourceItem] = []
-    for provider_id in providers:
-        if not isinstance(provider_id, str):
-            continue
-        try:
-            provider_type = AgentLLMProviderType(provider_id)
-        except ValueError:
-            continue
-        items.append(
-            AgentConfigProviderSourceItem(
-                provider_type=provider_type,
-                source=source,
-            )
-        )
-    return tuple(items)
+    provider = llm.get("provider")
+    if not isinstance(provider, str) or not provider.strip():
+        return ()
+    return (
+        AgentConfigProviderSourceItem(
+            provider=provider.strip(),
+            source=source,
+        ),
+    )

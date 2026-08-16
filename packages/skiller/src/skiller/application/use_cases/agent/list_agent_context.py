@@ -14,6 +14,7 @@ from skiller.domain.agent.context.model import (
     AgentContextWindowQuery,
     agent_context_payload_to_dict,
 )
+from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
@@ -71,6 +72,7 @@ class ListAgentContextUseCase:
         agent_context_store: AgentContextStorePort,
         agent_context_state: AgentContextStatePort,
         agent_config: AgentConfigPort,
+        llm_provider_catalog: LLMProviderCatalogPort,
         skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
@@ -78,6 +80,7 @@ class ListAgentContextUseCase:
         self.agent_context_store = agent_context_store
         self.agent_context_state = agent_context_state
         self.agent_config = agent_config
+        self.llm_provider_catalog = llm_provider_catalog
         self.skill_runner = skill_runner
 
     def execute(self, run_id: str, agent_id: str) -> ListAgentContextResult:
@@ -111,7 +114,11 @@ class ListAgentContextUseCase:
 
         config_path = self._resolve_agent_config_path(run.source, run.ref)
         config = self.agent_config.get_config(config_path=config_path)
-        provider = config.llm.default()
+        catalog = self.llm_provider_catalog.get_catalog()
+        model = catalog.get_model(
+            provider_name=config.llm.provider,
+            model_name=config.llm.model,
+        )
         context_config = config.context
         compaction = context_config.compaction
 
@@ -127,7 +134,7 @@ class ListAgentContextUseCase:
             start_sequence=state.start_sequence,
             end_sequence=_end_sequence(entries),
             limit_tokens=context_config.compaction_trigger_tokens(
-                model_context_window_tokens=provider.model.model_context_window_tokens,
+                model_context_window_tokens=model.context_window_tokens,
             ),
             estimated_tokens=context_window.estimated_tokens,
             payload_bytes=payload_bytes,

@@ -25,6 +25,14 @@ class LogEventsObserver(Protocol):
 
     def unsubscribe(self) -> None: ...
 
+    async def refresh(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        after_sequence: int,
+    ) -> None: ...
+
 
 class EventsPort(Protocol):
     def subscribe(
@@ -36,3 +44,5 @@ class EventsPort(Protocol):
     ) -> None: ...
 
     def unsubscribe(self) -> None: ...
+
+    async def refresh(self) -> None: ...

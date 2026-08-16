@@ -28,6 +28,7 @@ class RuntimeEventType(StrEnum):
     RUN_RESUME = "RUN_RESUME"
     RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
     RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
+    RUN_MODEL_UPDATED = "RUN_MODEL_UPDATED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -65,6 +66,12 @@ class RunSnapshotFailedPayload:
     source: str
     ref: str
     error: str
+
+
+@dataclass(frozen=True)
+class RunModelUpdatedPayload:
+    provider: str
+    model: str
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,7 @@ RuntimeEventPayload: TypeAlias = (
     | RunResumedPayload
     | RunSnapshotUpdatedPayload
     | RunSnapshotFailedPayload
+    | RunModelUpdatedPayload
     | RunWaitingPayload
     | RunFinishedPayload
     | StepStartedPayload
@@ -275,6 +283,12 @@ def runtime_event_payload_from_dict(
             source=str(value.get("source", "")),
             ref=str(value.get("ref", "")),
             error=str(value.get("error", "")),
+        )
+
+    if event_type == RuntimeEventType.RUN_MODEL_UPDATED:
+        return RunModelUpdatedPayload(
+            provider=str(value.get("provider", "")),
+            model=str(value.get("model", "")),
         )
 
     if event_type == RuntimeEventType.RUN_WAITING:

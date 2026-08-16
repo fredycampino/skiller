@@ -31,6 +31,7 @@ from stui.port.event_models import (
     RouteOutputValue,
     RunCreatePayload,
     RunFinishedPayload,
+    RunModelUpdatedPayload,
     RunSnapshotFailedPayload,
     RunSnapshotUpdatedPayload,
     RunWaitingPayload,
@@ -157,6 +158,36 @@ def test_cli_log_event_adapter_parses_run_snapshot_failed_payload() -> None:
         source="internal",
         ref="mono",
         error="Could not sync snapshot 'mono'",
+    )
+
+
+def test_cli_log_event_adapter_parses_run_model_updated_payload() -> None:
+    event = _mapped_event(
+        [
+            {
+                "sequence": 3,
+                "id": "event-3",
+                "run_id": "run-1",
+                "type": "RUN_MODEL_UPDATED",
+                "step_id": None,
+                "step_type": None,
+                "agent_sequence": None,
+                "created_at": "2026-06-01T10:30:16Z",
+                "payload": {
+                    "provider": "moonshot",
+                    "model": "kimi-k3",
+                },
+            }
+        ]
+    )
+
+    assert event.event_type == LogEventType.RUN_MODEL_UPDATED
+    assert event.step_id is None
+    assert event.step_type is None
+    assert event.agent_sequence is None
+    assert event.payload == RunModelUpdatedPayload(
+        provider="moonshot",
+        model="kimi-k3",
     )
 
 

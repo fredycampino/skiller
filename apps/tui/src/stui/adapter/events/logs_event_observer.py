@@ -82,6 +82,27 @@ class LogsEventObserver(LogEventsObserver):
         self._pending_stop = False
         self._observer_error_count = 0
 
+    async def refresh(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        after_sequence: int,
+    ) -> None:
+        events = await asyncio.to_thread(
+            self._list_events,
+            run_id=run_id,
+            listener=listener,
+            after_sequence=after_sequence,
+        )
+        if not events:
+            return
+
+        last_sequence = max(event.sequence for event in events)
+        if self._run_id == run_id:
+            self._last_seen_sequence = max(self._last_seen_sequence, last_sequence)
+        listener.notify(events)
+
     def _stop_current(self) -> None:
         self._listener = None
         self._pending_stop = False
@@ -122,9 +143,22 @@ class LogsEventObserver(LogEventsObserver):
             self._task = None
 
     def _list_next_events(self, listener: LogEventsListener) -> list[LogEvent]:
+        return self._list_events(
+            run_id=self._run_id,
+            listener=listener,
+            after_sequence=self._last_seen_sequence,
+        )
+
+    def _list_events(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        after_sequence: int,
+    ) -> list[LogEvent]:
         events = self.logs.list(
-            self._run_id,
-            after_sequence=self._last_seen_sequence or None,
+            run_id,
+            after_sequence=after_sequence or None,
             limit=listener.get_max_page(),
         )
         return [self.mapper.map(event) for event in events]

@@ -1,7 +1,11 @@
 from pathlib import Path
 
 import pytest
-from helpers.agent_config import FakeAgentConfigPort, agent_config
+from helpers.agent_config import (
+    FakeAgentConfigPort,
+    FakeLLMProviderCatalogPort,
+    agent_config,
+)
 
 from skiller.application.agent.config.step_config_reader import AgentStepConfigReader
 from skiller.application.agent.tools.tool_manager import ToolManager
@@ -32,6 +36,7 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
                 max_tool_calls=5,
             )
         ),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=_FakeToolManager(definitions=(notify_tool, shell_tool)),
@@ -68,6 +73,7 @@ def test_agent_step_config_reader_reads_base_limits_without_tools() -> None:
                 max_tool_calls=5,
             )
         ),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
@@ -98,6 +104,7 @@ def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_c
     )
     reader = AgentStepConfigReader(
         agent_config=FakeAgentConfigPort(base_config),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
@@ -119,7 +126,7 @@ def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_c
     assert config.config.loop.max_tool_calls == 3
     assert base_config.loop.max_turns == 10
     assert base_config.loop.max_tool_calls == 5
-    assert config.config.llm.default_provider == base_config.llm.default_provider
+    assert config.config.llm == base_config.llm
     assert config.config.context.compaction == base_config.context.compaction
     assert config.config.event_output.truncate == base_config.event_output.truncate
 
@@ -132,6 +139,7 @@ def test_agent_step_config_reader_validates_agent_config_through_port() -> None:
     agent_cfg = _FakeAgentConfigPort(validation=validation)
     reader = AgentStepConfigReader(
         agent_config=agent_cfg,
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
@@ -150,6 +158,7 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
     skill_runner = _FakeSkillRunner(config_path=config_path)
     reader = AgentStepConfigReader(
         agent_config=agent_cfg,
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(source="internal", ref="mono"),
         skill_runner=skill_runner,
         tool_manager=ToolManager(tools=[]),
@@ -174,6 +183,7 @@ def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
         agent_config=FakeAgentConfigPort(
             agent_config(max_turns=10, max_tool_calls=5),
         ),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=_FakeToolManager(definitions=(NotifyTool(), ShellProcessTool())),
@@ -194,6 +204,7 @@ def test_agent_step_config_reader_builds_tools_section_empty_when_no_tools() -> 
         agent_config=FakeAgentConfigPort(
             agent_config(max_turns=10, max_tool_calls=5),
         ),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
         skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
@@ -239,11 +250,7 @@ class _FakeToolManager:
         self.definitions = definitions
 
     def get_tool_definitions(self, allowed_tools: list[str]) -> list[ToolDefinition]:
-        return [
-            definition
-            for definition in self.definitions
-            if definition.name in allowed_tools
-        ]
+        return [definition for definition in self.definitions if definition.name in allowed_tools]
 
 
 class _FakeAgentConfigPort:
@@ -257,9 +264,7 @@ class _FakeAgentConfigPort:
             self.config_paths.append(config_path)
         raise AssertionError("get_config should not be called")
 
-    def validate_config(
-        self, *, config_path: Path | None = None
-    ) -> AgentConfigValidation:
+    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
         _ = config_path
         self.validate_calls += 1
         return self._validation

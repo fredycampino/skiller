@@ -4,8 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-profile="${AGENT_BEDROCK_PROFILE:-aternitybedrock}"
-model="${AGENT_BEDROCK_MODEL:-us.anthropic.claude-opus-4-7}"
+profile="${AGENT_BEDROCK_PROFILE:-testBedrock}"
+model="${AGENT_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
 timeout_seconds="${AGENT_BEDROCK_TIMEOUT_SECONDS:-120}"
 max_tokens="${AGENT_BEDROCK_MAX_TOKENS:-1024}"
 

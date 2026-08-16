@@ -7,6 +7,7 @@ Delivers human input to waiting runs and writes JSON to `stdout`.
 | Command | Behavior | Returns |
 | --- | --- | --- |
 | `skiller input receive <run_id> --text "..."` | Delivers text input to a waiting run. | Delivery result and resumed run ids. |
+| `skiller input receive <run_id> --text "..." --wait` | Delivers text input and waits for the resumed run to reach another wait or a terminal status. | Delivery result and wait results. |
 
 ## Output Model
 
@@ -35,6 +36,9 @@ Output:
 ```
 
 After accepting input, the CLI dispatches a worker resume for each matched run.
+
+Add `--wait` when the caller must remain attached to the resumed run. The command
+then waits until the run reaches `WAITING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`.
 
 ## Exit Code
 

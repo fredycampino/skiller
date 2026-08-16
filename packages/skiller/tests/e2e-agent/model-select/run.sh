@@ -26,7 +26,8 @@ mkdir -p "${HOME}/.skiller/settings" "${tmpdir}/flow"
 cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
 {
   "llm": {
-    "default_provider": "codex"
+    "provider": "minimax",
+    "model": "MiniMax-M2.7"
   },
   "context": {
     "window_width_tokens": 1050000
@@ -49,7 +50,8 @@ JSON
 cat >"${tmpdir}/flow/agent.json" <<'JSON'
 {
   "llm": {
-    "default_provider": "codex"
+    "provider": "minimax",
+    "model": "MiniMax-M2.7"
   }
 }
 JSON
@@ -96,13 +98,8 @@ codex_models = {model["name"]: model for model in providers["codex"]["models"]}
 minimax_models = {model["name"]: model for model in providers["minimax"]["models"]}
 
 assert payload["status"] == "OK", payload
-assert providers["codex"]["source"] == "global", providers["codex"]
-assert providers["minimax"]["source"] == "global", providers["minimax"]
-assert codex_models["gpt-5.5"]["active"] is True, providers["codex"]
-assert codex_models["gpt-5.6-sol"]["active"] is False, providers["codex"]
-assert codex_models["gpt-5.6-terra"]["active"] is False, providers["codex"]
-assert codex_models["gpt-5.6-luna"]["active"] is False, providers["codex"]
-assert minimax_models["MiniMax-M2.7"]["active"] is False, providers["minimax"]
+assert providers["minimax"]["source"] == "default", providers["minimax"]
+assert minimax_models["MiniMax-M2.7"]["active"] is True, providers["minimax"]
 assert minimax_models["MiniMax-M2.5"]["active"] is False, providers["minimax"]
 PY
 
@@ -151,13 +148,12 @@ providers = {provider["name"]: provider for provider in payload["providers"]}
 codex_models = {model["name"]: model for model in providers["codex"]["models"]}
 minimax_models = {model["name"]: model for model in providers["minimax"]["models"]}
 
-assert codex_models["gpt-5.5"]["active"] is False, providers["codex"]
 assert minimax_models["MiniMax-M2.5"]["active"] is True, providers["minimax"]
 assert minimax_models["MiniMax-M2.7"]["active"] is False, providers["minimax"]
 
-assert local_payload == {"llm": {"default_provider": "minimax"}}, local_payload
-assert global_payload["llm"]["default_provider"] == "codex", global_payload
-assert global_payload["providers"]["minimax"]["model"] == "MiniMax-M2.5", global_payload
+assert local_payload == {"llm": {"provider": "minimax", "model": "MiniMax-M2.5"}}, local_payload
+assert global_payload["llm"]["provider"] == "minimax", global_payload
+assert global_payload["llm"]["model"] == "MiniMax-M2.7", global_payload
 assert "providers" not in local_payload, local_payload
 
 serialized = json.dumps(payload)

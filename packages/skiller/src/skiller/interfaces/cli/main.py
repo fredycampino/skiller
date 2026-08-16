@@ -146,10 +146,12 @@ def _watch_run(
     run_id: str,
     *,
     initial_status: str = RunStatus.CREATED.value,
+    last_waiting_sequence: int | None = None,
 ) -> dict[str, Any]:
     last_status = ""
     seen_event_ids: set[str] = set()
     collected_events: list[dict[str, Any]] = []
+    terminal_event_seen = last_waiting_sequence is None
 
     if initial_status:
         _print_watch_status(run_id, initial_status)
@@ -160,24 +162,30 @@ def _watch_run(
         if run is None:
             raise RuntimeError(f"Run '{run_id}' not found during watch")
 
-        events = controller.logs(run_id)
+        events = controller.logs(run_id, after_sequence=last_waiting_sequence)
         for event in events:
             event_id = str(event.get("id", "")).strip()
             if not event_id or event_id in seen_event_ids:
                 continue
             seen_event_ids.add(event_id)
             collected_events.append(dict(event))
+            event_type = str(event.get("type", "")).strip().upper()
+            if event_type in {"RUN_WAITING", "RUN_FINISHED"}:
+                terminal_event_seen = True
             formatted_event = _format_watch_event(run_id, event)
             if formatted_event is None:
                 continue
             print(formatted_event, file=sys.stderr, flush=True)
 
         status = str(run.get("status", "")).upper()
-        if status and status != last_status:
+        stale_terminal_status = (
+            status in _WATCH_TERMINAL_STATUSES and not terminal_event_seen
+        )
+        if status and status != last_status and not stale_terminal_status:
             _print_watch_status(run_id, status)
             last_status = status
 
-        if status in _WATCH_TERMINAL_STATUSES:
+        if status in _WATCH_TERMINAL_STATUSES and terminal_event_seen:
             return {
                 "run_id": str(run.get("run_id", run_id)),
                 "status": status,
@@ -427,6 +435,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     input_receive_parser.add_argument("run_id", help="Run id")
     input_receive_parser.add_argument("--text", required=True, help="Input text")
+    input_receive_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait until the resumed run reaches another wait or a terminal status",
+    )
 
     channel_parser = sub.add_parser("channel", help="Channel ingress operations")
     channel_sub = channel_parser.add_subparsers(dest="channel_command", required=True)
@@ -738,6 +751,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "input" and args.input_command == "receive":
+        last_waiting_sequence: int | None = None
+        if args.wait:
+            current_status = controller.status(args.run_id)
+            if current_status is not None:
+                sequence = current_status.get("last_event_sequence")
+                if isinstance(sequence, int):
+                    last_waiting_sequence = sequence
+
         result = controller.receive_input(args.run_id, text=args.text)
         resumed_runs: list[str] = []
         for run_id in result["matched_runs"]:
@@ -748,6 +769,26 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             resumed_runs.append(run_id)
         result["resumed_runs"] = resumed_runs
+        if args.wait and result["accepted"]:
+            wait_results: list[dict[str, Any]] = []
+            for run_id in resumed_runs:
+                watched = _watch_run(
+                    controller,
+                    run_id,
+                    initial_status=RunStatus.RUNNING.value,
+                    last_waiting_sequence=last_waiting_sequence,
+                )
+                wait_result: dict[str, Any] = {
+                    "run_id": run_id,
+                    "status": watched["status"],
+                }
+                if watched["status"] == RunStatus.WAITING.value:
+                    wait_result = _merge_waiting_metadata(
+                        wait_result,
+                        controller.status(run_id),
+                    )
+                wait_results.append(wait_result)
+            result["wait_results"] = wait_results
         print(json.dumps(result, indent=2))
         return 0 if result["accepted"] else 1
 

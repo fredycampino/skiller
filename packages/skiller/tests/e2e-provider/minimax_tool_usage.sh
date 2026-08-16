@@ -45,20 +45,28 @@ PYTHONPATH=packages/skiller/src \
 import json
 import os
 
-from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.llm.model import LLMToolChoiceMode
-from skiller.domain.agent.llm.provider_registry import (
-    AgentMiniMaxLLMModel,
-    AgentMiniMaxProvider,
+from skiller.domain.agent.llm.model import (
+    LLMSystemMessage,
+    LLMToolChoiceMode,
+    LLMUserMessage,
 )
-from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMApiKeySource,
+    LLMApiKeySourceType,
+    LLMModelDefinition,
+    OpenAILLMProviderDefinition,
+)
+from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
     ToolRequest,
     ToolRequestResult,
     ToolSchema,
+)
+from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
+from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
+    OpenAIApiKeyDatasource,
 )
 
 
@@ -86,17 +94,34 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = AgentMiniMaxLLMModel(os.environ.get("AGENT_MINIMAX_MODEL", "MiniMax-M2.7"))
-provider = AgentMiniMaxProvider(
-    model=model,
-    api_key=os.environ["AGENT_MINIMAX_API_KEY"],
-    timeout_seconds=float(os.environ.get("AGENT_MINIMAX_TIMEOUT_SECONDS", "120")),
+model = LLMModelDefinition(
+    model=os.environ.get("AGENT_MINIMAX_MODEL", "MiniMax-M2.7"),
+    context_window_tokens=204800,
 )
-client = LLMClientFactory().resolve(provider)
+provider = OpenAILLMProviderDefinition(
+    name="minimax",
+    timeout_seconds=float(os.environ.get("AGENT_MINIMAX_TIMEOUT_SECONDS", "120")),
+    models=(model,),
+    enabled=True,
+    base_url="https://api.minimax.io/v1",
+    temperature=1,
+    top_p=1,
+    max_output_tokens=4096,
+    parallel_tool_calls=True,
+    tool_choice=LLMToolChoiceMode.AUTO,
+    api_key_source=LLMApiKeySource(
+        type=LLMApiKeySourceType.ENV,
+        value="AGENT_MINIMAX_API_KEY",
+    ),
+    options={"reasoning_split": True},
+)
+client = DefaultLLMClientResolver(
+    api_key_datasource=OpenAIApiKeyDatasource(env=os.environ),
+).resolve(provider)
 
 command = "echo skiller-minimax-tool-usage-ok"
 response = client.generate(
-    MiniMaxLLMRequest(
+    OpenAILLMRequest(
         model=model,
         messages=(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),

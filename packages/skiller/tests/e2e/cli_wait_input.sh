@@ -25,9 +25,25 @@ run_id="$(printf '%s\n' "${run_output}" | python3 -c 'import json,sys; print(jso
 receive_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller input receive \
     "${run_id}" \
-    --text "${input_text}"
+    --text "${input_text}" \
+    --wait
 )"
-_="${receive_output}"
+
+RECEIVE_OUTPUT="${receive_output}" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["RECEIVE_OUTPUT"])
+assert payload["accepted"] is True, payload
+assert payload["wait_results"] == [
+    {
+        "run_id": payload["run_id"],
+        "status": "WAITING",
+        "wait_type": "input",
+        "prompt": "Write another summary",
+    }
+], payload
+PY
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller status "${run_id}" \
 | python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"run_id": payload["run_id"], "status": payload["status"]}, indent=2))'

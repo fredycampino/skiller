@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-profile="${AGENT_BEDROCK_PROFILE:-claude-bedrock}"
+profile="${AGENT_BEDROCK_PROFILE:-testBedrock}"
 model="${AGENT_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
 timeout_seconds="${AGENT_BEDROCK_TIMEOUT_SECONDS:-120}"
 

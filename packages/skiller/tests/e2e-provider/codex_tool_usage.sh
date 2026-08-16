@@ -41,13 +41,13 @@ SKILLER_OPENAI_CODEX_CREDENTIALS_FILE="${credentials_file}" \
 "${runtime_python}" - <<'PY'
 import json
 import os
+import uuid
 
-from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.llm.provider_codex import (
-    AgentCodexLLMModel,
-    AgentCodexProvider,
-    CodexLLMRequest,
+from skiller.domain.agent.llm.provider_catalog import (
+    CodexLLMProviderDefinition,
+    LLMModelDefinition,
 )
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
@@ -55,6 +55,10 @@ from skiller.domain.tool.tool_contract import (
     ToolRequest,
     ToolRequestResult,
     ToolSchema,
+)
+from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
+from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
+    OpenAIApiKeyDatasource,
 )
 
 
@@ -82,13 +86,21 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = AgentCodexLLMModel(os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.5"))
-provider = AgentCodexProvider(
-    model=model,
-    timeout_seconds=120,
-    credentials_file=os.environ["SKILLER_OPENAI_CODEX_CREDENTIALS_FILE"],
+model = LLMModelDefinition(
+    model=os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.6-luna"),
+    context_window_tokens=1_050_000,
 )
-client = LLMClientFactory().resolve(provider)
+provider = CodexLLMProviderDefinition(
+    name="codex",
+    timeout_seconds=120,
+    models=(model,),
+    enabled=True,
+    credentials_file=os.environ["SKILLER_OPENAI_CODEX_CREDENTIALS_FILE"],
+    parallel_tool_calls=True,
+)
+client = DefaultLLMClientResolver(
+    api_key_datasource=OpenAIApiKeyDatasource(env={}),
+).resolve(provider)
 
 command = "echo skiller-codex-tool-usage-ok"
 response = client.generate(
@@ -100,6 +112,7 @@ response = client.generate(
         ),
         tools=(ShellSmokeTool(),),
         parallel_tool_calls=True,
+        session_id=str(uuid.uuid4()),
     )
 )
 

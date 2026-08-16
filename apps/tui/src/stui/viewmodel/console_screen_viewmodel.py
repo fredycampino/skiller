@@ -199,6 +199,15 @@ class ConsoleScreenViewModel(LogEventsListener):
             self._emit_state()
             return
 
+        if command.kind == CommandKind.AUTH and not command.params:
+            result = await self._use_cases.list_auth_providers.execute(
+                state=self.state,
+                command=command,
+            )
+            self.state = result.state
+            self._emit_state()
+            return
+
         if command.kind == CommandKind.QUIT:
             self._clear_prompt_state()
             self._emit_state()
@@ -349,6 +358,34 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
 
+    def hide_auth_table(self) -> None:
+        self.state.auth_table.visible = False
+        self.state.auth_table.command = ""
+        self.state.prompt.mode = self._resolve_prompt_mode()
+        self._emit_state()
+
+    async def select_auth_provider(self, *, provider: str) -> bool:
+        command = Command(
+            kind=CommandKind.AUTH,
+            name="/auth",
+            raw_text=f"/auth {provider}",
+            params=(provider,),
+            args_text=provider,
+        )
+        auth_result = self._use_cases.auth_command.execute(command=command)
+        if auth_result.command is None:
+            return False
+
+        self.state.set_auth_table()
+        result = await self._use_cases.run_command.execute(
+            self,
+            state=self.state,
+            command=auth_result.command,
+        )
+        self.state = result.state
+        self._emit_state()
+        return True
+
     async def select_model(self, *, provider: str, model: str) -> bool:
         result = await self._use_cases.select_model.execute(
             state=self.state,
@@ -357,6 +394,8 @@ class ConsoleScreenViewModel(LogEventsListener):
         )
         self.state = result.state
         self._emit_state()
+        if result.selected:
+            await self._use_cases.refresh_events.execute()
         return result.selected
 
     async def interrupt_running_agent_turn(self) -> bool:
@@ -400,10 +439,14 @@ class ConsoleScreenViewModel(LogEventsListener):
             self.state.runs_table.command = ""
             self.state.models_table.visible = False
             self.state.models_table.command = ""
+            self.state.auth_table.visible = False
+            self.state.auth_table.command = ""
             self.state.set_agent_context_stats()
         self.state.prompt.mode = self._resolve_prompt_mode()
 
     def _resolve_prompt_mode(self) -> PromptMode:
+        if self.state.auth_table.visible:
+            return PromptMode.AUTH_TABLE
         if self.state.models_table.visible:
             return PromptMode.MODELS_TABLE
         if self.state.runs_table.visible:
@@ -456,6 +499,11 @@ class ConsoleScreenViewModel(LogEventsListener):
             visible=self.state.models_table.visible,
             command=self.state.models_table.command,
             rows=self.state.models_table.rows,
+        )
+        state.set_auth_table(
+            visible=self.state.auth_table.visible,
+            command=self.state.auth_table.command,
+            rows=self.state.auth_table.rows,
         )
         state.set_agent_metrics(self.state.agent_metrics)
         state.set_agent_context_stats(self.state.agent_context_stats)

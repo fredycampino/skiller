@@ -61,6 +61,7 @@ RuntimeEventPayload: TypeAlias = (
     | RunResumedPayload
     | RunSnapshotUpdatedPayload
     | RunSnapshotFailedPayload
+    | RunModelUpdatedPayload
     | RunWaitingPayload
     | RunFinishedPayload
     | StepStartedPayload
@@ -81,6 +82,7 @@ class RuntimeEventType(StrEnum):
     RUN_RESUME = "RUN_RESUME"
     RUN_SNAPSHOT_UPDATED = "RUN_SNAPSHOT_UPDATED"
     RUN_SNAPSHOT_FAILED = "RUN_SNAPSHOT_FAILED"
+    RUN_MODEL_UPDATED = "RUN_MODEL_UPDATED"
     STEP_STARTED = "STEP_STARTED"
     STEP_SUCCESS = "STEP_SUCCESS"
     STEP_ERROR = "STEP_ERROR"
@@ -208,6 +210,29 @@ step is no longer present in the new definition.
     "source": "internal",
     "ref": "mono",
     "error": "Could not sync snapshot 'mono': missing required field 'steps'"
+  }
+}
+```
+
+### `RUN_MODEL_UPDATED`
+
+`RUN_MODEL_UPDATED` is emitted after an agent model selection has been
+validated and persisted for the run. It is a run-level event, so `step_id` and
+`step_type` are `null`.
+
+```json
+{
+  "sequence": 104,
+  "id": "event-uuid",
+  "run_id": "run-123",
+  "type": "RUN_MODEL_UPDATED",
+  "step_id": null,
+  "step_type": null,
+  "agent_sequence": null,
+  "created_at": "2026-05-12T10:30:14Z",
+  "payload": {
+    "provider": "moonshot",
+    "model": "kimi-k3"
   }
 }
 ```

@@ -141,5 +141,6 @@ These settings are intentionally owned by other files:
 
 | Area | File | Docs |
 | --- | --- | --- |
-| agent loop, providers, context, event output, tools | `agent.json` | [`agent-config.md`](../agent/agent-config.md) |
+| agent LLM selection, loop, context, event output, tools | `agent.json` | [`agent-config.md`](../agent/agent-config.md) |
+| LLM providers, adapters, credentials, and supported models | `providers.json` | [`agent-config-llm.md`](../agent/agent-config-llm.md) |
 | flow-local agent overrides | `agent.json` next to `agent.yaml` | [`agent-config.md`](../agent/agent-config.md) |

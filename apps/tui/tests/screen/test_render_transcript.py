@@ -16,6 +16,7 @@ from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.intro_view import IntroView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.screen.transcript.run_finished_view import RunFinishedView
+from stui.screen.transcript.run_model_updated_view import RunModelUpdatedView
 from stui.screen.transcript.run_system_notice_view import RunSystemNoticeView
 from stui.screen.transcript.run_waiting_input_view import RunWaitingInputView
 from stui.screen.transcript.run_waiting_webhook_view import RunWaitingWebhookView
@@ -30,6 +31,7 @@ from stui.viewmodel.console_screen_state import (
     AgentToolResultItem,
     InfoItem,
     RunFinishedItem,
+    RunModelUpdatedItem,
     RunSnapshotStatus,
     RunSyncSnapshotItem,
     RunWaitingInputItem,
@@ -483,6 +485,24 @@ def test_run_system_notice_view_renders_snapshot_failed_with_strings() -> None:
     console.print(view.render(theme=DEFAULT_TUI_THEME))
 
     assert console.export_text().rstrip() == "! Snapshot KO: Could not sync snapshot 'mono'"
+
+
+def test_run_model_updated_view_renders_model_with_strings() -> None:
+    view = RunModelUpdatedView(
+        item=RunModelUpdatedItem(
+            run_id="run-1",
+            provider="moonshot",
+            model="kimi-k3",
+        ),
+        strings=TuiStrings(
+            run_model_updated_notice_template="Model OK: {provider}/{model}",
+        ),
+    )
+    console = Console(width=80, record=True)
+
+    console.print(view.render(theme=DEFAULT_TUI_THEME))
+
+    assert console.export_text().rstrip() == "✓ Model OK: moonshot/kimi-k3"
 
 
 def test_markdown_fenced_code_uses_theme_background() -> None:

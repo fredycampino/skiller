@@ -103,7 +103,7 @@ def test_shell_process_tool_rejects_command_outside_allowed_paths() -> None:
     )
 
     assert result.ok is False
-    assert result.error == "shell command path escapes allowed_paths"
+    assert result.error == "shell command path escapes allowed_paths: /etc/passwd"
 
 
 def test_shell_process_tool_rejects_cwd_outside_allowed_paths() -> None:
@@ -119,7 +119,7 @@ def test_shell_process_tool_rejects_cwd_outside_allowed_paths() -> None:
     )
 
     assert result.ok is False
-    assert result.error == "shell cwd escapes allowed_paths"
+    assert result.error == "shell cwd escapes allowed_paths: /outside/workspace"
 
 
 def test_shell_process_tool_rejects_command_outside_allowlist() -> None:

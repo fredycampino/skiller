@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.provider_registry import AgentLLMProviderList
 from skiller.domain.tool.tool_contract import ToolRuntimeConfigs
 
 TOOL_RESULT_APPROX_BYTES_PER_TOKEN = 4
@@ -16,6 +15,18 @@ class AgentLoopConfig:
 
 
 @dataclass(frozen=True)
+class AgentLLMSelection:
+    provider: str
+    model: str
+
+    def __post_init__(self) -> None:
+        if not self.provider:
+            raise ValueError("Agent LLM selection requires provider")
+        if not self.model:
+            raise ValueError("Agent LLM selection requires model")
+
+
+@dataclass(frozen=True)
 class AgentContextCompactionConfig:
     compaction_trigger_ratio: float
     compaction_target_ratio: float
@@ -24,7 +35,7 @@ class AgentContextCompactionConfig:
 
 @dataclass(frozen=True)
 class AgentContextConfig:
-    window_width_tokens: int
+    window_width_tokens: int | None
     compaction: AgentContextCompactionConfig
 
     def metrics(self, *, model_context_window_tokens: int) -> AgentContextMetrics:
@@ -36,6 +47,8 @@ class AgentContextConfig:
         )
 
     def effective_context_tokens(self, *, model_context_window_tokens: int) -> int:
+        if self.window_width_tokens is None:
+            return model_context_window_tokens
         return min(
             self.window_width_tokens,
             model_context_window_tokens,
@@ -89,7 +102,7 @@ class AgentDebugConfig:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    llm: AgentLLMProviderList
+    llm: AgentLLMSelection
     loop: AgentLoopConfig
     context: AgentContextConfig
     event_output: AgentEventOutputConfig

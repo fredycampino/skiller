@@ -41,9 +41,9 @@ def test_select_model_use_case_selects_and_refreshes_models() -> None:
             ("run-123", "minimax", "MiniMax-M2.5"),
         ]
         assert port.called_with == ["run-123"]
-        assert result.state.models_table.visible is True
-        assert result.state.models_table.command == "/models"
-        assert result.state.prompt.mode == PromptMode.MODELS_TABLE
+        assert result.state.models_table.visible is False
+        assert result.state.models_table.command == ""
+        assert result.state.prompt.mode == PromptMode.DEFAULT
         assert result.state.view_status.kind == ViewStatusKind.HIDDEN
         providers = {provider.name: provider for provider in result.state.models_table.rows}
         minimax_models = {
@@ -135,12 +135,12 @@ def _models() -> list[ModelsPortProviderItem]:
     return [
         ModelsPortProviderItem(
             name="codex",
-            source="global",
+            source="user",
             models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
         ),
         ModelsPortProviderItem(
             name="minimax",
-            source="global",
+            source="user",
             models=(
                 ModelsPortModelItem(name="MiniMax-M2.7"),
                 ModelsPortModelItem(name="MiniMax-M2.5"),

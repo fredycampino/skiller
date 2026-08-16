@@ -20,6 +20,7 @@ from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.intro_view import IntroView
 from stui.screen.transcript.run_ack_view import RunAckView
 from stui.screen.transcript.run_finished_view import RunFinishedView
+from stui.screen.transcript.run_model_updated_view import RunModelUpdatedView
 from stui.screen.transcript.run_output_view import RunOutputView
 from stui.screen.transcript.run_resume_view import RunResumeView
 from stui.screen.transcript.run_step_view import RunStepView
@@ -42,6 +43,7 @@ from stui.viewmodel.console_screen_state import (
     InfoItem,
     RunAckItem,
     RunFinishedItem,
+    RunModelUpdatedItem,
     RunOutputItem,
     RunResumeItem,
     RunStepItem,
@@ -255,6 +257,8 @@ class RenderTranscript:
             return RunStepView(item=item, mode=TranscriptMode.CHAT)
         if isinstance(item, RunSyncSnapshotItem):
             return RunSystemNoticeView(item=item, strings=self.strings)
+        if isinstance(item, RunModelUpdatedItem):
+            return RunModelUpdatedView(item=item, strings=self.strings)
         if isinstance(item, AgentToolCallItem):
             return AgentToolCallView(item=item)
         if isinstance(item, AgentToolResultItem):

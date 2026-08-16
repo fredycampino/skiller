@@ -37,6 +37,7 @@ from stui.port.event_models import (
     RouteOutputValue,
     RunCreatePayload,
     RunFinishedPayload,
+    RunModelUpdatedPayload,
     RunResumePayload,
     RunSnapshotFailedPayload,
     RunSnapshotUpdatedPayload,
@@ -146,6 +147,13 @@ class RunSnapshotFailedModel(BaseModel):
     source: str
     ref: str
     error: str
+
+
+class RunModelUpdatedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str
 
 
 class StepStartedModel(BaseModel):
@@ -365,6 +373,10 @@ class LogEventMapper:
                 ref=model.ref,
                 error=model.error,
             )
+
+        if event_type == LogEventType.RUN_MODEL_UPDATED:
+            model = _validate_model(RunModelUpdatedModel, payload, "payload")
+            return RunModelUpdatedPayload(provider=model.provider, model=model.model)
 
         if event_type == LogEventType.STEP_STARTED:
             _validate_model(StepStartedModel, payload, "payload")

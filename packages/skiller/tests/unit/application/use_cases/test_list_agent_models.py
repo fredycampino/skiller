@@ -1,34 +1,18 @@
 from pathlib import Path
 
 import pytest
+from helpers.agent_config import agent_config
 
 from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsStatus,
     ListAgentModelsUseCase,
 )
-from skiller.domain.agent.config.model import (
-    AgentConfig,
-    AgentContextCompactionConfig,
-    AgentContextConfig,
-    AgentDebugConfig,
-    AgentEventOutputConfig,
-    AgentEventOutputTruncateConfig,
-    AgentLoopConfig,
-)
-from skiller.domain.agent.config.port import (
-    AgentConfigProviderSource,
-    AgentConfigProviderSourceItem,
-)
-from skiller.domain.agent.llm.model import AgentLLMProviderType, LLMCustomModel
-from skiller.domain.agent.llm.provider_registry import (
-    CODEX_MODELS,
-    MINIMAX_MODELS,
-    AgentCodexLLMModel,
-    AgentCodexProvider,
-    AgentLLMProviderList,
-    AgentLMStudioProvider,
-    AgentMiniMaxLLMModel,
-    AgentMiniMaxProvider,
+from skiller.domain.agent.llm.model import LLMToolChoiceMode
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMModelDefinition,
+    LLMProviderCatalog,
+    LLMProviderCatalogSource,
+    OpenAILLMProviderDefinition,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
@@ -36,119 +20,33 @@ from skiller.domain.run.run_model import Run
 pytestmark = pytest.mark.unit
 
 
-def test_list_agent_models_returns_configured_and_active_model() -> None:
-    agent_config = _FakeAgentConfig(
-        _agent_config(
-            default_provider=AgentLLMProviderType.CODEX,
-            providers=(
-                AgentCodexProvider(
-                    model=AgentCodexLLMModel.GPT_5_5,
-                    models=CODEX_MODELS,
-                    timeout_seconds=120,
-                    credentials_file="/secret/codex.json",
-                ),
-                AgentMiniMaxProvider(
-                    model=AgentMiniMaxLLMModel.M2_7,
-                    models=MINIMAX_MODELS,
-                    timeout_seconds=30,
-                    api_key="secret",
-                ),
-            ),
-        )
-    )
+def test_list_agent_models_uses_catalog_and_marks_agent_selection() -> None:
     use_case = ListAgentModelsUseCase(
-        run_store=_FakeRunStore(_build_run()),
-        agent_config=agent_config,
+        run_store=_FakeRunStore(_run()),
+        agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=_FakeCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     )
 
     result = use_case.execute("run-1")
 
     assert result.status == ListAgentModelsStatus.OK
-    codex = _provider(result.providers, "codex")
-    minimax = _provider(result.providers, "minimax")
-    lmstudio = _provider(result.providers, "lmstudio")
-    bedrock = _provider(result.providers, "bedrock")
-    provider_names = [provider.name for provider in result.providers]
-    assert provider_names == ["minimax", "lmstudio", "codex", "bedrock", "moonshot"]
-    assert codex.source == AgentConfigProviderSource.GLOBAL
-    assert minimax.source == AgentConfigProviderSource.GLOBAL
-    assert lmstudio.source == AgentConfigProviderSource.NONE
-    assert bedrock.source == AgentConfigProviderSource.NONE
-    assert _model(codex.models, "gpt-5.5").active is True
-    assert _model(codex.models, "gpt-5.4").active is False
-    assert _model(codex.models, "gpt-5.6-sol").active is False
-    assert _model(codex.models, "gpt-5.6-terra").active is False
-    assert _model(codex.models, "gpt-5.6-luna").active is False
-    assert _model(minimax.models, "MiniMax-M2.7").active is False
-    assert lmstudio.models == ()
-    assert agent_config.config_paths == [None]
+    assert [provider.name for provider in result.providers] == ["fake"]
+    assert [model.name for model in result.providers[0].models] == ["model1", "model2"]
+    assert [model.active for model in result.providers[0].models] == [True, False]
+    assert result.providers[0].source == LLMProviderCatalogSource.DEFAULT
 
 
 def test_list_agent_models_returns_run_not_found() -> None:
     result = ListAgentModelsUseCase(
         run_store=_FakeRunStore(None),
-        agent_config=_FakeAgentConfig(_codex_config()),
+        agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=_FakeCatalogPort(),
         skill_runner=_FakeSkillRunner(),
-    ).execute("missing-run")
+    ).execute("missing")
 
     assert result.status == ListAgentModelsStatus.RUN_NOT_FOUND
     assert result.providers == ()
-    assert result.error == "Run 'missing-run' not found"
-
-
-def test_list_agent_models_uses_resolved_run_agent_config_path(tmp_path: Path) -> None:
-    config_path = tmp_path / "agent.json"
-    config_path.write_text("{}", encoding="utf-8")
-    agent_config = _FakeAgentConfig(_codex_config())
-    use_case = ListAgentModelsUseCase(
-        run_store=_FakeRunStore(_build_run()),
-        agent_config=agent_config,
-        skill_runner=_FakeSkillRunner(config_path=config_path),
-    )
-
-    result = use_case.execute("run-1")
-
-    assert result.status == ListAgentModelsStatus.OK
-    assert agent_config.config_paths == [config_path]
-    assert agent_config.source_config_paths == [config_path]
-
-
-def test_list_agent_models_returns_configured_lmstudio_models() -> None:
-    custom_model = LLMCustomModel(
-        value="local/gemma-custom",
-        model_context_window_tokens=10_000,
-    )
-    provider = AgentLMStudioProvider(
-        model=custom_model,
-        models=(custom_model,),
-        timeout_seconds=30,
-    )
-    agent_config = _FakeAgentConfig(
-        _agent_config(
-            default_provider=AgentLLMProviderType.LMSTUDIO,
-            providers=(provider,),
-        ),
-        sources=(
-            AgentConfigProviderSourceItem(
-                provider_type=provider.type,
-                source=AgentConfigProviderSource.LOCAL,
-            ),
-        ),
-    )
-    use_case = ListAgentModelsUseCase(
-        run_store=_FakeRunStore(_build_run()),
-        agent_config=agent_config,
-        skill_runner=_FakeSkillRunner(),
-    )
-
-    result = use_case.execute("run-1")
-
-    lmstudio = _provider(result.providers, "lmstudio")
-    assert lmstudio.source == AgentConfigProviderSource.LOCAL
-    assert [(model.name, model.active) for model in lmstudio.models] == [
-        ("local/gemma-custom", True),
-    ]
 
 
 class _FakeRunStore:
@@ -161,125 +59,49 @@ class _FakeRunStore:
 
 
 class _FakeAgentConfig:
-    def __init__(
-        self,
-        config: AgentConfig,
-        sources: tuple[AgentConfigProviderSourceItem, ...] | None = None,
-    ) -> None:
-        self.config = config
-        self.sources = sources
-        self.config_paths: list[Path | None] = []
-        self.source_config_paths: list[Path | None] = []
+    def get_config(self, *, config_path: Path | None = None):  # noqa: ANN201
+        _ = config_path
+        return agent_config()
 
-    def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
-        self.config_paths.append(config_path)
-        return self.config
 
-    def list_provider_sources(
-        self,
-        *,
-        config_path: Path | None = None,
-    ) -> tuple[AgentConfigProviderSourceItem, ...]:
-        self.source_config_paths.append(config_path)
-        if self.sources is not None:
-            return self.sources
-        return tuple(
-            AgentConfigProviderSourceItem(
-                provider_type=provider.type,
-                source=AgentConfigProviderSource.GLOBAL,
-            )
-            for provider in self.config.llm.providers
+class _FakeCatalogPort:
+    def get_catalog(self) -> LLMProviderCatalog:
+        models = (
+            LLMModelDefinition(model="model1", context_window_tokens=100_000),
+            LLMModelDefinition(model="model2", context_window_tokens=100_000),
         )
+        provider = OpenAILLMProviderDefinition(
+            name="fake",
+            timeout_seconds=30,
+            models=models,
+            enabled=True,
+            base_url="http://localhost/v1",
+            temperature=0,
+            top_p=1,
+            max_output_tokens=4096,
+            parallel_tool_calls=True,
+            tool_choice=LLMToolChoiceMode.AUTO,
+            api_key_source=None,
+            options={},
+        )
+        return LLMProviderCatalog(providers=(provider,))
 
 
 class _FakeSkillRunner:
-    def __init__(self, config_path: Path | None = None) -> None:
-        self.config_path = config_path
-
     def resolve_file_path(self, source: str, ref: str, file_ref: str) -> Path:
         _ = source, ref, file_ref
-        if self.config_path is None:
-            raise FileNotFoundError
-        return self.config_path
+        raise FileNotFoundError
 
 
-def _codex_config() -> AgentConfig:
-    provider = AgentCodexProvider(
-        model=AgentCodexLLMModel.GPT_5_5,
-        models=CODEX_MODELS,
-        timeout_seconds=120,
-        credentials_file="/secret/codex.json",
-    )
-    return _agent_config(
-        default_provider=AgentLLMProviderType.CODEX,
-        providers=(provider,),
-    )
-
-
-def _agent_config(
-    *,
-    default_provider: AgentLLMProviderType,
-    providers: tuple[
-        AgentCodexProvider | AgentMiniMaxProvider | AgentLMStudioProvider,
-        ...,
-    ],
-    ) -> AgentConfig:
-    return AgentConfig(
-        llm=AgentLLMProviderList(
-            default_provider=default_provider,
-            providers=providers,
-        ),
-        loop=AgentLoopConfig(
-            max_turns=2,
-            max_tool_calls=3,
-        ),
-        context=AgentContextConfig(
-            window_width_tokens=100000,
-            compaction=AgentContextCompactionConfig(
-                compaction_trigger_ratio=0.8,
-                compaction_target_ratio=0.5,
-                keep_last_blocks=5,
-            ),
-        ),
-        event_output=AgentEventOutputConfig(
-            truncate=AgentEventOutputTruncateConfig(
-                enabled=True,
-                max_text_chars=100,
-                max_json_chars=1000,
-                max_array_items=10,
-            ),
-        ),
-        debug=AgentDebugConfig(
-            log_request=False,
-            log_request_file=None,
-            log_override_file=True,
-        ),
-    )
-
-
-def _build_run() -> Run:
+def _run() -> Run:
     return Run(
         id="run-1",
         source="internal",
         ref="demo",
-        snapshot={"start": "support_agent", "steps": [{"agent": "support_agent"}]},
+        snapshot={"start": "agent", "steps": []},
         status="RUNNING",
-        current="support_agent",
+        current="agent",
         context=RunContext(inputs={}, step_executions={}),
-        created_at="2026-05-16T00:00:00Z",
-        updated_at="2026-05-16T00:00:00Z",
+        created_at="2026-08-16T00:00:00Z",
+        updated_at="2026-08-16T00:00:00Z",
     )
-
-
-def _provider(providers, name: str):  # noqa: ANN001, ANN202
-    for provider in providers:
-        if provider.name == name:
-            return provider
-    raise AssertionError(f"Missing provider {name}")
-
-
-def _model(models, name: str):  # noqa: ANN001, ANN202
-    for model in models:
-        if model.name == name:
-            return model
-    raise AssertionError(f"Missing model {name}")

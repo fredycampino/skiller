@@ -9,6 +9,7 @@ from skiller.domain.agent.context.stats_model import (
     AgentStats,
 )
 from skiller.domain.agent.context.stats_port import AgentContextStatsPort
+from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
 from skiller.domain.run.run_agent_store_port import RunAgentStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
@@ -38,12 +39,14 @@ class GetAgentStatsUseCase:
         run_agent_store: RunAgentStorePort,
         context_stats: AgentContextStatsPort,
         agent_config: AgentConfigPort,
+        llm_provider_catalog: LLMProviderCatalogPort,
         skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
         self.run_agent_store = run_agent_store
         self.context_stats = context_stats
         self.agent_config = agent_config
+        self.llm_provider_catalog = llm_provider_catalog
         self.skill_runner = skill_runner
 
     def execute(self, run_id: str, agent_id: str) -> GetAgentStatsResult:
@@ -78,13 +81,17 @@ class GetAgentStatsUseCase:
         context_stats = self.context_stats.get_stats(context_id=agent.context_id)
         config_path = self._resolve_agent_config_path(run.source, run.ref)
         config = self.agent_config.get_config(config_path=config_path)
-        provider = config.llm.default()
+        catalog = self.llm_provider_catalog.get_catalog()
+        model = catalog.get_model(
+            provider_name=config.llm.provider,
+            model_name=config.llm.model,
+        )
         context_config = config.context
         capacity_tokens = context_config.effective_context_tokens(
-            model_context_window_tokens=provider.model.model_context_window_tokens,
+            model_context_window_tokens=model.context_window_tokens,
         )
         limit_tokens = context_config.compaction_trigger_tokens(
-            model_context_window_tokens=provider.model.model_context_window_tokens,
+            model_context_window_tokens=model.context_window_tokens,
         )
         return GetAgentStatsResult(
             status=GetAgentStatsStatus.OK,

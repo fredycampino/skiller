@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from stui.viewmodel.console_screen_state import CompletionItem, ConsoleScreenState
 
-_SUBMIT_COMPLETION_COMMANDS = frozenset({"/models", "/runs"})
+_SUBMIT_COMPLETION_COMMANDS = frozenset({"/auth", "/models", "/runs"})
 
 
 @dataclass(frozen=True)
@@ -48,4 +48,4 @@ class PromptEnterUseCase:
 
 def _should_submit_completion(selected_item: CompletionItem) -> bool:
     insert_text = (selected_item.insert_text or "").strip()
-    return selected_item.kind == "param" or insert_text in _SUBMIT_COMPLETION_COMMANDS
+    return insert_text in _SUBMIT_COMPLETION_COMMANDS

@@ -10,7 +10,10 @@ Controls a running agent and reads persisted agent context diagnostics.
 | --- | --- | --- |
 | `skiller agent interrupt <run_id>` | Enqueues an interrupt for the current agent turn. | Interrupt enqueue result. |
 | `skiller agent stats <run_id> --agent <agent_id>` | Reads persisted context-window stats for one agent in a run. | Agent context stats. |
-| `skiller agent models <run_id>` | Lists model options from the agent config effective for a run. | Provider/model rows. |
+| `skiller agent context <run_id> --agent <agent_id>` | Lists the effective persisted agent context window. | Context window and entries. |
+| `skiller agent models <run_id>` | Lists enabled providers and models from the effective provider catalog. | Provider/model rows. |
+| `skiller agent tools <run_id>` | Shows effective tool configuration for the first agent in a run. | Tool configuration. |
+| `skiller agent model <run_id> --provider <provider> --model <model>` | Selects a catalog model for the run. | Selection result. |
 
 ## `interrupt`
 
@@ -151,10 +154,9 @@ skiller agent models <run_id>
 Behavior:
 
 - validates that the run exists
-- reads the agent config effective for that run
-- returns provider/model rows only for public providers (`codex`, `minimax`, `bedrock`)
-- reports each provider config source as `global`, `local`, `env`, or `none`
-- omits internal test providers such as `null` and `fake`
+- reads the agent selection from the effective `agent.json`
+- reads enabled providers and supported models from the effective provider catalog
+- reports each provider catalog source as `default`, `user`, or `env`
 - does not include credentials, credential paths, profiles, timeouts, or token metadata
 
 Output:
@@ -167,7 +169,7 @@ Output:
   "providers": [
     {
       "name": "codex",
-      "source": "global",
+      "source": "user",
       "models": [
         {
           "name": "gpt-5.5",
@@ -200,7 +202,7 @@ Fields:
 - `status`: model lookup status.
 - `ok`: whether models were returned.
 - `providers[].name`: provider name.
-- `providers[].source`: provider config source: `global`, `local`, `env`, or `none`.
+- `providers[].source`: provider catalog source: `default`, `user`, or `env`.
 - `providers[].models[].name`: supported model name.
 - `providers[].models[].active`: whether the model is the default provider's configured model.
 - `error`: failure reason, present when `ok = false`.
@@ -209,6 +211,18 @@ Status values:
 
 - `OK`: models were returned.
 - `RUN_NOT_FOUND`: no persisted run exists for `run_id`.
+
+## `model`
+
+Command:
+
+```bash
+skiller agent model <run_id> --provider <provider> --model <model>
+```
+
+The command validates the provider and model against the effective catalog and
+writes the selection to the effective `agent.json`. It does not modify the
+provider catalog or credentials.
 
 ## Exit Code
 

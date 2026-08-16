@@ -1,5 +1,5 @@
 name: auths/minimax
-description: "Configure MiniMax credentials for Skiller agents"
+description: "Configure the MiniMax provider for Skiller agents"
 version: "0.1"
 start: check_minimax_config
 
@@ -25,9 +25,6 @@ steps:
     command: |
       set -eu
 
-      settings_dir="$HOME/.skiller/settings"
-      secrets_dir="$HOME/.skiller/secrets"
-      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
       secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
       if [ -s "$secret_file" ]; then
@@ -150,9 +147,9 @@ steps:
       set -eu
 
       settings_dir="$HOME/.skiller/settings"
-      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.minimax-auth.bak"
+      missing_file="$settings_dir/providers.json.minimax-auth.missing"
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$backup_file")"
       rm -f "$backup_file" "$missing_file"
@@ -175,8 +172,7 @@ steps:
       set -eu
 
       settings_dir="$HOME/.skiller/settings"
-      secrets_dir="$HOME/.skiller/secrets"
-      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
+      config_file="$settings_dir/providers.json"
       secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
       mkdir -p "$(dirname "$config_file")" "$(dirname "$secret_file")"
@@ -198,16 +194,11 @@ steps:
       else:
           config = {}
 
-      llm = config.setdefault("llm", {})
-      llm["default_provider"] = "minimax"
-      context = config.setdefault("context", {})
-      context["window_width_tokens"] = 80000
       providers = config.setdefault("providers", {})
-      providers["minimax"] = {
-          "model": "MiniMax-M2.7",
-          "timeout_seconds": 60,
-          "api_key_file": secret_file,
-      }
+      provider = providers.setdefault("minimax", {})
+      provider.pop("model", None)
+      provider["timeout_seconds"] = 60
+      provider["api_key_file"] = secret_file
 
       config_file.write_text(
           json.dumps(config, indent=2, sort_keys=True) + "\n",
@@ -216,7 +207,7 @@ steps:
       PY
 
       printf '%s\n' "MiniMax config saved."
-      printf '%s\n' "Config: $config_file"
+      printf '%s\n' "Provider config: $config_file"
       printf '%s\n' "Secret: $secret_file"
     cwd: .
     timeout: 15
@@ -244,8 +235,51 @@ steps:
     command: |
       set -eu
 
-      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      rm -f "$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/agent.json"
+      local_config_file="{{flow.dir}}/agent.json"
+
+      CONFIG_FILE="$config_file" LOCAL_CONFIG_FILE="$local_config_file" {{runtime.python}} - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      local_config_file = Path(os.environ["LOCAL_CONFIG_FILE"])
+      local_config = json.loads(local_config_file.read_text(encoding="utf-8"))
+      selection = local_config.get("llm")
+      if not isinstance(selection, dict):
+          raise ValueError("MiniMax auth agent config requires llm selection")
+
+      provider = selection.get("provider")
+      model = selection.get("model")
+      if not isinstance(provider, str) or not provider.strip():
+          raise ValueError("MiniMax auth agent config requires llm.provider")
+      if not isinstance(model, str) or not model.strip():
+          raise ValueError("MiniMax auth agent config requires llm.model")
+
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+      if not isinstance(config, dict):
+          raise ValueError("Global agent config must contain a JSON object")
+
+      llm = config.setdefault("llm", {})
+      if not isinstance(llm, dict):
+          raise ValueError("Global agent config llm must contain an object")
+      llm["provider"] = provider.strip()
+      llm["model"] = model.strip()
+      config_file.parent.mkdir(parents=True, exist_ok=True)
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      rm -f "$HOME/.skiller/settings/providers.json.minimax-auth.bak"
+      rm -f "$HOME/.skiller/settings/providers.json.minimax-auth.missing"
+      printf '%s\n' "Global agent selection updated."
       printf '%s' committed
     cwd: .
     timeout: 15
@@ -259,9 +293,9 @@ steps:
       set -eu
 
       settings_dir="$HOME/.skiller/settings"
-      config_file="${AGENT_AGENT_CONFIG_FILE:-$settings_dir/agent.json}"
-      backup_file="$HOME/.skiller/settings/agent.json.minimax-auth.bak"
-      missing_file="$HOME/.skiller/settings/agent.json.minimax-auth.missing"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.minimax-auth.bak"
+      missing_file="$settings_dir/providers.json.minimax-auth.missing"
       secret_file="$({{runtime.python}} "{{flow.dir}}/minimax_auth.py" api-key-file)"
 
       if [ -f "$backup_file" ]; then

@@ -45,9 +45,10 @@ class AgentContextManager:
         context: AgentContext,
         config: AgentRunnerConfig,
     ) -> AgentContextLLMRequest:
-        provider = config.config.llm.default()
+        provider = config.provider_definition
+        model = config.model_definition()
         context_config = config.config.context
-        model_context_window_tokens = provider.model.model_context_window_tokens
+        model_context_window_tokens = model.context_window_tokens
         window_tokens = context_config.effective_context_tokens(
             model_context_window_tokens=model_context_window_tokens,
         )
@@ -85,6 +86,7 @@ class AgentContextManager:
             log_request_file = config.config.debug.log_request_file
         llm_request = self.prompt_builder.build_request(
             provider=provider,
+            model=model,
             system=config.system,
             entries=entries,
             tools=config.tools,

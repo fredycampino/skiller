@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from helpers.agent_config import FakeAgentConfigPort
+from helpers.agent_config import FakeAgentConfigPort, FakeLLMProviderCatalogPort
 from helpers.agent_runner import build_agent_runner
 
 from skiller.application.action.action_mapper import ActionMapper
@@ -161,6 +161,7 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=FakeAgentConfigPort(),
+            llm_provider_catalog=FakeLLMProviderCatalogPort(),
             run_store=store,
             skill_runner=skill_runner,
             tool_manager=agent_tool_manager,

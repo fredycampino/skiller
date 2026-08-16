@@ -30,6 +30,7 @@ from stui.port.event_models import (
     OutputPayload,
     RouteOutputValue,
     RunFinishedPayload,
+    RunModelUpdatedPayload,
     RunResumePayload,
     RunSnapshotFailedPayload,
     RunSnapshotUpdatedPayload,
@@ -56,6 +57,7 @@ from stui.viewmodel.console_screen_state import (
     NotifyActionDoneItem,
     OutputFormat,
     RunFinishedItem,
+    RunModelUpdatedItem,
     RunSnapshotStatus,
     RunSyncSnapshotItem,
     RunWaitingInputItem,
@@ -221,6 +223,30 @@ def test_event_transcript_mapper_uses_snapshot_updated_as_run_snapshot_item() ->
         source="internal",
         ref="mono",
         status=RunSnapshotStatus.UPDATED,
+    )
+
+
+def test_event_transcript_mapper_uses_model_updated_as_run_model_item() -> None:
+    mapper = EventTranscriptMapper()
+
+    items = mapper.to_transcript(
+        [
+            _event(
+                LogEventType.RUN_MODEL_UPDATED,
+                payload=RunModelUpdatedPayload(
+                    provider="moonshot",
+                    model="kimi-k3",
+                ),
+            ),
+        ],
+    )
+
+    assert len(items) == 1
+    assert items[0] == RunModelUpdatedItem(
+        sequence=1,
+        run_id="run-1",
+        provider="moonshot",
+        model="kimi-k3",
     )
 
 

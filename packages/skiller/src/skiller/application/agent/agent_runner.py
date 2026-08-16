@@ -71,7 +71,7 @@ class AgentRunner:
             )
             turn_id = context_request.turn_id
             response = self.llm_model.generate(
-                provider=config.config.llm.default(),
+                provider=config.provider_definition,
                 request=context_request.llm_request,
             )
             if response.ok is False:
@@ -85,10 +85,7 @@ class AgentRunner:
             state.record_llm_response(response)
 
             final_content = response.content
-            has_invalid_final_content = (
-                final_content is None
-                or not final_content.strip()
-            )
+            has_invalid_final_content = final_content is None or not final_content.strip()
 
             if not tools_enabled and has_invalid_final_content:
                 error = self.error_mapper.invalid_final_message(
@@ -118,7 +115,7 @@ class AgentRunner:
 
             allowed_tools = [tool.name for tool in config.tools]
             max_tool_calls = config.config.loop.max_tool_calls
-            provider = config.config.llm.default()
+            model = config.model_definition()
             context_config = config.config.context
             tool_execution_request = ToolExecutionRequest(
                 context=context,
@@ -129,7 +126,7 @@ class AgentRunner:
                 event_config=config.config.event_output,
                 max_tool_calls=max_tool_calls,
                 max_tool_result_bytes=context_config.tool_result_max_bytes(
-                    model_context_window_tokens=provider.model.model_context_window_tokens,
+                    model_context_window_tokens=model.context_window_tokens,
                 ),
                 context_metrics=context_metrics,
                 turn_loop=turn_loop,

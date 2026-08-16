@@ -220,7 +220,7 @@ def test_router_prepare_rejects_policy_blocked_tool() -> None:
 
     assert result.ok is False
     assert result.error == ToolPrepareFailure.POLICY_BLOCKED
-    assert result.error_message == "shell command path escapes allowed_paths"
+    assert result.error_message == "shell command path escapes allowed_paths: /etc/passwd"
 
 
 def test_router_prepare_rejects_policy_exception() -> None:

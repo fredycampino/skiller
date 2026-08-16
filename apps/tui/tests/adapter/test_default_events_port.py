@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 
 import pytest
@@ -30,6 +31,7 @@ class FakeLogEventsObserver:
     subscribe_after_sequence_calls: list[int] = field(default_factory=list)
     subscribe_interval_calls: list[float] = field(default_factory=list)
     unsubscribe_calls: int = 0
+    refresh_calls: list[tuple[str, LogEventsListener, int]] = field(default_factory=list)
 
     def subscribe(
         self,
@@ -45,6 +47,15 @@ class FakeLogEventsObserver:
 
     def unsubscribe(self) -> None:
         self.unsubscribe_calls += 1
+
+    async def refresh(
+        self,
+        *,
+        run_id: str,
+        listener: LogEventsListener,
+        after_sequence: int,
+    ) -> None:
+        self.refresh_calls.append((run_id, listener, after_sequence))
 
 
 @dataclass
@@ -211,6 +222,33 @@ def test_unsubscribe_clears_subscription() -> None:
 
     assert observer.unsubscribe_calls == 1
     assert port.get_max_page() == DEFAULT_MAX_EVENTS_WINDOW
+
+
+def test_refresh_reads_after_last_received_sequence() -> None:
+    async def run() -> None:
+        observer = FakeLogEventsObserver()
+        listener = FakeLogEventsListener()
+        port = _port(event_observer=observer)
+        port.subscribe(run_id="run-1", listener=listener)
+        port.notify([_event(sequence=7)])
+
+        await port.refresh()
+
+        assert observer.refresh_calls == [("run-1", port, 7)]
+
+    asyncio.run(run())
+
+
+def test_refresh_without_subscription_is_ignored() -> None:
+    async def run() -> None:
+        observer = FakeLogEventsObserver()
+        port = _port(event_observer=observer)
+
+        await port.refresh()
+
+        assert observer.refresh_calls == []
+
+    asyncio.run(run())
 
 
 def _port(

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
+"""MiniMax provider authentication helper for Skiller."""
 from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Moonshot credential helper for Skiller onboarding."
+        description="MiniMax credential helper for Skiller onboarding."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("api-key-file", help="Print the resolved API key file path.")
@@ -27,16 +27,15 @@ def default_api_key_file() -> Path:
     configured_path = configured_api_key_file()
     if configured_path is not None:
         return configured_path
-    return Path.home() / ".skiller" / "secrets" / "moonshot_api_key"
+    return Path.home() / ".skiller" / "secrets" / "minimax_api_key"
+
+
+def providers_config_file() -> Path:
+    return Path.home() / ".skiller" / "settings" / "providers.json"
 
 
 def configured_api_key_file() -> Path | None:
-    config_path = Path(
-        os.environ.get(
-            "AGENT_AGENT_CONFIG_FILE",
-            Path.home() / ".skiller" / "settings" / "agent.json",
-        )
-    ).expanduser()
+    config_path = providers_config_file()
     if not config_path.exists():
         return None
 
@@ -49,11 +48,11 @@ def configured_api_key_file() -> Path | None:
     if not isinstance(providers, dict):
         return None
 
-    moonshot = providers.get("moonshot")
-    if not isinstance(moonshot, dict):
+    minimax = providers.get("minimax")
+    if not isinstance(minimax, dict):
         return None
 
-    api_key_file = moonshot.get("api_key_file")
+    api_key_file = minimax.get("api_key_file")
     if not isinstance(api_key_file, str) or not api_key_file.strip():
         return None
 

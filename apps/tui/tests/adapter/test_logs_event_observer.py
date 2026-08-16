@@ -126,6 +126,50 @@ def test_logs_event_observer_stops_immediately_on_finished(
     asyncio.run(run())
 
 
+def test_logs_event_observer_refreshes_after_polling_stops_on_waiting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_sleep = asyncio.sleep
+    adapter = FakeLogEventAdapter(
+        [
+            [_run_waiting_event(sequence=2)],
+            [],
+            [_step_started_event(sequence=3)],
+        ]
+    )
+    listener = FakeLogEventsListener()
+
+    async def fake_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return function(*args, **kwargs)
+
+    async def fake_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    async def run() -> None:
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        observer = LogsEventObserver(logs=adapter)
+        observer.subscribe(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=0,
+            interval_seconds=0.0,
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        await observer.refresh(
+            run_id="run-1",
+            listener=listener,
+            after_sequence=2,
+        )
+
+        assert [event.sequence for event in listener.events] == [2, 3]
+        assert adapter.called_with[-1] == ("run-1", 2, 100)
+
+    asyncio.run(run())
+
+
 def test_logs_event_observer_uses_listener_max_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

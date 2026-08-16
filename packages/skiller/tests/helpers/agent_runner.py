@@ -23,7 +23,7 @@ from skiller.application.use_cases.run.append_runtime_event import AppendRuntime
 from skiller.domain.agent.context.context_store_port import AgentContextStorePort
 from skiller.domain.agent.context.model import AgentContextState
 from skiller.domain.agent.llm.port import LLMPort, ResolvedLLMPort
-from skiller.domain.agent.llm.provider_registry import AgentLLMProvider
+from skiller.domain.agent.llm.provider_catalog import LLMProviderDefinition
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_model import RunAgent
@@ -52,7 +52,7 @@ class _FakeLLMClientResolver:
     def __init__(self, llm: LLMPort[LLMRequest]) -> None:
         self.llm = llm
 
-    def resolve(self, provider: AgentLLMProvider) -> ResolvedLLMPort:
+    def resolve(self, provider: LLMProviderDefinition) -> ResolvedLLMPort:
         _ = provider
         return self.llm
 
@@ -69,6 +69,7 @@ class _FakeRunAgentStore:
             agent_id=agent_id,
             context_id=context_id,
         )
+
 
 class _FakeAgentContextState:
     def __init__(self) -> None:

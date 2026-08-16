@@ -1,4 +1,5 @@
 import pytest
+from helpers.agent_config import FakeLLMProviderCatalogPort
 
 from skiller.application.use_cases.agent.list_agent_context import (
     ListAgentContextStatus,
@@ -11,6 +12,7 @@ from skiller.domain.agent.config.model import (
     AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
+    AgentLLMSelection,
     AgentLoopConfig,
 )
 from skiller.domain.agent.context.model import (
@@ -24,13 +26,6 @@ from skiller.domain.agent.context.model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.llm.model import LLMUsage
-from skiller.domain.agent.llm.provider_registry import (
-    NULL_MODELS,
-    AgentLLMProviderList,
-    AgentLLMProviderType,
-    AgentNullLLMModel,
-    AgentNullProvider,
-)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunAgent
 
@@ -58,6 +53,7 @@ def test_list_agent_context_uses_compact_window_and_returns_metadata_without_pay
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(_agent_config()),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     )
 
@@ -105,6 +101,7 @@ def test_list_agent_context_uses_raw_window_when_no_compaction_state() -> None:
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(_agent_config()),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -134,6 +131,7 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = ListAgentContextUseCase(
@@ -142,6 +140,7 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
     no_context = ListAgentContextUseCase(
@@ -150,6 +149,7 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -170,6 +170,7 @@ def test_list_agent_context_rejects_invalid_programmer_input() -> None:
         agent_context_store=context_store,
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     )
 
@@ -304,16 +305,8 @@ def _assistant_entry(
 
 
 def _agent_config() -> AgentConfig:
-    provider = AgentNullProvider(
-        model=AgentNullLLMModel.NULL1,
-        models=NULL_MODELS,
-        timeout_seconds=30,
-    )
     return AgentConfig(
-        llm=AgentLLMProviderList(
-            default_provider=AgentLLMProviderType.NULL,
-            providers=(provider,),
-        ),
+        llm=AgentLLMSelection(provider="fake", model="model1"),
         loop=AgentLoopConfig(max_turns=2, max_tool_calls=3),
         context=AgentContextConfig(
             window_width_tokens=100000,

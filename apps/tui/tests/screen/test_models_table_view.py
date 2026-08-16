@@ -86,12 +86,12 @@ def test_models_table_view_uses_active_model_as_default_selection() -> None:
     view.set_rows([
         ModelsTableProviderRow(
             name="codex",
-            source="global",
+            source="user",
             models=(ModelsTableModelRow(name="gpt-5.4"),),
         ),
         ModelsTableProviderRow(
             name="minimax",
-            source="global",
+            source="user",
             models=(
                 ModelsTableModelRow(name="MiniMax-M2.7"),
                 ModelsTableModelRow(name="MiniMax-M2.5", active=True),
@@ -118,12 +118,12 @@ def test_models_table_view_uses_refreshed_active_model_selection() -> None:
     view.set_rows([
         ModelsTableProviderRow(
             name="codex",
-            source="global",
+            source="user",
             models=(ModelsTableModelRow(name="gpt-5.5"),),
         ),
         ModelsTableProviderRow(
             name="minimax",
-            source="global",
+            source="user",
             models=(
                 ModelsTableModelRow(name="MiniMax-M2.7"),
                 ModelsTableModelRow(name="MiniMax-M2.5", active=True),
@@ -166,8 +166,8 @@ def test_models_table_view_orders_configured_providers_first() -> None:
     view = ModelsTableView()
     view.set_rows([
         ModelsTableProviderRow(name="bedrock", source="none", models=()),
-        ModelsTableProviderRow(name="codex", source="global", models=()),
-        ModelsTableProviderRow(name="minimax", source="global", models=()),
+        ModelsTableProviderRow(name="codex", source="user", models=()),
+        ModelsTableProviderRow(name="minimax", source="user", models=()),
     ])
 
     assert view.render_providers_text().splitlines() == ["codex ✓", "minimax ✓", "bedrock"]
@@ -187,14 +187,14 @@ def test_models_table_view_warns_when_selected_provider_needs_auth() -> None:
     assert content.style == "warning"
 
 
-def test_models_table_view_does_not_warn_for_global_provider() -> None:
+def test_models_table_view_does_not_warn_for_user_provider() -> None:
     view = ModelsTableView(
         theme=TuiTheme(color_text_warning="warning"),
     )
     view.set_rows([
         ModelsTableProviderRow(
             name="minimax",
-            source="global",
+            source="user",
             models=(ModelsTableModelRow(name="MiniMax-M2.7"),),
         )
     ])
@@ -204,11 +204,31 @@ def test_models_table_view_does_not_warn_for_global_provider() -> None:
     assert content == "Select a model"
 
 
+@pytest.mark.parametrize("source", ["default", "env"])
+def test_models_table_view_requires_auth_for_non_user_provider(source: str) -> None:
+    view = ModelsTableView(
+        theme=TuiTheme(color_text_warning="warning"),
+    )
+    view.set_rows([
+        ModelsTableProviderRow(
+            name="lmstudio",
+            source=source,
+            models=(ModelsTableModelRow(name="local-model"),),
+        )
+    ])
+
+    content = view.render_status_content()
+
+    assert isinstance(content, Text)
+    assert content.plain == "Run /auth lmstudio to configure"
+    assert content.style == "warning"
+
+
 def _rows() -> list[ModelsTableProviderRow]:
     return [
         ModelsTableProviderRow(
             name="codex",
-            source="global",
+            source="user",
             models=(
                 ModelsTableModelRow(name="gpt-5.5", active=True),
                 ModelsTableModelRow(name="gpt-5.4"),
@@ -216,7 +236,7 @@ def _rows() -> list[ModelsTableProviderRow]:
         ),
         ModelsTableProviderRow(
             name="minimax",
-            source="global",
+            source="user",
             models=(
                 ModelsTableModelRow(name="MiniMax-M2.7"),
                 ModelsTableModelRow(name="MiniMax-M2.5"),

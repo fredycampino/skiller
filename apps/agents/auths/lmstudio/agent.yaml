@@ -1,0 +1,225 @@
+name: auths/lmstudio
+description: "Configure the LM Studio provider for Skiller agents"
+version: "0.1"
+start: check_lmstudio_connection
+
+inputs:
+  continue_id: string
+
+on_success:
+  cleanup: true
+  action:
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_lmstudio_connection
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      base_url="$({{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" base-url)"
+      if {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" probe "$base_url" >/dev/null; then
+        printf '%s' ready
+      else
+        printf '%s' unavailable
+      fi
+    cwd: .
+    timeout: 15
+    check: true
+    next: route_lmstudio_connection
+
+  - switch: route_lmstudio_connection
+    value: '{{output_value("check_lmstudio_connection").stdout}}'
+    cases:
+      ready: backup_lmstudio_config_existing
+    default: explain_lmstudio
+
+  - notify: explain_lmstudio
+    format: markdown
+    message: |
+      # LM Studio setup
+
+      Start the LM Studio local server and load a model. Then enter its
+      OpenAI-compatible base URL.
+
+      The default URL is:
+
+      ```text
+      http://127.0.0.1:1234/v1
+      ```
+    next: ask_base_url
+
+  - wait_input: ask_base_url
+    prompt: "LM Studio base URL, or exit"
+    next: route_base_url_input
+
+  - switch: route_base_url_input
+    value: '{{output_value("ask_base_url").payload.text}}'
+    cases:
+      exit: exit_setup
+      Exit: exit_setup
+      quit: exit_setup
+      Quit: exit_setup
+    default: validate_custom_base_url
+
+  - shell: validate_custom_base_url
+    allowed_paths:
+      - "~/.skiller"
+    env:
+      LMSTUDIO_BASE_URL: '{{output_value("ask_base_url").payload.text}}'
+    command: |
+      set -eu
+
+      if {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" probe "$LMSTUDIO_BASE_URL" >/dev/null; then
+        printf '%s' ready
+      else
+        printf '%s' unavailable
+      fi
+    cwd: .
+    timeout: 15
+    check: true
+    next: route_custom_base_url
+
+  - switch: route_custom_base_url
+    value: '{{output_value("validate_custom_base_url").stdout}}'
+    cases:
+      ready: backup_lmstudio_config_custom
+    default: invalid_base_url
+
+  - notify: invalid_base_url
+    message: "LM Studio did not return any models from that URL. Check the server and URL."
+    next: ask_base_url
+
+  - shell: backup_lmstudio_config_existing
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" backup
+    cwd: .
+    timeout: 15
+    check: true
+    next: write_lmstudio_config_existing
+
+  - shell: write_lmstudio_config_existing
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      base_url="$({{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" base-url)"
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" configure "$base_url"
+    cwd: .
+    timeout: 15
+    check: true
+    next: verify_lmstudio
+
+  - shell: backup_lmstudio_config_custom
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" backup
+    cwd: .
+    timeout: 15
+    check: true
+    next: write_lmstudio_config_custom
+
+  - shell: write_lmstudio_config_custom
+    allowed_paths:
+      - "~/.skiller"
+    env:
+      LMSTUDIO_BASE_URL: '{{output_value("ask_base_url").payload.text}}'
+    command: |
+      set -eu
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" configure "$LMSTUDIO_BASE_URL"
+    cwd: .
+    timeout: 15
+    check: true
+    next: verify_lmstudio
+
+  # LM Studio models are discovered at runtime. The configure step writes the
+  # temporary selection to global agent.json, so this flow intentionally has no
+  # package-local agent.json.
+  - agent: verify_lmstudio
+    system: |
+      You are a configuration check agent.
+      Reply with one short sentence.
+    task: "Say that the LM Studio agent configuration works."
+    tools: []
+    max_turns: 1
+    next: route_lmstudio_validation
+
+  - switch: route_lmstudio_validation
+    value: '{{output_value("verify_lmstudio").data.stop_reason}}'
+    cases:
+      final: commit_lmstudio_config
+    default: restore_failed_lmstudio_config
+
+  - shell: commit_lmstudio_config
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" commit
+    cwd: .
+    timeout: 15
+    check: true
+    next: done
+
+  - shell: restore_failed_lmstudio_config
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" restore
+    cwd: .
+    timeout: 15
+    check: true
+    next: validation_error
+
+  - notify: validation_error
+    format: markdown
+    message: |
+      LM Studio answered `/v1/models`, but the agent request failed. The previous
+      provider and model selection were restored.
+
+      Choose an option:
+
+      1. Try again
+      2. Exit
+    next: select_validation_action
+
+  - wait_input: select_validation_action
+    prompt: "Choose 1 to try again, or 2 to exit."
+    next: route_validation_action
+
+  - switch: route_validation_action
+    value: '{{output_value("select_validation_action").payload.text}}'
+    cases:
+      "1": check_lmstudio_connection
+      retry: check_lmstudio_connection
+      Retry: check_lmstudio_connection
+      try again: check_lmstudio_connection
+      "2": exit_setup
+      exit: exit_setup
+      Exit: exit_setup
+      quit: exit_setup
+    default: invalid_validation_action
+
+  - notify: invalid_validation_action
+    message: "Invalid option. Type 1 to try again or 2 to exit."
+    next: select_validation_action
+
+  - notify: done
+    message: "LM Studio responded. Agent configuration is ready."
+
+  - notify: exit_setup
+    message: "LM Studio setup closed."

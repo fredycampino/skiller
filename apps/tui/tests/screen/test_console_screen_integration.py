@@ -28,6 +28,7 @@ from stui.port.run_port import (
 from stui.screen import console_screen as console_screen_module
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
+from stui.screen.auth_table_view import AuthTableView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
 from stui.screen.models_table_view import ModelsTableView
@@ -35,6 +36,9 @@ from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.transcript_log import TranscriptLog
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
+)
+from stui.usecase import (
+    list_auth_providers_use_case as list_auth_providers_use_case_module,
 )
 from stui.usecase import list_models_use_case as list_models_use_case_module
 from stui.usecase import run_command_use_case as run_command_use_case_module
@@ -121,18 +125,71 @@ def test_console_screen_opens_models_table_from_command() -> None:
         asyncio.run(run())
 
 
+def test_console_screen_opens_auth_panel_and_closes_it_with_escape() -> None:
+    async def run() -> None:
+        models_port = FakeModelsPort(
+            models=[
+                ModelsPortProviderItem(name="moonshot", source="user", models=()),
+                ModelsPortProviderItem(name="codex", source="user", models=()),
+            ]
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            models_port=models_port,
+        )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("/", "a")
+            await pilot.pause()
+
+            autocomplete = app.query_one("#autocomplete", AutoCompleteView)
+            assert autocomplete.is_visible() is True
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            auth_table = app.query_one("#auth-table", AuthTableView)
+            help_view = app.query_one("#auth-help", Static)
+            prompt = app.query_one("#prompt", TextArea)
+            assert app.state.auth_table.visible is True
+            assert app.state.prompt.mode == PromptMode.AUTH_TABLE
+            assert auth_table.display is True
+            assert autocomplete.is_visible() is False
+            assert prompt.text == ""
+            assert "Enter configure" in str(help_view.content)
+            assert auth_table.size.height <= 10
+            assert auth_table.render_providers_text().splitlines()[:2] == [
+                "moonshot ✓",
+                "codex ✓",
+            ]
+
+            await pilot.press("escape")
+            await pilot.pause()
+
+            assert app.state.auth_table.visible is False
+            assert app.state.prompt.mode == PromptMode.DEFAULT
+            assert auth_table.display is False
+
+    with patched_to_thread(list_auth_providers_use_case_module):
+        asyncio.run(run())
+
+
 def test_console_screen_selects_model_from_models_table() -> None:
     async def run() -> None:
         models_port = FakeModelsPort(
             models=[
                 ModelsPortProviderItem(
                     name="codex",
-                    source="global",
+                    source="user",
                     models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
                 ),
                 ModelsPortProviderItem(
                     name="minimax",
-                    source="global",
+                    source="user",
                     models=(
                         ModelsPortModelItem(name="MiniMax-M2.7"),
                         ModelsPortModelItem(name="MiniMax-M2.5"),

@@ -19,6 +19,20 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.28 - 2026-08-16
+
+### Added
+- Add `skiller input receive --wait` to remain attached until a resumed run reaches its next wait or finishes.
+
+### Changed
+- Update provider and agent end-to-end test coverage for the current runtime configuration.
+
+### Fixed
+- Prevent `input --wait` from returning on the previous waiting state by tracking subsequent runtime events.
+
+### Notes
+- Includes PR #118.
+
 ## 0.1.0-beta.27 - 2026-08-14
 
 ### Added

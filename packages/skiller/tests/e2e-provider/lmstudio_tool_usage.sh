@@ -99,23 +99,28 @@ PYTHONPATH=packages/skiller/src \
 import json
 import os
 
-from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.agent.llm.model import (
     LLMSystemMessage,
     LLMToolChoiceMode,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm.model import LLMModel
-from skiller.domain.agent.llm.provider_lmstudio import (
-    AgentLMStudioProvider,
-    LMStudioLLMRequest,
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMApiKeySource,
+    LLMApiKeySourceType,
+    LLMModelDefinition,
+    OpenAILLMProviderDefinition,
 )
+from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
     ToolRequest,
     ToolRequestResult,
     ToolSchema,
+)
+from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
+from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
+    OpenAIApiKeyDatasource,
 )
 
 
@@ -143,21 +148,34 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = LLMModel(
-    value=os.environ["LMSTUDIO_MODEL"],
-    model_context_window_tokens=8000,
+model = LLMModelDefinition(
+    model=os.environ["LMSTUDIO_MODEL"],
+    context_window_tokens=8000,
 )
-provider = AgentLMStudioProvider(
-    model=model,
-    api_key=os.environ["LMSTUDIO_API_KEY"],
+provider = OpenAILLMProviderDefinition(
+    name="lmstudio",
+    models=(model,),
+    enabled=True,
     base_url=os.environ["LMSTUDIO_BASE_URL"],
     timeout_seconds=float(os.environ["LMSTUDIO_TIMEOUT_SECONDS"]),
+    temperature=0.2,
+    top_p=1,
+    max_output_tokens=4096,
+    parallel_tool_calls=True,
+    tool_choice=LLMToolChoiceMode.AUTO,
+    api_key_source=LLMApiKeySource(
+        type=LLMApiKeySourceType.VALUE,
+        value=os.environ["LMSTUDIO_API_KEY"],
+    ),
+    options={},
 )
-client = LLMClientFactory().resolve(provider)
+client = DefaultLLMClientResolver(
+    api_key_datasource=OpenAIApiKeyDatasource(env={}),
+).resolve(provider)
 
 command = "echo skiller-lmstudio-tool-usage-ok"
 response = client.generate(
-    LMStudioLLMRequest(
+    OpenAILLMRequest(
         model=model,
         messages=(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),

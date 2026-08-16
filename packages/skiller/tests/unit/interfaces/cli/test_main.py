@@ -57,6 +57,7 @@ class _FakeController:
                 },
             }
         ]
+        self.logs_results: list[list[dict[str, object]]] | None = None
         self.status_results: list[dict[str, object]] = [
             {"run_id": "run-1", "status": "RUNNING"},
             {"run_id": "run-1", "status": "SUCCEEDED"},
@@ -196,7 +197,11 @@ class _FakeController:
                 "limit": limit,
             }
         )
-        return list(self.logs_result)
+        if self.logs_results is None:
+            return list(self.logs_result)
+        if len(self.logs_results) == 1:
+            return list(self.logs_results[0])
+        return list(self.logs_results.pop(0))
 
     def status(self, run_id: str) -> dict[str, object] | None:
         self.status_calls.append({"run_id": run_id})
@@ -781,6 +786,126 @@ def test_input_receive_stores_input_and_resumes_matched_runs(
     assert controller.receive_input_calls == [("run-1", "database timeout")]
     assert worker_process_service.calls == [("resume", "run-1")]
     assert data["resumed_runs"] == ["run-1"]
+
+
+def test_input_receive_waits_for_resumed_run_status(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    controller.status_results = [
+        {
+            "run_id": "run-1",
+            "status": "WAITING",
+            "last_event_sequence": 5,
+        },
+        {
+            "run_id": "run-1",
+            "status": "WAITING",
+            "last_event_sequence": 5,
+        },
+        {
+            "run_id": "run-1",
+            "status": "WAITING",
+            "last_event_sequence": 7,
+            "wait_type": "input",
+            "prompt": "Next input",
+        },
+    ]
+    controller.logs_results = [
+        [],
+        [
+            {
+                "sequence": 6,
+                "id": "evt-resume",
+                "type": "RUN_RESUME",
+                "payload": {"source": "manual"},
+            },
+            {
+                "sequence": 7,
+                "id": "evt-waiting",
+                "type": "RUN_WAITING",
+                "payload": {},
+            },
+        ],
+    ]
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _seconds: None)
+    worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
+
+    exit_code = cli_main.main(
+        ["input", "receive", "run-1", "--text", "next", "--wait"]
+    )
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert worker_process_service.calls == [("resume", "run-1")]
+    assert controller.logs_calls == [
+        {"run_id": "run-1", "after_sequence": 5, "limit": None},
+        {"run_id": "run-1", "after_sequence": 5, "limit": None},
+    ]
+    assert data["wait_results"] == [
+        {
+            "run_id": "run-1",
+            "status": "WAITING",
+            "wait_type": "input",
+            "prompt": "Next input",
+        }
+    ]
+
+
+def test_input_receive_wait_handles_fast_finished_run(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    controller.status_results = [
+        {
+            "run_id": "run-1",
+            "status": "WAITING",
+            "last_event_sequence": 5,
+        },
+        {
+            "run_id": "run-1",
+            "status": "SUCCEEDED",
+            "last_event_sequence": 8,
+        },
+    ]
+    controller.logs_results = [
+        [
+            {
+                "sequence": 8,
+                "id": "evt-finished",
+                "type": "RUN_FINISHED",
+                "payload": {"status": "SUCCEEDED"},
+            }
+        ]
+    ]
+    worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
+
+    exit_code = cli_main.main(
+        ["input", "receive", "run-1", "--text", "next", "--wait"]
+    )
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert controller.logs_calls == [
+        {"run_id": "run-1", "after_sequence": 5, "limit": None}
+    ]
+    assert data["wait_results"] == [{"run_id": "run-1", "status": "SUCCEEDED"}]
 
 
 def test_channel_receive_forwards_payload_and_resumes_matched_runs(

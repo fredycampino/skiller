@@ -12,3 +12,11 @@ steps:
 
   - notify: done
     message: '{{output_value("ask_user").payload.text}}'
+    next: ask_again
+
+  - wait_input: ask_again
+    prompt: "Write another summary"
+    next: finish
+
+  - notify: finish
+    message: '{{output_value("ask_again").payload.text}}'

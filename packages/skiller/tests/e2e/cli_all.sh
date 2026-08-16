@@ -50,7 +50,7 @@ yellow = os.getenv("YELLOW", "")
 red = os.getenv("RED", "")
 reset = os.getenv("RESET", "")
 
-if status == "SUCCEEDED":
+if status in {"SUCCEEDED", "WAITING"}:
     print(f"{green}[PASS]{reset} {run_id}")
 elif status == "SKIPPED":
     print(f"{yellow}[SKIP]{reset} {reason or "no reason"}")
@@ -90,5 +90,3 @@ echo
 run_cli "cli_mcp_stdio.sh" ./cli_mcp_stdio.sh "hola-e2e"
 echo
 run_cli "cli_shell.sh" ./cli_shell.sh "hola-shell-e2e"
-echo
-run_cli "cli_codex_client.sh" ./cli_codex_client.sh

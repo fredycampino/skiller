@@ -64,6 +64,12 @@ For a run blocked on human input:
 skiller input receive <run_id> --text "database timeout"
 ```
 
+To remain attached until the resumed run reaches another wait or finishes:
+
+```bash
+skiller input receive <run_id> --text "database timeout" --wait
+```
+
 For a run blocked on a webhook:
 
 ```bash

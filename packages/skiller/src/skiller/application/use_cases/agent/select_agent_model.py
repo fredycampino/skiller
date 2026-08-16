@@ -3,7 +3,13 @@ from enum import Enum
 from pathlib import Path
 
 from skiller.domain.agent.config.port import AgentConfigPort
-from skiller.domain.agent.llm.model import AgentLLMProviderType
+from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
+from skiller.domain.event.event_model import (
+    RunModelUpdatedPayload,
+    RuntimeEventDraft,
+    RuntimeEventType,
+)
+from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.runner_port import RunnerPort
 
@@ -11,7 +17,6 @@ from skiller.domain.step.runner_port import RunnerPort
 class SelectAgentModelStatus(str, Enum):
     OK = "OK"
     RUN_NOT_FOUND = "RUN_NOT_FOUND"
-    PROVIDER_NOT_CONFIGURED = "PROVIDER_NOT_CONFIGURED"
     PROVIDER_NOT_SUPPORTED = "PROVIDER_NOT_SUPPORTED"
     MODEL_NOT_SUPPORTED = "MODEL_NOT_SUPPORTED"
 
@@ -25,25 +30,20 @@ class SelectAgentModelResult:
     error: str | None = None
 
 
-_SELECTABLE_PROVIDER_TYPES = {
-    AgentLLMProviderType.MINIMAX,
-    AgentLLMProviderType.MOONSHOT,
-    AgentLLMProviderType.LMSTUDIO,
-    AgentLLMProviderType.CODEX,
-    AgentLLMProviderType.BEDROCK,
-}
-
-
 class SelectAgentModelUseCase:
     def __init__(
         self,
         *,
         run_store: RunStorePort,
         agent_config: AgentConfigPort,
+        llm_provider_catalog: LLMProviderCatalogPort,
+        runtime_events: RuntimeEventStorePort,
         skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
         self.agent_config = agent_config
+        self.llm_provider_catalog = llm_provider_catalog
+        self.runtime_events = runtime_events
         self.skill_runner = skill_runner
 
     def execute(
@@ -66,8 +66,10 @@ class SelectAgentModelUseCase:
                 error=f"Run '{run_id}' not found",
             )
 
-        provider_type = _provider_type(provider)
-        if provider_type is None:
+        catalog = self.llm_provider_catalog.get_catalog()
+        try:
+            provider_definition = catalog.get(provider)
+        except ValueError:
             return SelectAgentModelResult(
                 status=SelectAgentModelStatus.PROVIDER_NOT_SUPPORTED,
                 run_id=run_id,
@@ -76,7 +78,7 @@ class SelectAgentModelUseCase:
                 error=f"Unsupported LLM provider: {provider}",
             )
 
-        if provider_type not in _SELECTABLE_PROVIDER_TYPES:
+        if not provider_definition.enabled:
             return SelectAgentModelResult(
                 status=SelectAgentModelStatus.PROVIDER_NOT_SUPPORTED,
                 run_id=run_id,
@@ -85,44 +87,37 @@ class SelectAgentModelUseCase:
                 error=f"Unsupported LLM provider: {provider}",
             )
 
-        config_path = self._resolve_agent_config_path(run.source, run.ref)
-        config = self.agent_config.get_config(config_path=config_path)
-        configured_provider = next(
-            (
-                item
-                for item in config.llm.providers
-                if item.type == provider_type
-            ),
-            None,
-        )
-        if configured_provider is None:
-            return SelectAgentModelResult(
-                status=SelectAgentModelStatus.PROVIDER_NOT_CONFIGURED,
-                run_id=run_id,
-                provider=provider_type.value,
-                model=model,
-                error=f"LLM provider is not configured: {provider_type.value}",
-            )
-
-        allowed_model_values = {item.value for item in configured_provider.models}
-        if model not in allowed_model_values:
+        try:
+            catalog.get_model(provider_name=provider, model_name=model)
+        except ValueError:
             return SelectAgentModelResult(
                 status=SelectAgentModelStatus.MODEL_NOT_SUPPORTED,
                 run_id=run_id,
                 provider=provider,
                 model=model,
-                error=f"Unsupported model='{model}' for provider='{provider_type.value}'",
+                error=f"Unsupported model='{model}' for provider='{provider}'",
             )
 
+        config_path = self._resolve_agent_config_path(run.source, run.ref)
         self.agent_config.set_model(
-            provider_type=provider_type,
+            provider=provider,
             model=model,
             config_path=config_path,
+        )
+        self.runtime_events.append_event(
+            RuntimeEventDraft(
+                run_id=run_id,
+                type=RuntimeEventType.RUN_MODEL_UPDATED,
+                payload=RunModelUpdatedPayload(
+                    provider=provider,
+                    model=model,
+                ),
+            )
         )
         return SelectAgentModelResult(
             status=SelectAgentModelStatus.OK,
             run_id=run_id,
-            provider=provider_type.value,
+            provider=provider,
             model=model,
         )
 
@@ -138,11 +133,4 @@ class SelectAgentModelUseCase:
 
         if config_path.exists():
             return config_path
-        return None
-
-
-def _provider_type(provider: str) -> AgentLLMProviderType | None:
-    try:
-        return AgentLLMProviderType(provider)
-    except ValueError:
         return None

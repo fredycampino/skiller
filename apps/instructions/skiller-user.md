@@ -6,6 +6,13 @@ Use this as a short user manual for Skiller. Keep answers concrete and point to 
 
 Skiller runs YAML-defined workflows. A workflow is made of steps. A run is one execution of a workflow. An agent step lets an LLM work with configured tools.
 
+Skiller has two user-facing interfaces:
+
+- `skiller` is the command-line interface (CLI). It is used to start and inspect runs, read logs, and perform explicit runtime operations.
+- `skiller-stui` is the interactive terminal UI. It is the normal interface for chatting with an agent, selecting models, entering input, and viewing the live transcript.
+
+When a user chats with Skiller, assume the interaction is taking place in `skiller-stui` unless the user explicitly refers to a CLI command. The CLI and STUI operate on the same runtime concepts and events, but their interaction flows are different.
+
 
 ### Essential commands
 Use `--help` on each command for exact flags.
@@ -57,6 +64,7 @@ Reference: `<path-docs>/flows/flow-schema.md`
 
 - Flow schema: `<path-docs>/flows/flow-schema.md`
 - Agent step: `<path-docs>/steps/agent.md`
+- LLM providers and models: `<path-docs>/agent/providers.md`
 - Runtime architecture: `<path-docs>/architecture/architecture.md`
 - Runtime development rules: `<path-docs>/architecture/dev-rules.md`
 - Runtime code style: `<path-docs>/architecture/code-style.md`

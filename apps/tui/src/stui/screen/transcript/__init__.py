@@ -15,6 +15,7 @@ from stui.screen.transcript.placeholder_view import PlaceholderView
 from stui.screen.transcript.render_transcript import RenderTranscript
 from stui.screen.transcript.run_ack_view import RunAckView
 from stui.screen.transcript.run_finished_view import RunFinishedView
+from stui.screen.transcript.run_model_updated_view import RunModelUpdatedView
 from stui.screen.transcript.run_output_view import RunOutputView
 from stui.screen.transcript.run_resume_view import RunResumeView
 from stui.screen.transcript.run_step_view import RunStepView
@@ -44,6 +45,7 @@ __all__ = [
     "RunOutputView",
     "RunResumeView",
     "RunFinishedView",
+    "RunModelUpdatedView",
     "RunStepView",
     "RunSystemNoticeView",
     "RunWaitingInputView",

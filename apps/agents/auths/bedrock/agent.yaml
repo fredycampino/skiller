@@ -1,0 +1,424 @@
+name: auths/bedrock
+description: "Configure AWS Bedrock profile for Skiller agents"
+version: "0.1"
+start: check_bedrock_config
+
+inputs:
+  continue_id: string
+
+on_success:
+  cleanup: true
+  action:
+    type: post
+    label: Auth success
+    arg: load_session
+    params: "run_id={{inputs.continue_id}}"
+    auto: true
+
+on_error:
+  cleanup: true
+
+steps:
+  - shell: check_bedrock_config
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+      profile="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" configured-profile 2>/dev/null || true)"
+      if [ -z "$profile" ]; then
+        printf '%s' missing
+        exit 0
+      fi
+
+      if "{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify --profile "$profile" --model "us.anthropic.claude-opus-4-6-v1" >/dev/null 2>&1; then
+        printf '%s' ready
+        exit 0
+      fi
+
+      printf '%s' invalid
+    cwd: .
+    timeout: 30
+    check: true
+    next: route_bedrock_config
+
+  - switch: route_bedrock_config
+    value: '{{output_value("check_bedrock_config").stdout}}'
+    cases:
+      ready: write_bedrock_config_existing
+    default: explain_bedrock
+
+  - notify: explain_bedrock
+    format: markdown
+    message: |
+      # Bedrock setup
+
+      Choose the AWS profile to validate:
+
+      ```text
+      1 Usar profile (skiller-bedrock)
+      2 Escribir otro profile
+      3 Cancelar
+      ```
+    next: select_profile_option
+
+  - wait_input: select_profile_option
+    prompt: "Choose 1, 2, or 3."
+    next: route_profile_option
+
+  - switch: route_profile_option
+    value: '{{output_value("select_profile_option").payload.text}}'
+    cases:
+      "1": verify_skiller_profile
+      "2": ask_custom_profile
+      "3": exit_setup
+    default: invalid_profile_option
+
+  - notify: invalid_profile_option
+    message: "Invalid option. Choose 1, 2, or 3."
+    next: select_profile_option
+
+  - shell: verify_skiller_profile
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      if verify_output="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify \
+        --profile "skiller-bedrock" \
+        --model "us.anthropic.claude-opus-4-6-v1" 2>&1)"; then
+        printf '%s' ready
+      else
+        printf '%s\n' "$verify_output" >&2
+        printf '%s' invalid
+      fi
+    cwd: .
+    timeout: 120
+    check: true
+    next: route_verify_skiller
+
+  - switch: route_verify_skiller
+    value: '{{output_value("verify_skiller_profile").stdout}}'
+    cases:
+      ready: write_bedrock_config_skiller
+    default: validation_error
+
+  - wait_input: ask_custom_profile
+    prompt: "Type your AWS profile name (for example: my-bedrock-profile)"
+    next: verify_custom_profile
+
+  - shell: verify_custom_profile
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      profile='{{output_value("ask_custom_profile").payload.text}}'
+      profile="$(printf '%s' "$profile" | tr -d '[:space:]')"
+      if [ -z "$profile" ]; then
+        printf '%s' invalid
+        exit 0
+      fi
+
+      if verify_output="$("{{runtime.python}}" "{{flow.dir}}/bedrock_auth.py" verify \
+        --profile "$profile" \
+        --model "us.anthropic.claude-opus-4-6-v1" 2>&1)"; then
+        printf '%s' ready
+      else
+        printf '%s\n' "$verify_output" >&2
+        printf '%s' invalid
+      fi
+    cwd: .
+    timeout: 120
+    check: true
+    next: route_verify_custom
+
+  - switch: route_verify_custom
+    value: '{{output_value("verify_custom_profile").stdout}}'
+    cases:
+      ready: write_bedrock_config_custom
+    default: validation_error
+
+  - shell: write_bedrock_config_existing
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.bedrock-auth.bak"
+      missing_file="$settings_dir/providers.json.bedrock-auth.missing"
+      profile="$({{runtime.python}} "{{flow.dir}}/bedrock_auth.py" configured-profile)"
+
+      mkdir -p "$(dirname "$config_file")"
+      rm -f "$backup_file" "$missing_file"
+      if [ -f "$config_file" ]; then
+        cp "$config_file" "$backup_file"
+      else
+        printf '%s' missing > "$missing_file"
+      fi
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" {{runtime.python}} - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+      if not isinstance(config, dict):
+          raise ValueError("Provider config must contain a JSON object")
+
+      providers = config.setdefault("providers", {})
+      if not isinstance(providers, dict):
+          raise ValueError("Provider config providers must contain an object")
+      provider = providers.setdefault("bedrock", {})
+      if not isinstance(provider, dict):
+          raise ValueError("Bedrock provider config must contain an object")
+      provider.pop("model", None)
+      provider["timeout_seconds"] = 120
+      provider["profile"] = profile
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock provider config saved."
+      printf '%s\n' "Provider config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: verify_bedrock
+
+  - shell: write_bedrock_config_skiller
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.bedrock-auth.bak"
+      missing_file="$settings_dir/providers.json.bedrock-auth.missing"
+      profile="skiller-bedrock"
+
+      mkdir -p "$(dirname "$config_file")"
+      rm -f "$backup_file" "$missing_file"
+      if [ -f "$config_file" ]; then
+        cp "$config_file" "$backup_file"
+      else
+        printf '%s' missing > "$missing_file"
+      fi
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" {{runtime.python}} - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      providers = config.setdefault("providers", {})
+      if not isinstance(providers, dict):
+          raise ValueError("Provider config providers must contain an object")
+      provider = providers.setdefault("bedrock", {})
+      if not isinstance(provider, dict):
+          raise ValueError("Bedrock provider config must contain an object")
+      provider.pop("model", None)
+      provider["timeout_seconds"] = 120
+      provider["profile"] = profile
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock provider config saved."
+      printf '%s\n' "Provider config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: verify_bedrock
+
+  - shell: write_bedrock_config_custom
+    allowed_paths:
+      - "~/.skiller"
+    env:
+      BEDROCK_PROFILE: '{{output_value("ask_custom_profile").payload.text}}'
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.bedrock-auth.bak"
+      missing_file="$settings_dir/providers.json.bedrock-auth.missing"
+      profile="$BEDROCK_PROFILE"
+      profile="$(printf '%s' "$profile" | tr -d '[:space:]')"
+
+      mkdir -p "$(dirname "$config_file")"
+      rm -f "$backup_file" "$missing_file"
+      if [ -f "$config_file" ]; then
+        cp "$config_file" "$backup_file"
+      else
+        printf '%s' missing > "$missing_file"
+      fi
+
+      CONFIG_FILE="$config_file" PROFILE="$profile" {{runtime.python}} - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      profile = os.environ["PROFILE"]
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+
+      providers = config.setdefault("providers", {})
+      if not isinstance(providers, dict):
+          raise ValueError("Provider config providers must contain an object")
+      provider = providers.setdefault("bedrock", {})
+      if not isinstance(provider, dict):
+          raise ValueError("Bedrock provider config must contain an object")
+      provider.pop("model", None)
+      provider["timeout_seconds"] = 120
+      provider["profile"] = profile
+
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      printf '%s\n' "Bedrock provider config saved."
+      printf '%s\n' "Provider config: $config_file"
+      printf '%s\n' "Profile: $profile"
+    cwd: .
+    timeout: 20
+    check: true
+    next: verify_bedrock
+
+  - agent: verify_bedrock
+    system: |
+      You are a configuration check agent.
+      Reply with one short sentence.
+    task: "Say that the Bedrock agent configuration works."
+    tools: []
+    max_turns: 1
+    next: route_bedrock_validation
+
+  - switch: route_bedrock_validation
+    value: '{{output_value("verify_bedrock").data.stop_reason}}'
+    cases:
+      final: commit_bedrock_config
+    default: restore_failed_bedrock_config
+
+  - shell: commit_bedrock_config
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/agent.json"
+      local_config_file="{{flow.dir}}/agent.json"
+
+      CONFIG_FILE="$config_file" LOCAL_CONFIG_FILE="$local_config_file" {{runtime.python}} - <<'PY'
+      import json
+      import os
+      from pathlib import Path
+
+      config_file = Path(os.environ["CONFIG_FILE"])
+      local_config_file = Path(os.environ["LOCAL_CONFIG_FILE"])
+      local_config = json.loads(local_config_file.read_text(encoding="utf-8"))
+      selection = local_config.get("llm")
+      if not isinstance(selection, dict):
+          raise ValueError("Bedrock auth agent config requires llm selection")
+
+      provider = selection.get("provider")
+      model = selection.get("model")
+      if not isinstance(provider, str) or not provider.strip():
+          raise ValueError("Bedrock auth agent config requires llm.provider")
+      if not isinstance(model, str) or not model.strip():
+          raise ValueError("Bedrock auth agent config requires llm.model")
+
+      if config_file.exists():
+          config = json.loads(config_file.read_text(encoding="utf-8"))
+      else:
+          config = {}
+      if not isinstance(config, dict):
+          raise ValueError("Global agent config must contain a JSON object")
+
+      llm = config.setdefault("llm", {})
+      if not isinstance(llm, dict):
+          raise ValueError("Global agent config llm must contain an object")
+      llm["provider"] = provider.strip()
+      llm["model"] = model.strip()
+      config_file.parent.mkdir(parents=True, exist_ok=True)
+      config_file.write_text(
+          json.dumps(config, indent=2, sort_keys=True) + "\n",
+          encoding="utf-8",
+      )
+      PY
+
+      rm -f "$HOME/.skiller/settings/providers.json.bedrock-auth.bak"
+      rm -f "$HOME/.skiller/settings/providers.json.bedrock-auth.missing"
+      printf '%s\n' "Global agent selection updated."
+      printf '%s' committed
+    cwd: .
+    timeout: 15
+    check: true
+    next: credentials_ready
+
+  - shell: restore_failed_bedrock_config
+    allowed_paths:
+      - "~/.skiller"
+    command: |
+      set -eu
+
+      settings_dir="$HOME/.skiller/settings"
+      config_file="$settings_dir/providers.json"
+      backup_file="$settings_dir/providers.json.bedrock-auth.bak"
+      missing_file="$settings_dir/providers.json.bedrock-auth.missing"
+
+      if [ -f "$backup_file" ]; then
+        cp "$backup_file" "$config_file"
+      elif [ -f "$missing_file" ]; then
+        rm -f "$config_file"
+      fi
+
+      rm -f "$backup_file" "$missing_file"
+      printf '%s' restored
+    cwd: .
+    timeout: 15
+    check: true
+    next: validation_error
+
+  - notify: credentials_ready
+    format: markdown
+    message: |
+      Bedrock credentials are valid and provider configuration is ready.
+
+  - notify: validation_error
+    format: markdown
+    message: |
+      Bedrock validation failed for that profile.
+
+      Verify that:
+      - the AWS profile exists in `~/.aws/credentials` and `~/.aws/config`
+      - the profile has Bedrock permissions
+      - the selected Bedrock model/inference profile is available
+    next: explain_bedrock
+
+  - notify: exit_setup
+    message: "Bedrock setup closed."

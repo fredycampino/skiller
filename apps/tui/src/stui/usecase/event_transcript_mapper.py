@@ -26,6 +26,7 @@ from stui.port.event_models import (
     OutputPayload,
     RouteOutputValue,
     RunFinishedPayload,
+    RunModelUpdatedPayload,
     RunSnapshotFailedPayload,
     RunSnapshotUpdatedPayload,
     RunWaitingPayload,
@@ -53,6 +54,7 @@ from stui.viewmodel.console_screen_state import (
     NotifyActionDoneItem,
     OutputFormat,
     RunFinishedItem,
+    RunModelUpdatedItem,
     RunSnapshotStatus,
     RunStepItem,
     RunSyncSnapshotItem,
@@ -107,6 +109,15 @@ class EventTranscriptMapper:
                 ref=payload.ref,
                 status=RunSnapshotStatus.FAILED,
                 error=payload.error,
+            )
+
+        if event.event_type == LogEventType.RUN_MODEL_UPDATED:
+            payload = _payload(event, RunModelUpdatedPayload)
+            return RunModelUpdatedItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                provider=payload.provider,
+                model=payload.model,
             )
 
         if event.event_type == LogEventType.ACTION_DONE:

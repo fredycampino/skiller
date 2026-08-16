@@ -20,6 +20,7 @@ from stui.port.models_port import ModelsPortProviderItem
 from stui.port.runs_port import RunsPortItem
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
+from stui.screen.auth_table_view import AuthTableProviderRow, AuthTableView
 from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.footer_context_view import FooterContextView
 from stui.screen.markdown import MarkdownView
@@ -78,6 +79,7 @@ class ConsoleScreen(App[str]):
         self._render_transcript = RenderTranscript(strings=strings)
         self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
         self._last_models_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
+        self._last_auth_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -125,6 +127,14 @@ class ConsoleScreen(App[str]):
                     strings=self.ui_strings,
                 ),
                 id="models-table-area",
+            ),
+            Container(
+                AuthTableView(
+                    id="auth-table",
+                    visible=False,
+                    strings=self.ui_strings,
+                ),
+                id="auth-table-area",
             ),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             PromptView(theme=self.ui_theme),
@@ -236,6 +246,10 @@ class ConsoleScreen(App[str]):
             self._runs_table().action_select_cursor()
             return
 
+        if self.state.auth_table.visible:
+            await self._select_auth_from_table()
+            return
+
         if self.state.models_table.visible:
             await self._select_model_from_table()
             return
@@ -261,6 +275,10 @@ class ConsoleScreen(App[str]):
             self.viewmodel.hide_models_table()
             self._prompt_view().focus_prompt()
             return
+        if self.state.auth_table.visible:
+            self.viewmodel.hide_auth_table()
+            self._prompt_view().focus_prompt()
+            return
 
         await self.viewmodel.interrupt_running_agent_turn()
         self._prompt_view().focus_prompt()
@@ -280,6 +298,8 @@ class ConsoleScreen(App[str]):
     def action_transcript_scroll_up(self) -> None:
         if self.viewmodel.move_completion(-1):
             return
+        if self.state.auth_table.visible and self._auth_table().move_selection(-1):
+            return
         if self.state.models_table.visible and self._models_table().move_selection(-1):
             return
         if self.state.runs_table.visible and self._runs_table().move_selection(-1):
@@ -293,6 +313,8 @@ class ConsoleScreen(App[str]):
 
     def action_transcript_scroll_down(self) -> None:
         if self.viewmodel.move_completion(1):
+            return
+        if self.state.auth_table.visible and self._auth_table().move_selection(1):
             return
         if self.state.models_table.visible and self._models_table().move_selection(1):
             return
@@ -419,6 +441,12 @@ class ConsoleScreen(App[str]):
             model=model.name,
         )
 
+    async def _select_auth_from_table(self) -> None:
+        provider = self._auth_table().selected_provider
+        if provider is None:
+            return
+        await self.viewmodel.select_auth_provider(provider=provider.name)
+
     def _refresh_status(self, *, new_state: ConsoleScreenState) -> None:
         try:
             status = self.query_one("#status", ScreenStatusView)
@@ -520,6 +548,7 @@ class ConsoleScreen(App[str]):
         self._refresh_transcript(new_state=new_state)
         self._refresh_runs_table(new_state=new_state)
         self._refresh_models_table(new_state=new_state)
+        self._refresh_auth_table(new_state=new_state)
         self._refresh_table_visibility(new_state=new_state)
         self._refresh_prompt(new_state=new_state)
         self._refresh_status(new_state=new_state)
@@ -592,12 +621,29 @@ class ConsoleScreen(App[str]):
         )
         self._last_models_snapshot = new_state.models_table.rows
 
+    def _refresh_auth_table(self, *, new_state: ConsoleScreenState) -> None:
+        if (
+            self._last_auth_snapshot is not None
+            and new_state.auth_table.rows == self._last_auth_snapshot
+        ):
+            return
+        auth_table = self._auth_table()
+        auth_table.set_rows(
+            [
+                AuthTableProviderRow(name=provider.name, source=provider.source)
+                for provider in new_state.auth_table.rows
+            ]
+        )
+        self._last_auth_snapshot = new_state.auth_table.rows
+
     def _refresh_table_visibility(self, *, new_state: ConsoleScreenState) -> None:
         try:
             runs_table_area = self.query_one("#runs-table-area", Container)
             runs_table = self.query_one("#runs-table", RunsTableView)
             models_table_area = self.query_one("#models-table-area", Container)
             models_table = self.query_one("#models-table", ModelsTableView)
+            auth_table_area = self.query_one("#auth-table-area", Container)
+            auth_table = self.query_one("#auth-table", AuthTableView)
             status_row = self.query_one("#status-row", Horizontal)
         except NoMatches:
             return
@@ -606,11 +652,14 @@ class ConsoleScreen(App[str]):
             PromptMode.AUTOCOMPLETION,
             PromptMode.RUNS_TABLE,
             PromptMode.MODELS_TABLE,
+            PromptMode.AUTH_TABLE,
         }
         runs_table_area.display = new_state.runs_table.visible
         runs_table.display = new_state.runs_table.visible
         models_table_area.display = new_state.models_table.visible
         models_table.display = new_state.models_table.visible
+        auth_table_area.display = new_state.auth_table.visible
+        auth_table.display = new_state.auth_table.visible
         status_row.display = not prompt_panel_visible
 
     def _runs_table(self) -> RunsTableView:
@@ -618,6 +667,9 @@ class ConsoleScreen(App[str]):
 
     def _models_table(self) -> ModelsTableView:
         return self.query_one("#models-table", ModelsTableView)
+
+    def _auth_table(self) -> AuthTableView:
+        return self.query_one("#auth-table", AuthTableView)
 
     def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
         return RunsTableRow(

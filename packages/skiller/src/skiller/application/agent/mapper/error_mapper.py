@@ -61,6 +61,6 @@ def _usage_payload(usage: LLMUsage | None) -> dict[str, object] | None:
         "total_tokens": usage.total_tokens,
         "cache_read_tokens": usage.cache_read_tokens,
         "cache_write_tokens": usage.cache_write_tokens,
-        "provider": usage.provider.value if usage.provider is not None else None,
+        "provider": usage.provider,
         "model": usage.model,
     }

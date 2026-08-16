@@ -1,4 +1,5 @@
 import pytest
+from helpers.agent_config import FakeLLMProviderCatalogPort
 
 from skiller.application.use_cases.agent.get_agent_stats import (
     GetAgentStatsStatus,
@@ -11,18 +12,12 @@ from skiller.domain.agent.config.model import (
     AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
+    AgentLLMSelection,
     AgentLoopConfig,
 )
 from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
-)
-from skiller.domain.agent.llm.provider_registry import (
-    NULL_MODELS,
-    AgentLLMProviderList,
-    AgentLLMProviderType,
-    AgentNullLLMModel,
-    AgentNullProvider,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunAgent
@@ -37,6 +32,7 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
         context_stats=context_stats,
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     )
 
@@ -59,6 +55,7 @@ def test_get_agent_stats_caps_capacity_by_model_context_window() -> None:
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=120000)),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -74,6 +71,7 @@ def test_get_agent_stats_uses_configured_capacity_when_smaller_than_model() -> N
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "support-thread")),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=60000)),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -89,6 +87,7 @@ def test_get_agent_stats_returns_not_found_statuses() -> None:
         run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = GetAgentStatsUseCase(
@@ -96,6 +95,7 @@ def test_get_agent_stats_returns_not_found_statuses() -> None:
         run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -111,6 +111,7 @@ def test_get_agent_stats_returns_context_not_ready() -> None:
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", None)),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
@@ -124,6 +125,7 @@ def test_get_agent_stats_rejects_invalid_programmer_input() -> None:
         run_agent_store=_FakeRunAgentStore(None),
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
+        llm_provider_catalog=FakeLLMProviderCatalogPort(),
         skill_runner=_FakeSkillRunner(),
     )
 
@@ -185,16 +187,8 @@ class _FakeSkillRunner:
 
 
 def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
-    provider = AgentNullProvider(
-        model=AgentNullLLMModel.NULL1,
-        models=NULL_MODELS,
-        timeout_seconds=30,
-    )
     return AgentConfig(
-        llm=AgentLLMProviderList(
-            default_provider=AgentLLMProviderType.NULL,
-            providers=(provider,),
-        ),
+        llm=AgentLLMSelection(provider="fake", model="model1"),
         loop=AgentLoopConfig(
             max_turns=2,
             max_tool_calls=3,

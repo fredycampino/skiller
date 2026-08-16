@@ -252,6 +252,17 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             scrollbar-visibility: hidden;
         }}
 
+        #auth-table-area {{
+            display: none;
+            height: auto;
+            align: center bottom;
+            width: 100%;
+            margin: 0 {theme.horizontal_padding} 0 {theme.horizontal_padding};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
         #prompt-row {{
             height: auto;
             width: 100%;
@@ -339,6 +350,47 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             overflow: hidden;
             scrollbar-size: 0 0;
             scrollbar-visibility: hidden;
+        }}
+
+        #auth-table {{
+            layout: vertical;
+            height: auto;
+            width: 100%;
+            padding: 0 2;
+            border: round {theme.color_prompt_border};
+            background: {theme.color_background};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #auth-providers-table {{
+            height: auto;
+            min-height: 1;
+            max-height: 12;
+            width: 32;
+            margin: 0;
+            border: none;
+            background: {theme.color_background};
+            color: {theme.color_text_secondary};
+            overflow: hidden;
+            scrollbar-size: 0 0;
+            scrollbar-visibility: hidden;
+        }}
+
+        #auth-providers-table > .datatable--cursor {{
+            color: {theme.color_text_accent};
+            background: {theme.color_background} 0%;
+            text-style: bold;
+        }}
+
+        #auth-help {{
+            height: 1;
+            width: 100%;
+            margin: 1 0 0 0;
+            color: {theme.color_text_muted};
+            background: {theme.color_background};
         }}
 
         #models-tables-row {{

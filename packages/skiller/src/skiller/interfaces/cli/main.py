@@ -50,13 +50,8 @@ def _ensure_stui_on_sys_path() -> None:
 
 
 def _load_tui_runner():
-    try:
-        from stui.app import run_tui
-    except ModuleNotFoundError as exc:
-        if exc.name != "stui":
-            raise
-        _ensure_stui_on_sys_path()
-        from stui.app import run_tui
+    _ensure_stui_on_sys_path()
+    from stui.app import run_tui
 
     return run_tui
 

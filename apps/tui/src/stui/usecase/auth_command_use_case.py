@@ -3,16 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
+from stui.usecase.auth_provider_catalog import AUTH_PROVIDER_RUN_ARGS
 from stui.usecase.normalize_command_use_case import Command, CommandKind
 from stui.usecase.run_event_context import RunEventContext, RunStatus
 
-_AUTH_RUN_ARGS_BY_PROVIDER = {
-    "": "auths/auth",
-    "codex": "auths/codex",
-    "minimax": "auths/minimax",
-    "bedrock": "auths/bedrock",
-    "moonshot": "auths/moonshot",
-}
+_AUTH_RUN_ARGS_BY_PROVIDER = {"": "auths/auth", **AUTH_PROVIDER_RUN_ARGS}
 
 
 @dataclass(frozen=True)

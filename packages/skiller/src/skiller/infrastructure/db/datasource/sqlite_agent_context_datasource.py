@@ -182,8 +182,6 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
             estimated_tokens=int(rows[0]["selected_tokens"]),
         )
 
-
-
     def select_compaction_state(
         self,
         *,
@@ -488,9 +486,7 @@ class SqliteAgentContextDatasource(SqliteConnectionSource):
             ).fetchone()
             marker = self._last_usage_marker(conn, context_id=context_id)
             state_start_sequence = (
-                int(state["start_sequence"])
-                if state is not None
-                else int(totals["start_sequence"])
+                int(state["start_sequence"]) if state is not None else int(totals["start_sequence"])
             )
             current_tokens = marker.prompt_tokens if marker is not None else 0
 
@@ -661,7 +657,7 @@ def _usage_to_dict(usage: LLMUsage) -> dict[str, int | str | None]:
         "cache_write_tokens": usage.cache_write_tokens,
     }
     if usage.provider is not None:
-        result["provider"] = usage.provider.value
+        result["provider"] = usage.provider
     if usage.model is not None:
         result["model"] = usage.model
     return result

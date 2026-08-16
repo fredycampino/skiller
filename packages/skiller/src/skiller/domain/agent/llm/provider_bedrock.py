@@ -3,6 +3,7 @@ from typing import ClassVar
 
 from skiller.domain.agent.llm.model import (
     AgentLLMProviderType,
+    LLMModelLike,
     LLMStaticModel,
 )
 from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
@@ -40,12 +41,11 @@ BEDROCK_MODELS = (
 
 @dataclass(frozen=True)
 class BedrockLLMRequest(LLMRequest):
-    model: AgentBedrockLLMModel
+    model: LLMModelLike
     max_tokens: int
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, AgentBedrockLLMModel):
-            raise TypeError("BedrockLLMRequest model must be an AgentBedrockLLMModel")
+        super().__post_init__()
 
 
 @dataclass(frozen=True)

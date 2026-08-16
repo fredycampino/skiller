@@ -1,6 +1,6 @@
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DEFAULT_AGENT_LOOP_MAX_TURNS = 30
 DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS = 10
@@ -13,31 +13,19 @@ DEFAULT_AGENT_EVENT_OUTPUT_MAX_JSON_CHARS = 4000
 DEFAULT_AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS = 20
 
 
-class LLMProviderModelConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    model: str
-    context_window_tokens: int = Field(gt=0)
-
-
-class LLMProviderConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    model: str
-    models: tuple[LLMProviderModelConfigModel, ...] | None = None
-    timeout_seconds: float = Field(gt=0)
-    api_key: str | None = None
-    api_key_env: str | None = None
-    api_key_file: str | None = None
-    base_url: str | None = None
-    credentials_file: str | None = None
-    profile: str | None = None
-
-
 class LLMConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    default_provider: str
+    provider: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+
+    @field_validator("provider", "model")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Agent LLM selection fields must not be empty")
+        return normalized
 
 
 class DebugConfigModel(BaseModel):
@@ -106,10 +94,9 @@ class EventOutputConfigModel(BaseModel):
 
 
 class AgentConfigModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     llm: LLMConfigModel
-    providers: dict[str, LLMProviderConfigModel]
     debug: DebugConfigModel = Field(default_factory=DebugConfigModel)
     loop: LoopConfigModel = Field(default_factory=LoopConfigModel)
     context: ContextConfigModel = Field(default_factory=ContextConfigModel)

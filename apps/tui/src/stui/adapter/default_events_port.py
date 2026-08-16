@@ -18,6 +18,7 @@ DEFAULT_MAX_EVENTS_WINDOW = 10
 class _ActiveSubscription:
     listener: LogEventsListener
     run_id: str
+    last_sequence: int
     events: list[LogEvent] = field(default_factory=list)
 
 
@@ -46,6 +47,7 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
             self._subscription = _ActiveSubscription(
                 listener=listener,
                 run_id=normalized_run_id,
+                last_sequence=after_sequence,
             )
         else:
             subscription.listener = listener
@@ -60,12 +62,29 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
         self.event_observer.unsubscribe()
         self._subscription = None
 
+    async def refresh(self) -> None:
+        subscription = self._subscription
+        if subscription is None:
+            return
+
+        await self.event_observer.refresh(
+            run_id=subscription.run_id,
+            listener=self,
+            after_sequence=subscription.last_sequence,
+        )
+
     def notify(self, events: list[LogEvent]) -> None:
         subscription = self._subscription
         if subscription is None:
             return
 
         subscription.events.extend(events)
+        if events:
+            received_last_sequence = max(event.sequence for event in events)
+            subscription.last_sequence = max(
+                subscription.last_sequence,
+                received_last_sequence,
+            )
         self._trim_window(subscription, max_events=subscription.listener.get_max_page())
         subscription.listener.notify(list(subscription.events))
 

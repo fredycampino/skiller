@@ -67,6 +67,29 @@ def test_prompt_enter_use_case_submits_models_completion() -> None:
     assert state.prompt.text == "/models"
 
 
+def test_prompt_enter_use_case_submits_auth_completion() -> None:
+    state = ConsoleScreenState(
+        prompt=PromptState(
+            text="/a",
+            cursor_position=2,
+        )
+    )
+    state.autocompletion = CompletionState(
+        visible=True,
+        query="/a",
+        items=(CompletionItem(label="auth", insert_text="/auth"),),
+        selected_index=0,
+        replace_from=0,
+        replace_to=2,
+    )
+
+    result = PromptEnterUseCase().execute(state=state)
+
+    assert result.should_submit is True
+    assert result.submit_text == "/auth"
+    assert state.prompt.text == "/auth"
+
+
 def test_prompt_enter_use_case_does_not_submit_run_completion() -> None:
     state = ConsoleScreenState(
         prompt=PromptState(

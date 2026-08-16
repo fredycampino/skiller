@@ -5,49 +5,50 @@ from skiller.application.tools.shell import ShellProcessTool
 from skiller.domain.agent.context.model import AgentContextEntry, AgentContextEntryType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
-    LLMCustomModel,
     LLMSystemMessage,
     LLMToolCall,
     LLMToolCallFunction,
+    LLMToolChoiceMode,
     LLMToolMessage,
     LLMUserMessage,
 )
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
-from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_registry import (
-    BEDROCK_MODELS,
-    CODEX_MODELS,
-    FAKE_MODELS,
-    MINIMAX_MODELS,
-    AgentBedrockLLMModel,
-    AgentBedrockProvider,
-    AgentCodexLLMModel,
-    AgentCodexProvider,
-    AgentFakeLLMModel,
-    AgentFakeProvider,
-    AgentLMStudioProvider,
-    AgentMiniMaxLLMModel,
-    AgentMiniMaxProvider,
+from skiller.domain.agent.llm.provider_catalog import (
+    BedrockLLMProviderDefinition,
+    CodexLLMProviderDefinition,
+    LLMModelDefinition,
+    OpenAILLMProviderDefinition,
 )
-from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 
 pytestmark = pytest.mark.unit
 
 
-def _lmstudio_model() -> LLMCustomModel:
-    return LLMCustomModel(
-        value="google/gemma-4-12b-qat",
-        model_context_window_tokens=131_072,
-    )
+def _model(value: str = "model1", context_window_tokens: int = 100_000) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
-def _provider() -> AgentFakeProvider:
-    return AgentFakeProvider(
-        model=AgentFakeLLMModel.MODEL1,
-        models=FAKE_MODELS,
+def _provider(
+    *,
+    name: str = "fake",
+    model: LLMModelDefinition | None = None,
+    temperature: float = 0,
+) -> OpenAILLMProviderDefinition:
+    selected_model = model or _model()
+    return OpenAILLMProviderDefinition(
+        name=name,
         timeout_seconds=30,
+        models=(selected_model,),
+        enabled=True,
+        base_url="http://localhost/v1",
+        temperature=temperature,
+        top_p=1,
+        max_output_tokens=4096,
+        parallel_tool_calls=True,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        api_key_source=None,
+        options={},
     )
 
 
@@ -117,6 +118,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
 
     request = builder.build_request(
         provider=_provider(),
+        model=_model(),
         system="Be useful.",
         entries=entries,
         tools=(),
@@ -125,9 +127,8 @@ def test_agent_prompt_builder_builds_messages() -> None:
         log_override_file=True,
     )
 
-    assert request.model == "model1"
+    assert request.model == _model()
     assert isinstance(request, LLMRequest)
-    assert not isinstance(request, MiniMaxLLMRequest)
     assert request.messages == (
         LLMSystemMessage("Be useful."),
         LLMUserMessage("Hello"),
@@ -197,6 +198,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
 
     request = builder.build_request(
         provider=_provider(),
+        model=_model(),
         system="Be useful.",
         entries=entries,
         tools=(),
@@ -287,6 +289,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
 
     request = builder.build_request(
         provider=_provider(),
+        model=_model(),
         system="Be useful.",
         entries=entries,
         tools=(),
@@ -332,6 +335,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
 
     request = builder.build_request(
         provider=_provider(),
+        model=_model(),
         system="Be useful.",
         entries=[],
         tools=(),
@@ -345,15 +349,15 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
 
 def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
     builder = AgentPromptBuilder()
-    provider = AgentMiniMaxProvider(
-        model=AgentMiniMaxLLMModel.M2_7,
-        models=MINIMAX_MODELS,
-        api_key="secret",
-        timeout_seconds=30,
+    provider = _provider(
+        name="minimax",
+        model=_model("MiniMax-M2.7", 204_800),
+        temperature=1,
     )
 
     request = builder.build_request(
         provider=provider,
+        model=provider.models[0],
         system="Be useful.",
         entries=[],
         tools=(),
@@ -362,7 +366,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         log_override_file=True,
     )
 
-    assert isinstance(request, MiniMaxLLMRequest)
+    assert isinstance(request, OpenAILLMRequest)
     assert request.temperature == 1
     assert request.max_tokens == 4096
     assert request.top_p == 1
@@ -370,14 +374,15 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
 
 def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
     builder = AgentPromptBuilder()
-    provider = AgentLMStudioProvider(
-        model=_lmstudio_model(),
-        models=(_lmstudio_model(),),
-        timeout_seconds=30,
+    provider = _provider(
+        name="lmstudio",
+        model=_model("google/gemma-4-12b-qat", 131_072),
+        temperature=0.2,
     )
 
     request = builder.build_request(
         provider=provider,
+        model=provider.models[0],
         system="Be useful.",
         entries=[],
         tools=(),
@@ -386,7 +391,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         log_override_file=True,
     )
 
-    assert isinstance(request, LMStudioLLMRequest)
+    assert isinstance(request, OpenAILLMRequest)
     assert request.temperature == 0.2
     assert request.max_tokens == 4096
     assert request.top_p == 1
@@ -394,15 +399,19 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
 
 def test_agent_prompt_builder_returns_codex_request() -> None:
     builder = AgentPromptBuilder()
-    provider = AgentCodexProvider(
-        model=AgentCodexLLMModel.GPT_5_5,
-        models=CODEX_MODELS,
+    model = _model("gpt-5.5", 1_050_000)
+    provider = CodexLLMProviderDefinition(
+        name="codex",
+        models=(model,),
+        enabled=True,
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
+        parallel_tool_calls=True,
     )
 
     request = builder.build_request(
         provider=provider,
+        model=provider.models[0],
         system="Be useful.",
         entries=[],
         tools=(),
@@ -412,7 +421,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
     )
 
     assert isinstance(request, CodexLLMRequest)
-    assert request.model == AgentCodexLLMModel.GPT_5_5
+    assert request.model == model
     assert request.parallel_tool_calls is True
     assert request.session_id == "context-1"
     assert not hasattr(request, "temperature")
@@ -422,15 +431,19 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
 
 def test_agent_prompt_builder_returns_bedrock_request() -> None:
     builder = AgentPromptBuilder()
-    provider = AgentBedrockProvider(
-        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
-        models=BEDROCK_MODELS,
+    model = _model("us.anthropic.claude-opus-4-6-v1", 200_000)
+    provider = BedrockLLMProviderDefinition(
+        name="bedrock",
+        models=(model,),
+        enabled=True,
         profile="claude-bedrock",
         timeout_seconds=120,
+        max_output_tokens=4096,
     )
 
     request = builder.build_request(
         provider=provider,
+        model=provider.models[0],
         system="Be useful.",
         entries=[],
         tools=(),
@@ -440,7 +453,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
     )
 
     assert isinstance(request, BedrockLLMRequest)
-    assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
+    assert request.model == model
     assert request.max_tokens == 4096
     assert not hasattr(request, "top_p")
 
@@ -451,6 +464,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
 
     request = builder.build_request(
         provider=_provider(),
+        model=_model(),
         system="Be useful.",
         entries=[],
         tools=(tool,),

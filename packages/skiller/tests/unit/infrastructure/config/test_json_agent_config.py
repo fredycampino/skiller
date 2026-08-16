@@ -1,1353 +1,170 @@
-from __future__ import annotations
-
 import json
-import sys
-from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
-from skiller.application.tools.files import FilesTool, FilesToolRuntimeConfig
-from skiller.application.tools.notify import NotifyTool
-from skiller.application.tools.shell import ShellProcessTool
-from skiller.application.tools.shell.config import ShellToolRuntimeConfig
+from skiller.domain.agent.config.model import AgentLLMSelection
 from skiller.domain.agent.config.port import AgentConfigProviderSource
-from skiller.domain.agent.config.validation import (
-    AgentConfigValidation,
-    AgentConfigValidationErrorCode,
-)
-from skiller.domain.agent.llm.provider_registry import (
-    AgentBedrockLLMModel,
-    AgentFakeLLMModel,
-    AgentLLMProviderType,
-    AgentMiniMaxLLMModel,
-    AgentMoonshotLLMModel,
-)
+from skiller.domain.agent.config.validation import AgentConfigValidationErrorCode
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
-from skiller.infrastructure.config.agent_config_schema import (
-    DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS,
-    CompactionConfigModel,
-)
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 
 pytestmark = pytest.mark.unit
 
 
-def test_json_agent_config_reads_agent_config(tmp_path) -> None:
-    secret_path = tmp_path / "minimax-key"
-    secret_path.write_text("secret\n", encoding="utf-8")
+def test_json_agent_config_reads_strict_llm_selection(tmp_path: Path) -> None:
     config_path = tmp_path / "agent.json"
-    _write_config(
+    _write(config_path, _payload())
+
+    config = _config_port(config_path).get_config()
+
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
+    assert config.context.window_width_tokens is None
+    assert config.debug.log_request_file == "~/.skiller/logs/request/minimax/request.json"
+
+
+def test_json_agent_config_ignores_legacy_default_provider(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    payload = _payload()
+    llm = payload["llm"]
+    assert isinstance(llm, dict)
+    llm["default_provider"] = "bedrock"
+    _write(config_path, payload)
+
+    config = _config_port(config_path).get_config()
+
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
+
+
+def test_json_agent_config_ignores_legacy_provider_contract(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write(
         config_path,
-        llm=_minimax_llm(api_key_file=str(secret_path)),
-        loop={"max_turns": 12, "max_tool_calls": 7},
-        context={
-            "window_width_tokens": 1_000_000,
-            "compaction": {
-                "compaction_trigger_ratio": 0.9,
-                "compaction_target_ratio": 0.5,
-                "keep_last_blocks": 5,
-            }
-        },
-        event_output={
-            "truncate": {
-                "enabled": False,
-                "max_text_chars": 300,
-                "max_json_chars": 2000,
-                "max_array_items": 8,
-            }
-        },
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
-    assert provider.type == AgentLLMProviderType.MINIMAX
-    assert provider.api_key == "secret"
-    assert provider.model == AgentMiniMaxLLMModel.M2_5
-    assert provider.timeout_seconds == 30.0
-    assert config.context.window_width_tokens == 1_000_000
-    assert config.loop.max_turns == 12
-    assert config.loop.max_tool_calls == 7
-    assert config.context.compaction.compaction_trigger_ratio == 0.9
-    assert config.context.compaction.compaction_target_ratio == 0.5
-    assert config.context.compaction.keep_last_blocks == 5
-    assert config.event_output.truncate.enabled is False
-    assert config.event_output.truncate.max_text_chars == 300
-    assert config.event_output.truncate.max_json_chars == 2000
-    assert config.event_output.truncate.max_array_items == 8
-
-
-def test_compaction_config_requires_target_below_trigger() -> None:
-    with pytest.raises(ValueError, match="compaction_target_ratio must be lower"):
-        CompactionConfigModel(
-            compaction_trigger_ratio=0.5,
-            compaction_target_ratio=0.5,
-        )
-
-
-def test_compaction_config_rejects_removed_enabled_field() -> None:
-    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        CompactionConfigModel.model_validate({"enabled": True})
-
-
-def test_json_agent_config_applies_selected_provider_env_overrides(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key="file-key"))
-    env = {
-        "AGENT_MINIMAX_API_KEY": "env-key",
-        "AGENT_MINIMAX_MODEL": "MiniMax-M2.7",
-        "AGENT_MINIMAX_TIMEOUT_SECONDS": "10.5",
-        "AGENT_LOOP_MAX_TURNS": "20",
-        "AGENT_LOOP_MAX_TOOL_CALLS": "3",
-        "AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED": "false",
-        "AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS": "100",
-    }
-
-    config = _provider(config_path=config_path, env=env).get_config()
-    provider = config.llm.default()
-
-    assert provider.api_key == "env-key"
-    assert provider.model == AgentMiniMaxLLMModel.M2_7
-    assert provider.timeout_seconds == 10.5
-    assert config.loop.max_turns == 20
-    assert config.loop.max_tool_calls == 3
-    assert config.event_output.truncate.enabled is False
-    assert config.event_output.truncate.max_text_chars == 100
-
-
-def test_json_agent_config_reads_moonshot_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_moonshot_llm(api_key="secret"))
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert config.llm.default_provider == AgentLLMProviderType.MOONSHOT
-    assert provider.type == AgentLLMProviderType.MOONSHOT
-    assert provider.api_key == "secret"
-    assert provider.model == AgentMoonshotLLMModel.KIMI_K3
-
-
-def test_json_agent_config_applies_moonshot_env_overrides(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_moonshot_llm(api_key="file-key"))
-
-    config = _provider(
-        config_path=config_path,
-        env={
-            "AGENT_MOONSHOT_API_KEY": "env-key",
-            "AGENT_MOONSHOT_MODEL": "kimi-k2.7-code",
-        },
-    ).get_config()
-    provider = config.llm.default()
-
-    assert provider.api_key == "env-key"
-    assert provider.model == AgentMoonshotLLMModel.KIMI_K2_7_CODE
-
-
-def test_json_agent_config_rejects_unsupported_moonshot_model(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_moonshot_llm(api_key="secret", model="unknown"))
-
-    with pytest.raises(
-        ValueError,
-        match="Unsupported model='unknown' for provider='moonshot'",
-    ):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_reads_context_window_width_tokens(
-    tmp_path,
-) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["context"] = {"window_width_tokens": 80_000}
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.context.window_width_tokens == 80_000
-
-
-def test_json_agent_config_rejects_provider_window_width_tokens(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(
-        api_key="secret",
-        extra={"window_width_tokens": 80_000},
-    )
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="window_width_tokens"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-@pytest.mark.parametrize("context", [{}, None], ids=["empty-context", "missing-context"])
-def test_json_agent_config_uses_model_window_when_context_window_is_missing(
-    tmp_path,
-    context,
-) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    if context is None:
-        payload.pop("context")
-    else:
-        payload["context"] = context
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.context.window_width_tokens == 204_800
-
-
-def test_json_agent_config_reads_debug_log_request_file(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {"default_provider": "minimax"}
-    payload["debug"] = {
-        "log_request": True,
-        "log_request_file": "/tmp/skiller-llm.json",
-    }
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.debug.log_request is True
-    assert config.debug.log_request_file == "/tmp/skiller-llm.json"
-
-
-def test_json_agent_config_reads_debug_log_override_file(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["debug"] = {"log_override_file": False}
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.debug.log_override_file is False
-
-
-def test_json_agent_config_rejects_legacy_llm_log_request_fields(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {
-        "default_provider": "minimax",
-        "log_request": True,
-        "log_request_file": "/tmp/legacy.json",
-    }
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_defaults_debug_log_request_to_false_and_file_to_provider_path(
-    tmp_path,
-) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {"default_provider": "minimax"}
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.debug.log_request is False
-    assert config.debug.log_override_file is True
-    assert (
-        config.debug.log_request_file
-        == "~/.skiller/logs/request/minimax/request.json"
-    )
-
-
-def test_json_agent_config_defaults_null_debug_log_request_file_to_provider_path(
-    tmp_path,
-) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {"default_provider": "minimax"}
-    payload["debug"] = {
-        "log_request": True,
-        "log_request_file": None,
-    }
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.debug.log_request is True
-    assert (
-        config.debug.log_request_file
-        == "~/.skiller/logs/request/minimax/request.json"
-    )
-
-
-def test_json_agent_config_defaults_empty_debug_log_request_file_to_provider_path(
-    tmp_path,
-) -> None:
-    config_path = tmp_path / "agent.json"
-    payload = _minimax_llm(api_key="secret")
-    payload["llm"] = {"default_provider": "minimax"}
-    payload["debug"] = {
-        "log_request_file": " ",
-    }
-    config_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert (
-        config.debug.log_request_file
-        == "~/.skiller/logs/request/minimax/request.json"
-    )
-
-
-def test_json_agent_config_resolves_api_key_env(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key_env="TEST_MINIMAX_KEY"))
-
-    config = _provider(
-        config_path=config_path,
-        env={"TEST_MINIMAX_KEY": "env-ref-key"},
-    ).get_config()
-
-    assert config.llm.default().api_key == "env-ref-key"
-
-
-def test_json_agent_config_reads_codex_provider(tmp_path) -> None:
-    credentials_path = tmp_path / "openai-codex.json"
-    credentials_path.write_text('{"access_token":"token"}', encoding="utf-8")
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_codex_llm(credentials_file=str(credentials_path)))
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert config.llm.default_provider == AgentLLMProviderType.CODEX
-    assert provider.type == AgentLLMProviderType.CODEX
-    assert provider.credentials_file == str(credentials_path)
-
-
-def test_json_agent_config_rejects_codex_without_credentials_file(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_codex_llm(credentials_file=None))
-
-    with pytest.raises(ValueError, match="LLM provider requires credentials_file"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_reads_bedrock_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_bedrock_llm(profile="claude-bedrock"))
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert config.llm.default_provider == AgentLLMProviderType.BEDROCK
-    assert provider.type == AgentLLMProviderType.BEDROCK
-    assert provider.profile == "claude-bedrock"
-    assert provider.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
-
-
-def test_json_agent_config_rejects_bedrock_without_profile(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_bedrock_llm(profile=None))
-
-    with pytest.raises(ValueError, match="LLM provider requires profile"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_reads_lmstudio_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_lmstudio_llm())
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert config.llm.default_provider == AgentLLMProviderType.LMSTUDIO
-    assert provider.type == AgentLLMProviderType.LMSTUDIO
-    assert provider.model.value == "google/gemma-4-12b-qat"
-    assert provider.model.model_context_window_tokens == 131_072
-    assert provider.api_key == "lm-studio"
-    assert provider.base_url == "http://127.0.0.1:1234/v1"
-
-
-def test_json_agent_config_resolves_lmstudio_api_key_env(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_lmstudio_llm(api_key_env="TEST_LMSTUDIO_KEY"))
-
-    config = _provider(
-        config_path=config_path,
-        env={"TEST_LMSTUDIO_KEY": "env-ref-key"},
-    ).get_config()
-
-    assert config.llm.default().api_key == "env-ref-key"
-
-
-def test_json_agent_config_resolves_lmstudio_api_key_file(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    secret_path = tmp_path / "lmstudio-key"
-    secret_path.write_text("file-key\n", encoding="utf-8")
-    _write_config(config_path, llm=_lmstudio_llm(api_key_file=str(secret_path)))
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.llm.default().api_key == "file-key"
-
-
-def test_json_agent_config_rejects_lmstudio_without_models(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_lmstudio_llm(models=None, include_default_models=False),
-    )
-
-    with pytest.raises(ValueError, match="LM Studio LLM provider requires models"):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_reads_lmstudio_custom_models(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_lmstudio_llm(
-            model="local/gemma-custom",
-            models=[
-                {
-                    "model": "local/gemma-custom",
-                    "context_window_tokens": 10_000,
-                },
-                {
-                    "model": "local/qwen-custom",
-                    "context_window_tokens": 32_000,
-                },
-            ],
-        ),
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-    provider = config.llm.default()
-
-    assert provider.model.value == "local/gemma-custom"
-    assert provider.model.model_context_window_tokens == 10_000
-    assert [model.value for model in provider.models] == [
-        "local/gemma-custom",
-        "local/qwen-custom",
-    ]
-
-
-def test_json_agent_config_rejects_lmstudio_model_outside_custom_models(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_lmstudio_llm(
-            model="local/not-allowed",
-            models=[
-                {
-                    "model": "local/gemma-custom",
-                    "context_window_tokens": 10_000,
-                },
-            ],
-        ),
-    )
-
-    with pytest.raises(
-        ValueError,
-        match=(
-            "LM Studio selected model='local/not-allowed' is not listed in "
-            "configured models: local/gemma-custom"
-        ),
-    ):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_rejects_lmstudio_duplicate_custom_models(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_lmstudio_llm(
-            model="local/gemma-custom",
-            models=[
-                {
-                    "model": "local/gemma-custom",
-                    "context_window_tokens": 10_000,
-                },
-                {
-                    "model": "local/gemma-custom",
-                    "context_window_tokens": 32_000,
-                },
-            ],
-        ),
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="Duplicate LM Studio models: local/gemma-custom",
-    ):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_rejects_models_config_for_non_lmstudio_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_minimax_llm(
-            api_key="secret",
-            extra={
-                "models": [
-                    {
-                        "model": "MiniMax-M2.5",
-                        "context_window_tokens": 204_800,
-                    },
-                ],
+        {
+            "llm": {
+                "provider": "minimax",
+                "model": "MiniMax-M3",
+                "default_provider": "legacy-value",
             },
-        ),
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="Provider models config is not supported for provider='minimax'",
-    ):
-        _provider(config_path=config_path, env={}).get_config()
-
-
-def test_json_agent_config_applies_lmstudio_custom_model_env_override(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_lmstudio_llm(
-            model="local/gemma-custom",
-            models=[
-                {
-                    "model": "local/gemma-custom",
-                    "context_window_tokens": 10_000,
-                },
-                {
-                    "model": "local/qwen-custom",
-                    "context_window_tokens": 32_000,
-                },
-            ],
-        ),
-    )
-
-    config = _provider(
-        config_path=config_path,
-        env={"AGENT_LMSTUDIO_MODEL": "local/qwen-custom"},
-    ).get_config()
-    provider = config.llm.default()
-
-    assert provider.model.value == "local/qwen-custom"
-    assert provider.model.model_context_window_tokens == 32_000
-
-
-def test_json_agent_config_applies_lmstudio_selected_env_overrides(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_lmstudio_llm())
-    env = {
-        "AGENT_LMSTUDIO_API_KEY": "env-key",
-        "AGENT_LMSTUDIO_BASE_URL": "http://127.0.0.1:4321/v1",
-        "AGENT_LMSTUDIO_MODEL": "google/gemma-4-12b-qat",
-        "AGENT_LMSTUDIO_TIMEOUT_SECONDS": "9.5",
-    }
-
-    config = _provider(config_path=config_path, env=env).get_config()
-    provider = config.llm.default()
-
-    assert provider.api_key == "env-key"
-    assert provider.base_url == "http://127.0.0.1:4321/v1"
-    assert provider.model.value == "google/gemma-4-12b-qat"
-    assert provider.timeout_seconds == 9.5
-
-
-def test_json_agent_config_loads_tool_runtime_config(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_minimax_llm(api_key="secret"),
-        tools={
-            "files": {
-                "read": ["."],
-                "write": ["src"],
-                "all": ["shared"],
-            },
-            "shell": {
-                "allowed_paths": ["tmp/work", "~/agent"],
-                "allowlist_enabled": True,
-                "allow_env_prefix": False,
-                "allowed_commands": ["rg", "cat"],
-            },
-            "notify": {"ignored": True},
-        },
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-            (config_path.parent / "tmp/work").resolve(strict=False),
-            Path("~/agent").expanduser().resolve(strict=False),
-        ),
-        allowlist_enabled=True,
-        allow_env_prefix=False,
-        allowed_commands=("rg", "cat"),
-    )
-    assert config.tools.get("files") == FilesToolRuntimeConfig(
-        definition=FilesTool,
-        read=(config_path.parent.resolve(strict=False),),
-        write=((config_path.parent / "src").resolve(strict=False),),
-        all=((config_path.parent / "shared").resolve(strict=False),),
-    )
-    assert config.tools.get("notify") is None
-
-
-def test_json_agent_config_resolves_shell_runtime_path_templates(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_minimax_llm(api_key="secret"),
-        tools={
-            "shell": {
-                "allowed_paths": [
-                    "{{flow.dir}}",
-                    "{{runtime.venv}}",
-                ],
-            },
-        },
-    )
-
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-            config_path.parent.resolve(strict=False),
-            Path(sys.prefix).resolve(strict=False),
-        ),
-        allowlist_enabled=False,
-        allow_env_prefix=True,
-        allowed_commands=(),
-    )
-
-
-def test_json_agent_config_resolves_global_tool_paths_against_global_config_dir(
-    tmp_path,
-) -> None:
-    global_config_dir = tmp_path / "global"
-    global_config_dir.mkdir()
-    global_config_path = global_config_dir / "agent.json"
-    context_config_dir = tmp_path / "local"
-    context_config_dir.mkdir()
-    context_config_path = context_config_dir / "agent.json"
-    _write_config(
-        global_config_path,
-        llm=_minimax_llm(api_key="secret"),
-        tools={
-            "shell": {
-                "allowed_paths": ["./workspace"],
-                "allowlist_enabled": True,
-                "allowed_commands": ["pwd"],
-            },
-            "files": {
-                "read": ["./workspace"],
-                "write": [],
-                "all": [],
-            },
-        },
-    )
-    _write_config(context_config_path, llm=_fake_llm())
-
-    config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-
-    expected_workspace = (global_config_dir / "workspace").resolve(strict=False)
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-            expected_workspace,
-        ),
-        allowlist_enabled=True,
-        allow_env_prefix=True,
-        allowed_commands=("pwd",),
-    )
-    assert config.tools.get("files") == FilesToolRuntimeConfig(
-        definition=FilesTool,
-        read=(expected_workspace,),
-        write=(),
-        all=(),
-    )
-
-
-def test_json_agent_config_resolves_local_tool_paths_against_local_config_dir(
-    tmp_path,
-) -> None:
-    global_config_dir = tmp_path / "global"
-    global_config_dir.mkdir()
-    global_config_path = global_config_dir / "agent.json"
-    context_config_dir = tmp_path / "local"
-    context_config_dir.mkdir()
-    context_config_path = context_config_dir / "agent.json"
-    _write_config(
-        global_config_path,
-        llm=_minimax_llm(api_key="secret"),
-        tools={
-            "shell": {
-                "allowed_paths": ["./global-workspace"],
-                "allowlist_enabled": True,
-                "allowed_commands": ["pwd"],
-            },
-        },
-    )
-    _write_config(
-        context_config_path,
-        llm=_fake_llm(),
-        tools={
-            "files": {
-                "read": ["./workspace"],
-                "write": ["./workspace"],
-                "all": [],
-            },
-        },
-    )
-
-    config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-
-    expected_workspace = (context_config_dir / "workspace").resolve(strict=False)
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-        ),
-        allowlist_enabled=False,
-        allow_env_prefix=True,
-        allowed_commands=(),
-    )
-    assert config.tools.get("files") == FilesToolRuntimeConfig(
-        definition=FilesTool,
-        read=(expected_workspace,),
-        write=(expected_workspace,),
-        all=(),
-    )
-
-
-def test_json_agent_config_resolves_env_tool_paths_against_env_config_dir(
-    tmp_path,
-) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    env_config_dir = tmp_path / "env"
-    env_config_dir.mkdir()
-    env_config_path = env_config_dir / "agent.json"
-    _write_config(global_config_path, llm=_minimax_llm(api_key="secret"))
-    _write_config(
-        env_config_path,
-        llm=_fake_llm(),
-        tools={
-            "shell": {
-                "allowed_paths": ["./workspace"],
-                "allowlist_enabled": True,
-                "allowed_commands": ["pwd"],
-            },
-        },
-    )
-
-    config = _provider(
-        config_path=global_config_path,
-        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
-    ).get_config()
-
-    expected_workspace = (env_config_dir / "workspace").resolve(strict=False)
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-            expected_workspace,
-        ),
-        allowlist_enabled=True,
-        allow_env_prefix=True,
-        allowed_commands=("pwd",),
-    )
-
-
-def test_json_agent_config_validates_valid_config(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
-
-    validation = _provider(config_path=config_path, env={}).validate_config()
-
-    assert validation == AgentConfigValidation.valid()
-
-
-def test_json_agent_config_rejects_agent_wrapper(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key="secret"), agent={})
-
-    validation = _provider(config_path=config_path, env={}).validate_config()
-
-    assert validation == AgentConfigValidation.invalid(
-        error=AgentConfigValidationErrorCode.INVALID_SCHEMA,
-        message="agent.json field 'agent' is not supported",
-    )
-
-
-def test_json_agent_config_validates_missing_config_file(tmp_path) -> None:
-    config_path = tmp_path / "missing-agent.json"
-
-    validation = _provider(config_path=config_path, env={}).validate_config()
-
-    assert validation == AgentConfigValidation.invalid(
-        error=AgentConfigValidationErrorCode.CONFIG_NOT_FOUND,
-        message=f"Missing agent config file: {config_path}",
-    )
-
-
-def test_json_agent_config_validates_unsupported_model(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm=_minimax_llm(api_key="secret", model="not-a-minimax-model"),
-    )
-
-    validation = _provider(config_path=config_path, env={}).validate_config()
-
-    assert validation.error == AgentConfigValidationErrorCode.PROVIDER_MODEL_UNSUPPORTED
-    assert validation.message.startswith(
-        "Unsupported model='not-a-minimax-model' for provider='minimax'"
-    )
-
-
-def test_json_agent_config_resolves_config_file_precedence(tmp_path) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    env_config_path = tmp_path / "env-agent.json"
-    _write_config(global_config_path, llm=_fake_llm())
-    _write_config(context_config_path, llm=_null_llm())
-    _write_config(env_config_path, llm=_minimax_llm(api_key="secret"))
-
-    context_config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-    env_config = _provider(
-        config_path=global_config_path,
-        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
-    ).get_config(config_path=context_config_path)
-    fallback_config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=tmp_path / "missing-agent.json"
-    )
-
-    assert context_config.llm.default_provider == AgentLLMProviderType.NULL
-    assert env_config.llm.default_provider == AgentLLMProviderType.MINIMAX
-    assert fallback_config.llm.default_provider == AgentLLMProviderType.FAKE
-
-
-def test_json_agent_config_lists_provider_sources(tmp_path) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    _write_config(
-        global_config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
             "providers": {
                 "minimax": {
-                    "api_key": "secret",
-                    "model": "MiniMax-M2.5",
-                    "timeout_seconds": 30,
-                },
-                "codex": {
-                    "credentials_file": "/secret/codex.json",
-                    "model": "gpt-5.5",
-                    "timeout_seconds": 120,
-                },
-            },
-        },
-    )
-    _write_config(context_config_path, llm=_bedrock_llm(profile="default"))
-
-    sources = _provider(
-        config_path=global_config_path,
-        env={},
-    ).list_provider_sources(config_path=context_config_path)
-
-    assert {
-        item.provider_type: item.source
-        for item in sources
-    } == {
-        AgentLLMProviderType.MINIMAX: AgentConfigProviderSource.GLOBAL,
-        AgentLLMProviderType.CODEX: AgentConfigProviderSource.GLOBAL,
-        AgentLLMProviderType.BEDROCK: AgentConfigProviderSource.LOCAL,
-    }
-
-
-def test_json_agent_config_lists_env_provider_sources(tmp_path) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    env_config_path = tmp_path / "env-agent.json"
-    _write_config(global_config_path, llm=_minimax_llm(api_key="secret"))
-    _write_config(env_config_path, llm=_codex_llm(credentials_file="/secret/codex.json"))
-
-    sources = _provider(
-        config_path=global_config_path,
-        env={"AGENT_AGENT_CONFIG_FILE": str(env_config_path)},
-    ).list_provider_sources()
-
-    assert {
-        item.provider_type: item.source
-        for item in sources
-    } == {AgentLLMProviderType.CODEX: AgentConfigProviderSource.ENV}
-
-
-def test_json_agent_config_sets_model_in_single_config_file(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
-            "providers": {
-                "minimax": {
-                    "api_key": "secret",
-                    "model": "MiniMax-M2.5",
-                    "timeout_seconds": 30,
-                },
-                "codex": {
-                    "credentials_file": "/secret/codex.json",
-                    "model": "gpt-5.5",
-                    "timeout_seconds": 120,
-                },
-            },
-        },
-    )
-
-    _provider(config_path=config_path, env={}).set_model(
-        provider_type=AgentLLMProviderType.CODEX,
-        model="gpt-5.4",
-    )
-
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
-    config = _provider(config_path=config_path, env={}).get_config()
-    assert payload["llm"]["default_provider"] == "codex"
-    assert payload["providers"]["codex"]["model"] == "gpt-5.4"
-    assert config.llm.default_provider == AgentLLMProviderType.CODEX
-    assert config.llm.default().model.value == "gpt-5.4"
-
-
-def test_json_agent_config_sets_local_default_and_global_provider_model(
-    tmp_path,
-) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    _write_config(
-        global_config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
-            "providers": {
-                "minimax": {
-                    "api_key": "secret",
-                    "model": "MiniMax-M2.5",
-                    "timeout_seconds": 30,
-                },
-                "codex": {
-                    "credentials_file": "/secret/codex.json",
-                    "model": "gpt-5.5",
-                    "timeout_seconds": 120,
-                },
-            },
-        },
-    )
-    _write_config(
-        context_config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
-        },
-    )
-
-    _provider(config_path=global_config_path, env={}).set_model(
-        provider_type=AgentLLMProviderType.CODEX,
-        model="gpt-5.4",
-        config_path=context_config_path,
-    )
-
-    local_payload = json.loads(context_config_path.read_text(encoding="utf-8"))
-    global_payload = json.loads(global_config_path.read_text(encoding="utf-8"))
-    config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-    assert local_payload == {
-        "llm": {"default_provider": "codex"},
-        "context": {"window_width_tokens": 100_000},
-    }
-    assert global_payload["providers"]["codex"]["model"] == "gpt-5.4"
-    assert config.llm.default_provider == AgentLLMProviderType.CODEX
-    assert config.llm.default().model.value == "gpt-5.4"
-
-
-def test_json_agent_config_rejects_set_model_for_unconfigured_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
-
-    with pytest.raises(RuntimeError, match="LLM provider is not configured: codex"):
-        _provider(config_path=config_path, env={}).set_model(
-            provider_type=AgentLLMProviderType.CODEX,
-            model="gpt-5.4",
-        )
-
-
-def test_json_agent_config_overrides_root_sections_without_deep_merge(tmp_path) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    _write_config(
-        global_config_path,
-        llm=_minimax_llm(api_key="secret"),
-        loop={"max_turns": 12, "max_tool_calls": 7},
-        tools={
-            "shell": {
-                "allowed_paths": ["."],
-                "allowlist_enabled": True,
-                "allow_env_prefix": True,
-                "allowed_commands": ["pwd"],
-            },
-        },
-    )
-    _write_config(
-        context_config_path,
-        llm=_fake_llm(),
-        loop={"max_turns": 3},
-        tools={
-            "files": {
-                "read": ["."],
-                "write": [],
-                "all": [],
-            },
-        },
-    )
-
-    config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-
-    assert config.llm.default_provider == AgentLLMProviderType.FAKE
-    assert config.loop.max_turns == 3
-    assert config.loop.max_tool_calls == DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS
-    assert config.tools.get("shell") == ShellToolRuntimeConfig(
-        definition=ShellProcessTool,
-        allowed_paths=(
-            Path.cwd().resolve(strict=False),
-            Path(sys.executable).resolve(strict=False),
-        ),
-        allowlist_enabled=False,
-        allow_env_prefix=True,
-        allowed_commands=(),
-    )
-    assert config.tools.get("files") == FilesToolRuntimeConfig(
-        definition=FilesTool,
-        read=(context_config_path.parent.resolve(strict=False),),
-        write=(),
-        all=(),
-    )
-
-
-def test_json_agent_config_agent_can_override_default_provider_only(tmp_path) -> None:
-    global_config_path = tmp_path / "global-agent.json"
-    context_config_path = tmp_path / "context-agent.json"
-    _write_config(
-        global_config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
-            "providers": {
-                "minimax": {
-                    "api_key": "secret",
-                    "model": "MiniMax-M2.5",
-                    "timeout_seconds": 30,
-                },
-                "fake": {
-                    "model": "model1",
-                    "timeout_seconds": 30,
-                },
-            },
-        },
-    )
-    _write_config(
-        context_config_path,
-        llm={
-            "llm": {"default_provider": "fake"},
-        },
-    )
-
-    config = _provider(config_path=global_config_path, env={}).get_config(
-        config_path=context_config_path
-    )
-
-    provider = config.llm.default()
-
-    assert provider.type == AgentLLMProviderType.FAKE
-    assert provider.model == AgentFakeLLMModel.MODEL1
-
-
-def test_json_agent_config_does_not_use_cwd_agent_json(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _write_config(tmp_path / "agent.json", llm=_null_llm())
-    global_config_path = tmp_path / "global-agent.json"
-    _write_config(global_config_path, llm=_fake_llm())
-    monkeypatch.chdir(tmp_path)
-
-    config = _provider(config_path=global_config_path, env={}).get_config()
-
-    assert config.llm.default_provider == AgentLLMProviderType.FAKE
-
-
-def test_json_agent_config_rejects_unknown_provider(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm={
-            "llm": {"default_provider": "bad"},
-            "providers": {
-                "bad": {
-                    "api_key": "secret",
-                    "model": "model",
+                    "model": "MiniMax-M3",
                     "timeout_seconds": 30,
                 }
             },
         },
     )
 
-    with pytest.raises(ValueError, match="Unsupported LLM provider: bad"):
-        _provider(config_path=config_path, env={}).get_config()
+    config = _config_port(config_path).get_config()
+
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
 
 
-def test_json_agent_config_ignores_unknown_provider_when_default_is_known(
-    tmp_path,
-) -> None:
+def test_json_agent_config_rejects_missing_model(tmp_path: Path) -> None:
     config_path = tmp_path / "agent.json"
-    _write_config(
-        config_path,
-        llm={
-            "llm": {"default_provider": "minimax"},
-            "providers": {
-                "minimax": {
-                    "api_key": "secret",
-                    "model": "MiniMax-M2.5",
-                    "timeout_seconds": 30,
-                },
-                "future-provider": {
-                    "api_key": "secret",
-                    "model": "kimi-k3",
-                    "timeout_seconds": 30,
-                    "future_option": True,
-                },
-            },
-        },
+    _write(config_path, {"llm": {"provider": "minimax"}})
+
+    validation = _config_port(config_path).validate_config()
+
+    assert validation.ok is False
+    assert validation.error == AgentConfigValidationErrorCode.INVALID_SCHEMA
+
+
+def test_json_agent_config_uses_local_file_as_root_override(tmp_path: Path) -> None:
+    global_path = tmp_path / "global" / "agent.json"
+    local_path = tmp_path / "local" / "agent.json"
+    _write(global_path, _payload())
+    _write(local_path, {"llm": {"provider": "codex", "model": "gpt-5.5"}})
+
+    config = _config_port(global_path).get_config(config_path=local_path)
+
+    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.5")
+
+
+def test_json_agent_config_env_file_has_highest_priority(tmp_path: Path) -> None:
+    global_path = tmp_path / "global.json"
+    env_path = tmp_path / "env.json"
+    _write(global_path, _payload())
+    _write(env_path, {"llm": {"provider": "codex", "model": "gpt-5.4"}})
+
+    config = _config_port(
+        global_path,
+        env={"AGENT_AGENT_CONFIG_FILE": str(env_path)},
+    ).get_config()
+
+    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.4")
+
+
+def test_json_agent_config_lists_selection_source(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write(config_path, _payload())
+
+    sources = _config_port(config_path).list_provider_sources()
+
+    assert len(sources) == 1
+    assert sources[0].provider == "minimax"
+    assert sources[0].source == AgentConfigProviderSource.GLOBAL
+
+
+def test_json_agent_config_sets_provider_and_model_together(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write(config_path, _payload())
+    port = _config_port(config_path)
+
+    port.set_model(provider="codex", model="gpt-5.5")
+
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["llm"] == {"provider": "codex", "model": "gpt-5.5"}
+
+
+def test_json_agent_config_updates_global_when_local_has_no_llm(tmp_path: Path) -> None:
+    global_path = tmp_path / "global" / "agent.json"
+    local_path = tmp_path / "local" / "agent.json"
+    _write(global_path, _payload())
+    _write(local_path, {"context": {"window_width_tokens": 100000}})
+    port = _config_port(global_path)
+
+    port.set_model(
+        provider="codex",
+        model="gpt-5.5",
+        config_path=local_path,
     )
 
-    config = _provider(config_path=config_path, env={}).get_config()
-
-    assert config.llm.default_provider == AgentLLMProviderType.MINIMAX
-    assert tuple(provider.type for provider in config.llm.providers) == (
-        AgentLLMProviderType.MINIMAX,
-    )
+    global_payload = json.loads(global_path.read_text(encoding="utf-8"))
+    local_payload = json.loads(local_path.read_text(encoding="utf-8"))
+    assert global_payload["llm"] == {"provider": "codex", "model": "gpt-5.5"}
+    assert "llm" not in local_payload
 
 
-def test_json_agent_config_rejects_unsupported_env_model_override(tmp_path) -> None:
-    config_path = tmp_path / "agent.json"
-    _write_config(config_path, llm=_minimax_llm(api_key="secret"))
+def test_json_agent_config_reports_missing_file(tmp_path: Path) -> None:
+    validation = _config_port(tmp_path / "missing.json").validate_config()
 
-    with pytest.raises(
-        ValueError,
-        match="Unsupported model='env-model' for provider='minimax'",
-    ):
-        _provider(
-            config_path=config_path,
-            env={"AGENT_MINIMAX_MODEL": "env-model"},
-        ).get_config()
+    assert validation.ok is False
+    assert validation.error == AgentConfigValidationErrorCode.CONFIG_NOT_FOUND
 
 
-def _write_config(
-    path: Path,
-    *,
-    llm: dict[str, object],
-    **sections: object,
-) -> None:
-    payload: dict[str, object] = dict(llm)
-    payload.update(sections)
-    context = payload.get("context")
-    if not isinstance(context, dict):
-        payload["context"] = {"window_width_tokens": 100_000}
-    elif "window_width_tokens" not in context:
-        context["window_width_tokens"] = 100_000
-    path.write_text(json.dumps(payload), encoding="utf-8")
-
-
-def _minimax_llm(
-    *,
-    api_key: str | None = None,
-    api_key_env: str | None = None,
-    api_key_file: str | None = None,
-    model: str = "MiniMax-M2.5",
-    extra: dict[str, object] | None = None,
-) -> dict[str, object]:
-    provider: dict[str, object] = {
-        "model": model,
-        "timeout_seconds": 30,
-    }
-    if api_key is not None:
-        provider["api_key"] = api_key
-    if api_key_env is not None:
-        provider["api_key_env"] = api_key_env
-    if api_key_file is not None:
-        provider["api_key_file"] = api_key_file
-    if extra is not None:
-        provider.update(extra)
-
-    return {
-        "llm": {"default_provider": "minimax"},
-        "providers": {
-            "minimax": provider,
-        },
-        "context": {"window_width_tokens": 1_000_000},
-    }
-
-
-def _moonshot_llm(
-    *,
-    api_key: str,
-    model: str = "kimi-k3",
-) -> dict[str, object]:
-    return {
-        "llm": {"default_provider": "moonshot"},
-        "providers": {
-            "moonshot": {
-                "api_key": api_key,
-                "model": model,
-                "timeout_seconds": 30,
-            },
-        },
-        "context": {"window_width_tokens": 256_000},
-    }
-
-
-def _codex_llm(*, credentials_file: str | None) -> dict[str, object]:
-    provider: dict[str, object] = {
-        "model": "gpt-5.5",
-        "timeout_seconds": 120,
-    }
-    if credentials_file is not None:
-        provider["credentials_file"] = credentials_file
-
-    return {
-        "llm": {"default_provider": "codex"},
-        "providers": {
-            "codex": provider,
-        },
-        "context": {"window_width_tokens": 100_000},
-    }
-
-
-def _bedrock_llm(*, profile: str | None) -> dict[str, object]:
-    provider: dict[str, object] = {
-        "model": "us.anthropic.claude-opus-4-6-v1",
-        "timeout_seconds": 120,
-    }
-    if profile is not None:
-        provider["profile"] = profile
-
-    return {
-        "llm": {"default_provider": "bedrock"},
-        "providers": {
-            "bedrock": provider,
-        },
-        "context": {"window_width_tokens": 200_000},
-    }
-
-
-def _lmstudio_llm(
-    *,
-    model: str = "google/gemma-4-12b-qat",
-    models: list[dict[str, object]] | None = None,
-    include_default_models: bool = True,
-    base_url: str | None = None,
-    api_key: str | None = None,
-    api_key_env: str | None = None,
-    api_key_file: str | None = None,
-) -> dict[str, object]:
-    provider: dict[str, object] = {
-        "model": model,
-        "timeout_seconds": 30,
-    }
-    if models is not None:
-        provider["models"] = models
-    elif include_default_models:
-        provider["models"] = [
-            {
-                "model": model,
-                "context_window_tokens": 131_072,
-            },
-        ]
-    if base_url is not None:
-        provider["base_url"] = base_url
-    if api_key is not None:
-        provider["api_key"] = api_key
-    if api_key_env is not None:
-        provider["api_key_env"] = api_key_env
-    if api_key_file is not None:
-        provider["api_key_file"] = api_key_file
-
-    return {
-        "llm": {"default_provider": "lmstudio"},
-        "providers": {
-            "lmstudio": provider,
-        },
-        "context": {"window_width_tokens": 131_072},
-    }
-
-
-def _fake_llm() -> dict[str, object]:
-    return {
-        "llm": {"default_provider": "fake"},
-        "providers": {
-            "fake": {
-                "model": "model1",
-                "timeout_seconds": 30,
-            }
-        },
-        "context": {"window_width_tokens": 100_000},
-    }
-
-
-def _null_llm() -> dict[str, object]:
-    return {
-        "llm": {"default_provider": "null"},
-        "providers": {
-            "null": {
-                "model": "null1",
-                "timeout_seconds": 30,
-            }
-        },
-        "context": {"window_width_tokens": 100_000},
-    }
-
-
-def _provider(
-    *,
+def _config_port(
     config_path: Path,
-    env: Mapping[str, str],
+    *,
+    env: dict[str, str] | None = None,
 ) -> JsonAgentConfig:
+    resolved_env = env or {}
     return JsonAgentConfig(
         config_path_global=config_path,
-        config_mapper=AgentConfigMapper(
-            env=env,
-            tools=(
-                FilesTool(),
-                ShellProcessTool(),
-                NotifyTool(),
-            ),
-        ),
-        env=env,
+        config_mapper=AgentConfigMapper(env=resolved_env),
+        env=resolved_env,
     )
+
+
+def _payload() -> dict[str, object]:
+    return {
+        "llm": {
+            "provider": "minimax",
+            "model": "MiniMax-M3",
+        }
+    }
+
+
+def _write(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{json.dumps(payload)}\n", encoding="utf-8")

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from helpers.agent_config import FakeAgentConfigPort
+from helpers.agent_config import FakeAgentConfigPort, FakeLLMProviderCatalogPort
 from helpers.agent_config import agent_config as agent_config_factory
 from helpers.agent_runner import build_agent_runner
 
@@ -314,7 +314,6 @@ class _FakeAgentContextStore:
             if entry.sequence >= start_sequence
         ]
 
-
     def list_raw_entries(
         self,
         *,
@@ -362,8 +361,7 @@ class _FakeAgentContextStore:
         estimated_tokens = sum(
             entry.delta_compact_tokens
             for entry in entries
-            if entry.delta_compact_tokens is not None
-            and entry.delta_compact_tokens > 0
+            if entry.delta_compact_tokens is not None and entry.delta_compact_tokens > 0
         )
         return AgentContextWindowEntries(
             entries=entries,
@@ -620,6 +618,7 @@ def _build_use_case(
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=resolved_agent_config,
+            llm_provider_catalog=FakeLLMProviderCatalogPort(),
             run_store=store,
             skill_runner=_FakeSkillRunner(),
             tool_manager=resolved_tool_manager,

@@ -3,10 +3,7 @@ from typing import Protocol, TypeAlias, TypeVar
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_lmstudio import LMStudioLLMRequest
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_moonshot import MoonshotLLMRequest
-from skiller.domain.agent.llm.request import LLMRequest
+from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 
 RequestT = TypeVar("RequestT", bound=LLMRequest, contravariant=True)
 
@@ -17,9 +14,7 @@ class LLMPort(Protocol[RequestT]):
 
 ResolvedLLMPort: TypeAlias = (
     LLMPort[LLMRequest]
-    | LLMPort[MiniMaxLLMRequest]
-    | LLMPort[MoonshotLLMRequest]
-    | LLMPort[LMStudioLLMRequest]
+    | LLMPort[OpenAILLMRequest]
     | LLMPort[CodexLLMRequest]
     | LLMPort[BedrockLLMRequest]
 )

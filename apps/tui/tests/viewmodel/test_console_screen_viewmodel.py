@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+import stui.usecase.list_auth_providers_use_case as list_auth_providers_use_case_module
 import stui.usecase.list_models_use_case as list_models_use_case_module
 import stui.usecase.list_runs_use_case as list_runs_use_case_module
 import stui.usecase.run_command_use_case as run_command_use_case_module
@@ -730,32 +731,33 @@ def test_prompt_enter_applies_completion_when_visible() -> None:
         asyncio.run(run())
 
 
-def test_prompt_enter_applies_auth_command_completion_and_shows_params() -> None:
+def test_prompt_enter_opens_auth_table_from_command_completion() -> None:
     async def run() -> None:
+        models_port = FakeModelsPort()
         viewmodel = build_viewmodel(
             session_key="main",
             run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
             waiting_port=FakeWaitingPort(),
+            models_port=models_port,
         )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
 
         viewmodel.prompt_change(text="/a", cursor_position=2)
 
         await viewmodel.prompt_enter()
 
-        assert viewmodel.state.prompt.text == "/auth "
-        assert viewmodel.state.prompt.cursor_position == 6
-        assert viewmodel.state.autocompletion is not None
-        assert [item.label for item in viewmodel.state.autocompletion.items] == [
-            "codex",
-            "minimax",
-            "bedrock",
-            "moonshot",
-        ]
+        assert models_port.called_with == ["run-123"]
+        assert viewmodel.state.auth_table.visible is True
+        assert viewmodel.state.prompt.text == ""
+        assert viewmodel.state.prompt.cursor_position == 0
+        assert viewmodel.state.autocompletion is None
+        assert viewmodel.state.prompt.mode == PromptMode.AUTH_TABLE
 
-    asyncio.run(run())
+    with patched_to_thread(list_auth_providers_use_case_module):
+        asyncio.run(run())
 
 
-def test_prompt_enter_submits_auth_param_completion_when_visible() -> None:
+def test_prompt_enter_submits_direct_auth_provider() -> None:
     run_port = FakeRunPort(
         CommandAck(
             status=CommandAckStatus.ACCEPTED,
@@ -771,7 +773,7 @@ def test_prompt_enter_submits_auth_param_completion_when_visible() -> None:
             waiting_port=FakeWaitingPort(),
         )
 
-        viewmodel.prompt_change(text="/auth c", cursor_position=7)
+        viewmodel.prompt_change(text="/auth codex", cursor_position=11)
 
         await viewmodel.prompt_enter()
 
@@ -785,32 +787,30 @@ def test_prompt_enter_submits_auth_param_completion_when_visible() -> None:
         asyncio.run(run())
 
 
-def test_prompt_enter_submits_first_auth_param_completion() -> None:
-    run_port = FakeRunPort(
-        CommandAck(
-            status=CommandAckStatus.ACCEPTED,
-            run_id="run-codex",
-            message="created",
-        )
-    )
-
+def test_prompt_enter_opens_auth_table_with_trailing_space() -> None:
     async def run() -> None:
+        models_port = FakeModelsPort()
         viewmodel = build_viewmodel(
             session_key="main",
-            run_port=run_port,
+            run_port=FakeRunPort(
+                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
+            ),
             waiting_port=FakeWaitingPort(),
+            models_port=models_port,
         )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
 
         viewmodel.prompt_change(text="/auth ", cursor_position=6)
 
         await viewmodel.prompt_enter()
 
-        assert run_port.called_with == ["auths/codex"]
+        assert models_port.called_with == ["run-123"]
+        assert viewmodel.state.auth_table.visible is True
         assert viewmodel.state.prompt.text == ""
         assert viewmodel.state.prompt.cursor_position == 0
-        assert viewmodel.state.session_key == "run-codex"
+        assert viewmodel.state.autocompletion is None
 
-    with patched_to_thread(run_command_use_case_module):
+    with patched_to_thread(list_auth_providers_use_case_module):
         asyncio.run(run())
 
 
@@ -929,29 +929,43 @@ def test_console_screen_viewmodel_dispatches_run() -> None:
         asyncio.run(run())
 
 
-def test_console_screen_viewmodel_dispatches_auth_menu() -> None:
-    run_port = FakeRunPort(
-        CommandAck(
-            status=CommandAckStatus.ACCEPTED,
-            run_id="run-auth",
-            message="created",
-        )
-    )
-
+def test_console_screen_viewmodel_opens_auth_table() -> None:
     async def run() -> None:
+        models_port = FakeModelsPort(
+            models=[
+                ModelsPortProviderItem(
+                    name="codex",
+                    source="user",
+                    models=(),
+                )
+            ]
+        )
         viewmodel = build_viewmodel(
             session_key="main",
-            run_port=run_port,
+            run_port=FakeRunPort(
+                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
+            ),
             waiting_port=FakeWaitingPort(),
+            models_port=models_port,
         )
+        viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
 
         await viewmodel.submit("/auth")
 
-        assert run_port.called_with == ["auths/auth"]
-        assert viewmodel.state.run_name == "auths/auth"
-        assert viewmodel.state.session_key == "run-auth"
+        assert models_port.called_with == ["run-123"]
+        assert viewmodel.state.auth_table.visible is True
+        assert viewmodel.state.auth_table.command == "/auth"
+        assert [row.name for row in viewmodel.state.auth_table.rows] == [
+            "moonshot",
+            "codex",
+            "bedrock",
+            "minimax",
+            "lmstudio",
+        ]
+        assert viewmodel.state.prompt.mode == PromptMode.AUTH_TABLE
+        assert viewmodel.state.auth_table.rows[1].source == "user"
 
-    with patched_to_thread(run_command_use_case_module):
+    with patched_to_thread(list_auth_providers_use_case_module):
         asyncio.run(run())
 
 
@@ -994,7 +1008,7 @@ def test_console_screen_viewmodel_rejects_unknown_auth_provider() -> None:
         assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
         assert viewmodel.state.view_status.message == (
             "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
-            "/auth bedrock, or /auth moonshot."
+            "/auth bedrock, /auth moonshot, or /auth lmstudio."
         )
         assert isinstance(viewmodel.state.transcript.items[0], UserInputItem)
         assert viewmodel.state.transcript.items[0].text == "/auth unknown"
@@ -1050,16 +1064,17 @@ def test_console_screen_viewmodel_opens_models_table_for_models_command() -> Non
 
 def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
     async def run() -> None:
+        events_port = FakeEventsPort()
         models_port = FakeModelsPort(
             models=[
                 ModelsPortProviderItem(
                     name="codex",
-                    source="global",
+                    source="user",
                     models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
                 ),
                 ModelsPortProviderItem(
                     name="minimax",
-                    source="global",
+                    source="user",
                     models=(
                         ModelsPortModelItem(name="MiniMax-M2.7"),
                         ModelsPortModelItem(name="MiniMax-M2.5"),
@@ -1072,6 +1087,7 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
             run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
             waiting_port=FakeWaitingPort(),
             models_port=models_port,
+            events_port=events_port,
         )
         viewmodel._run_event_context.run_id = "run-123"  # noqa: SLF001
 
@@ -1090,8 +1106,9 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
             ("run-123", "minimax", "MiniMax-M2.5"),
         ]
         assert minimax_models["MiniMax-M2.5"].active is True
-        assert viewmodel.state.models_table.visible is True
-        assert viewmodel.state.prompt.mode == PromptMode.MODELS_TABLE
+        assert viewmodel.state.models_table.visible is False
+        assert viewmodel.state.prompt.mode == PromptMode.DEFAULT
+        assert events_port.refresh_call_count == 1
 
     with patched_to_thread(list_models_use_case_module, select_model_use_case_module):
         asyncio.run(run())

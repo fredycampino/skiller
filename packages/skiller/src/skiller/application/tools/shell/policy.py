@@ -104,7 +104,8 @@ class ShellCommandPolicy:
             tokens = list(lexer)
         except ValueError as exc:
             raise ValueError(
-                "shell command blocked by allowlist policy: command could not be parsed"
+                f"shell command could not be parsed safely: {exc}. "
+                "Check quotes and heredoc delimiters."
             ) from exc
 
         segments: list[list[str]] = []
@@ -139,10 +140,7 @@ class ShellCommandPolicy:
         return Path(raw).name
 
     def _extract_path_candidates(self, command: str) -> list[str]:
-        try:
-            segments = self._split_command_segments(command)
-        except ValueError:
-            return self._extract_paths_from_raw_command(command)
+        segments = self._split_command_segments(command)
 
         candidates: list[str] = []
         for segment in segments:
@@ -163,12 +161,6 @@ class ShellCommandPolicy:
         arguments = tokens[index + 1 :]
         executable_candidates = self._path_if_candidate(executable_path)
         return env_assignments + executable_candidates + arguments
-
-    def _extract_paths_from_raw_command(self, command: str) -> list[str]:
-        candidates: list[str] = []
-        for match in re.findall(r"(~?/[^\s'\";|&<>]+|\.\.?/[^\s'\";|&<>]+)", command):
-            candidates.append(match)
-        return candidates
 
     def _paths_from_token(self, token: str) -> list[str]:
         raw = token.strip()
@@ -215,4 +207,4 @@ class ShellCommandPolicy:
                 return
             except ValueError:
                 continue
-        raise ValueError(f"shell {label} escapes allowed_paths")
+        raise ValueError(f"shell {label} escapes allowed_paths: {path}")

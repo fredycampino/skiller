@@ -5,7 +5,6 @@ from typing import Protocol
 
 from skiller.domain.agent.config.model import AgentConfig
 from skiller.domain.agent.config.validation import AgentConfigValidation
-from skiller.domain.agent.llm.model import AgentLLMProviderType
 
 
 class AgentConfigProviderSource(str, Enum):
@@ -17,7 +16,7 @@ class AgentConfigProviderSource(str, Enum):
 
 @dataclass(frozen=True)
 class AgentConfigProviderSourceItem:
-    provider_type: AgentLLMProviderType
+    provider: str
     source: AgentConfigProviderSource
 
 
@@ -38,7 +37,7 @@ class AgentConfigPort(Protocol):
     def set_model(
         self,
         *,
-        provider_type: AgentLLMProviderType,
+        provider: str,
         model: str,
         config_path: Path | None = None,
     ) -> None:

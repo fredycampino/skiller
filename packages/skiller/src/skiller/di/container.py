@@ -107,11 +107,19 @@ from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.service import WaitApplicationService
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
-from skiller.di.llm_client_factory import LLMClientFactory
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
+from skiller.infrastructure.config.file_llm_provider_catalog_datasource import (
+    FileLLMProviderCatalogDatasource,
+)
+from skiller.infrastructure.config.file_llm_provider_catalog_mapper import (
+    FileLLMProviderCatalogMapper,
+)
+from skiller.infrastructure.config.file_llm_provider_catalog_port import (
+    FileLLMProviderCatalogPort,
+)
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
 from skiller.infrastructure.config.settings import Settings, get_settings
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
@@ -138,6 +146,10 @@ from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
+from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
+from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
+    OpenAIApiKeyDatasource,
+)
 from skiller.infrastructure.skills.filesystem_runner_port import FilesystemRunnerPort
 from skiller.infrastructure.tools.channels.default_channel_sender import DefaultChannelSender
 from skiller.infrastructure.tools.mcp.default_mcp import DefaultMCP
@@ -205,7 +217,26 @@ def build_runtime_container(
         ),
         env=os.environ,
     )
-    llm_model = _build_llm_model_manager()
+    provider_catalog_mapper = FileLLMProviderCatalogMapper()
+    provider_catalog_datasource = FileLLMProviderCatalogDatasource(
+        mapper=provider_catalog_mapper,
+    )
+    default_provider_catalog_path = (
+        Path(__file__).parent.parent / "application" / "config" / "providers.json"
+    )
+    user_provider_catalog_path = Path.home() / ".skiller" / "settings" / "providers.json"
+    llm_provider_catalog = FileLLMProviderCatalogPort(
+        datasource=provider_catalog_datasource,
+        mapper=provider_catalog_mapper,
+        default_path=default_provider_catalog_path,
+        user_path=user_provider_catalog_path,
+        env=os.environ,
+    )
+    llm_model = LLMModelManager(
+        client_resolver=DefaultLLMClientResolver(
+            api_key_datasource=OpenAIApiKeyDatasource(env=os.environ),
+        ),
+    )
     mcp = DefaultMCP()
     tool_process_runner = DefaultToolProcessRunner()
     server_status = DefaultServerStatus(cfg)
@@ -278,6 +309,7 @@ def build_runtime_container(
         run_agent_store=run_agent_store,
         context_stats=agent_context_store,
         agent_config=agent_config,
+        llm_provider_catalog=llm_provider_catalog,
         skill_runner=skill_runner,
     )
     list_agent_context_use_case = ListAgentContextUseCase(
@@ -286,11 +318,13 @@ def build_runtime_container(
         agent_context_store=agent_context_store,
         agent_context_state=agent_context_state,
         agent_config=agent_config,
+        llm_provider_catalog=llm_provider_catalog,
         skill_runner=skill_runner,
     )
     list_agent_models_use_case = ListAgentModelsUseCase(
         run_store=store,
         agent_config=agent_config,
+        llm_provider_catalog=llm_provider_catalog,
         skill_runner=skill_runner,
     )
     get_agent_tools_use_case = GetAgentToolsUseCase(
@@ -302,6 +336,8 @@ def build_runtime_container(
     select_agent_model_use_case = SelectAgentModelUseCase(
         run_store=store,
         agent_config=agent_config,
+        llm_provider_catalog=llm_provider_catalog,
+        runtime_events=runtime_event_store,
         skill_runner=skill_runner,
     )
     agent_event_publisher = AgentEventPublisher(
@@ -331,6 +367,7 @@ def build_runtime_container(
         step_mapper=AgentStepMapper(),
         config_reader=AgentStepConfigReader(
             agent_config=agent_config,
+            llm_provider_catalog=llm_provider_catalog,
             run_store=store,
             skill_runner=skill_runner,
             tool_manager=tool_manager,
@@ -469,12 +506,6 @@ def build_runtime_container(
         input_wait_mapper=input_wait_mapper,
         channel_wait_mapper=channel_wait_mapper,
         webhook_wait_mapper=webhook_wait_mapper,
-    )
-
-
-def _build_llm_model_manager() -> LLMModelManager:
-    return LLMModelManager(
-        client_resolver=LLMClientFactory(),
     )
 
 

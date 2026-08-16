@@ -160,12 +160,15 @@ class LLMUsage:
     total_tokens: int | None
     cache_read_tokens: int | None
     cache_write_tokens: int | None
-    provider: AgentLLMProviderType | None
+    provider: str | None
     model: str | None
 
     def __post_init__(self) -> None:
         if self.provider is not None:
-            object.__setattr__(self, "provider", AgentLLMProviderType(self.provider))
+            provider = str(self.provider).strip()
+            if not provider:
+                raise ValueError("LLMUsage provider must be a non-empty string")
+            object.__setattr__(self, "provider", provider)
         if self.model is not None:
             object.__setattr__(self, "model", _usage_model_value(self.model))
 

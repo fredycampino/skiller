@@ -8,7 +8,6 @@ from skiller.domain.action.action_model import (
     action_to_public_dict,
 )
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.model import AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_type import StepType
 
@@ -47,7 +46,7 @@ class AgentUsageOutput:
     total_tokens: int | None
     cache_read_tokens: int | None
     cache_write_tokens: int | None
-    provider: AgentLLMProviderType | None
+    provider: str | None
     model: str | None
 
 
@@ -276,10 +275,13 @@ def _optional_int(value: object) -> int | None:
     return int(value)
 
 
-def _optional_provider(value: object) -> AgentLLMProviderType | None:
+def _optional_provider(value: object) -> str | None:
     if value is None:
         return None
-    return AgentLLMProviderType(str(value))
+    provider = str(value).strip()
+    if not provider:
+        raise ValueError("agent usage provider must be a non-empty string")
+    return provider
 
 
 def _optional_model(value: object) -> str | None:

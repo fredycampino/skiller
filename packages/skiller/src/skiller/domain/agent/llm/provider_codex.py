@@ -3,6 +3,7 @@ from typing import ClassVar
 
 from skiller.domain.agent.llm.model import (
     AgentLLMProviderType,
+    LLMModelLike,
     LLMStaticModel,
 )
 from skiller.domain.agent.llm.provider import AgentLLMProviderConfig
@@ -28,13 +29,12 @@ CODEX_MODELS = (
 
 @dataclass(frozen=True)
 class CodexLLMRequest(LLMRequest):
-    model: AgentCodexLLMModel
+    model: LLMModelLike
     parallel_tool_calls: bool
     session_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, AgentCodexLLMModel):
-            raise TypeError("CodexLLMRequest model must be an AgentCodexLLMModel")
+        super().__post_init__()
 
 
 @dataclass(frozen=True)

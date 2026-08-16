@@ -12,6 +12,7 @@ from stui.usecase.get_run_action_use_case import GetRunActionUseCase
 from stui.usecase.interrupt_agent_turn_use_case import (
     InterruptAgentTurnUseCase,
 )
+from stui.usecase.list_auth_providers_use_case import ListAuthProvidersUseCase
 from stui.usecase.list_models_use_case import ListModelsUseCase
 from stui.usecase.list_runs_use_case import ListRunsUseCase
 from stui.usecase.load_session_from_post_use_case import LoadSessionFromPostUseCase
@@ -32,6 +33,7 @@ from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
 from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
+from stui.usecase.refresh_events_use_case import RefreshEventsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.select_model_use_case import SelectModelUseCase
@@ -56,6 +58,7 @@ class ConsoleScreenUseCases:
     interrupt_agent_turn: InterruptAgentTurnUseCase
     move_completion: MoveCompletionUseCase
     list_models: ListModelsUseCase
+    list_auth_providers: ListAuthProvidersUseCase
     list_runs: ListRunsUseCase
     normalize_command: NormalizeCommandUseCase
     event_state: EventStateUseCase
@@ -65,6 +68,7 @@ class ConsoleScreenUseCases:
     project_agent_metrics: ProjectAgentMetricsUseCase
     refresh_agent_metrics: RefreshAgentMetricsUseCase
     refresh_agent_context_stats: RefreshAgentContextStatsUseCase
+    refresh_events: RefreshEventsUseCase
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase

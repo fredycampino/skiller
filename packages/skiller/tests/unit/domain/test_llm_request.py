@@ -10,7 +10,6 @@ from skiller.domain.agent.llm.provider_lmstudio import (
 )
 from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
 from skiller.domain.agent.llm.provider_registry import (
-    AgentBedrockLLMModel,
     AgentCodexLLMModel,
     AgentFakeLLMModel,
     AgentMiniMaxLLMModel,
@@ -129,43 +128,27 @@ def test_lmstudio_llm_request_accepts_model_like_contract() -> None:
     assert request.model == custom_model
 
 
-def test_codex_llm_request_requires_codex_model() -> None:
+def test_codex_llm_request_accepts_catalog_model_contract() -> None:
+    model = LLMCustomModel(value="gpt-5.5", model_context_window_tokens=1_050_000)
     request = CodexLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentCodexLLMModel.GPT_5_5,
+        model=model,
         parallel_tool_calls=True,
         session_id="context-1",
     )
 
-    assert request.model == AgentCodexLLMModel.GPT_5_5
-
-    with pytest.raises(
-        TypeError,
-        match="CodexLLMRequest model must be an AgentCodexLLMModel",
-    ):
-        CodexLLMRequest(
-            messages=(LLMUserMessage("hello"),),
-            model=AgentMiniMaxLLMModel.M2_7,
-            parallel_tool_calls=True,
-            session_id="context-1",
-        )
+    assert request.model == model
 
 
-def test_bedrock_llm_request_requires_bedrock_model() -> None:
+def test_bedrock_llm_request_accepts_catalog_model_contract() -> None:
+    model = LLMCustomModel(
+        value="us.anthropic.claude-opus-4-6-v1",
+        model_context_window_tokens=200_000,
+    )
     request = BedrockLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        model=model,
         max_tokens=4096,
     )
 
-    assert request.model == AgentBedrockLLMModel.CLAUDE_OPUS_4_6
-
-    with pytest.raises(
-        TypeError,
-        match="BedrockLLMRequest model must be an AgentBedrockLLMModel",
-    ):
-        BedrockLLMRequest(
-            messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_5,
-            max_tokens=4096,
-        )
+    assert request.model == model

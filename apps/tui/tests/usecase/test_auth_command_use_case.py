@@ -28,6 +28,7 @@ def test_auth_command_use_case_maps_auth_menu() -> None:
         ("/auth minimax", "auths/minimax"),
         ("/auth bedrock", "auths/bedrock"),
         ("/auth moonshot", "auths/moonshot"),
+        ("/auth lmstudio", "auths/lmstudio"),
         ("/auth CODEX", "auths/codex"),
     ],
 )
@@ -48,7 +49,7 @@ def test_auth_command_use_case_rejects_unknown_provider() -> None:
     assert result.command is None
     assert result.error_message == (
         "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
-        "/auth bedrock, or /auth moonshot."
+        "/auth bedrock, /auth moonshot, or /auth lmstudio."
     )
 
 

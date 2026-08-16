@@ -143,7 +143,7 @@ class FakeModelsPort:
         self.models = models or [
             ModelsPortProviderItem(
                 name="codex",
-                source="global",
+                source="user",
                 models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
             )
         ]
@@ -234,6 +234,7 @@ class FakeEventsPort:
         self.subscribe_calls: list[str] = []
         self.subscribe_interval_calls: list[float] = []
         self.unsubscribe_call_count = 0
+        self.refresh_call_count = 0
         self.current_run_id = current_run_id
         self.current_listener = current_listener
 
@@ -255,6 +256,9 @@ class FakeEventsPort:
         self.unsubscribe_call_count += 1
         self.current_listener = None
         self.current_run_id = ""
+
+    async def refresh(self) -> None:
+        self.refresh_call_count += 1
 
 
 class FakeSessionStorePort:

@@ -137,6 +137,27 @@ def test_shell_command_policy_rejects_command_path_outside_allowed_paths(
         )
 
 
+def test_shell_command_policy_reports_command_parse_error() -> None:
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(Path("/workspace"),),
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "shell command could not be parsed safely: No closing quotation. "
+            "Check quotes and heredoc delimiters."
+        ),
+    ):
+        policy.validate_command(
+            command="python - <<'PY",
+            effective_cwd="/workspace",
+        )
+
+
 def test_shell_command_policy_allows_dev_null_output_redirection() -> None:
     policy = ShellCommandPolicy(
         config=ShellToolRuntimeConfig(

@@ -8,15 +8,15 @@ from skiller.domain.agent.config.model import (
     AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
+    AgentLLMSelection,
     AgentLoopConfig,
 )
 from skiller.domain.agent.config.validation import AgentConfigValidation
-from skiller.domain.agent.llm.provider_registry import (
-    FAKE_MODELS,
-    AgentFakeLLMModel,
-    AgentFakeProvider,
-    AgentLLMProviderList,
-    AgentLLMProviderType,
+from skiller.domain.agent.llm.model import LLMToolChoiceMode
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMModelDefinition,
+    LLMProviderCatalog,
+    OpenAILLMProviderDefinition,
 )
 from skiller.domain.tool.tool_contract import ToolDefinition, ToolRuntimeConfigs
 
@@ -40,6 +40,48 @@ class FakeAgentConfigPort:
         self.validation_config_paths.append(config_path)
         return self.validation
 
+    def list_provider_sources(self, *, config_path: Path | None = None) -> tuple:
+        _ = config_path
+        return ()
+
+    def set_model(
+        self,
+        *,
+        provider: str,
+        model: str,
+        config_path: Path | None = None,
+    ) -> None:
+        _ = provider, model, config_path
+
+
+class FakeLLMProviderCatalogPort:
+    def __init__(self, catalog: LLMProviderCatalog | None = None) -> None:
+        self.catalog = catalog or fake_llm_provider_catalog()
+
+    def get_catalog(self) -> LLMProviderCatalog:
+        return self.catalog
+
+
+def fake_llm_provider_definition() -> OpenAILLMProviderDefinition:
+    return OpenAILLMProviderDefinition(
+        name="fake",
+        timeout_seconds=30,
+        models=(LLMModelDefinition(model="model1", context_window_tokens=100_000),),
+        enabled=True,
+        base_url="http://localhost/v1",
+        temperature=0,
+        top_p=1,
+        max_output_tokens=4096,
+        parallel_tool_calls=True,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        api_key_source=None,
+        options={},
+    )
+
+
+def fake_llm_provider_catalog() -> LLMProviderCatalog:
+    return LLMProviderCatalog(providers=(fake_llm_provider_definition(),))
+
 
 def agent_config(
     *,
@@ -51,16 +93,7 @@ def agent_config(
     tools: ToolRuntimeConfigs | None = None,
 ) -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMProviderList(
-            default_provider=AgentLLMProviderType.FAKE,
-            providers=(
-                AgentFakeProvider(
-                    model=AgentFakeLLMModel.MODEL1,
-                    models=FAKE_MODELS,
-                    timeout_seconds=30,
-                ),
-            ),
-        ),
+        llm=AgentLLMSelection(provider="fake", model="model1"),
         loop=AgentLoopConfig(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,
@@ -113,4 +146,5 @@ def agent_runner_config(
             log_request=log_request,
             log_request_file=log_request_file,
         ),
+        provider_definition=fake_llm_provider_definition(),
     )

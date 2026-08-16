@@ -395,7 +395,7 @@ def test_agent_tool_execution_persists_prepare_failure_as_tool_result() -> None:
     assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
     assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
     assert context_store.appended[-1]["payload"]["error"] == (
-        "shell command path escapes allowed_paths"
+        "shell command path escapes allowed_paths: /etc/passwd"
     )
 
 
@@ -430,7 +430,9 @@ def test_agent_tool_execution_persists_invalid_shell_cwd_as_tool_result() -> Non
     ]
     assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
     assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
-    assert context_store.appended[-1]["payload"]["error"] == "shell cwd escapes allowed_paths"
+    assert context_store.appended[-1]["payload"]["error"] == (
+        "shell cwd escapes allowed_paths: /outside/workspace"
+    )
 
 
 def test_agent_tool_execution_returns_terminal_prepare_exception_without_tool_result() -> None:

@@ -105,6 +105,18 @@ class AgentToolResultItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class AgentContextCompactedItem(TranscriptItem):
+    run_id: str
+    context_id: str
+    compaction_id: int
+    system_tokens: int
+    estimated_request_tokens: int
+    estimated_request_compacted_tokens: int
+    target_tokens: int
+    window_tokens: int
+
+
+@dataclass(frozen=True)
 class AgentAssistantMessageItem(TranscriptItem):
     run_id: str
     step_id: str

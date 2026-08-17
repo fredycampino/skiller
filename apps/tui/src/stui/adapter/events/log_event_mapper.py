@@ -13,6 +13,7 @@ from stui.port.event_models import (
     ActionPostValue,
     ActionRunValue,
     AgentAssistantMessagePayload,
+    AgentContextCompactedPayload,
     AgentContextPayload,
     AgentFinalAssistantMessagePayload,
     AgentLifecyclePayload,
@@ -154,6 +155,18 @@ class RunModelUpdatedModel(BaseModel):
 
     provider: str
     model: str
+
+
+class AgentContextCompactedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_id: str
+    compaction_id: int
+    system_tokens: int
+    estimated_request_tokens: int
+    estimated_request_compacted_tokens: int
+    target_tokens: int
+    window_tokens: int
 
 
 class StepStartedModel(BaseModel):
@@ -377,6 +390,18 @@ class LogEventMapper:
         if event_type == LogEventType.RUN_MODEL_UPDATED:
             model = _validate_model(RunModelUpdatedModel, payload, "payload")
             return RunModelUpdatedPayload(provider=model.provider, model=model.model)
+
+        if event_type == LogEventType.AGENT_CONTEXT_COMPACTED:
+            model = _validate_model(AgentContextCompactedModel, payload, "payload")
+            return AgentContextCompactedPayload(
+                context_id=model.context_id,
+                compaction_id=model.compaction_id,
+                system_tokens=model.system_tokens,
+                estimated_request_tokens=model.estimated_request_tokens,
+                estimated_request_compacted_tokens=model.estimated_request_compacted_tokens,
+                target_tokens=model.target_tokens,
+                window_tokens=model.window_tokens,
+            )
 
         if event_type == LogEventType.STEP_STARTED:
             _validate_model(StepStartedModel, payload, "payload")

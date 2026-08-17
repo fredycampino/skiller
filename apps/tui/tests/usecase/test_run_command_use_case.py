@@ -73,7 +73,12 @@ def test_run_command_use_case_missing_agent_records_error(
     async def run() -> None:
         port = FakeRunPort(_dispatch_error())
         events_port = FakeEventsPort()
-        context = _run_context()
+        context = RunEventContext(
+            run_id="current-run",
+            run_name="current-flow",
+            mode=RunMode.FLOW,
+            status=RunStatus.WAITING_INPUT,
+        )
         session_store = FakeSessionStorePort()
         use_case = RunCommandUseCase(
             run_port=port,
@@ -96,10 +101,10 @@ def test_run_command_use_case_missing_agent_records_error(
         assert events_port.current_run_id == ""
         assert result.state is state
         assert result.raw_args == "chat"
-        assert context.run_id == ""
-        assert context.run_name == ""
-        assert context.mode == RunMode.CHAT
-        assert context.status == RunStatus.FAILED
+        assert context.run_id == "current-run"
+        assert context.run_name == "current-flow"
+        assert context.mode == RunMode.FLOW
+        assert context.status == RunStatus.WAITING_INPUT
         assert state.session_key == "main"
         assert state.view_status.kind == ViewStatusKind.ERROR
         assert state.view_status.message == "agent not found: chat"
@@ -187,7 +192,7 @@ def test_run_command_use_case_unexpected_status_records_error(
         assert events_port.subscribed == []
         assert events_port.current_run_id == "old-run"
         assert context.run_id == ""
-        assert context.status == RunStatus.FAILED
+        assert context.status == RunStatus.RUNNING
         assert state.session_key == "main"
         assert state.view_status.kind == ViewStatusKind.ERROR
         assert state.view_status.message == "Unexpected run status: running"

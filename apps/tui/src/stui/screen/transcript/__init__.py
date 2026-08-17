@@ -1,4 +1,5 @@
 from stui.screen.transcript.agent_assistant_message_view import AgentAssistantMessageView
+from stui.screen.transcript.agent_context_compacted_view import AgentContextCompactedView
 from stui.screen.transcript.agent_final_assistant_message_view import (
     AgentFinalAssistantMessageView,
 )
@@ -29,6 +30,7 @@ from stui.screen.transcript.user_input_view import UserInputView
 
 __all__ = [
     "AgentAssistantMessageView",
+    "AgentContextCompactedView",
     "AgentFinalAssistantMessageView",
     "AgentStepFinalOutputView",
     "AgentSystemNoticeView",

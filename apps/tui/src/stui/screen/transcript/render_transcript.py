@@ -7,6 +7,7 @@ from rich.console import RenderableType
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
 from stui.screen.transcript.agent_assistant_message_view import AgentAssistantMessageView
+from stui.screen.transcript.agent_context_compacted_view import AgentContextCompactedView
 from stui.screen.transcript.agent_final_assistant_message_view import (
     AgentFinalAssistantMessageView,
 )
@@ -34,6 +35,7 @@ from stui.screen.transcript.step_shell_output_view import StepShellOutputView
 from stui.screen.transcript.user_input_view import UserInputView
 from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
+    AgentContextCompactedItem,
     AgentFinalAssistantMessageItem,
     AgentStepFinalOutputItem,
     AgentSystemNoticeItem,
@@ -259,6 +261,8 @@ class RenderTranscript:
             return RunSystemNoticeView(item=item, strings=self.strings)
         if isinstance(item, RunModelUpdatedItem):
             return RunModelUpdatedView(item=item, strings=self.strings)
+        if isinstance(item, AgentContextCompactedItem):
+            return AgentContextCompactedView(item=item, strings=self.strings)
         if isinstance(item, AgentToolCallItem):
             return AgentToolCallView(item=item)
         if isinstance(item, AgentToolResultItem):

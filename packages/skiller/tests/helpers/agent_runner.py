@@ -174,6 +174,7 @@ def build_agent_runner(
             agent_context_store=agent_context_store,
             agent_context_state=agent_context_state,
             prompt_builder=AgentPromptBuilder(),
+            runtime_event_store=runtime_event_store,
         ),
         error_mapper=AgentErrorMapper(),
         feedback=AgentRunnerFeedback(),

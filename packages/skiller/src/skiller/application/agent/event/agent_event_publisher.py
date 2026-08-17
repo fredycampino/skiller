@@ -8,7 +8,9 @@ from skiller.application.agent.event.agent_event_truncator import (
 )
 from skiller.domain.agent.config.model import AgentEventOutputConfig
 from skiller.domain.agent.context.model import AgentContextEntry, AgentContextMetrics
-from skiller.domain.event.event_agent_model import AgentEventPayload
+from skiller.domain.event.event_agent_model import (
+    AgentEventPayload,
+)
 from skiller.domain.event.event_model import RuntimeEventDraft
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 

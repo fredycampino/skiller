@@ -14,6 +14,7 @@ from skiller.domain.action.action_model import (
 from skiller.domain.agent.context.model import AgentContextMetrics
 from skiller.domain.agent.llm.model import LLMUsage
 from skiller.domain.event.event_agent_model import (
+    AgentContextCompactedPayload,
     AgentEventBody,
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -41,6 +42,7 @@ class RuntimeEventType(StrEnum):
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
     AGENT_MAX_TURNS_EXHAUSTED = "AGENT_MAX_TURNS_EXHAUSTED"
+    AGENT_CONTEXT_COMPACTED = "AGENT_CONTEXT_COMPACTED"
     INPUT_RECEIVED = "INPUT_RECEIVED"
 
 
@@ -128,6 +130,7 @@ RuntimeEventPayload: TypeAlias = (
     | ActionDonePayload
     | AgentEventPayload
     | AgentLifecyclePayload
+    | AgentContextCompactedPayload
     | InputReceivedPayload
 )
 
@@ -336,6 +339,19 @@ def runtime_event_payload_from_dict(
     if event_type == RuntimeEventType.INPUT_RECEIVED:
         return InputReceivedPayload(
             payload=_dict_value(value.get("payload")),
+        )
+
+    if event_type == RuntimeEventType.AGENT_CONTEXT_COMPACTED:
+        return AgentContextCompactedPayload(
+            context_id=str(value.get("context_id", "")),
+            compaction_id=_int_value(value.get("compaction_id")),
+            system_tokens=_int_value(value.get("system_tokens")),
+            estimated_request_tokens=_int_value(value.get("estimated_request_tokens")),
+            estimated_request_compacted_tokens=_int_value(
+                value.get("estimated_request_compacted_tokens")
+            ),
+            target_tokens=_int_value(value.get("target_tokens")),
+            window_tokens=_int_value(value.get("window_tokens")),
         )
 
     if event_type in {

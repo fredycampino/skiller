@@ -57,3 +57,14 @@ class AgentEventPayload:
 class AgentLifecyclePayload:
     turn_id: str
     stop_reason: str
+
+
+@dataclass(frozen=True)
+class AgentContextCompactedPayload:
+    context_id: str
+    compaction_id: int
+    system_tokens: int
+    estimated_request_tokens: int
+    estimated_request_compacted_tokens: int
+    target_tokens: int
+    window_tokens: int

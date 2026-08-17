@@ -14,6 +14,9 @@ from skiller.domain.agent.context.model import (
 )
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.domain.agent.run.identity import AgentContext
+from skiller.domain.event.event_agent_model import AgentContextCompactedPayload
+from skiller.domain.event.event_model import RuntimeEventDraft, RuntimeEventType
+from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 
 
 @dataclass(frozen=True)
@@ -34,10 +37,12 @@ class AgentContextManager:
         agent_context_store: AgentContextStorePort,
         agent_context_state: AgentContextStatePort,
         prompt_builder: AgentPromptBuilder,
+        runtime_event_store: RuntimeEventStorePort,
     ) -> None:
         self.agent_context_store = agent_context_store
         self.agent_context_state = agent_context_state
         self.prompt_builder = prompt_builder
+        self.runtime_event_store = runtime_event_store
 
     def build_context(
         self,
@@ -78,6 +83,17 @@ class AgentContextManager:
             state = self.agent_context_store.select_compaction_state(query=query)
             self.agent_context_state.save_state(state=state)
             context_window = self._recover_context_window(state=state)
+            self._publish_compaction_event(
+                context=context,
+                state=state,
+                system_tokens=system_tokens,
+                estimated_request_tokens=estimated_request_tokens,
+                estimated_request_compacted_tokens=(
+                    context_window.estimated_tokens + system_tokens
+                ),
+                target_tokens=target_tokens,
+                window_tokens=window_tokens,
+            )
 
         entries = context_window.entries
         turn_id = self.agent_context_store.next_turn_id(context_id=context.context_id)
@@ -102,6 +118,35 @@ class AgentContextManager:
             window_end_sequence=_end_sequence(entries),
             max_ratio=context_config.compaction.compaction_trigger_ratio,
             estimated_tokens=context_window.estimated_tokens,
+        )
+
+    def _publish_compaction_event(
+        self,
+        *,
+        context: AgentContext,
+        state: AgentContextState,
+        system_tokens: int,
+        estimated_request_tokens: int,
+        estimated_request_compacted_tokens: int,
+        target_tokens: int,
+        window_tokens: int,
+    ) -> None:
+        self.runtime_event_store.append_event(
+            RuntimeEventDraft(
+                run_id=context.run_id,
+                type=RuntimeEventType.AGENT_CONTEXT_COMPACTED,
+                step_id=context.agent_id,
+                step_type="agent",
+                payload=AgentContextCompactedPayload(
+                    context_id=state.context_id,
+                    compaction_id=state.compaction_id,
+                    system_tokens=system_tokens,
+                    estimated_request_tokens=estimated_request_tokens,
+                    estimated_request_compacted_tokens=estimated_request_compacted_tokens,
+                    target_tokens=target_tokens,
+                    window_tokens=window_tokens,
+                ),
+            )
         )
 
     def _recover_context_window(

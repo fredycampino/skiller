@@ -159,6 +159,7 @@ class LogEventType(StrEnum):
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
     AGENT_MAX_TURNS_EXHAUSTED = "AGENT_MAX_TURNS_EXHAUSTED"
+    AGENT_CONTEXT_COMPACTED = "AGENT_CONTEXT_COMPACTED"
     OBSERVER_LOOP_ERROR = "OBSERVER_LOOP_ERROR"
 
 
@@ -198,6 +199,17 @@ class RunSnapshotFailedPayload:
 class RunModelUpdatedPayload:
     provider: str
     model: str
+
+
+@dataclass(frozen=True)
+class AgentContextCompactedPayload:
+    context_id: str
+    compaction_id: int
+    system_tokens: int
+    estimated_request_tokens: int
+    estimated_request_compacted_tokens: int
+    target_tokens: int
+    window_tokens: int
 
 
 @dataclass(frozen=True)
@@ -326,6 +338,7 @@ LogEventPayload: TypeAlias = (
     | RunSnapshotUpdatedPayload
     | RunSnapshotFailedPayload
     | RunModelUpdatedPayload
+    | AgentContextCompactedPayload
     | StepStartedPayload
     | StepSuccessPayload
     | StepErrorPayload

@@ -16,6 +16,8 @@ from skiller.domain.agent.context.model import (
     AgentUserMessagePayload,
 )
 from skiller.domain.agent.run.identity import AgentContext
+from skiller.domain.event.event_model import RuntimeEventType
+from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
 
 pytestmark = pytest.mark.unit
 
@@ -45,6 +47,7 @@ def test_agent_context_manager_build_context_recovers_initial_raw_window() -> No
         agent_context_store=store,
         agent_context_state=state_store,
         prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=_FakeRuntimeEventStore(),
     )
     context = AgentContext(
         run_id="run-1",
@@ -109,6 +112,7 @@ def test_agent_context_manager_includes_resolved_system_in_compaction_condition(
         agent_context_store=store,
         agent_context_state=state_store,
         prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=_FakeRuntimeEventStore(),
     )
     context = AgentContext(
         run_id="run-1",
@@ -173,10 +177,12 @@ def test_agent_context_manager_build_context_compacts_and_recovers_new_window() 
         selected_state=compacted_state,
     )
     state_store = _FakeAgentContextState()
+    event_store = _FakeRuntimeEventStore()
     manager = AgentContextManager(
         agent_context_store=store,
         agent_context_state=state_store,
         prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=event_store,
     )
     context = AgentContext(
         run_id="run-1",
@@ -186,6 +192,20 @@ def test_agent_context_manager_build_context_compacts_and_recovers_new_window() 
     config = agent_runner_config(log_request_file=None)
 
     result = manager.build_context(context=context, config=config)
+
+    assert len(event_store.events) == 1
+    event = event_store.events[0]
+    assert event.type == RuntimeEventType.AGENT_CONTEXT_COMPACTED
+    assert event.run_id == "run-1"
+    assert event.step_id == "agent-1"
+    assert event.step_type == "agent"
+    assert event.payload.context_id == "ctx-1"
+    assert event.payload.compaction_id == 1
+    assert event.payload.system_tokens == 3
+    assert event.payload.estimated_request_tokens == 80_003
+    assert event.payload.estimated_request_compacted_tokens == 50_003
+    assert event.payload.target_tokens == 50_000
+    assert event.payload.window_tokens == 100_000
 
     assert store.compaction_queries == [
         AgentContextCompactionQuery(
@@ -267,6 +287,7 @@ def test_agent_context_manager_build_context_recovers_persisted_window_below_tri
         agent_context_store=store,
         agent_context_state=state_store,
         prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=_FakeRuntimeEventStore(),
     )
     context = AgentContext(
         run_id="run-1",
@@ -325,6 +346,7 @@ def test_agent_context_manager_build_context_stops_when_state_persistence_fails(
         agent_context_store=store,
         agent_context_state=state_store,
         prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=_FakeRuntimeEventStore(),
     )
     context = AgentContext(
         run_id="run-1",
@@ -351,6 +373,21 @@ def test_agent_context_manager_build_context_stops_when_state_persistence_fails(
             compacted_sequence=None,
         )
     ]
+
+
+class _FakeRuntimeEventStore(RuntimeEventStorePort):
+    def __init__(self) -> None:
+        self.events = []
+
+    def append_event(self, event):  # noqa: ANN001
+        self.events.append(event)
+        return "event-1"
+
+    def list_events(self, run_id: str, *, after_sequence=None, limit=None):  # noqa: ANN001
+        raise NotImplementedError
+
+    def get_last_event(self, run_id: str):  # noqa: ANN201
+        raise NotImplementedError
 
 
 class _FakeAgentContextStore:
@@ -412,7 +449,7 @@ class _FakeAgentContextStore:
         if query.compacted_sequence < query.start_sequence:
             return AgentContextWindowEntries(entries=[], estimated_tokens=0)
         index = len(self.compacted_calls) - 1
-        return self.compacted_windows[index - 1]
+        return self.compacted_windows[max(index - 1, 0)]
 
     def select_compaction_state(
         self,

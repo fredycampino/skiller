@@ -47,6 +47,10 @@ class TuiStrings:
     run_snapshot_updated_notice_template: str = "Run snapshot updated: {ref}"
     run_snapshot_failed_notice_template: str = "Run snapshot sync failed: {error}"
     run_model_updated_notice_template: str = "Model updated: {provider}/{model}"
+    agent_context_compacted_notice_template: str = (
+        "Context compacted: {estimated_request_tokens} → "
+        "{estimated_request_compacted_tokens} tokens"
+    )
 
 
 DEFAULT_TUI_STRINGS = TuiStrings()

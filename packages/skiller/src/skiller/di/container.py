@@ -299,11 +299,6 @@ def build_runtime_container(
         agent_context_marker_calculator,
         agent_feedback,
     )
-    agent_context_manager = AgentContextManager(
-        agent_context_store=agent_context_store,
-        agent_context_state=agent_context_state,
-        prompt_builder=AgentPromptBuilder(),
-    )
     get_agent_stats_use_case = GetAgentStatsUseCase(
         run_store=store,
         run_agent_store=run_agent_store,
@@ -344,6 +339,12 @@ def build_runtime_container(
         runtime_event_store,
         AgentEventDraftBuilder(),
         OutputTruncator(),
+    )
+    agent_context_manager = AgentContextManager(
+        agent_context_store=agent_context_store,
+        agent_context_state=agent_context_state,
+        prompt_builder=AgentPromptBuilder(),
+        runtime_event_store=runtime_event_store,
     )
     execute_agent_step_use_case = ExecuteAgentStepUseCase(
         store=store,

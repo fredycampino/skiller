@@ -11,6 +11,7 @@ from stui.port.event_models import (
     ActionRunValue,
     ActionValue,
     AgentAssistantMessagePayload,
+    AgentContextCompactedPayload,
     AgentContextPayload,
     AgentFinalAssistantMessagePayload,
     AgentOutputValue,
@@ -42,6 +43,7 @@ from stui.viewmodel.console_screen_state import (
     ActionPostItem,
     ActionRunItem,
     AgentAssistantMessageItem,
+    AgentContextCompactedItem,
     AgentFinalAssistantMessageItem,
     AgentStepContext,
     AgentStepFinalOutputItem,
@@ -136,6 +138,20 @@ class EventTranscriptMapper:
             if not text:
                 return None
             return UserInputItem(sequence=event.sequence, text=text)
+
+        if event.event_type == LogEventType.AGENT_CONTEXT_COMPACTED:
+            payload = _payload(event, AgentContextCompactedPayload)
+            return AgentContextCompactedItem(
+                sequence=event.sequence,
+                run_id=event.run_id,
+                context_id=payload.context_id,
+                compaction_id=payload.compaction_id,
+                system_tokens=payload.system_tokens,
+                estimated_request_tokens=payload.estimated_request_tokens,
+                estimated_request_compacted_tokens=payload.estimated_request_compacted_tokens,
+                target_tokens=payload.target_tokens,
+                window_tokens=payload.window_tokens,
+            )
 
         if event.event_type == LogEventType.AGENT_ASSISTANT_MESSAGE:
             payload = _payload(event, AgentAssistantMessagePayload)

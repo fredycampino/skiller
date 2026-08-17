@@ -33,6 +33,7 @@ class TuiTheme:
     user_icon: str = "›"
     agent_message_icon: str = "‹"
     agent_tool_icon: str = "▪"
+    agent_context_compaction_icon: str = "⊟"
     system_warning_icon: str = "!"
     selector: str = "→"
     autocomplete_selector_icon: str = "->"

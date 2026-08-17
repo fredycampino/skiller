@@ -59,7 +59,6 @@ class RunCommandUseCase:
                 DispatchErrorItem(message=f"error: {ack.error.message}")
             )
             state.set_status(kind=ViewStatusKind.ERROR, message=ack.error.message)
-            self.context.status = RunStatus.FAILED
             return RunCommandResult(state=state, raw_args=raw_args)
 
         if ack.status != RunRuntimeStatusKind.CREATED:
@@ -70,7 +69,6 @@ class RunCommandUseCase:
                 kind=ViewStatusKind.ERROR,
                 message=f"Unexpected run status: {ack.status}",
             )
-            self.context.status = RunStatus.FAILED
             return RunCommandResult(state=state, raw_args=raw_args)
 
         self.context.activate_run(

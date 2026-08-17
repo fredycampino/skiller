@@ -301,7 +301,11 @@ class _FakeAgentContextStore:
         return AgentContextState(
             context_id=query.context_id,
             start_sequence=query.start_sequence,
-            compacted_sequence=query.compacted_sequence,
+            compacted_sequence=(
+                query.compacted_sequence
+                if query.compacted_sequence is not None
+                else query.start_sequence
+            ),
             compaction_id=query.compaction_id + 1,
         )
 

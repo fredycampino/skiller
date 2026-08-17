@@ -78,6 +78,7 @@ class EventStateUseCase:
             LogEventType.AGENT_TOOL_RESULT,
             LogEventType.AGENT_INTERRUPTED,
             LogEventType.AGENT_MAX_TURNS_EXHAUSTED,
+            LogEventType.AGENT_CONTEXT_COMPACTED,
             LogEventType.STEP_STARTED,
         }:
             state.set_status(kind=ViewStatusKind.RUNNING)

@@ -19,6 +19,17 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.29 - 2026-08-18
+
+### Added
+- Add agent context compaction events and TUI transcript rendering.
+
+### Changed
+- Improve context state handling and event propagation across the runtime and TUI.
+
+### Notes
+- Includes PR #120.
+
 ## 0.1.0-beta.28 - 2026-08-16
 
 ### Added

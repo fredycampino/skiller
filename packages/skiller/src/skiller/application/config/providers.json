@@ -49,6 +49,27 @@
         }
       ]
     },
+    "deepseek": {
+      "adapter": "openai",
+      "base_url": "https://api.deepseek.com",
+      "api_key_env": "AGENT_DEEPSEEK_API_KEY",
+      "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
+      "models": [
+        {
+          "model": "deepseek-v4-flash",
+          "context_window_tokens": 128000
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "context_window_tokens": 128000
+        }
+      ]
+    },
     "lmstudio": {
       "adapter": "openai",
       "base_url": "http://127.0.0.1:1234/v1",

@@ -67,6 +67,17 @@ def test_builtin_application_catalog_is_valid() -> None:
 
     assert catalog.get("minimax").adapter == LLMAdapterType.OPENAI
     assert catalog.get("moonshot").adapter == LLMAdapterType.OPENAI
+    deepseek = catalog.get("deepseek")
+    assert deepseek.adapter == LLMAdapterType.OPENAI
+    assert deepseek.base_url == "https://api.deepseek.com"
+    assert deepseek.api_key_source is not None
+    assert deepseek.api_key_source.type.value == "env"
+    assert deepseek.api_key_source.value == "AGENT_DEEPSEEK_API_KEY"
+    assert [model.model for model in deepseek.models] == [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    ]
+    assert all(model.context_window_tokens == 128000 for model in deepseek.models)
     lmstudio = catalog.get("lmstudio")
     assert lmstudio.adapter == LLMAdapterType.OPENAI
     assert [model.model for model in lmstudio.models] == [

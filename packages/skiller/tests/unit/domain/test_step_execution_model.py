@@ -2,7 +2,6 @@ import pytest
 
 from skiller.domain.action.action_model import OpenUrlAction, RunAction
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel, AgentLLMProviderType
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
     AgentFinalOutputData,
@@ -114,8 +113,8 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                     prompt_tokens=100,
                     output_tokens=25,
                     total_tokens=125,
-                    provider=AgentLLMProviderType.CODEX,
-                    model=AgentCodexLLMModel.GPT_5_5.value,
+                    provider="codex",
+                    model="gpt-5.5",
                 ),
             ),
         ),
@@ -195,7 +194,7 @@ def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:
         prompt_tokens=100,
         output_tokens=25,
         total_tokens=125,
-        provider=AgentLLMProviderType.LMSTUDIO,
+        provider="lmstudio",
         model="google/gemma-4-12b-qat",
     )
 
@@ -219,7 +218,7 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
                     prompt_tokens=100,
                     output_tokens=25,
                     total_tokens=125,
-                    provider=AgentLLMProviderType.LMSTUDIO,
+                    provider="lmstudio",
                     model="google/gemma-4-12b-qat",
                 ),
             ),

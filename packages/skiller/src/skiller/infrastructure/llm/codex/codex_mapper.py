@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Protocol
 
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
@@ -17,7 +18,12 @@ from skiller.domain.agent.llm.model import (
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
-from skiller.infrastructure.llm.mapper.llm_protocol_mapper import LLMProtocolMapper
+from skiller.infrastructure.llm.codex.codex_model_capabilities import (
+    CodexModelCapabilities,
+    CodexModelCapabilitiesResolver,
+    CodexResponsesProtocol,
+)
+from skiller.infrastructure.llm.codex.codex_turn_session import CodexTurnSession
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
     LLMProviderUsage,
     LLMUsageMapper,
@@ -32,33 +38,31 @@ class CodexStreamResult:
 
 
 @dataclass(frozen=True)
-class CodexMapper(LLMProtocolMapper[CodexLLMRequest, CodexStreamResult]):
+class CodexMapper:
     usage_mapper: LLMUsageMapper
+    capabilities_resolver: CodexModelCapabilitiesResolver
+    responses_mapper: CodexRequestPayloadMapper
+    responses_lite_mapper: CodexRequestPayloadMapper
 
-    def to_kwargs(self, request: CodexLLMRequest) -> dict[str, object]:
-        instructions, input_items = _to_codex_prompt_payload(request.messages)
-        payload: dict[str, object] = {
-            "model": request.model.value,
-            "instructions": instructions,
-            "input": input_items,
-            "prompt_cache_key": request.session_id,
-            "extra_headers": {
-                "session_id": request.session_id,
-                "x-client-request-id": request.session_id,
-            },
-            "store": False,
-            "tool_choice": "auto",
-            "parallel_tool_calls": request.parallel_tool_calls,
-        }
-        if request.tools:
-            payload["tools"] = [_to_codex_tool_payload(tool) for tool in request.tools]
-        if request.response_format is not None:
-            payload["text"] = {
-                "format": _to_codex_response_format_payload(
-                    request.response_format,
-                )
-            }
-        return payload
+    def capabilities(self, request: CodexLLMRequest) -> CodexModelCapabilities:
+        return self.capabilities_resolver.resolve(request.model.value)
+
+    def to_kwargs(
+        self,
+        request: CodexLLMRequest,
+        *,
+        capabilities: CodexModelCapabilities,
+        turn_session: CodexTurnSession,
+    ) -> dict[str, object]:
+        if capabilities.protocol == CodexResponsesProtocol.LITE:
+            return self.responses_lite_mapper.to_kwargs(
+                request,
+                turn_session=turn_session,
+            )
+        return self.responses_mapper.to_kwargs(
+            request,
+            turn_session=turn_session,
+        )
 
     def to_response(
         self,
@@ -73,7 +77,16 @@ class CodexMapper(LLMProtocolMapper[CodexLLMRequest, CodexStreamResult]):
         )
 
 
-def _to_codex_prompt_payload(
+class CodexRequestPayloadMapper(Protocol):
+    def to_kwargs(
+        self,
+        request: CodexLLMRequest,
+        *,
+        turn_session: CodexTurnSession,
+    ) -> dict[str, object]: ...
+
+
+def to_codex_prompt_payload(
     messages: tuple[LLMMessage, ...],
 ) -> tuple[str, list[dict[str, object]]]:
     instructions: list[str] = []
@@ -84,12 +97,12 @@ def _to_codex_prompt_payload(
             instructions.append(message.content)
             continue
 
-        input_items.extend(_message_to_input_items(message))
+        input_items.extend(message_to_codex_input_items(message))
 
     return "\n\n".join(instructions), input_items
 
 
-def _to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
+def to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     return {
         "type": "function",
         "name": tool.name,
@@ -98,7 +111,7 @@ def _to_codex_tool_payload(tool: ToolDefinition) -> dict[str, object]:
     }
 
 
-def _to_codex_response_format_payload(
+def to_codex_response_format_payload(
     response_format: LLMResponseFormat,
 ) -> dict[str, object]:
     payload: dict[str, object] = {"type": response_format.type.value}
@@ -169,7 +182,7 @@ def _to_port_llm_response(
     )
 
 
-def _message_to_input_items(message: LLMMessage) -> list[dict[str, object]]:
+def message_to_codex_input_items(message: LLMMessage) -> list[dict[str, object]]:
     if isinstance(message, LLMToolMessage):
         return [
             {

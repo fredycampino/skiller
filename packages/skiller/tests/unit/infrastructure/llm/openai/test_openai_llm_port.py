@@ -5,14 +5,18 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
+from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 from skiller.infrastructure.llm.openai import openai_llm_port
 from skiller.infrastructure.llm.openai.openai_llm_port import OpenAILLMPort
 from skiller.infrastructure.llm.openai.openai_mapper import OpenAIMapper
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 class _FakeCompletions:
@@ -73,10 +77,10 @@ class _FakeRequestLogger:
         self.errors.append(error)
 
 
-def _minimax_request(*, log_request_file: str | None = None) -> MiniMaxLLMRequest:
-    return MiniMaxLLMRequest(
+def _openai_compatible_request(*, log_request_file: str | None = None) -> OpenAILLMRequest:
+    return OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentMiniMaxLLMModel.M2_7,
+        model=_model("kimi-k3", 256_000),
         tool_choice=LLMToolChoiceMode.AUTO,
         temperature=1,
         max_tokens=4096,
@@ -88,7 +92,7 @@ def _minimax_request(*, log_request_file: str | None = None) -> MiniMaxLLMReques
 
 def _expected_openai_kwargs(*, reasoning_split: bool = False) -> dict[str, object]:
     payload: dict[str, object] = {
-        "model": "MiniMax-M2.7",
+        "model": "kimi-k3",
         "messages": [{"role": "user", "content": "hello"}],
         "tool_choice": "auto",
         "temperature": 1,
@@ -116,7 +120,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request())
+    result = llm.generate(_openai_compatible_request())
 
     assert llm.client.kwargs == {
         "api_key": "secret-key",
@@ -126,7 +130,7 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
     assert llm.client.completions.calls == [_expected_openai_kwargs(reasoning_split=True)]
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == AgentMiniMaxLLMModel.M2_7
+    assert result.model == _model("kimi-k3", 256_000)
     assert result.finish_reason == "stop"
     assert result.tool_calls == ()
     assert logger.requests == []
@@ -144,7 +148,7 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request())
+    result = llm.generate(_openai_compatible_request())
 
     assert result.ok is False
     assert result.error == "API key is not configured for the selected model provider"
@@ -168,7 +172,7 @@ def test_openai_llm_logs_request_and_response_when_enabled(
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request(log_request_file="/tmp/skiller-llm.json"))
+    result = llm.generate(_openai_compatible_request(log_request_file="/tmp/skiller-llm.json"))
 
     assert result.ok is True
     assert logger.requests == [_expected_openai_kwargs()]
@@ -200,7 +204,7 @@ def test_openai_llm_logs_error_when_request_fails(
         request_logger=logger,
     )
 
-    result = llm.generate(_minimax_request(log_request_file="/tmp/skiller-llm.json"))
+    result = llm.generate(_openai_compatible_request(log_request_file="/tmp/skiller-llm.json"))
 
     assert result.ok is False
     assert result.error == "OpenAI request failed: network down"

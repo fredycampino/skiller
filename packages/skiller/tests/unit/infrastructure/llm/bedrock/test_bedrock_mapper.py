@@ -10,17 +10,21 @@ from skiller.domain.agent.llm.model import (
     LLMUserMessage,
 )
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
-from skiller.domain.agent.llm.provider_registry import AgentBedrockLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
 
 
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+
+
 def test_bedrock_mapper_adds_cache_point_before_last_message() -> None:
     request = BedrockLLMRequest(
         messages=(LLMUserMessage("history"), LLMUserMessage("new")),
-        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
         max_tokens=4096,
     )
 
@@ -68,7 +72,7 @@ def test_bedrock_mapper_groups_consecutive_tool_results() -> None:
             LLMToolMessage('{"ok":true}', tool_call_id="tooluse_1"),
             LLMToolMessage('{"ok":true}', tool_call_id="tooluse_2"),
         ),
-        model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
         max_tokens=4096,
     )
 

@@ -22,9 +22,17 @@ from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
 )
 from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
 from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
+from skiller.infrastructure.llm.codex.codex_model_capabilities import (
+    CodexModelCapabilitiesResolver,
+)
 from skiller.infrastructure.llm.codex.codex_request_logger import (
     CodexFileLLMRequestLogger,
 )
+from skiller.infrastructure.llm.codex.codex_turn_session import CodexTurnSessionManager
+from skiller.infrastructure.llm.codex.responses_general_mapper import (
+    ResponsesGeneralMapper,
+)
+from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
     OpenAIApiKeyDatasource,
@@ -66,12 +74,19 @@ class DefaultLLMClientResolver:
                 request_logger=OpenAIFileLLMRequestLogger(),
             )
         if isinstance(provider, CodexLLMProviderDefinition):
+            codex_mapper = CodexMapper(
+                usage_mapper=DefaultLLMUsageMapper(),
+                capabilities_resolver=CodexModelCapabilitiesResolver(),
+                responses_mapper=ResponsesGeneralMapper(),
+                responses_lite_mapper=ResponsesLiteMapper(),
+            )
             return CodexLLMPort(
                 credentials_file=provider.credentials_file,
                 timeout_seconds=provider.timeout_seconds,
                 credentials_datasource=CodexCredentialsDatasource(),
                 request_logger=CodexFileLLMRequestLogger(),
-                mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+                mapper=codex_mapper,
+                turn_session_manager=CodexTurnSessionManager(),
             )
         if isinstance(provider, BedrockLLMProviderDefinition):
             return BedrockStreamingLLMPort(

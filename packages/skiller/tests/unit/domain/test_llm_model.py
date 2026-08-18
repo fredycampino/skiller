@@ -1,8 +1,9 @@
+from dataclasses import dataclass
+
 import pytest
 
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
-    LLMCustomModel,
     LLMMessageRole,
     LLMResponse,
     LLMSystemMessage,
@@ -12,9 +13,19 @@ from skiller.domain.agent.llm.model import (
     LLMUsage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+
+
+@dataclass(frozen=True)
+class _CustomModel:
+    value: str
+    model_context_window_tokens: int
 
 
 def test_llm_message_factories_return_role_specific_messages() -> None:
@@ -50,14 +61,14 @@ def test_llm_response_normalizes_metadata_strings() -> None:
     response = LLMResponse(
         ok=False,
         content=" done ",
-        model=AgentFakeLLMModel.MODEL1,
+        model=_model("model1", 100_000),
         finish_reason=" stop ",
         error=" invalid params ",
         error_code=" 2013 ",
     )
 
     assert response.content == "done"
-    assert response.model == AgentFakeLLMModel.MODEL1
+    assert response.model == _model("model1", 100_000)
     assert response.finish_reason == "stop"
     assert response.error == "invalid params"
     assert response.error_code == "2013"
@@ -67,21 +78,21 @@ def test_llm_response_converts_empty_metadata_to_none() -> None:
     response = LLMResponse(
         ok=False,
         content=" \n ",
-        model=AgentFakeLLMModel.MODEL1,
+        model=_model("model1", 100_000),
         finish_reason="",
         error="\n",
         error_code="\t",
     )
 
     assert response.content is None
-    assert response.model == AgentFakeLLMModel.MODEL1
+    assert response.model == _model("model1", 100_000)
     assert response.finish_reason is None
     assert response.error is None
     assert response.error_code is None
 
 
 def test_llm_response_exposes_semantic_properties() -> None:
-    response = LLMResponse(ok=False, model=AgentFakeLLMModel.MODEL1, content="done")
+    response = LLMResponse(ok=False, model=_model("model1", 100_000), content="done")
 
     assert response.has_text_content is True
     assert response.has_tool_calls is False
@@ -97,7 +108,7 @@ def test_llm_usage_normalizes_model_like_values_to_model_name() -> None:
         output_tokens=None,
         total_tokens=None,
         provider=None,
-        model=LLMCustomModel(
+        model=_CustomModel(
             value="local/custom",
             model_context_window_tokens=4096,
         ),

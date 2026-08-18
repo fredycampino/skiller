@@ -17,6 +17,7 @@ from stui.viewmodel.port_to_viewmodel import to_run_status
 @dataclass(frozen=True)
 class SelectRunsTableRowResult:
     state: ConsoleScreenState
+    selected: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,4 +86,4 @@ class SelectRunsTableRowUseCase:
             status=run_status,
         )
         self.events_port.subscribe(run_id=run_id, listener=observer)
-        return SelectRunsTableRowResult(state=state)
+        return SelectRunsTableRowResult(state=state, selected=True)

@@ -33,7 +33,7 @@ from skiller.domain.agent.llm.model import (
     LLMToolCallFunction,
     LLMUsage,
 )
-from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.run.identity import AgentContext, AgentRun
 from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.run.run_model import RunAgent
@@ -45,6 +45,10 @@ from skiller.domain.tool.tool_execution_model import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -> None:
@@ -381,7 +385,7 @@ def _tool_request() -> ToolExecutionRequest:
             context_id="ctx-1",
         ),
         turn_id="turn-1",
-        response=LLMResponse(ok=True, model=AgentFakeLLMModel.MODEL1),
+        response=LLMResponse(ok=True, model=_model("model1", 100_000)),
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
         event_config=_event_output_config(),

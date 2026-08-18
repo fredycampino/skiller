@@ -2,9 +2,13 @@ import pytest
 
 from skiller.application.agent.mapper.error_mapper import AgentErrorMapper
 from skiller.domain.agent.llm.model import LLMResponse, LLMUsage
-from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 def test_llm_request_includes_provider_error_and_code() -> None:
@@ -12,7 +16,7 @@ def test_llm_request_includes_provider_error_and_code() -> None:
         agent_id="support_agent",
         response=LLMResponse(
             ok=False,
-            model=AgentFakeLLMModel.MODEL1,
+            model=_model("model1", 100_000),
             error="invalid params",
             error_code="2013",
         ),
@@ -26,7 +30,7 @@ def test_llm_request_falls_back_to_finish_reason() -> None:
         agent_id="support_agent",
         response=LLMResponse(
             ok=False,
-            model=AgentFakeLLMModel.MODEL1,
+            model=_model("model1", 100_000),
             finish_reason="content_filter",
         ),
     )
@@ -37,7 +41,7 @@ def test_llm_request_falls_back_to_finish_reason() -> None:
 def test_llm_request_falls_back_to_generic_detail() -> None:
     message = AgentErrorMapper().llm_request(
         agent_id="support_agent",
-        response=LLMResponse(ok=False, model=AgentFakeLLMModel.MODEL1),
+        response=LLMResponse(ok=False, model=_model("model1", 100_000)),
     )
 
     assert (
@@ -51,7 +55,7 @@ def test_invalid_final_message_embeds_response_json() -> None:
         agent_id="support_agent",
         response=LLMResponse(
             ok=True,
-            model=AgentFakeLLMModel.MODEL1,
+            model=_model("model1", 100_000),
             content=None,
             finish_reason="end_turn",
             usage=LLMUsage(

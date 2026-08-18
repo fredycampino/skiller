@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -15,8 +16,8 @@ from skiller.domain.agent.context.model import (
     AgentToolCallPayload,
     AgentUserMessagePayload,
 )
-from skiller.domain.agent.llm.model import LLMCustomModel, LLMUsage
-from skiller.domain.agent.llm.provider_registry import AgentMiniMaxLLMModel
+from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.run.identity import AgentContext
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.tool.tool_contract import ToolResult, ToolResultStatus
@@ -32,6 +33,16 @@ from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+
+
+@dataclass(frozen=True)
+class _CustomModel:
+    value: str
+    model_context_window_tokens: int
 
 
 RUN_ID = "run-1"
@@ -255,8 +266,8 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
             prompt_tokens=123,
             output_tokens=45,
             total_tokens=168,
-            provider="minimax",
-            model=AgentMiniMaxLLMModel.M2_5,
+            provider="moonshot",
+            model=_model("kimi-k3", 256_000),
         ),
         delta_tokens=123,
         compaction_id=1,
@@ -296,8 +307,8 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         prompt_tokens=123,
         output_tokens=45,
         total_tokens=168,
-        provider="minimax",
-        model=AgentMiniMaxLLMModel.M2_5,
+        provider="moonshot",
+        model=_model("kimi-k3", 256_000),
     )
     assert raw_row[0] == "final"
     assert raw_row[1] == 1
@@ -311,8 +322,8 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         "total_tokens": 168,
         "cache_read_tokens": None,
         "cache_write_tokens": None,
-        "provider": "minimax",
-        "model": "MiniMax-M2.5",
+        "provider": "moonshot",
+        "model": "kimi-k3",
     }
     assert store.get_usage(context_id=CONTEXT_ID) == LLMUsage(
         estimated_system_tokens=None,
@@ -321,8 +332,8 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
         prompt_tokens=123,
         output_tokens=45,
         total_tokens=168,
-        provider="minimax",
-        model=AgentMiniMaxLLMModel.M2_5,
+        provider="moonshot",
+        model=_model("kimi-k3", 256_000),
     )
 
 
@@ -949,7 +960,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
         run_id=RUN_ID,
     )
     store = _store(db_path)
-    model = LLMCustomModel(
+    model = _CustomModel(
         value="google/gemma-4-12b-qat",
         model_context_window_tokens=100_000,
     )

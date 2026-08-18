@@ -17,14 +17,8 @@ from skiller.domain.agent.config.model import (
     AgentDebugConfig,
     AgentEventOutputConfig,
     AgentEventOutputTruncateConfig,
+    AgentLLMSelection,
     AgentLoopConfig,
-)
-from skiller.domain.agent.llm.provider_registry import (
-    NULL_MODELS,
-    AgentLLMProviderList,
-    AgentLLMProviderType,
-    AgentNullLLMModel,
-    AgentNullProvider,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunAgent
@@ -146,16 +140,8 @@ class _FakeSkillRunner:
 
 
 def _agent_config() -> AgentConfig:
-    provider = AgentNullProvider(
-        model=AgentNullLLMModel.NULL1,
-        models=NULL_MODELS,
-        timeout_seconds=30,
-    )
     return AgentConfig(
-        llm=AgentLLMProviderList(
-            default_provider=AgentLLMProviderType.NULL,
-            providers=(provider,),
-        ),
+        llm=AgentLLMSelection(provider="null", model="null1"),
         loop=AgentLoopConfig(
             max_turns=2,
             max_tool_calls=3,

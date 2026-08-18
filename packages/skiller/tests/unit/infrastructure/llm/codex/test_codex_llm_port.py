@@ -8,9 +8,15 @@ from urllib.parse import parse_qs
 
 import pytest
 
-from skiller.domain.agent.llm.model import LLMUserMessage
+from skiller.domain.agent.llm.model import (
+    LLMAssistantMessage,
+    LLMToolCall,
+    LLMToolCallFunction,
+    LLMToolMessage,
+    LLMUserMessage,
+)
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_registry import AgentCodexLLMModel
 from skiller.infrastructure.llm.codex import codex_llm_port
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentials,
@@ -23,10 +29,22 @@ from skiller.infrastructure.llm.codex.codex_llm_port import (
     CodexLLMPort,
 )
 from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
+from skiller.infrastructure.llm.codex.codex_model_capabilities import (
+    CodexModelCapabilitiesResolver,
+)
+from skiller.infrastructure.llm.codex.codex_turn_session import CodexTurnSessionManager
+from skiller.infrastructure.llm.codex.responses_general_mapper import (
+    ResponsesGeneralMapper,
+)
+from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
 from skiller.infrastructure.llm.logger.request_logger import FileLLMRequestLogger
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 class _FakeCredentialsDatasource:
@@ -101,16 +119,45 @@ class _FakeResponses:
         self.events = events
         self.error_after_events = error_after_events
         self.calls: list[dict[str, object]] = []
+        self.with_streaming_response = _FakeStreamingResponses(self)
 
     def create(self, **kwargs: object) -> _FakeStream:
         self.calls.append(kwargs)
         return _FakeStream(self.events, self.error_after_events)
 
 
+class _FakeRawResponse:
+    def __init__(self, responses: _FakeResponses) -> None:
+        self.responses = responses
+        self.headers = {"x-codex-turn-state": _FakeOpenAI.turn_state}
+
+    def __enter__(self) -> _FakeRawResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        _ = args
+
+    def parse(self) -> _FakeStream:
+        return _FakeStream(
+            self.responses.events,
+            self.responses.error_after_events,
+        )
+
+
+class _FakeStreamingResponses:
+    def __init__(self, responses: _FakeResponses) -> None:
+        self.responses = responses
+
+    def create(self, **kwargs: object) -> _FakeRawResponse:
+        self.responses.calls.append(kwargs)
+        return _FakeRawResponse(self.responses)
+
+
 class _FakeOpenAI:
     instances: list["_FakeOpenAI"] = []
     events: list[object] = []
     error_after_events: Exception | None = None
+    turn_state = "opaque-turn-state"
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
@@ -153,12 +200,13 @@ def test_codex_llm_port_builds_client_with_codex_headers(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
     llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
         )
@@ -196,13 +244,14 @@ def test_codex_llm_port_streams_response(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     response = llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
         )
@@ -223,9 +272,98 @@ def test_codex_llm_port_streams_response(
             "store": False,
             "tool_choice": "auto",
             "parallel_tool_calls": True,
+            "reasoning": {"effort": "medium"},
+            "include": ["reasoning.encrypted_content"],
             "stream": True,
         }
     ]
+
+
+def test_codex_llm_port_replays_lite_turn_state_and_raw_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reasoning_item = {
+        "type": "reasoning",
+        "id": "reasoning-1",
+        "summary": [],
+        "encrypted_content": "encrypted-reasoning",
+    }
+    function_call_item = {
+        "type": "function_call",
+        "call_id": "call-1",
+        "name": "shell",
+        "arguments": '{"command":"pwd"}',
+    }
+    _FakeOpenAI.instances = []
+    _FakeOpenAI.error_after_events = None
+    _FakeOpenAI.events = [
+        SimpleNamespace(type="response.output_item.done", item=reasoning_item),
+        SimpleNamespace(type="response.output_item.done", item=function_call_item),
+    ]
+    monkeypatch.setattr(
+        codex_llm_port,
+        "_load_openai_client_class",
+        lambda: _FakeOpenAI,
+    )
+    turn_session_manager = CodexTurnSessionManager()
+    llm = CodexLLMPort(
+        credentials_file="/tmp/openai-codex.json",
+        timeout_seconds=120,
+        credentials_datasource=_FakeCredentialsDatasource(),
+        request_logger=FileLLMRequestLogger(),
+        mapper=_mapper(),
+        turn_session_manager=turn_session_manager,
+    )
+
+    first_response = llm.generate(
+        CodexLLMRequest(
+            messages=(LLMUserMessage("use shell"),),
+            model=_model("gpt-5.6-luna", 1_050_000),
+            parallel_tool_calls=True,
+            session_id="context-1",
+        )
+    )
+
+    assert first_response.has_tool_calls is True
+    first_request = _FakeOpenAI.instances[0].responses.calls[0]
+    assert first_request["parallel_tool_calls"] is False
+    assert first_request["extra_headers"][
+        "x-openai-internal-codex-responses-lite"
+    ] == "true"
+    first_turn_id = first_request["extra_body"]["client_metadata"]["turn_id"]
+
+    tool_call = LLMToolCall(
+        id="call-1",
+        function=LLMToolCallFunction(
+            name="shell",
+            arguments_json='{"command":"pwd"}',
+        ),
+    )
+    _FakeOpenAI.events = [
+        SimpleNamespace(type="response.output_text.delta", delta="done"),
+    ]
+    second_response = llm.generate(
+        CodexLLMRequest(
+            messages=(
+                LLMUserMessage("use shell"),
+                LLMAssistantMessage(tool_calls=(tool_call,)),
+                LLMToolMessage("result", tool_call_id="call-1"),
+            ),
+            model=_model("gpt-5.6-luna", 1_050_000),
+            parallel_tool_calls=True,
+            session_id="context-1",
+        )
+    )
+
+    assert second_response.content == "done"
+    second_request = _FakeOpenAI.instances[1].responses.calls[0]
+    assert second_request["extra_headers"]["x-codex-turn-state"] == "opaque-turn-state"
+    assert second_request["extra_body"]["client_metadata"]["turn_id"] == first_turn_id
+    input_types = [item.get("type") for item in second_request["input"]]
+    assert input_types.count("reasoning") == 1
+    assert input_types.count("function_call") == 1
+    assert input_types.count("function_call_output") == 1
+    assert "context-1" not in turn_session_manager.sessions
 
 
 def test_codex_llm_port_reads_completed_event_usage(
@@ -265,13 +403,14 @@ def test_codex_llm_port_reads_completed_event_usage(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     response = llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
             log_request_file=str(log_file),
@@ -321,20 +460,21 @@ def test_codex_llm_port_keeps_stream_items_when_raw_stream_fails(
         timeout_seconds=120,
         credentials_datasource=_FakeCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     response = llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
         )
     )
 
     assert response.ok is True
-    assert response.model == "gpt-5.4"
+    assert response.model == _model("gpt-5.4", 1_050_000)
     assert len(response.tool_calls) == 1
     assert response.tool_calls[0].id == "call-1"
     assert response.tool_calls[0].function.name == "shell"
@@ -355,13 +495,14 @@ def test_codex_llm_port_returns_credentials_error_before_building_client(
         timeout_seconds=120,
         credentials_datasource=_BrokenCredentialsDatasource(),
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     response = llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
         )
@@ -406,13 +547,14 @@ def test_codex_llm_port_refreshes_expired_token_before_request(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     llm.generate(
         CodexLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_4,
+            model=_model("gpt-5.4", 1_050_000),
             parallel_tool_calls=True,
             session_id="context-1",
         )
@@ -461,7 +603,8 @@ def test_codex_llm_port_refresh_token(
         timeout_seconds=120,
         credentials_datasource=datasource,
         request_logger=FileLLMRequestLogger(),
-        mapper=CodexMapper(usage_mapper=DefaultLLMUsageMapper()),
+        mapper=_mapper(),
+        turn_session_manager=CodexTurnSessionManager(),
     )
 
     token = llm._refresh_token(datasource.credentials)
@@ -511,6 +654,15 @@ def _codex_credentials(
         scope="openid profile email offline_access",
         source="skiller-openai-auth",
         token_type="bearer",
+    )
+
+
+def _mapper() -> CodexMapper:
+    return CodexMapper(
+        usage_mapper=DefaultLLMUsageMapper(),
+        capabilities_resolver=CodexModelCapabilitiesResolver(),
+        responses_mapper=ResponsesGeneralMapper(),
+        responses_lite_mapper=ResponsesLiteMapper(),
     )
 
 

@@ -24,50 +24,10 @@ def validate_llm_model_like(value: object, *, label: str) -> LLMModelLike:
     return value
 
 
-@dataclass(frozen=True)
-class LLMCustomModel:
-    value: str
-    model_context_window_tokens: int
-
-    def __post_init__(self) -> None:
-        if not self.value.strip():
-            raise ValueError("LLM custom model requires value")
-        if self.model_context_window_tokens <= 0:
-            raise ValueError("LLM custom model requires positive context window")
-
-
-class LLMStaticModel(str, Enum):
-    _model_context_window_tokens: int
-
-    def __new__(
-        cls,
-        value: str,
-        model_context_window_tokens: int,
-    ) -> "LLMStaticModel":
-        item = str.__new__(cls, value)
-        item._value_ = value
-        item._model_context_window_tokens = model_context_window_tokens
-        return item
-
-    @property
-    def model_context_window_tokens(self) -> int:
-        return self._model_context_window_tokens
-
-
 class LLMToolChoiceMode(str, Enum):
     AUTO = "auto"
     NONE = "none"
     REQUIRED = "required"
-
-
-class AgentLLMProviderType(str, Enum):
-    NULL = "null"
-    FAKE = "fake"
-    MINIMAX = "minimax"
-    MOONSHOT = "moonshot"
-    LMSTUDIO = "lmstudio"
-    CODEX = "codex"
-    BEDROCK = "bedrock"
 
 
 class LLMMessageRole(str, Enum):

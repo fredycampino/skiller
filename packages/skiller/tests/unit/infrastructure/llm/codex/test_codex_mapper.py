@@ -9,17 +9,26 @@ from skiller.domain.agent.llm.model import (
     LLMToolCallFunction,
     LLMUserMessage,
 )
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_registry import (
-    AgentCodexLLMModel,
-)
 from skiller.infrastructure.llm.codex.codex_mapper import (
     CodexMapper,
     CodexStreamResult,
 )
+from skiller.infrastructure.llm.codex.codex_model_capabilities import (
+    CodexModelCapabilitiesResolver,
+)
+from skiller.infrastructure.llm.codex.responses_general_mapper import (
+    ResponsesGeneralMapper,
+)
+from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 class _ResponseWithBrokenOutputText:
@@ -63,14 +72,14 @@ def test_codex_mapper_maps_final_response_to_port_response() -> None:
         )
     )
 
-    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
+    result = _mapper().to_response(
         stream_result,
         request=_request(),
     )
 
     assert result.ok is True
     assert result.content == "hello"
-    assert result.model == AgentCodexLLMModel.GPT_5_4
+    assert result.model == _model("gpt-5.4", 1_050_000)
     assert result.finish_reason == "completed"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 10
@@ -101,7 +110,7 @@ def test_codex_mapper_prefers_streamed_text() -> None:
         text_deltas=("streamed", " text"),
     )
 
-    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
+    result = _mapper().to_response(
         stream_result,
         request=_request(),
     )
@@ -126,7 +135,7 @@ def test_codex_mapper_reads_text_from_message_output() -> None:
         }
     )
 
-    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
+    result = _mapper().to_response(
         stream_result,
         request=_request(),
     )
@@ -147,7 +156,7 @@ def test_codex_mapper_uses_streamed_output_items_when_final_output_is_empty() ->
         ),
     )
 
-    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
+    result = _mapper().to_response(
         stream_result,
         request=_request(),
     )
@@ -176,7 +185,7 @@ def test_codex_mapper_tolerates_codex_output_text_with_null_output() -> None:
         ),
     )
 
-    result = CodexMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
+    result = _mapper().to_response(
         stream_result,
         request=_request(),
     )
@@ -199,7 +208,16 @@ def test_codex_mapper_tolerates_codex_output_text_with_null_output() -> None:
 def _request() -> CodexLLMRequest:
     return CodexLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentCodexLLMModel.GPT_5_4,
+        model=_model("gpt-5.4", 1_050_000),
         parallel_tool_calls=True,
         session_id="context-1",
+    )
+
+
+def _mapper() -> CodexMapper:
+    return CodexMapper(
+        usage_mapper=DefaultLLMUsageMapper(),
+        capabilities_resolver=CodexModelCapabilitiesResolver(),
+        responses_mapper=ResponsesGeneralMapper(),
+        responses_lite_mapper=ResponsesLiteMapper(),
     )

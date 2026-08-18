@@ -2,24 +2,20 @@ from dataclasses import dataclass
 
 import pytest
 
-from skiller.domain.agent.llm.model import LLMCustomModel, LLMToolChoiceMode, LLMUserMessage
+from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
-from skiller.domain.agent.llm.provider_lmstudio import (
-    LMStudioLLMRequest,
-)
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_registry import (
-    AgentCodexLLMModel,
-    AgentFakeLLMModel,
-    AgentMiniMaxLLMModel,
-)
 from skiller.domain.agent.llm.request import (
     LLMRequest,
     OpenAILLMRequest,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 @dataclass(frozen=True)
@@ -37,10 +33,10 @@ class _InvalidModelValue:
 def test_llm_request_requires_supported_model() -> None:
     request = LLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentFakeLLMModel.MODEL1,
+        model=_model("model1", 100_000),
     )
 
-    assert request.model == AgentFakeLLMModel.MODEL1
+    assert request.model == _model("model1", 100_000)
 
     with pytest.raises(TypeError, match="LLMRequest model must be an LLMModelLike"):
         LLMRequest(
@@ -71,7 +67,7 @@ def test_llm_request_rejects_invalid_model_like_values() -> None:
 def test_openai_llm_request_accepts_openai_compatible_model() -> None:
     request = OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentMiniMaxLLMModel.M2_7,
+        model=_model("kimi-k3", 256_000),
         tool_choice=LLMToolChoiceMode.AUTO,
         parallel_tool_calls=True,
         temperature=1,
@@ -79,43 +75,15 @@ def test_openai_llm_request_accepts_openai_compatible_model() -> None:
         top_p=1,
     )
 
-    assert request.model == AgentMiniMaxLLMModel.M2_7
-
-
-def test_minimax_llm_request_requires_minimax_model() -> None:
-    request = MiniMaxLLMRequest(
-        messages=(LLMUserMessage("hello"),),
-        model=AgentMiniMaxLLMModel.M2_7,
-        tool_choice=LLMToolChoiceMode.AUTO,
-        parallel_tool_calls=True,
-        temperature=1,
-        max_tokens=4096,
-        top_p=1,
-    )
-
-    assert request.model == AgentMiniMaxLLMModel.M2_7
-
-    with pytest.raises(
-        TypeError,
-        match="MiniMaxLLMRequest model must be an AgentMiniMaxLLMModel",
-    ):
-        MiniMaxLLMRequest(
-            messages=(LLMUserMessage("hello"),),
-            model=AgentCodexLLMModel.GPT_5_5,
-            tool_choice=LLMToolChoiceMode.AUTO,
-            parallel_tool_calls=True,
-            temperature=1,
-            max_tokens=4096,
-            top_p=1,
-        )
+    assert request.model == _model("kimi-k3", 256_000)
 
 
 def test_lmstudio_llm_request_accepts_model_like_contract() -> None:
-    custom_model = LLMCustomModel(
+    custom_model = _CustomModel(
         value="local/gemma-custom",
         model_context_window_tokens=10_000,
     )
-    request = LMStudioLLMRequest(
+    request = OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=custom_model,
         tool_choice=LLMToolChoiceMode.AUTO,
@@ -129,7 +97,7 @@ def test_lmstudio_llm_request_accepts_model_like_contract() -> None:
 
 
 def test_codex_llm_request_accepts_catalog_model_contract() -> None:
-    model = LLMCustomModel(value="gpt-5.5", model_context_window_tokens=1_050_000)
+    model = _CustomModel(value="gpt-5.5", model_context_window_tokens=1_050_000)
     request = CodexLLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=model,
@@ -141,7 +109,7 @@ def test_codex_llm_request_accepts_catalog_model_contract() -> None:
 
 
 def test_bedrock_llm_request_accepts_catalog_model_contract() -> None:
-    model = LLMCustomModel(
+    model = _CustomModel(
         value="us.anthropic.claude-opus-4-6-v1",
         model_context_window_tokens=200_000,
     )

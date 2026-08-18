@@ -10,7 +10,7 @@ from skiller.domain.agent.llm.model import (
     LLMUsage,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm.provider_registry import AgentFakeLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.request import LLMRequest
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
     DefaultLLMUsageMapper,
@@ -20,13 +20,17 @@ from skiller.infrastructure.llm.mapper.llm_usage_mapper import (
 pytestmark = pytest.mark.unit
 
 
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+
+
 def _request(*, system: str = "system", user: str = "user") -> LLMRequest:
     return LLMRequest(
         messages=(
             LLMSystemMessage(content=system),
             LLMUserMessage(content=user),
         ),
-        model=AgentFakeLLMModel.MODEL1,
+        model=_model("model1", 100_000),
     )
 
 
@@ -103,7 +107,7 @@ def test_default_usage_mapper_does_not_divide_by_zero_for_empty_messages() -> No
                     )
                 ),
             ),
-            model=AgentFakeLLMModel.MODEL1,
+            model=_model("model1", 100_000),
         ),
     )
 

@@ -13,10 +13,8 @@ from skiller.domain.agent.llm.model import (
     LLMToolChoiceMode,
     LLMUserMessage,
 )
-from skiller.domain.agent.llm.provider_minimax import MiniMaxLLMRequest
-from skiller.domain.agent.llm.provider_registry import (
-    AgentMiniMaxLLMModel,
-)
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
+from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
     ToolInput,
@@ -30,6 +28,10 @@ from skiller.infrastructure.llm.openai.openai_mapper import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 class _ShellTool(ToolDefinition[ToolRequest]):
@@ -50,12 +52,12 @@ class _ShellTool(ToolDefinition[ToolRequest]):
 
 
 def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
-    request = MiniMaxLLMRequest(
+    request = OpenAILLMRequest(
         messages=(
             LLMSystemMessage("system"),
             LLMUserMessage("hello", name="tester"),
         ),
-        model=AgentMiniMaxLLMModel.M2_7,
+        model=_model("kimi-k3", 256_000),
         tools=(_ShellTool(),),
         tool_choice=LLMToolChoiceMode.REQUIRED,
         response_format=LLMResponseFormat(
@@ -73,7 +75,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
     kwargs = OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()).to_kwargs(request)
 
     assert kwargs == {
-        "model": "MiniMax-M2.7",
+        "model": "kimi-k3",
         "messages": [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "hello", "name": "tester"},
@@ -105,9 +107,9 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
 
 
 def test_openai_mapper_adds_extra_body() -> None:
-    request = MiniMaxLLMRequest(
+    request = OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentMiniMaxLLMModel.M2_7,
+        model=_model("kimi-k3", 256_000),
         tool_choice=LLMToolChoiceMode.AUTO,
         temperature=1,
         max_tokens=4096,
@@ -157,9 +159,9 @@ def test_openai_mapper_maps_response_to_port_response() -> None:
 
     result = OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         response,
-        request=MiniMaxLLMRequest(
+        request=OpenAILLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentMiniMaxLLMModel.M2_7,
+            model=_model("kimi-k3", 256_000),
             tool_choice=LLMToolChoiceMode.AUTO,
             temperature=1,
             max_tokens=4096,
@@ -169,7 +171,7 @@ def test_openai_mapper_maps_response_to_port_response() -> None:
     )
 
     assert result.ok is True
-    assert result.model == AgentMiniMaxLLMModel.M2_7
+    assert result.model == _model("kimi-k3", 256_000)
     assert result.finish_reason == "tool_calls"
     assert result.content is None
     assert result.usage is not None
@@ -191,9 +193,9 @@ def test_openai_mapper_maps_response_to_port_response() -> None:
 
 
 def test_openai_mapper_maps_dict_usage_to_port_response() -> None:
-    request = MiniMaxLLMRequest(
+    request = OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=AgentMiniMaxLLMModel.M2_7,
+        model=_model("kimi-k3", 256_000),
         tool_choice=LLMToolChoiceMode.AUTO,
         temperature=1,
         max_tokens=4096,
@@ -202,7 +204,7 @@ def test_openai_mapper_maps_dict_usage_to_port_response() -> None:
     )
     result = OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()).to_response(
         {
-            "model": "MiniMax-M2.7",
+            "model": "kimi-k3",
             "usage": {
                 "prompt_tokens": 42,
                 "completion_tokens": 38,
@@ -221,7 +223,7 @@ def test_openai_mapper_maps_dict_usage_to_port_response() -> None:
     )
 
     assert result.ok is True
-    assert result.model == AgentMiniMaxLLMModel.M2_7
+    assert result.model == _model("kimi-k3", 256_000)
     assert result.content == "Hello"
     assert result.usage is not None
     assert result.usage.prompt_tokens == 42

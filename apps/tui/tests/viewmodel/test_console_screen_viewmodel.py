@@ -53,6 +53,7 @@ from stui.port.run_port import (
     RunDispatchErrorKind,
     RunRuntimeStatus,
     RunRuntimeStatusKind,
+    RunRuntimeWaitType,
 )
 from stui.port.runs_port import RunsPortItem
 from stui.port.waiting_port import WaitingInputAck, WaitingInputStatus
@@ -1112,6 +1113,41 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
 
     with patched_to_thread(list_models_use_case_module, select_model_use_case_module):
         asyncio.run(run())
+
+
+def test_console_screen_viewmodel_refreshes_events_after_selecting_waiting_run() -> None:
+    async def run() -> None:
+        events_port = FakeEventsPort()
+        run_port = FakeRunPort(
+            CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
+        )
+        run_port.status = lambda run_id: RunRuntimeStatus(  # type: ignore[method-assign]
+            run_id=run_id,
+            status=RunRuntimeStatusKind.WAITING,
+            wait_type=RunRuntimeWaitType.INPUT,
+            prompt="Write a message",
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+            events_port=events_port,
+        )
+
+        viewmodel.state.runs_table.visible = True
+        viewmodel.state.runs_table.command = "/runs"
+        await viewmodel.select_runs_table_row(
+            prompt_text="/runs",
+            run_id="run-123",
+            run_name="chat",
+        )
+
+        assert viewmodel.state.view_status.kind == ViewStatusKind.WAITING
+        assert viewmodel._run_event_context.status == RunStatus.WAITING_INPUT  # noqa: SLF001
+        assert events_port.subscribe_calls == ["run-123"]
+        assert events_port.refresh_call_count == 1
+
+    asyncio.run(run())
 
 
 def test_console_screen_viewmodel_opens_runs_table_with_filters() -> None:

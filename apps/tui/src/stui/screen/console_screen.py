@@ -333,13 +333,13 @@ class ConsoleScreen(App[str]):
         self._transcript_log().scroll_end(animate=False, force=True, immediate=True)
 
     @on(DataTable.RowSelected, "#runs-table-data")
-    def on_runs_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    async def on_runs_table_row_selected(self, event: DataTable.RowSelected) -> None:
         runs_table = self._runs_table()
         if not runs_table.select_row(event.cursor_row):
             self._prompt_view().focus_prompt()
             return
         selected_run = runs_table.selected_run
-        self.viewmodel.select_runs_table_row(
+        await self.viewmodel.select_runs_table_row(
             prompt_text=self.state.runs_table.command,
             run_id=selected_run.run_id if selected_run is not None else "",
             run_name=selected_run.skill if selected_run is not None else "",

@@ -4,13 +4,17 @@ import pytest
 
 from skiller.domain.agent.llm.model import LLMToolCall, LLMToolCallFunction, LLMUserMessage
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
-from skiller.domain.agent.llm.provider_registry import AgentBedrockLLMModel
+from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.infrastructure.llm.bedrock import bedrock_llm_port
 from skiller.infrastructure.llm.bedrock.bedrock_llm_port import BedrockLLMPort
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
+
+
+def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
+    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
 
 
 class _FakeBedrockClient:
@@ -67,7 +71,7 @@ def test_bedrock_llm_port_generates_response(monkeypatch: pytest.MonkeyPatch) ->
     response = llm.generate(
         BedrockLLMRequest(
             messages=(LLMUserMessage("Hola mundo"),),
-            model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
             max_tokens=4096,
         )
     )
@@ -129,7 +133,7 @@ def test_bedrock_llm_port_maps_tool_use_to_tool_calls(
     response = llm.generate(
         BedrockLLMRequest(
             messages=(LLMUserMessage("run"),),
-            model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
             max_tokens=4096,
         )
     )
@@ -177,7 +181,7 @@ def test_bedrock_llm_port_returns_request_error(monkeypatch: pytest.MonkeyPatch)
     response = llm.generate(
         BedrockLLMRequest(
             messages=(LLMUserMessage("hello"),),
-            model=AgentBedrockLLMModel.CLAUDE_OPUS_4_6,
+            model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
             max_tokens=4096,
         )
     )

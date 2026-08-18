@@ -329,7 +329,7 @@ class ConsoleScreenViewModel(LogEventsListener):
         self.state.prompt.mode = self._resolve_prompt_mode()
         self._emit_state()
 
-    def select_runs_table_row(
+    async def select_runs_table_row(
         self,
         *,
         prompt_text: str,
@@ -345,6 +345,8 @@ class ConsoleScreenViewModel(LogEventsListener):
         )
         self.state = result.state
         self._emit_state()
+        if result.selected:
+            await self._use_cases.refresh_events.execute()
 
     def hide_runs_table(self) -> None:
         self.state.runs_table.visible = False

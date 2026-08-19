@@ -142,6 +142,7 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 credentials_file="/tmp/openai-codex.json",
                 timeout_seconds=120,
                 parallel_tool_calls=True,
+                max_output_tokens=4096,
             ),
             "Codex LLM provider requires CodexLLMRequest",
         ),

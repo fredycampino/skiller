@@ -1,6 +1,23 @@
+"""File-backed LLM provider catalog mapper.
+
+Parses the user JSON catalog into typed adapter config models and converts
+each entry into the corresponding domain-level LLM provider definition.
+
+The mapper is intentionally free of default values: every adapter model
+declares its full configuration, and the user JSON must be exhaustively
+defined. Defaults would silently shadow the JSON and reintroduce the bug
+class that motivated this refactor.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+from pathlib import Path
+from typing import Any, TypeVar
+
 from pydantic import ValidationError
 
-from skiller.domain.agent.llm.model import LLMToolChoiceMode
 from skiller.domain.agent.llm.provider_catalog import (
     BedrockLLMProviderDefinition,
     CodexLLMProviderDefinition,
@@ -12,221 +29,234 @@ from skiller.domain.agent.llm.provider_catalog import (
     LLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
-from skiller.infrastructure.config.provider_catalog_schema import (
+from skiller.infrastructure.config.adapter_config import (
+    BedrockAdapterConfigModel,
+    BedrockAdapterOverrideModel,
+    CodexAdapterConfigModel,
+    CodexAdapterOverrideModel,
+    LLMAdapterConfigModel,
+    LLMModelConfigModel,
+    LLMProviderCatalogOverride,
+    LLMProviderCatalogOverrideSourceModel,
     LLMProviderCatalogSourceModel,
-    LLMProviderConfigModel,
+    OpenAIAdapterConfigModel,
+    OpenAIAdapterOverrideModel,
 )
 
-_OPENAI_FIELDS = frozenset(
-    {
-        "base_url",
-        "temperature",
-        "top_p",
-        "parallel_tool_calls",
-        "tool_choice",
-        "api_key",
-        "api_key_env",
-        "api_key_file",
-        "options",
-    }
-)
-_CODEX_FIELDS = frozenset({"credentials_file"})
-_OPENAI_INVALID_FIELDS = frozenset({"profile", "credentials_file"})
-_CODEX_INVALID_FIELDS = (_OPENAI_FIELDS - {"parallel_tool_calls"}) | frozenset(
-    {"profile", "max_output_tokens"}
-)
+_OverrideModel = TypeVar("_OverrideModel")
 
 
 class FileLLMProviderCatalogMapper:
     def to_provider_configs(
         self,
-        raw_config: dict[str, object],
-    ) -> tuple[LLMProviderConfigModel, ...]:
+        raw_config: dict[str, Any] | Path,
+    ) -> tuple[LLMProviderDefinition, ...]:
+        if isinstance(raw_config, Path):
+            raw_config = json.loads(raw_config.read_text())
         try:
             source = LLMProviderCatalogSourceModel.model_validate(raw_config)
-            providers = self._to_provider_configs(source)
         except ValidationError as exc:
             raise ValueError(f"Invalid LLM provider catalog: {exc}") from exc
-        return providers
+        return tuple(self._to_provider_config(entry) for entry in source.providers.values())
+
+    def to_override_configs(
+        self,
+        raw_config: dict[str, Any] | Path,
+    ) -> tuple[LLMProviderCatalogOverride, ...]:
+        if isinstance(raw_config, Path):
+            raw_config = json.loads(raw_config.read_text())
+        try:
+            source = LLMProviderCatalogOverrideSourceModel.model_validate(raw_config)
+        except ValidationError as exc:
+            raise ValueError(f"Invalid LLM provider catalog override: {exc}") from exc
+        return tuple(
+            _to_catalog_override(entry_name=entry.name, entry_fields=entry.model_dump())
+            for entry in source.providers.values()
+        )
+
+    def to_new_provider(
+        self,
+        override: LLMProviderCatalogOverride,
+    ) -> LLMProviderDefinition:
+        raw_config = {"providers": {override.name: dict(override.fields)}}
+        providers = self.to_provider_configs(raw_config)
+        return providers[0]
+
+    def apply_override(
+        self,
+        *,
+        base: LLMProviderDefinition,
+        override: LLMProviderCatalogOverride,
+    ) -> LLMProviderDefinition:
+        if "adapter" in override.fields:
+            raise ValueError(f"LLM provider adapter cannot be changed: {base.name}")
+        raw_override = {"name": override.name, **override.fields}
+        if isinstance(base, OpenAILLMProviderDefinition):
+            config = _validate_override(OpenAIAdapterOverrideModel, raw_override)
+            updates = _to_openai_override_updates(config)
+            return dataclasses.replace(base, **updates)
+        if isinstance(base, BedrockLLMProviderDefinition):
+            config = _validate_override(BedrockAdapterOverrideModel, raw_override)
+            updates = _to_provider_override_updates(config)
+            return dataclasses.replace(base, **updates)
+        if isinstance(base, CodexLLMProviderDefinition):
+            config = _validate_override(CodexAdapterOverrideModel, raw_override)
+            updates = _to_provider_override_updates(config)
+            return dataclasses.replace(base, **updates)
+        raise ValueError(f"Unsupported LLM provider adapter: {base.adapter}")
 
     def to_catalog(
         self,
-        configs: tuple[LLMProviderConfigModel, ...],
+        base: tuple[LLMProviderDefinition, ...],
     ) -> LLMProviderCatalog:
-        providers = tuple(self._to_provider(config) for config in configs)
-        return LLMProviderCatalog(providers=providers)
+        return LLMProviderCatalog(providers=base)
 
-    def _to_provider_configs(
-        self,
-        source: LLMProviderCatalogSourceModel,
-    ) -> tuple[LLMProviderConfigModel, ...]:
-        providers: list[LLMProviderConfigModel] = []
-        provider_names: set[str] = set()
-        for raw_name, raw_provider in source.providers.items():
-            name = raw_name.strip()
-            if not name:
-                raise ValueError("LLM provider name must not be empty")
-            if name in provider_names:
-                raise ValueError(f"Duplicate LLM provider name: {name}")
-            if "name" in raw_provider:
-                raise ValueError("LLM provider name must be declared as the map key")
+    @staticmethod
+    def _to_provider_config(entry: LLMAdapterConfigModel) -> LLMProviderDefinition:
+        match entry.adapter:
+            case LLMAdapterType.BEDROCK:
+                return FileLLMProviderCatalogMapper._to_bedrock_provider(entry)
+            case LLMAdapterType.OPENAI:
+                return FileLLMProviderCatalogMapper._to_openai_provider(entry)
+            case LLMAdapterType.CODEX:
+                return FileLLMProviderCatalogMapper._to_codex_provider(entry)
 
-            provider_names.add(name)
-            provider = LLMProviderConfigModel.model_validate({"name": name, **raw_provider})
-            providers.append(provider)
-        return tuple(providers)
-
-    def _to_provider(self, config: LLMProviderConfigModel) -> LLMProviderDefinition:
-        if config.adapter is None:
-            raise ValueError(f"LLM provider requires adapter: {config.name}")
-        if config.timeout_seconds is None:
-            raise ValueError(f"LLM provider requires timeout_seconds: {config.name}")
-        if config.models is None:
-            raise ValueError(f"LLM provider requires models: {config.name}")
-
-        timeout_seconds = config.timeout_seconds
+    @staticmethod
+    def _to_bedrock_provider(config: BedrockAdapterConfigModel) -> LLMProviderDefinition:
         models = tuple(
             LLMModelDefinition(
-                model=model.model,
-                context_window_tokens=model.context_window_tokens,
+                model=m.model,
+                context_window_tokens=m.context_window_tokens,
             )
-            for model in config.models
-        )
-        if config.adapter == LLMAdapterType.OPENAI:
-            return self._to_openai_provider(
-                config=config,
-                timeout_seconds=timeout_seconds,
-                models=models,
-            )
-        if config.adapter == LLMAdapterType.BEDROCK:
-            return self._to_bedrock_provider(
-                config=config,
-                timeout_seconds=timeout_seconds,
-                models=models,
-            )
-        if config.adapter == LLMAdapterType.CODEX:
-            return self._to_codex_provider(
-                config=config,
-                timeout_seconds=timeout_seconds,
-                models=models,
-            )
-        raise ValueError(f"Unsupported LLM provider adapter: {config.adapter}")
-
-    def _to_openai_provider(
-        self,
-        *,
-        config: LLMProviderConfigModel,
-        timeout_seconds: float,
-        models: tuple[LLMModelDefinition, ...],
-    ) -> OpenAILLMProviderDefinition:
-        invalid_fields = sorted(config.model_fields_set & _OPENAI_INVALID_FIELDS)
-        if invalid_fields:
-            fields = ", ".join(invalid_fields)
-            raise ValueError(f"OpenAI LLM provider does not accept fields: {config.name}: {fields}")
-        if config.base_url is None:
-            raise ValueError(f"LLM provider requires base_url: {config.name}")
-
-        enabled = config.enabled if config.enabled is not None else True
-        temperature = config.temperature if config.temperature is not None else 1
-        top_p = config.top_p if config.top_p is not None else 1
-        max_output_tokens = (
-            config.max_output_tokens if config.max_output_tokens is not None else 4096
-        )
-        parallel_tool_calls = (
-            config.parallel_tool_calls if config.parallel_tool_calls is not None else True
-        )
-        tool_choice = config.tool_choice or LLMToolChoiceMode.AUTO
-        api_key_source = self._to_api_key_source(config)
-        options = dict(config.options or {})
-
-        return OpenAILLMProviderDefinition(
-            name=config.name,
-            timeout_seconds=timeout_seconds,
-            models=models,
-            enabled=enabled,
-            base_url=config.base_url,
-            temperature=temperature,
-            top_p=top_p,
-            max_output_tokens=max_output_tokens,
-            parallel_tool_calls=parallel_tool_calls,
-            tool_choice=tool_choice,
-            api_key_source=api_key_source,
-            options=options,
-        )
-
-    def _to_bedrock_provider(
-        self,
-        *,
-        config: LLMProviderConfigModel,
-        timeout_seconds: float,
-        models: tuple[LLMModelDefinition, ...],
-    ) -> BedrockLLMProviderDefinition:
-        invalid_fields = sorted(config.model_fields_set & (_OPENAI_FIELDS | _CODEX_FIELDS))
-        if invalid_fields:
-            fields = ", ".join(invalid_fields)
-            raise ValueError(
-                f"Bedrock LLM provider does not accept fields: {config.name}: {fields}"
-            )
-        if config.profile is None:
-            raise ValueError(f"LLM provider requires profile: {config.name}")
-
-        enabled = config.enabled if config.enabled is not None else True
-        max_output_tokens = (
-            config.max_output_tokens if config.max_output_tokens is not None else 4096
+            for m in config.models
         )
         return BedrockLLMProviderDefinition(
             name=config.name,
-            timeout_seconds=timeout_seconds,
+            enabled=config.enabled,
+            timeout_seconds=config.timeout_seconds,
             models=models,
-            enabled=enabled,
+            max_output_tokens=config.max_output_tokens,
             profile=config.profile,
-            max_output_tokens=max_output_tokens,
         )
 
-    def _to_codex_provider(
-        self,
-        *,
-        config: LLMProviderConfigModel,
-        timeout_seconds: float,
-        models: tuple[LLMModelDefinition, ...],
-    ) -> CodexLLMProviderDefinition:
-        invalid_fields = sorted(config.model_fields_set & _CODEX_INVALID_FIELDS)
-        if invalid_fields:
-            fields = ", ".join(invalid_fields)
-            raise ValueError(f"Codex LLM provider does not accept fields: {config.name}: {fields}")
-        if config.credentials_file is None:
-            raise ValueError(f"LLM provider requires credentials_file: {config.name}")
+    @staticmethod
+    def _to_openai_provider(config: OpenAIAdapterConfigModel) -> LLMProviderDefinition:
+        models = tuple(
+            LLMModelDefinition(
+                model=m.model,
+                context_window_tokens=m.context_window_tokens,
+            )
+            for m in config.models
+        )
+        api_key_source = _resolve_openai_api_key_source(config)
+        return OpenAILLMProviderDefinition(
+            name=config.name,
+            enabled=config.enabled,
+            timeout_seconds=config.timeout_seconds,
+            models=models,
+            max_output_tokens=config.max_output_tokens,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            top_p=config.top_p,
+            parallel_tool_calls=config.parallel_tool_calls,
+            tool_choice=config.tool_choice,
+            api_key_source=api_key_source,
+            options=dict(config.options),
+        )
 
-        enabled = config.enabled if config.enabled is not None else True
-        parallel_tool_calls = (
-            config.parallel_tool_calls if config.parallel_tool_calls is not None else True
+    @staticmethod
+    def _to_codex_provider(config: CodexAdapterConfigModel) -> LLMProviderDefinition:
+        models = tuple(
+            LLMModelDefinition(
+                model=m.model,
+                context_window_tokens=m.context_window_tokens,
+            )
+            for m in config.models
         )
         return CodexLLMProviderDefinition(
             name=config.name,
-            timeout_seconds=timeout_seconds,
+            enabled=config.enabled,
+            timeout_seconds=config.timeout_seconds,
             models=models,
-            enabled=enabled,
+            max_output_tokens=config.max_output_tokens,
             credentials_file=config.credentials_file,
-            parallel_tool_calls=parallel_tool_calls,
+            parallel_tool_calls=config.parallel_tool_calls,
         )
 
-    def _to_api_key_source(
-        self,
-        config: LLMProviderConfigModel,
-    ) -> LLMApiKeySource | None:
-        if config.api_key is not None:
-            return LLMApiKeySource(
-                type=LLMApiKeySourceType.VALUE,
-                value=config.api_key,
-            )
-        if config.api_key_env is not None:
-            return LLMApiKeySource(
-                type=LLMApiKeySourceType.ENV,
-                value=config.api_key_env,
-            )
-        if config.api_key_file is not None:
-            return LLMApiKeySource(
-                type=LLMApiKeySourceType.FILE,
-                value=config.api_key_file,
-            )
-        return None
+
+def _resolve_openai_api_key_source(config: OpenAIAdapterConfigModel) -> LLMApiKeySource:
+    if config.api_key is not None:
+        return LLMApiKeySource(type=LLMApiKeySourceType.VALUE, value=config.api_key)
+    if config.api_key_env is not None:
+        return LLMApiKeySource(type=LLMApiKeySourceType.ENV, value=config.api_key_env)
+    return LLMApiKeySource(type=LLMApiKeySourceType.FILE, value=config.api_key_file)
+
+
+def _to_catalog_override(
+    *,
+    entry_name: str,
+    entry_fields: dict[str, Any],
+) -> LLMProviderCatalogOverride:
+    fields = {
+        key: value for key, value in entry_fields.items() if value is not None and key != "name"
+    }
+    return LLMProviderCatalogOverride(name=entry_name, fields=fields)
+
+
+def _validate_override(
+    model: type[_OverrideModel],
+    raw_override: dict[str, object],
+) -> _OverrideModel:
+    try:
+        return model.model_validate(raw_override)  # type: ignore[attr-defined]
+    except ValidationError as exc:
+        raise ValueError(f"Invalid LLM provider catalog override: {exc}") from exc
+
+
+def _to_provider_override_updates(
+    config: BedrockAdapterOverrideModel | CodexAdapterOverrideModel | OpenAIAdapterOverrideModel,
+) -> dict[str, object]:
+    values = config.model_dump(exclude_none=True)
+    values.pop("name")
+    if config.models is not None:
+        values["models"] = _to_model_definitions(config.models)
+    return values
+
+
+def _to_openai_override_updates(config: OpenAIAdapterOverrideModel) -> dict[str, object]:
+    values = _to_provider_override_updates(config)
+    api_key_fields = {"api_key", "api_key_env", "api_key_file"}
+    if not api_key_fields & set(values):
+        return values
+    api_key = values.pop("api_key", None)
+    api_key_env = values.pop("api_key_env", None)
+    api_key_file = values.pop("api_key_file", None)
+    if api_key is not None:
+        values["api_key_source"] = LLMApiKeySource(
+            type=LLMApiKeySourceType.VALUE,
+            value=api_key,
+        )
+        return values
+    if api_key_env is not None:
+        values["api_key_source"] = LLMApiKeySource(
+            type=LLMApiKeySourceType.ENV,
+            value=api_key_env,
+        )
+        return values
+    values["api_key_source"] = LLMApiKeySource(
+        type=LLMApiKeySourceType.FILE,
+        value=api_key_file,
+    )
+    return values
+
+
+def _to_model_definitions(
+    models: tuple[LLMModelConfigModel, ...],
+) -> tuple[LLMModelDefinition, ...]:
+    return tuple(
+        LLMModelDefinition(
+            model=model.model,
+            context_window_tokens=model.context_window_tokens,
+        )
+        for model in models
+    )

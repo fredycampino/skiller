@@ -76,4 +76,5 @@ def test_codex_llm_provider_requires_credentials_file() -> None:
             enabled=True,
             credentials_file="",
             parallel_tool_calls=True,
+            max_output_tokens=4096,
         )

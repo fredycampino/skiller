@@ -2,12 +2,13 @@
   "providers": {
     "minimax": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.minimax.io/v1",
       "api_key_env": "AGENT_MINIMAX_API_KEY",
       "timeout_seconds": 30,
       "temperature": 1,
       "top_p": 1,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 1024,
       "parallel_tool_calls": true,
       "tool_choice": "auto",
       "options": {
@@ -30,12 +31,13 @@
     },
     "moonshot": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.moonshot.ai/v1",
       "api_key_env": "AGENT_MOONSHOT_API_KEY",
       "timeout_seconds": 30,
       "temperature": 1,
       "top_p": 0.95,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 1024,
       "parallel_tool_calls": true,
       "tool_choice": "auto",
       "models": [
@@ -51,12 +53,13 @@
     },
     "deepseek": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.deepseek.com",
       "api_key_env": "AGENT_DEEPSEEK_API_KEY",
       "timeout_seconds": 30,
       "temperature": 1,
       "top_p": 1,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 1024,
       "parallel_tool_calls": true,
       "tool_choice": "auto",
       "models": [
@@ -72,12 +75,13 @@
     },
     "lmstudio": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "http://127.0.0.1:1234/v1",
       "api_key": "lm-studio",
       "timeout_seconds": 120,
       "temperature": 0.2,
       "top_p": 1,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 1024,
       "parallel_tool_calls": true,
       "tool_choice": "auto",
       "models": [
@@ -93,8 +97,10 @@
     },
     "codex": {
       "adapter": "codex",
+      "enabled": true,
       "credentials_file": "~/.skiller/secrets/openai-codex.json",
       "timeout_seconds": 120,
+      "max_output_tokens": 1024,
       "parallel_tool_calls": true,
       "models": [
         {
@@ -121,9 +127,10 @@
     },
     "bedrock": {
       "adapter": "bedrock",
+      "enabled": true,
       "profile": "default",
       "timeout_seconds": 45,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 1024,
       "models": [
         {
           "model": "us.anthropic.claude-opus-4-6-v1",

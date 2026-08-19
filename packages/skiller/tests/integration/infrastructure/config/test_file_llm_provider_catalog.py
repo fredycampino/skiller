@@ -24,7 +24,17 @@ def test_file_datasource_reads_provider_catalog(tmp_path: Path) -> None:
         {
             "providers": {
                 "minimax": {
+                    "adapter": "openai",
+                    "enabled": True,
+                    "base_url": "https://provider.example/v1",
+                    "api_key_env": "PROVIDER_API_KEY",
                     "timeout_seconds": 60,
+                    "temperature": 1,
+                    "top_p": 1,
+                    "max_output_tokens": 4096,
+                    "parallel_tool_calls": True,
+                    "tool_choice": "auto",
+                    "models": [{"model": "MiniMax-M2.5", "context_window_tokens": 204_800}],
                 }
             }
         },
@@ -94,6 +104,68 @@ def test_builtin_application_catalog_is_valid() -> None:
         "gpt-5.6-luna",
     ]
     assert catalog.get("bedrock").adapter == LLMAdapterType.BEDROCK
+
+
+def test_file_port_applies_partial_user_override(tmp_path: Path) -> None:
+    package_path = Path(__file__).parents[4]
+    default_path = package_path / "src/skiller/application/config/providers.json"
+    user_path = tmp_path / "providers.json"
+    _write_catalog(
+        user_path,
+        {"providers": {"minimax": {"timeout_seconds": 60}}},
+    )
+    mapper = FileLLMProviderCatalogMapper()
+    port = FileLLMProviderCatalogPort(
+        datasource=FileLLMProviderCatalogDatasource(mapper=mapper),
+        mapper=mapper,
+        default_path=default_path,
+        user_path=user_path,
+        env={},
+    )
+
+    catalog = port.get_catalog()
+
+    assert catalog.get("minimax").timeout_seconds == 60
+    assert catalog.source_for("minimax").value == "user"
+
+
+def test_file_port_adds_complete_custom_provider(tmp_path: Path) -> None:
+    package_path = Path(__file__).parents[4]
+    default_path = package_path / "src/skiller/application/config/providers.json"
+    user_path = tmp_path / "providers.json"
+    _write_catalog(
+        user_path,
+        {
+            "providers": {
+                "custom": {
+                    "adapter": "openai",
+                    "enabled": True,
+                    "base_url": "https://provider.example/v1",
+                    "api_key_env": "CUSTOM_PROVIDER_API_KEY",
+                    "timeout_seconds": 30,
+                    "temperature": 1,
+                    "top_p": 1,
+                    "max_output_tokens": 4096,
+                    "parallel_tool_calls": True,
+                    "tool_choice": "auto",
+                    "models": [{"model": "custom-model", "context_window_tokens": 128_000}],
+                }
+            }
+        },
+    )
+    mapper = FileLLMProviderCatalogMapper()
+    port = FileLLMProviderCatalogPort(
+        datasource=FileLLMProviderCatalogDatasource(mapper=mapper),
+        mapper=mapper,
+        default_path=default_path,
+        user_path=user_path,
+        env={},
+    )
+
+    catalog = port.get_catalog()
+
+    assert catalog.get("custom").adapter == LLMAdapterType.OPENAI
+    assert catalog.source_for("custom").value == "user"
 
 
 def _write_catalog(path: Path, catalog: dict[str, object]) -> None:

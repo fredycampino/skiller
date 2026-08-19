@@ -69,6 +69,7 @@ def test_resolver_creates_codex_client_with_internal_lite_capabilities() -> None
         enabled=True,
         credentials_file="~/.skiller/secrets/openai-codex.json",
         parallel_tool_calls=True,
+        max_output_tokens=4096,
     )
     resolver = DefaultLLMClientResolver(
         api_key_datasource=OpenAIApiKeyDatasource(env={}),

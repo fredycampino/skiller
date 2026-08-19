@@ -123,6 +123,7 @@ class CodexLLMProviderDefinition:
     enabled: bool
     credentials_file: str
     parallel_tool_calls: bool
+    max_output_tokens: int
     adapter: Literal[LLMAdapterType.CODEX] = field(
         default=LLMAdapterType.CODEX,
         init=False,
@@ -136,6 +137,8 @@ class CodexLLMProviderDefinition:
         )
         if not self.credentials_file:
             raise ValueError("Codex LLM provider requires credentials_file")
+        if self.max_output_tokens <= 0:
+            raise ValueError("Codex LLM provider max output tokens must be positive")
 
 
 LLMProviderDefinition: TypeAlias = (

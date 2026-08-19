@@ -9,8 +9,15 @@ adapter-specific settings, credentials references, and supported models.
   "providers": {
     "provider-name": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://provider.example/v1",
+      "api_key_env": "PROVIDER_API_KEY",
       "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
       "models": [
         {
           "model": "provider-model",
@@ -34,9 +41,15 @@ For example, an OpenAI-compatible provider can be added as follows:
   "providers": {
     "minimax": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.minimax.io/v1",
       "api_key_env": "AGENT_MINIMAX_API_KEY",
       "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
       "models": [
         {
           "model": "MiniMax-M3",
@@ -62,7 +75,9 @@ to make lookup and merge operations deterministic:
   "providers": {
     "provider-name": {
       "adapter": "adapter-name",
+      "enabled": true,
       "timeout_seconds": 30,
+      "max_output_tokens": 4096,
       "models": [
         {
           "model": "provider-model",
@@ -79,16 +94,12 @@ to make lookup and merge operations deterministic:
 | Field | Type | Description |
 |---|---|---|
 | `adapter` | `string` | Registered adapter used to create the client. |
+| `enabled` | `boolean` | Enables or disables the provider. |
 | `timeout_seconds` | `number` | Request timeout. Must be greater than zero. |
+| `max_output_tokens` | `integer` | Maximum output tokens. Must be greater than zero. |
 | `models` | `array` | Models supported by the provider. Must not be empty. |
 | `models[].model` | `string` | Model identifier sent to the provider. |
 | `models[].context_window_tokens` | `integer` | Model context window. Must be greater than zero. |
-
-### Common optional fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `true` | Enables or disables the provider. |
 
 Each model defines its context window:
 
@@ -133,8 +144,15 @@ Minimal example:
   "providers": {
     "minimax": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.minimax.io/v1",
+      "api_key_env": "AGENT_MINIMAX_API_KEY",
       "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
       "models": [
         {
           "model": "MiniMax-M2.7",
@@ -144,8 +162,10 @@ Minimal example:
     },
     "bedrock": {
       "adapter": "bedrock",
+      "enabled": true,
       "profile": "default",
       "timeout_seconds": 45,
+      "max_output_tokens": 4096,
       "models": [
         {
           "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -185,12 +205,15 @@ General merge rules:
 
 - Providers are identified by their map key, for example `minimax`.
 - A provider defined only in the application file is kept unchanged.
-- A provider defined in multiple files is merged field by field.
+- An existing provider defined in multiple files is merged field by field.
 - Values from the higher-priority file override lower-priority values.
 - Unspecified fields keep their lower-priority values.
 - When a higher-priority file defines `models`, the complete model list is replaced.
 - A provider can be disabled explicitly with `"enabled": false`.
-- The adapter value must be supported by the application.
+- An override of an existing provider must not declare `adapter`; its adapter is fixed by the
+  application catalog and only fields supported by that adapter are accepted.
+- A provider that is absent from the application catalog is added when the higher-priority file
+  declares a registered `adapter` and every field required by that adapter.
 - Application defaults must not contain secret values or user-specific credential paths.
 
 When the catalog is exposed through the agent model commands, each provider is
@@ -213,6 +236,7 @@ Each provider configuration uses a flat structure:
 ```json
 {
   "adapter": "openai",
+  "enabled": true,
   "base_url": "https://provider.example/v1",
   "api_key_env": "PROVIDER_API_KEY",
   "timeout_seconds": 30,
@@ -238,6 +262,7 @@ merged deterministically:
   "providers": {
     "minimax": {
       "adapter": "openai",
+      "enabled": true,
       "base_url": "https://api.minimax.io/v1",
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "timeout_seconds": 30,
@@ -271,8 +296,17 @@ Example user override:
         }
       ]
     },
-    "lmstudio": {
+    "custom": {
+      "adapter": "openai",
+      "enabled": true,
       "base_url": "http://127.0.0.1:1234/v1",
+      "api_key_env": "CUSTOM_PROVIDER_API_KEY",
+      "timeout_seconds": 30,
+      "temperature": 0.2,
+      "top_p": 1,
+      "max_output_tokens": 4096,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
       "models": [
         {
           "model": "google/gemma-4-12b-qat",
@@ -285,23 +319,28 @@ Example user override:
 ```
 
 In this example, MiniMax keeps its application defaults except for
-`timeout_seconds` and `models`. LM Studio keeps its built-in OpenAI-compatible
-adapter defaults while the user configuration replaces its endpoint and model
-list.
+`timeout_seconds` and `models`. `custom` is a new provider, so it declares its
+adapter and its complete OpenAI configuration.
 
 ### Required fields
 
 | Field | Type | Description |
 |---|---|---|
 | `adapter` | `string` | Must be `openai`. |
+| `enabled` | `boolean` | Enables or disables the provider. |
 | `base_url` | `string` | API base URL. Must not be empty. |
 | `models` | `array` | Models supported by the provider. Must not be empty. |
 | `models[].model` | `string` | Identifier sent to the API. |
 | `models[].context_window_tokens` | `integer` | Model context window. Must be greater than zero. |
 | `timeout_seconds` | `number` | Request timeout. Must be greater than zero. |
+| `temperature` | `number` | Randomness control. Must not be negative. |
+| `top_p` | `number` | Cumulative probability sampling. Greater than zero and at most one. |
+| `max_output_tokens` | `integer` | Maximum output tokens. Must be greater than zero. |
+| `parallel_tool_calls` | `boolean` | Enables parallel tool calls. |
+| `tool_choice` | `string` | Values: `auto`, `none`, or `required`. |
 
-If the provider requires an API key, the `openai` adapter supports one of the
-following authentication fields:
+An `openai` provider definition requires exactly one of the following
+authentication fields:
 
 | Field | Type | Description |
 |---|---|---|
@@ -309,19 +348,15 @@ following authentication fields:
 | `api_key_env` | `string` | Name of the environment variable containing the key. |
 | `api_key_file` | `string` | Path to the file containing the key. Recommended. |
 
-These fields are provider authentication settings. They are not configuration
-override variables. The application default configuration must not contain a
-secret value or a user-specific credential path.
+These fields are provider authentication settings. A partial override may
+replace the configured source with exactly one of them. The application default
+configuration must not contain a secret value or a user-specific credential
+path.
 
 ### Optional fields
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `temperature` | `number` | `1` | Randomness control. |
-| `top_p` | `number` | `1` | Cumulative probability sampling. |
-| `max_output_tokens` | `integer` | `4096` | Maximum output tokens. |
-| `parallel_tool_calls` | `boolean` | `true` | Enables parallel tool calls. |
-| `tool_choice` | `string` | `auto` | Values: `auto`, `none`, or `required`. |
 | `options` | `object` | `{}` | Additional provider-specific options. |
 
 ## Example: MiniMax
@@ -329,6 +364,7 @@ secret value or a user-specific credential path.
 ```json
 {
   "adapter": "openai",
+  "enabled": true,
   "base_url": "https://api.minimax.io/v1",
   "api_key_file": "~/.skiller/secrets/minimax_api_key",
   "timeout_seconds": 30,
@@ -361,6 +397,7 @@ does not use the OpenAI authentication fields.
 ```json
 {
   "adapter": "bedrock",
+  "enabled": true,
   "profile": "claude-bedrock",
   "timeout_seconds": 45,
   "max_output_tokens": 4096,
@@ -378,17 +415,13 @@ does not use the OpenAI authentication fields.
 | Field | Type | Description |
 |---|---|---|
 | `adapter` | `string` | Must be `bedrock`. |
+| `enabled` | `boolean` | Enables or disables the provider. |
 | `profile` | `string` | AWS profile used to create the Bedrock session. |
 | `timeout_seconds` | `number` | Request timeout. Must be greater than zero. |
+| `max_output_tokens` | `integer` | Maximum output tokens. Must be greater than zero. |
 | `models` | `array` | Bedrock models supported by the provider. Must not be empty. |
 | `models[].model` | `string` | Bedrock model or inference profile identifier. |
 | `models[].context_window_tokens` | `integer` | Model context window. Must be greater than zero. |
-
-### Optional fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `max_output_tokens` | `integer` | `4096` | Maximum output tokens. |
 
 The selected model must be one of the models declared in `models`. The
 application uses the configured AWS profile to create the Bedrock session and
@@ -402,8 +435,10 @@ protocol. It does not use the `openai` adapter or its API key fields.
 ```json
 {
   "adapter": "codex",
+  "enabled": true,
   "credentials_file": "~/.skiller/secrets/openai-codex.json",
   "timeout_seconds": 120,
+  "max_output_tokens": 4096,
   "parallel_tool_calls": true,
   "models": [
     {
@@ -435,17 +470,14 @@ protocol. It does not use the `openai` adapter or its API key fields.
 | Field | Type | Description |
 |---|---|---|
 | `adapter` | `string` | Must be `codex`. |
+| `enabled` | `boolean` | Enables or disables the provider. |
 | `credentials_file` | `string` | Path to the Codex OAuth credentials JSON file. Supports `~`. |
 | `timeout_seconds` | `number` | Request timeout. Must be greater than zero. |
+| `max_output_tokens` | `integer` | Maximum output tokens. Must be greater than zero. |
 | `models` | `array` | Codex models supported by the provider. Must not be empty. |
 | `models[].model` | `string` | Codex model identifier. |
 | `models[].context_window_tokens` | `integer` | Model context window. Must be greater than zero. |
-
-### Optional fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `parallel_tool_calls` | `boolean` | `true` | Enables parallel tool calls. |
+| `parallel_tool_calls` | `boolean` | Enables parallel tool calls. |
 
 The credentials file contains OAuth state managed by the Codex authentication
 flow. Provider configuration stores only its path and must not embed access or

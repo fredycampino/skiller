@@ -19,6 +19,20 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.31 - 2026-08-20
+
+### Changed
+- Refactor the LLM provider catalog configuration: per-adapter config models without silent defaults (`adapter_config.py` replaces `provider_catalog_schema.py`), with `max_output_tokens` now mandatory and validated (`> 0`, including Codex).
+- Normalize the built-in `providers.json` catalog with explicit `enabled: true` and `max_output_tokens: 1024` for every provider.
+- Support partial user and env-file overrides merged by provider name via `dataclasses.replace`, keeping provider definitions frozen.
+
+### Added
+- Add Bedrock stream truncation probe (`scripts/qa/bedrock_stream_truncation_probe.py`) to reproduce tool_use truncation by `max_tokens`.
+- Document the required `enabled` and `max_output_tokens` fields in the agent LLM config guide.
+
+### Notes
+- Includes PR #125.
+
 ## 0.1.0-beta.30 - 2026-08-19
 
 ### Added

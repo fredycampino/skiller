@@ -1,22 +1,30 @@
+"""File-backed LLM provider catalog port.
+
+Merges the default catalog, the optional user catalog, and the optional
+env-file catalog into a single LLMProviderCatalog. The merge is by
+provider name: an override entry replaces the base entry with the same
+name. Since provider definitions are frozen dataclasses, merging two
+instances of the same adapter is done via `dataclasses.replace`.
+"""
+
+from __future__ import annotations
+
 from collections.abc import Mapping
 from pathlib import Path
 
 from skiller.domain.agent.llm.provider_catalog import (
     LLMProviderCatalog,
     LLMProviderCatalogSource,
+    LLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
+from skiller.infrastructure.config.adapter_config import LLMProviderCatalogOverride
 from skiller.infrastructure.config.file_llm_provider_catalog_datasource import (
     FileLLMProviderCatalogDatasource,
 )
 from skiller.infrastructure.config.file_llm_provider_catalog_mapper import (
     FileLLMProviderCatalogMapper,
 )
-from skiller.infrastructure.config.provider_catalog_schema import (
-    LLMProviderConfigModel,
-)
-
-_API_KEY_FIELDS = frozenset({"api_key", "api_key_env", "api_key_file"})
 
 
 class FileLLMProviderCatalogPort(LLMProviderCatalogPort):
@@ -39,58 +47,44 @@ class FileLLMProviderCatalogPort(LLMProviderCatalogPort):
         providers = self.datasource.get_providers(self.default_path)
         sources = {provider.name: LLMProviderCatalogSource.DEFAULT for provider in providers}
         if self.user_path is not None and self.user_path.exists():
-            user_providers = self.datasource.get_providers(self.user_path)
-            providers = self._merge_providers(providers, user_providers)
+            user_overrides = self.datasource.get_override_providers(self.user_path)
+            providers = self._merge_overrides(providers, user_overrides)
             sources.update(
-                {provider.name: LLMProviderCatalogSource.USER for provider in user_providers}
+                {override.name: LLMProviderCatalogSource.USER for override in user_overrides}
             )
         env_path_value = self.env.get("AGENT_PROVIDERS_FILE", "").strip()
         if env_path_value:
             env_path = Path(env_path_value).expanduser()
-            env_providers = self.datasource.get_providers(env_path)
-            providers = self._merge_providers(providers, env_providers)
+            env_overrides = self.datasource.get_override_providers(env_path)
+            providers = self._merge_overrides(providers, env_overrides)
             sources.update(
-                {provider.name: LLMProviderCatalogSource.ENV for provider in env_providers}
+                {override.name: LLMProviderCatalogSource.ENV for override in env_overrides}
             )
         catalog = self.mapper.to_catalog(providers)
         return LLMProviderCatalog(providers=catalog.providers, sources=sources)
 
-    def _merge_providers(
+    def _merge_overrides(
         self,
-        base: tuple[LLMProviderConfigModel, ...],
-        override: tuple[LLMProviderConfigModel, ...],
-    ) -> tuple[LLMProviderConfigModel, ...]:
+        base: tuple[LLMProviderDefinition, ...],
+        overrides: tuple[LLMProviderCatalogOverride, ...],
+    ) -> tuple[LLMProviderDefinition, ...]:
         providers_by_name = {provider.name: provider for provider in base}
-        for override_provider in override:
-            base_provider = providers_by_name.get(override_provider.name)
+        for override in overrides:
+            name = override.name
+            base_provider = providers_by_name.get(name)
             if base_provider is None:
-                providers_by_name[override_provider.name] = override_provider
+                providers_by_name[name] = self.mapper.to_new_provider(override)
                 continue
-            providers_by_name[override_provider.name] = self._merge_provider(
+            providers_by_name[name] = self._merge_provider(
                 base=base_provider,
-                override=override_provider,
+                override=override,
             )
         return tuple(providers_by_name.values())
 
     def _merge_provider(
         self,
         *,
-        base: LLMProviderConfigModel,
-        override: LLMProviderConfigModel,
-    ) -> LLMProviderConfigModel:
-        adapter_changed = (
-            base.adapter is not None
-            and override.adapter is not None
-            and base.adapter != override.adapter
-        )
-        if adapter_changed:
-            raise ValueError(f"LLM provider adapter cannot be changed: {base.name}")
-
-        override_fields = override.model_fields_set - {"name"}
-        updates = {field_name: getattr(override, field_name) for field_name in override_fields}
-        if override_fields & _API_KEY_FIELDS:
-            api_key_updates = {
-                field_name: getattr(override, field_name) for field_name in _API_KEY_FIELDS
-            }
-            updates.update(api_key_updates)
-        return base.model_copy(update=updates)
+        base: LLMProviderDefinition,
+        override: LLMProviderCatalogOverride,
+    ) -> LLMProviderDefinition:
+        return self.mapper.apply_override(base=base, override=override)

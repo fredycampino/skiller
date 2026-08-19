@@ -1,11 +1,10 @@
 import json
 from pathlib import Path
 
+from skiller.domain.agent.llm.provider_catalog import LLMProviderDefinition
+from skiller.infrastructure.config.adapter_config import LLMProviderCatalogOverride
 from skiller.infrastructure.config.file_llm_provider_catalog_mapper import (
     FileLLMProviderCatalogMapper,
-)
-from skiller.infrastructure.config.provider_catalog_schema import (
-    LLMProviderConfigModel,
 )
 
 
@@ -17,9 +16,19 @@ class FileLLMProviderCatalogDatasource:
     ) -> None:
         self.mapper = mapper
 
-    def get_providers(self, path: Path) -> tuple[LLMProviderConfigModel, ...]:
+    def get_providers(
+        self,
+        path: Path,
+    ) -> tuple[LLMProviderDefinition, ...]:
         raw_config = _load_json_object(path)
         return self.mapper.to_provider_configs(raw_config)
+
+    def get_override_providers(
+        self,
+        path: Path,
+    ) -> tuple[LLMProviderCatalogOverride, ...]:
+        raw_config = _load_json_object(path)
+        return self.mapper.to_override_configs(raw_config)
 
 
 def _load_json_object(path: Path) -> dict[str, object]:

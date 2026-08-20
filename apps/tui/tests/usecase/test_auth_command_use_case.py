@@ -1,40 +1,71 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
+from typing import TypeVar
+
 import pytest
 
+import stui.usecase.auth_command_use_case as auth_command_use_case_module
+from apps.tui.tests.support import FakeModelsPort, patched_to_thread
 from stui.di.strings import TuiStrings
+from stui.port.models_port import AuthProvidersPortModelItem, AuthProvidersPortProviderItem
 from stui.usecase.auth_command_use_case import AuthCommandUseCase
-from stui.usecase.normalize_command_use_case import CommandKind, NormalizeCommandUseCase
+from stui.usecase.normalize_command_use_case import NormalizeCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 
 pytestmark = pytest.mark.unit
 
+_T = TypeVar("_T")
 
-def test_auth_command_use_case_maps_auth_menu() -> None:
-    result = AuthCommandUseCase(context=_context()).execute(
-        command=NormalizeCommandUseCase().execute(text="/auth")
+_ADAPTER_BY_PROVIDER = {
+    "codex": "codex",
+    "minimax": "openai",
+    "bedrock": "bedrock",
+    "moonshot": "openai",
+    "lmstudio": "openai",
+    "openrouter": "openai",
+}
+
+
+def _run(coro: Awaitable[_T]) -> _T:
+    with patched_to_thread(auth_command_use_case_module):
+        return asyncio.run(coro)
+
+
+def _port() -> FakeModelsPort:
+    return FakeModelsPort(
+        providers=[
+            AuthProvidersPortProviderItem(
+                name=name,
+                source="user",
+                adapter=adapter,
+                models=(
+                    AuthProvidersPortModelItem(name=f"{name}-m1"),
+                ),
+            )
+            for name, adapter in _ADAPTER_BY_PROVIDER.items()
+        ]
     )
-
-    assert result.command is not None
-    assert result.command.kind == CommandKind.RUN
-    assert result.command.args_text == "auths/auth"
-    assert result.command.raw_text == "/auth"
 
 
 @pytest.mark.parametrize(
     ("text", "run_args"),
     [
         ("/auth codex", "auths/codex"),
-        ("/auth minimax", "auths/minimax"),
+        ("/auth minimax", "auths/openai --arg provider=minimax"),
         ("/auth bedrock", "auths/bedrock"),
-        ("/auth moonshot", "auths/moonshot"),
+        ("/auth moonshot", "auths/openai --arg provider=moonshot"),
         ("/auth lmstudio", "auths/lmstudio"),
+        ("/auth openrouter", "auths/openai --arg provider=openrouter"),
         ("/auth CODEX", "auths/codex"),
     ],
 )
 def test_auth_command_use_case_maps_provider(text: str, run_args: str) -> None:
-    result = AuthCommandUseCase(context=_context()).execute(
-        command=NormalizeCommandUseCase().execute(text=text)
+    result = _run(
+        AuthCommandUseCase(context=_context(), models_port=_port()).execute(
+            command=NormalizeCommandUseCase().execute(text=text)
+        )
     )
 
     assert result.command is not None
@@ -42,30 +73,74 @@ def test_auth_command_use_case_maps_provider(text: str, run_args: str) -> None:
 
 
 def test_auth_command_use_case_rejects_unknown_provider() -> None:
-    result = AuthCommandUseCase(context=_context()).execute(
-        command=NormalizeCommandUseCase().execute(text="/auth unknown")
+    result = _run(
+        AuthCommandUseCase(context=_context(), models_port=_port()).execute(
+            command=NormalizeCommandUseCase().execute(text="/auth unknown")
+        )
     )
 
     assert result.command is None
     assert result.error_message == (
-        "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
-        "/auth bedrock, /auth moonshot, or /auth lmstudio."
+        "Unknown auth provider. Use /auth to list available providers, "
+        "or /auth <provider> to configure one."
+    )
+
+
+def test_auth_command_use_case_reports_providers_query_failure() -> None:
+    port = FakeModelsPort(error=RuntimeError("providers command failed"))
+
+    result = _run(
+        AuthCommandUseCase(context=_context(), models_port=port).execute(
+            command=NormalizeCommandUseCase().execute(text="/auth minimax")
+        )
+    )
+
+    assert result.command is None
+    assert result.error_message == "Failed to load auth providers: providers command failed"
+
+
+def test_auth_command_use_case_rejects_provider_without_flow() -> None:
+    port = FakeModelsPort(
+        providers=[
+            AuthProvidersPortProviderItem(
+                name="custom",
+                source="none",
+                adapter="mystery",
+                models=(),
+            )
+        ]
+    )
+    result = _run(
+        AuthCommandUseCase(context=_context(), models_port=port).execute(
+            command=NormalizeCommandUseCase().execute(text="/auth custom")
+        )
+    )
+
+    assert result.command is None
+    assert result.error_message == (
+        "Unknown auth provider. Use /auth to list available providers, "
+        "or /auth <provider> to configure one."
     )
 
 
 def test_auth_command_use_case_uses_string_for_unknown_provider() -> None:
-    result = AuthCommandUseCase(
-        context=_context(),
-        strings=TuiStrings(auth_unknown_provider_message="Choose a known provider.")
-    ).execute(command=NormalizeCommandUseCase().execute(text="/auth unknown"))
+    result = _run(
+        AuthCommandUseCase(
+            context=_context(),
+            models_port=_port(),
+            strings=TuiStrings(auth_unknown_provider_message="Choose a known provider."),
+        ).execute(command=NormalizeCommandUseCase().execute(text="/auth unknown"))
+    )
 
     assert result.command is None
     assert result.error_message == "Choose a known provider."
 
 
 def test_auth_command_use_case_rejects_extra_args() -> None:
-    result = AuthCommandUseCase(context=_context()).execute(
-        command=NormalizeCommandUseCase().execute(text="/auth codex extra")
+    result = _run(
+        AuthCommandUseCase(context=_context(), models_port=_port()).execute(
+            command=NormalizeCommandUseCase().execute(text="/auth codex extra")
+        )
     )
 
     assert result.command is None
@@ -82,18 +157,24 @@ def test_auth_command_use_case_rejects_extra_args() -> None:
 def test_auth_command_use_case_passes_continue_id_when_waiting(
     status: RunStatus,
 ) -> None:
-    result = AuthCommandUseCase(
-        context=_context(run_id="waiting-run", status=status)
-    ).execute(command=NormalizeCommandUseCase().execute(text="/auth codex"))
+    result = _run(
+        AuthCommandUseCase(
+            context=_context(run_id="waiting-run", status=status),
+            models_port=_port(),
+        ).execute(command=NormalizeCommandUseCase().execute(text="/auth codex"))
+    )
 
     assert result.command is not None
     assert result.command.args_text == "auths/codex --arg continue_id=waiting-run"
 
 
 def test_auth_command_use_case_does_not_pass_continue_id_when_running() -> None:
-    result = AuthCommandUseCase(
-        context=_context(run_id="running-run", status=RunStatus.RUNNING)
-    ).execute(command=NormalizeCommandUseCase().execute(text="/auth codex"))
+    result = _run(
+        AuthCommandUseCase(
+            context=_context(run_id="running-run", status=RunStatus.RUNNING),
+            models_port=_port(),
+        ).execute(command=NormalizeCommandUseCase().execute(text="/auth codex"))
+    )
 
     assert result.command is not None
     assert result.command.args_text == "auths/codex"

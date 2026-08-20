@@ -21,6 +21,12 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
 )
+from skiller.application.use_cases.agent.list_llm_providers import (
+    ListLLMProvidersResult,
+    ListLLMProvidersStatus,
+    LLMProviderItem,
+    LLMProviderModelItem,
+)
 from skiller.application.use_cases.agent.select_agent_model import (
     SelectAgentModelResult,
     SelectAgentModelStatus,
@@ -30,6 +36,10 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextStats,
     AgentContextWindowStats,
     AgentStats,
+)
+from skiller.domain.agent.llm.provider_catalog import (
+    LLMAdapterType,
+    LLMProviderCatalogSource,
 )
 from skiller.domain.run.steering_model import SteeringAgentInterrupt
 
@@ -85,6 +95,75 @@ def test_mapper_serializes_agent_models_result_without_secrets() -> None:
                 ],
             },
         ],
+    }
+
+
+def test_mapper_serializes_llm_providers_result_without_secrets() -> None:
+    mapper = AgentServiceMapper()
+    result = ListLLMProvidersResult(
+        status=ListLLMProvidersStatus.OK,
+        providers=(
+            LLMProviderItem(
+                name="codex",
+                source=LLMProviderCatalogSource.USER,
+                adapter=LLMAdapterType.CODEX,
+                enabled=True,
+                base_url=None,
+                timeout_seconds=60.0,
+                credentials_file="~/.codex/credentials.json",
+                profile=None,
+                api_key_file=None,
+                models=(
+                    LLMProviderModelItem(name="gpt-5.5", context_window_tokens=400_000),
+                ),
+            ),
+        ),
+    )
+
+    assert mapper.to_llm_providers_dict(result) == {
+        "status": "OK",
+        "ok": True,
+        "providers": [
+            {
+                "name": "codex",
+                "source": "user",
+                "adapter": "codex",
+                "enabled": True,
+                "base_url": None,
+                "timeout_seconds": 60.0,
+                "credentials_file": "~/.codex/credentials.json",
+                "profile": None,
+                "api_key_file": None,
+                "models": [
+                    {"name": "gpt-5.5", "context_window_tokens": 400_000},
+                ],
+            },
+        ],
+    }
+
+
+def test_mapper_serializes_llm_providers_empty_result() -> None:
+    mapper = AgentServiceMapper()
+    result = ListLLMProvidersResult(status=ListLLMProvidersStatus.OK)
+
+    assert mapper.to_llm_providers_dict(result) == {
+        "status": "OK",
+        "ok": True,
+        "providers": [],
+    }
+
+
+def test_mapper_serializes_llm_providers_error_result() -> None:
+    mapper = AgentServiceMapper()
+    result = ListLLMProvidersResult(
+        status=ListLLMProvidersStatus.ERROR,
+        error="catalog unreadable",
+    )
+
+    assert mapper.to_llm_providers_dict(result) == {
+        "status": "ERROR",
+        "ok": False,
+        "error": "catalog unreadable",
     }
 
 

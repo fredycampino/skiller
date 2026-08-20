@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.domain.agent.llm.model import LLMToolChoiceMode
@@ -38,6 +40,31 @@ def test_mapper_builds_openai_domain_provider() -> None:
     assert provider.api_key_source is not None
     assert provider.api_key_source.type == LLMApiKeySourceType.ENV
     assert provider.api_key_source.value == "PROVIDER_API_KEY"
+
+
+def test_default_catalog_declares_openrouter_as_openai_compatible() -> None:
+    mapper = FileLLMProviderCatalogMapper()
+    configs = mapper.to_provider_configs(
+        Path("packages/skiller/src/skiller/application/config/providers.json")
+    )
+
+    provider = mapper.to_catalog(configs).get("openrouter")
+
+    assert isinstance(provider, OpenAILLMProviderDefinition)
+    assert provider.base_url == "https://openrouter.ai/api/v1"
+    assert provider.api_key_source is not None
+    assert provider.api_key_source.type == LLMApiKeySourceType.ENV
+    assert provider.api_key_source.value == "OPENROUTER_API_KEY"
+    assert [model.model for model in provider.models] == [
+        "openrouter/free",
+        "openai/gpt-4o",
+        "anthropic/claude-opus-5",
+        "deepseek/deepseek-v4-pro",
+        "z-ai/glm-5.3",
+        "google/gemini-3.7-flash",
+        "xiaomi/mimo-v2.5-pro",
+        "anthropic/claude-opus-4.8",
+    ]
 
 
 def test_mapper_builds_bedrock_domain_provider() -> None:

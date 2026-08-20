@@ -22,6 +22,7 @@ class _FakeController:
         self.agent_model_calls: list[dict[str, str]] = []
         self.agent_stats_calls: list[dict[str, str]] = []
         self.agent_tools_calls: list[str] = []
+        self.agent_providers_calls: int = 0
         self.action_done_calls: list[dict[str, str]] = []
         self.delete_run_calls: list[str] = []
         self.receive_input_calls: list[tuple[str, str]] = []
@@ -133,6 +134,22 @@ class _FakeController:
                     "capacity_tokens": 100000,
                 },
             },
+        }
+
+    def agent_providers(self) -> dict[str, object]:
+        self.agent_providers_calls += 1
+        return {
+            "status": "OK",
+            "ok": True,
+            "providers": [
+                {
+                    "name": "codex",
+                    "source": "user",
+                    "adapter": "codex",
+                    "enabled": True,
+                    "models": [{"name": "gpt-5.5", "context_window_tokens": 400000}],
+                }
+            ],
         }
 
     def agent_tools(self, run_id: str) -> dict[str, object]:
@@ -1056,6 +1073,11 @@ def test_webhook_list_and_remove_are_controller_passthroughs(
         (
             ["agent", "tools", "run-1"],
             "agent_tools_calls",
+            "OK",
+        ),
+        (
+            ["agent", "providers"],
+            "agent_providers_calls",
             "OK",
         ),
     ],

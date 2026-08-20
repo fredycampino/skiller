@@ -224,7 +224,7 @@ class ConsoleScreenViewModel(LogEventsListener):
             return
 
         if command.kind == CommandKind.AUTH:
-            auth_result = self._use_cases.auth_command.execute(command=command)
+            auth_result = await self._use_cases.auth_command.execute(command=command)
             if auth_result.command is None:
                 self.state.transcript.items.append(UserInputItem(text=command.raw_text))
                 self.state.transcript.items.append(
@@ -374,7 +374,7 @@ class ConsoleScreenViewModel(LogEventsListener):
             params=(provider,),
             args_text=provider,
         )
-        auth_result = self._use_cases.auth_command.execute(command=command)
+        auth_result = await self._use_cases.auth_command.execute(command=command)
         if auth_result.command is None:
             return False
 

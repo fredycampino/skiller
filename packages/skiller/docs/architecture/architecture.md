@@ -146,7 +146,7 @@ class RegisterThingResult:
     status: RegisterThingStatus
     name: str
     mode: ThingMode
-    error: str | None = None
+    error: str | None
 
 
 class ThingApplicationService:

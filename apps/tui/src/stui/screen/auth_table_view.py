@@ -13,6 +13,7 @@ from stui.port.models_port import MODEL_PROVIDER_SOURCE_USER
 @dataclass(frozen=True)
 class AuthTableProviderRow:
     name: str
+    adapter: str
     source: str
 
 
@@ -108,4 +109,4 @@ def format_provider_label(
 ) -> str:
     marker = f" {strings.models_table_provider_configured_marker}"
     check = marker if provider.source == MODEL_PROVIDER_SOURCE_USER else ""
-    return f"{provider.name}{check}"
+    return f"{provider.name} · {provider.adapter}{check}"

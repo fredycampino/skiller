@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from stui.port.event_models import ActionPostArg
-from stui.port.models_port import ModelsPortProviderItem
+from stui.port.models_port import AuthProvidersPortProviderItem, ModelsPortProviderItem
 from stui.port.runs_port import RunsPortItem
 
 
@@ -370,7 +370,7 @@ class ModelsTableState:
 class AuthTableState:
     visible: bool = False
     command: str = ""
-    rows: tuple[ModelsPortProviderItem, ...] = field(default_factory=tuple)
+    rows: tuple[AuthProvidersPortProviderItem, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -482,7 +482,7 @@ class ConsoleScreenState:
         *,
         visible: bool = False,
         command: str = "",
-        rows: Sequence[ModelsPortProviderItem] = (),
+        rows: Sequence[AuthProvidersPortProviderItem] = (),
     ) -> None:
         self.auth_table.visible = visible
         self.auth_table.command = command

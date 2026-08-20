@@ -229,7 +229,7 @@ priority file that defines it.
 ## `openai` adapter
 
 The `openai` adapter is used for providers compatible with the
-`chat.completions` API, such as MiniMax, Moonshot, and LM Studio.
+`chat.completions` API, such as MiniMax, Moonshot, OpenRouter, and LM Studio.
 
 Each provider configuration uses a flat structure:
 

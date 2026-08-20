@@ -35,7 +35,23 @@ class ModelsPortProviderItem:
     models: tuple[ModelsPortModelItem, ...]
 
 
+@dataclass(frozen=True)
+class AuthProvidersPortModelItem:
+    name: str
+    context_window_tokens: int = 0
+
+
+@dataclass(frozen=True)
+class AuthProvidersPortProviderItem:
+    name: str
+    source: str
+    adapter: str
+    models: tuple[AuthProvidersPortModelItem, ...]
+
+
 class ModelsPort(Protocol):
     def list_models(self, *, run_id: str) -> list[ModelsPortProviderItem]: ...
+
+    def list_providers(self) -> list[AuthProvidersPortProviderItem]: ...
 
     def select_model(self, *, run_id: str, provider: str, model: str) -> None: ...

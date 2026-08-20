@@ -366,6 +366,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="List agent model options for a run",
     )
     agent_models_parser.add_argument("run_id")
+    agent_sub.add_parser(
+        "providers",
+        help="List the effective LLM provider catalog configuration",
+    )
     agent_tools_parser = agent_sub.add_parser(
         "tools",
         help="Show effective tool configuration for the first agent in a run",
@@ -702,6 +706,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agent" and args.agent_command == "models":
         result = controller.agent_models(args.run_id)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "OK" else 1
+
+    if args.command == "agent" and args.agent_command == "providers":
+        result = controller.agent_providers()
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "OK" else 1
 

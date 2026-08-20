@@ -8,6 +8,8 @@ from stui.adapter.cli_invoker import CliInvoker
 from stui.port.models_port import (
     MODEL_PROVIDER_SOURCE_NONE,
     MODEL_PROVIDER_SOURCES,
+    AuthProvidersPortModelItem,
+    AuthProvidersPortProviderItem,
     ModelsPortModelItem,
     ModelsPortProviderItem,
 )
@@ -36,7 +38,23 @@ class CliModelsAdapter:
         providers = payload.get("providers")
         if not isinstance(providers, list):
             raise RuntimeError("models command returned invalid providers")
-        return [_parse_provider(item) for item in providers if isinstance(item, dict)]
+        return [_parse_models_provider(item) for item in providers if isinstance(item, dict)]
+
+    def list_providers(self) -> list[AuthProvidersPortProviderItem]:
+        payload = _run_json_command(
+            self.invoker,
+            "agent",
+            "providers",
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("providers command returned invalid payload")
+        if payload.get("ok") is not True:
+            raise RuntimeError(_error_message(payload, fallback="providers query failed"))
+
+        providers = payload.get("providers")
+        if not isinstance(providers, list):
+            raise RuntimeError("providers command returned invalid providers")
+        return [_parse_auth_provider(item) for item in providers if isinstance(item, dict)]
 
     def select_model(self, *, run_id: str, provider: str, model: str) -> None:
         payload = _run_json_command(
@@ -68,14 +86,46 @@ def _run_json_command(invoker: CliInvoker, *args: str) -> Any:
         raise RuntimeError("runtime command returned invalid JSON") from exc
 
 
-def _parse_provider(payload: dict[str, Any]) -> ModelsPortProviderItem:
+def _parse_models_provider(payload: dict[str, Any]) -> ModelsPortProviderItem:
     models = payload.get("models", [])
     if not isinstance(models, list):
         models = []
     return ModelsPortProviderItem(
         name=str(payload.get("name", "")).strip(),
         source=_parse_source(payload),
-        models=tuple(_parse_model(item) for item in models if isinstance(item, dict)),
+        models=tuple(_parse_models_model(item) for item in models if isinstance(item, dict)),
+    )
+
+
+def _parse_models_model(payload: dict[str, Any]) -> ModelsPortModelItem:
+    return ModelsPortModelItem(
+        name=str(payload.get("name", "")).strip(),
+        active=bool(payload.get("active", False)),
+    )
+
+
+def _parse_auth_provider(payload: dict[str, Any]) -> AuthProvidersPortProviderItem:
+    models = payload.get("models", [])
+    if not isinstance(models, list):
+        models = []
+    adapter = str(payload.get("adapter", "")).strip()
+    if not adapter:
+        raise RuntimeError("provider payload missing adapter")
+    return AuthProvidersPortProviderItem(
+        name=str(payload.get("name", "")).strip(),
+        source=_parse_source(payload),
+        adapter=adapter,
+        models=tuple(_parse_auth_model(item) for item in models if isinstance(item, dict)),
+    )
+
+
+def _parse_auth_model(payload: dict[str, Any]) -> AuthProvidersPortModelItem:
+    context_window = payload.get("context_window_tokens", 0)
+    if not isinstance(context_window, int):
+        context_window = 0
+    return AuthProvidersPortModelItem(
+        name=str(payload.get("name", "")).strip(),
+        context_window_tokens=context_window,
     )
 
 
@@ -84,13 +134,6 @@ def _parse_source(payload: dict[str, Any]) -> str:
     if source in MODEL_PROVIDER_SOURCES:
         return source
     return MODEL_PROVIDER_SOURCE_NONE
-
-
-def _parse_model(payload: dict[str, Any]) -> ModelsPortModelItem:
-    return ModelsPortModelItem(
-        name=str(payload.get("name", "")).strip(),
-        active=bool(payload.get("active", False)),
-    )
 
 
 def _error_message(payload: dict[str, Any], *, fallback: str = "models query failed") -> str:

@@ -20,6 +20,10 @@ from skiller.application.use_cases.agent.list_agent_models import (
     ListAgentModelsResult,
     ListAgentModelsStatus,
 )
+from skiller.application.use_cases.agent.list_llm_providers import (
+    ListLLMProvidersResult,
+    ListLLMProvidersStatus,
+)
 from skiller.application.use_cases.agent.select_agent_model import (
     SelectAgentModelResult,
     SelectAgentModelStatus,
@@ -133,6 +137,37 @@ class AgentServiceMapper:
                         {
                             "name": model.name,
                             "active": model.active,
+                        }
+                        for model in provider.models
+                    ],
+                }
+                for provider in result.providers
+            ]
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
+    def to_llm_providers_dict(self, result: ListLLMProvidersResult) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "status": result.status.value,
+            "ok": result.status == ListLLMProvidersStatus.OK,
+        }
+        if result.providers or result.status == ListLLMProvidersStatus.OK:
+            payload["providers"] = [
+                {
+                    "name": provider.name,
+                    "source": provider.source.value,
+                    "adapter": provider.adapter.value,
+                    "enabled": provider.enabled,
+                    "base_url": provider.base_url,
+                    "timeout_seconds": provider.timeout_seconds,
+                    "credentials_file": provider.credentials_file,
+                    "profile": provider.profile,
+                    "api_key_file": provider.api_key_file,
+                    "models": [
+                        {
+                            "name": model.name,
+                            "context_window_tokens": model.context_window_tokens,
                         }
                         for model in provider.models
                     ],

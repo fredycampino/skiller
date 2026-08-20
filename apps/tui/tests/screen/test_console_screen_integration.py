@@ -17,7 +17,11 @@ from apps.tui.tests.support import (
     patched_to_thread,
 )
 from stui.di.strings import TuiStrings
-from stui.port.models_port import ModelsPortModelItem, ModelsPortProviderItem
+from stui.port.models_port import (
+    AuthProvidersPortProviderItem,
+    ModelsPortModelItem,
+    ModelsPortProviderItem,
+)
 from stui.port.run_port import (
     RunDispatch,
     RunDispatchError,
@@ -128,9 +132,13 @@ def test_console_screen_opens_models_table_from_command() -> None:
 def test_console_screen_opens_auth_panel_and_closes_it_with_escape() -> None:
     async def run() -> None:
         models_port = FakeModelsPort(
-            models=[
-                ModelsPortProviderItem(name="moonshot", source="user", models=()),
-                ModelsPortProviderItem(name="codex", source="user", models=()),
+            providers=[
+                AuthProvidersPortProviderItem(
+                    name="moonshot", source="user", adapter="openai", models=()
+                ),
+                AuthProvidersPortProviderItem(
+                    name="codex", source="user", adapter="codex", models=()
+                ),
             ]
         )
         viewmodel = build_viewmodel(
@@ -163,8 +171,8 @@ def test_console_screen_opens_auth_panel_and_closes_it_with_escape() -> None:
             assert "Enter configure" in str(help_view.content)
             assert auth_table.size.height <= 10
             assert auth_table.render_providers_text().splitlines()[:2] == [
-                "moonshot ✓",
-                "codex ✓",
+                "moonshot · openai ✓",
+                "codex · codex ✓",
             ]
 
             await pilot.press("escape")

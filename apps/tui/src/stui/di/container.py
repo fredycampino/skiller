@@ -163,7 +163,11 @@ def build_tui_container(
     )
     use_cases = ConsoleScreenUseCases(
         agent_status=AgentStatusUseCase(),
-        auth_command=AuthCommandUseCase(context=run_event_context, strings=strings),
+        auth_command=AuthCommandUseCase(
+            context=run_event_context,
+            models_port=resolved_models_port,
+            strings=strings,
+        ),
         autocomplete=AutocompleteUseCase(strings=strings),
         interrupt_agent_turn=InterruptAgentTurnUseCase(
             agent_port=resolved_agent_port,
@@ -175,7 +179,6 @@ def build_tui_container(
         ),
         list_auth_providers=ListAuthProvidersUseCase(
             models_port=resolved_models_port,
-            context=run_event_context,
         ),
         list_runs=ListRunsUseCase(runs_port=resolved_runs_port),
         normalize_command=NormalizeCommandUseCase(),

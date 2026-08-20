@@ -97,11 +97,11 @@ def test_builtin_application_catalog_is_valid() -> None:
     codex = catalog.get("codex")
     assert codex.adapter == LLMAdapterType.CODEX
     assert [model.model for model in codex.models] == [
+        "gpt-5.6-luna",
         "gpt-5.4",
         "gpt-5.5",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
-        "gpt-5.6-luna",
     ]
     assert catalog.get("bedrock").adapter == LLMAdapterType.BEDROCK
 

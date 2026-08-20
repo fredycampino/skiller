@@ -16,7 +16,7 @@ from textual.widgets import Button, DataTable, Static, TextArea
 from stui.app_version import format_app_version
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
-from stui.port.models_port import ModelsPortProviderItem
+from stui.port.models_port import AuthProvidersPortProviderItem, ModelsPortProviderItem
 from stui.port.runs_port import RunsPortItem
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
@@ -79,7 +79,7 @@ class ConsoleScreen(App[str]):
         self._render_transcript = RenderTranscript(strings=strings)
         self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
         self._last_models_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
-        self._last_auth_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
+        self._last_auth_snapshot: tuple[AuthProvidersPortProviderItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -630,7 +630,11 @@ class ConsoleScreen(App[str]):
         auth_table = self._auth_table()
         auth_table.set_rows(
             [
-                AuthTableProviderRow(name=provider.name, source=provider.source)
+                AuthTableProviderRow(
+                    name=provider.name,
+                    adapter=provider.adapter,
+                    source=provider.source,
+                )
                 for provider in new_state.auth_table.rows
             ]
         )

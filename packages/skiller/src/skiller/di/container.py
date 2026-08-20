@@ -43,6 +43,7 @@ from skiller.application.use_cases.agent.get_agent_tools import GetAgentToolsUse
 from skiller.application.use_cases.agent.interrupt_agent import InterruptAgentUseCase
 from skiller.application.use_cases.agent.list_agent_context import ListAgentContextUseCase
 from skiller.application.use_cases.agent.list_agent_models import ListAgentModelsUseCase
+from skiller.application.use_cases.agent.list_llm_providers import ListLLMProvidersUseCase
 from skiller.application.use_cases.agent.select_agent_model import SelectAgentModelUseCase
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
@@ -322,6 +323,9 @@ def build_runtime_container(
         llm_provider_catalog=llm_provider_catalog,
         skill_runner=skill_runner,
     )
+    list_llm_providers_use_case = ListLLMProvidersUseCase(
+        llm_provider_catalog=llm_provider_catalog,
+    )
     get_agent_tools_use_case = GetAgentToolsUseCase(
         run_store=store,
         run_agent_store=run_agent_store,
@@ -491,6 +495,7 @@ def build_runtime_container(
         get_agent_stats_use_case=get_agent_stats_use_case,
         list_agent_context_use_case=list_agent_context_use_case,
         list_agent_models_use_case=list_agent_models_use_case,
+        list_llm_providers_use_case=list_llm_providers_use_case,
         get_agent_tools_use_case=get_agent_tools_use_case,
         select_agent_model_use_case=select_agent_model_use_case,
     )

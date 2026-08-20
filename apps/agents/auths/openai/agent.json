@@ -1,0 +1,6 @@
+{
+  "llm": {
+    "model": "kimi-k3",
+    "provider": "moonshot"
+  }
+}

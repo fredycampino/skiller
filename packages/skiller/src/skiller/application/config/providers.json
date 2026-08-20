@@ -16,11 +16,11 @@
       },
       "models": [
         {
-          "model": "MiniMax-M2.5",
+          "model": "MiniMax-M2.7",
           "context_window_tokens": 204800
         },
         {
-          "model": "MiniMax-M2.7",
+          "model": "MiniMax-M2.5",
           "context_window_tokens": 204800
         },
         {
@@ -73,6 +73,52 @@
         }
       ]
     },
+    "openrouter": {
+      "adapter": "openai",
+      "enabled": true,
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "timeout_seconds": 30,
+      "temperature": 1,
+      "top_p": 1,
+      "max_output_tokens": 1024,
+      "parallel_tool_calls": true,
+      "tool_choice": "auto",
+      "models": [
+        {
+          "model": "openrouter/free",
+          "context_window_tokens": 200000
+        },
+        {
+          "model": "openai/gpt-4o",
+          "context_window_tokens": 128000
+        },
+        {
+          "model": "anthropic/claude-opus-5",
+          "context_window_tokens": 1000000
+        },
+        {
+          "model": "deepseek/deepseek-v4-pro",
+          "context_window_tokens": 1048576
+        },
+        {
+          "model": "z-ai/glm-5.3",
+          "context_window_tokens": 1048576
+        },
+        {
+          "model": "google/gemini-3.7-flash",
+          "context_window_tokens": 1048576
+        },
+        {
+          "model": "xiaomi/mimo-v2.5-pro",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "anthropic/claude-opus-4.8",
+          "context_window_tokens": 1000000
+        }
+      ]
+    },
     "lmstudio": {
       "adapter": "openai",
       "enabled": true,
@@ -104,6 +150,10 @@
       "parallel_tool_calls": true,
       "models": [
         {
+          "model": "gpt-5.6-luna",
+          "context_window_tokens": 1050000
+        },
+        {
           "model": "gpt-5.4",
           "context_window_tokens": 1050000
         },
@@ -117,10 +167,6 @@
         },
         {
           "model": "gpt-5.6-terra",
-          "context_window_tokens": 1050000
-        },
-        {
-          "model": "gpt-5.6-luna",
           "context_window_tokens": 1050000
         }
       ]

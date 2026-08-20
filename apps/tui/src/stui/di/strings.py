@@ -31,8 +31,11 @@ class TuiStrings:
     auth_table_help: str = "↑↓ select · Enter configure · Esc close"
     auth_table_no_providers_message: str = "No auth providers available."
     auth_unknown_provider_message: str = (
-        "Unknown auth provider. Use /auth, /auth codex, /auth minimax, "
-        "/auth bedrock, /auth moonshot, or /auth lmstudio."
+        "Unknown auth provider. Use /auth to list available providers, "
+        "or /auth <provider> to configure one."
+    )
+    auth_providers_query_failed_message: str = (
+        "Failed to load auth providers: {message}"
     )
     autocomplete_quit_description: str = "Exit the TUI"
     autocomplete_exit_description: str = "Exit the TUI"

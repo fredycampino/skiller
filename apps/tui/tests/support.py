@@ -14,7 +14,12 @@ from stui.port.agent_port import (
 )
 from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.installation_state_port import InstallationState
-from stui.port.models_port import ModelsPortModelItem, ModelsPortProviderItem
+from stui.port.models_port import (
+    AuthProvidersPortModelItem,
+    AuthProvidersPortProviderItem,
+    ModelsPortModelItem,
+    ModelsPortProviderItem,
+)
 from stui.port.run_port import (
     CommandAck,
     CommandAckStatus,
@@ -137,6 +142,7 @@ class FakeModelsPort:
     def __init__(
         self,
         models: list[ModelsPortProviderItem] | None = None,
+        providers: list[AuthProvidersPortProviderItem] | None = None,
         error: RuntimeError | None = None,
         select_error: RuntimeError | None = None,
     ) -> None:
@@ -147,10 +153,23 @@ class FakeModelsPort:
                 models=(ModelsPortModelItem(name="gpt-5.5", active=True),),
             )
         ]
+        self.providers = providers or [
+            AuthProvidersPortProviderItem(
+                name=item.name,
+                source=item.source,
+                adapter="codex",
+                models=tuple(
+                    AuthProvidersPortModelItem(name=model_item.name)
+                    for model_item in item.models
+                ),
+            )
+            for item in self.models
+        ]
         self.error = error
         self.select_error = select_error
         self.called = False
         self.called_with: list[str] = []
+        self.providers_called = False
         self.select_called_with: list[tuple[str, str, str]] = []
 
     def list_models(self, *, run_id: str) -> list[ModelsPortProviderItem]:
@@ -159,6 +178,12 @@ class FakeModelsPort:
         if self.error is not None:
             raise self.error
         return list(self.models)
+
+    def list_providers(self) -> list[AuthProvidersPortProviderItem]:
+        self.providers_called = True
+        if self.error is not None:
+            raise self.error
+        return list(self.providers)
 
     def select_model(self, *, run_id: str, provider: str, model: str) -> None:
         self.select_called_with.append((run_id, provider, model))

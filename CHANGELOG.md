@@ -19,6 +19,19 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.32 - 2026-08-21
+
+### Added
+- Add the `skiller agent providers` CLI command backed by a new `ListLLMProviders` use case exposing name, source, adapter, and models per provider.
+- Add the generic `auths/openai` flow to configure credentials for any OpenAI-compatible provider, and register the OpenRouter provider in the default catalog.
+- TUI: resolve `/auth` flows dynamically from the runtime provider listing; `lmstudio`, `codex`, and `bedrock` keep dedicated flows while OpenAI-compatible providers route to `auths/openai --arg provider=<name>`.
+
+### Fixed
+- Fix the `provider payload missing adapter` error on the TUI models table by splitting strict parsers and port items for `/models` (no adapter) and `/auth` (adapter required).
+
+### Notes
+- Includes PR #127.
+
 ## 0.1.0-beta.31 - 2026-08-20
 
 ### Changed

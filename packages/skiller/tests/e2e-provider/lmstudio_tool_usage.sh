@@ -99,6 +99,7 @@ PYTHONPATH=packages/skiller/src \
 import json
 import os
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMSystemMessage,
     LLMToolChoiceMode,
@@ -151,6 +152,7 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
 model = LLMModelDefinition(
     model=os.environ["LMSTUDIO_MODEL"],
     context_window_tokens=8000,
+    max_output_tokens=4096,
 )
 provider = OpenAILLMProviderDefinition(
     name="lmstudio",
@@ -160,7 +162,6 @@ provider = OpenAILLMProviderDefinition(
     timeout_seconds=float(os.environ["LMSTUDIO_TIMEOUT_SECONDS"]),
     temperature=0.2,
     top_p=1,
-    max_output_tokens=4096,
     parallel_tool_calls=True,
     tool_choice=LLMToolChoiceMode.AUTO,
     api_key_source=LLMApiKeySource(
@@ -185,12 +186,11 @@ response = client.generate(
         tool_choice=LLMToolChoiceMode.AUTO,
         parallel_tool_calls=True,
         temperature=provider.temperature,
-        max_tokens=provider.max_output_tokens,
         top_p=provider.top_p,
     )
 )
 
-if not response.ok:
+if response.finish_type != LLMFinishType.TOOL_CALLS:
     raise SystemExit(response.error or "LM Studio tool request failed")
 if len(response.tool_calls) != 1:
     raise SystemExit("LM Studio response did not include exactly one tool call")
@@ -212,7 +212,7 @@ print(
             "provider": "lmstudio",
             "base_url": os.environ["LMSTUDIO_BASE_URL"],
             "model": response.model.value,
-            "finish_reason": response.finish_reason,
+            "finish_type": response.finish_type.value,
             "tool_calls": len(response.tool_calls),
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,

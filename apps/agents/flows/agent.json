@@ -1,6 +1,7 @@
 {
   "debug": {
-    "log_request": true,
+    "log_request": false,
+    "log_streaming": true,
     "log_override_file": true
   },
   "loop": {

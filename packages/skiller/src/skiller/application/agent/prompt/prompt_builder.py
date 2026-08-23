@@ -42,6 +42,7 @@ class AgentPromptBuilder:
         context_id: str,
         log_request_file: str | None,
         log_override_file: bool,
+        log_streaming: bool,
     ) -> LLMRequest:
         messages = tuple(self._build_messages(system=system, entries=entries))
         if isinstance(provider, OpenAILLMProviderDefinition):
@@ -51,11 +52,11 @@ class AgentPromptBuilder:
                 tool_choice=provider.tool_choice,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 temperature=provider.temperature,
-                max_tokens=provider.max_output_tokens,
                 top_p=provider.top_p,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
+                log_streaming=log_streaming,
             )
         if isinstance(provider, CodexLLMProviderDefinition):
             return CodexLLMRequest(
@@ -66,15 +67,16 @@ class AgentPromptBuilder:
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
+                log_streaming=log_streaming,
             )
         if isinstance(provider, BedrockLLMProviderDefinition):
             return BedrockLLMRequest(
                 messages=messages,
                 model=model,
-                max_tokens=provider.max_output_tokens,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,
+                log_streaming=log_streaming,
             )
         raise ValueError(f"Unsupported LLM adapter: {provider.adapter}")
 

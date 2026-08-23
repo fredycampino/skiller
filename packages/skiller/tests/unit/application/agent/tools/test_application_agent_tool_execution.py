@@ -46,6 +46,7 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMResponse,
     LLMToolCall,
@@ -89,7 +90,9 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+    )
 
 
 def test_agent_tool_execution_runs_process_tool() -> None:
@@ -299,8 +302,8 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         runtime_event_store=runtime_events,
     )
     response = LLMResponse(
-        ok=True,
         model=_model("model1", 100_000),
+        finish_type=LLMFinishType.TOOL_CALLS,
         tool_calls=(
             LLMToolCall(
                 id="call-1",
@@ -495,7 +498,8 @@ def _build_executor(
             OutputTruncator(),
         ),
         steering=steering or _FakeSteering(),
-        tool_manager=tool_manager or ToolManager(
+        tool_manager=tool_manager
+        or ToolManager(
             tools=[
                 ShellProcessTool(shell="/bin/bash"),
                 NotifyTool(),
@@ -597,8 +601,8 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         ),
         turn_id="turn-1",
         response=LLMResponse(
-            ok=True,
             model=_model("model1", 100_000),
+            finish_type=LLMFinishType.TOOL_CALLS,
             tool_calls=(
                 LLMToolCall(
                     id="call-1",
@@ -845,6 +849,7 @@ class _FakeRunAgentStore:
 
     def attach_agent(self, *, run_id: str, agent_id: str, context_id: str) -> None:
         _ = run_id, agent_id, context_id
+
 
 class _FakeAgentContextState:
     def get_state(self, *, context_id: str) -> AgentContextState:

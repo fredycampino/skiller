@@ -27,6 +27,7 @@ from skiller.domain.agent.context.model import (
     AgentToolResultPayload,
     AgentUserMessagePayload,
 )
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMResponse,
     LLMToolCall,
@@ -48,7 +49,9 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+    )
 
 
 def test_agent_context_publisher_publishes_tool_entries_with_normalized_data() -> None:
@@ -385,7 +388,10 @@ def _tool_request() -> ToolExecutionRequest:
             context_id="ctx-1",
         ),
         turn_id="turn-1",
-        response=LLMResponse(ok=True, model=_model("model1", 100_000)),
+        response=LLMResponse(
+            model=_model("model1", 100_000),
+            finish_type=LLMFinishType.TOOL_CALLS,
+        ),
         allowed_tools=["notify"],
         runtime_configs=ToolRuntimeConfigs(),
         event_config=_event_output_config(),
@@ -619,7 +625,6 @@ class _FakeAgentContextStore(AgentContextStorePort):
             }
         )
         return [entry for entry in self.entries if entry.sequence >= start_sequence]
-
 
     def get_last_usage_marker(
         self,

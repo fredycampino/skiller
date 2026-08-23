@@ -71,6 +71,7 @@ class AgentConfigMapper:
         )
         debug = AgentDebugConfig(
             log_request=config.debug.log_request,
+            log_streaming=config.debug.log_streaming,
             log_request_file=_resolve_log_request_file(
                 debug_config=config.debug,
                 provider=config.llm.provider,

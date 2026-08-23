@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -40,7 +41,8 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
         if request.response_format is not None:
             payload["response_format"] = _response_format_value(request.response_format)
         payload["temperature"] = request.temperature
-        payload["max_tokens"] = request.max_tokens
+        if request.model.max_output_tokens is not None:
+            payload["max_tokens"] = request.model.max_output_tokens
         payload["top_p"] = request.top_p
         payload["parallel_tool_calls"] = request.parallel_tool_calls
         if self.extra_body is not None:
@@ -53,67 +55,112 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
         *,
         request: OpenAILLMRequest,
     ) -> LLMResponse:
-        return _to_port_llm_response(
-            raw_response,
-            request=request,
-            usage_mapper=self.usage_mapper,
+        choices = getattr(raw_response, "choices", None)
+        if choices is None and isinstance(raw_response, Mapping):
+            choices = raw_response.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return LLMResponse(
+                model=request.model,
+                finish_type=LLMFinishType.ERROR_MISSING_CHOICES,
+                error="OpenAI response missing choices",
+                error_code="missing_choices",
+            )
+
+        first_choice = choices[0]
+        message = getattr(first_choice, "message", None)
+        if message is None and isinstance(first_choice, Mapping):
+            message = first_choice.get("message")
+        if message is None:
+            return LLMResponse(
+                model=request.model,
+                finish_type=LLMFinishType.ERROR_MISSING_MESSAGE,
+                error="OpenAI response missing message payload",
+                error_code="missing_message",
+            )
+
+        tool_calls = _to_port_tool_calls(getattr(message, "tool_calls", None))
+        if not tool_calls and isinstance(message, Mapping):
+            tool_calls = _to_port_tool_calls(message.get("tool_calls"))
+
+        content = _to_port_content(getattr(message, "content", None))
+        if content is None and isinstance(message, Mapping):
+            content = _to_port_content(message.get("content"))
+
+        finish_reason = getattr(first_choice, "finish_reason", None)
+        if finish_reason is None and isinstance(first_choice, Mapping):
+            finish_reason = first_choice.get("finish_reason")
+        finish_type = _finish_type(
+            finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+            content=content,
+            tool_calls=tool_calls,
+        )
+        error: str | None = None
+        error_code: str | None = None
+        if finish_type == LLMFinishType.INVALID_RESPONSE_LENGTH:
+            error = "OpenAI response was truncated due to length"
+            error_code = "response_length"
+        elif finish_type == LLMFinishType.INVALID_RESPONSE_CONTENT_FILTER:
+            error = "OpenAI response was blocked by the content filter"
+            error_code = "content_filter"
+        elif finish_type == LLMFinishType.ERROR_MISSING_FINISH_REASON:
+            error = "OpenAI response missing finish reason"
+            error_code = "missing_finish_reason"
+        elif finish_type == LLMFinishType.ERROR_MISSING_CONTENT:
+            error = "OpenAI response missing content"
+            error_code = "missing_content"
+        elif finish_type == LLMFinishType.ERROR_MISSING_TOOL_CALLS:
+            error = "OpenAI response missing tool calls"
+            error_code = "missing_tool_calls"
+        elif finish_type == LLMFinishType.ERROR_MALFORMED_RESPONSE:
+            error = "OpenAI response has an inconsistent finish reason"
+            error_code = "inconsistent_finish_reason"
+        elif finish_type == LLMFinishType.UNKNOWN:
+            error = "OpenAI response has an unknown finish reason"
+            error_code = "unknown_finish_reason"
+
+        provider_usage = _to_provider_usage(getattr(raw_response, "usage", None))
+        if provider_usage is None and isinstance(raw_response, Mapping):
+            provider_usage = _to_provider_usage(raw_response.get("usage"))
+        usage = self.usage_mapper.to_usage(provider_usage, request=request)
+
+        return LLMResponse(
+            content=content,
+            model=request.model,
+            tool_calls=tool_calls,
+            finish_type=finish_type,
+            error=error,
+            error_code=error_code,
+            usage=usage,
         )
 
 
-def _to_port_llm_response(
-    raw_response: object,
+def _finish_type(
     *,
-    request: OpenAILLMRequest,
-    usage_mapper: LLMUsageMapper,
-) -> LLMResponse:
-    choices = getattr(raw_response, "choices", None)
-    if choices is None and isinstance(raw_response, Mapping):
-        choices = raw_response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return LLMResponse(
-            ok=False,
-            model=request.model,
-            error="OpenAI response missing choices",
-            error_code="missing_choices",
-        )
-
-    first_choice = choices[0]
-    message = getattr(first_choice, "message", None)
-    if message is None and isinstance(first_choice, Mapping):
-        message = first_choice.get("message")
-    if message is None:
-        return LLMResponse(
-            ok=False,
-            model=request.model,
-            error="OpenAI response missing message payload",
-            error_code="missing_message",
-        )
-
-    tool_calls = _to_port_tool_calls(getattr(message, "tool_calls", None))
-    if not tool_calls and isinstance(message, Mapping):
-        tool_calls = _to_port_tool_calls(message.get("tool_calls"))
-
-    content = _to_port_content(getattr(message, "content", None))
-    if content is None and isinstance(message, Mapping):
-        content = _to_port_content(message.get("content"))
-
-    finish_reason = getattr(first_choice, "finish_reason", None)
-    if finish_reason is None and isinstance(first_choice, Mapping):
-        finish_reason = first_choice.get("finish_reason")
-
-    provider_usage = _to_provider_usage(getattr(raw_response, "usage", None))
-    if provider_usage is None and isinstance(raw_response, Mapping):
-        provider_usage = _to_provider_usage(raw_response.get("usage"))
-    usage = usage_mapper.to_usage(provider_usage, request=request)
-
-    return LLMResponse(
-        ok=True,
-        content=content,
-        model=request.model,
-        tool_calls=tool_calls,
-        finish_reason=finish_reason if isinstance(finish_reason, str) else None,
-        usage=usage,
-    )
+    finish_reason: str | None,
+    content: str | None,
+    tool_calls: tuple[LLMToolCall, ...],
+) -> LLMFinishType:
+    if finish_reason is None:
+        return LLMFinishType.ERROR_MISSING_FINISH_REASON
+    if finish_reason == "stop":
+        if tool_calls:
+            return LLMFinishType.ERROR_MALFORMED_RESPONSE
+        if content is None or not content.strip():
+            return LLMFinishType.ERROR_MISSING_CONTENT
+        return LLMFinishType.STOP
+    if finish_reason == "length":
+        return LLMFinishType.INVALID_RESPONSE_LENGTH
+    if finish_reason == "content_filter":
+        return LLMFinishType.INVALID_RESPONSE_CONTENT_FILTER
+    if finish_reason == "function_call":
+        if not tool_calls:
+            return LLMFinishType.ERROR_MISSING_TOOL_CALLS
+        return LLMFinishType.TOOL_CALLS
+    if finish_reason == "tool_calls":
+        if not tool_calls:
+            return LLMFinishType.ERROR_MISSING_TOOL_CALLS
+        return LLMFinishType.TOOL_CALLS
+    return LLMFinishType.UNKNOWN
 
 
 def _message_to_payload(message: LLMMessage) -> dict[str, object]:

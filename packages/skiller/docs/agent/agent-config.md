@@ -40,6 +40,7 @@ are rejected.
   },
   "debug": {
     "log_request": false,
+    "log_streaming": false,
     "log_request_file": "~/.skiller/logs/request/minimax/request.json",
     "log_override_file": true
   },
@@ -137,6 +138,7 @@ provider catalog. See [`agent-config-llm.md`](./agent-config-llm.md).
 {
   "debug": {
     "log_request": true,
+    "log_streaming": true,
     "log_request_file": "logs/llm-request.json",
     "log_override_file": true
   }
@@ -144,6 +146,8 @@ provider catalog. See [`agent-config-llm.md`](./agent-config-llm.md).
 ```
 
 - `log_request` enables request logging. Default: `false`.
+- `log_streaming` captures and serializes provider streaming events in the response log when
+  `log_request` is enabled. Default: `false`.
 - `log_request_file` sets the destination. When omitted or empty, it defaults
   to `~/.skiller/logs/request/<provider>/request.json`.
 - `log_override_file` replaces the destination on each request when `true`.

@@ -98,6 +98,7 @@ class AgentDebugConfig:
     log_request: bool
     log_request_file: str | None
     log_override_file: bool
+    log_streaming: bool = False
 
 
 @dataclass(frozen=True)

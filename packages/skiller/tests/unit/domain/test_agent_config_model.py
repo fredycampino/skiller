@@ -95,4 +95,5 @@ def _lmstudio_model() -> LLMModelDefinition:
     return LLMModelDefinition(
         model="google/gemma-4-12b-qat",
         context_window_tokens=131_072,
+        max_output_tokens=None,
     )

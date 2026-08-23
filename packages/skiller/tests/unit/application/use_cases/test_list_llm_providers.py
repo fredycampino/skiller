@@ -90,12 +90,15 @@ def _provider(*, name: str, enabled: bool = True) -> OpenAILLMProviderDefinition
     return OpenAILLMProviderDefinition(
         name=name,
         timeout_seconds=30,
-        models=(LLMModelDefinition(model="kimi-k2", context_window_tokens=262_144),),
+        models=(
+            LLMModelDefinition(
+                model="kimi-k2", context_window_tokens=262_144, max_output_tokens=None
+            ),
+        ),
         enabled=enabled,
         base_url="http://localhost/v1",
         temperature=0,
         top_p=1,
-        max_output_tokens=1024,
         parallel_tool_calls=False,
         tool_choice=LLMToolChoiceMode.AUTO,
         api_key_source=LLMApiKeySource(

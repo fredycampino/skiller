@@ -72,8 +72,8 @@ infrastructure/db/sqlite_run_agent_store_port.py
 infrastructure/db/sqlite_runtime_event_store_port.py
   -> SqliteRuntimeEventStorePort implements RuntimeEventStorePort
 
-infrastructure/llm/codex/codex_llm_port.py
-  -> CodexLLMPort implements LLMPort[CodexLLMRequest]
+infrastructure/llm/codex/responses_llm_port.py
+  -> ResponsesLLMPort implements LLMPort[CodexLLMRequest]
 ```
 
 ## Infrastructure Datasources

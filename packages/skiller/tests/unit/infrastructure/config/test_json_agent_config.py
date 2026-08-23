@@ -20,7 +20,23 @@ def test_json_agent_config_reads_strict_llm_selection(tmp_path: Path) -> None:
 
     assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
     assert config.context.window_width_tokens is None
+    assert config.debug.log_streaming is False
     assert config.debug.log_request_file == "~/.skiller/logs/request/minimax/request.json"
+
+
+def test_json_agent_config_enables_stream_logging_explicitly(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent.json"
+    _write(
+        config_path,
+        {
+            "llm": {"provider": "codex", "model": "gpt-5.5"},
+            "debug": {"log_streaming": True},
+        },
+    )
+
+    config = _config_port(config_path).get_config()
+
+    assert config.debug.log_streaming is True
 
 
 def test_json_agent_config_ignores_legacy_default_provider(tmp_path: Path) -> None:

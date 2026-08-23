@@ -45,6 +45,7 @@ PYTHONPATH=packages/skiller/src \
 import json
 import os
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMSystemMessage,
     LLMToolChoiceMode,
@@ -97,6 +98,7 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
 model = LLMModelDefinition(
     model=os.environ.get("AGENT_MINIMAX_MODEL", "MiniMax-M2.7"),
     context_window_tokens=204800,
+    max_output_tokens=4096,
 )
 provider = OpenAILLMProviderDefinition(
     name="minimax",
@@ -106,7 +108,6 @@ provider = OpenAILLMProviderDefinition(
     base_url="https://api.minimax.io/v1",
     temperature=1,
     top_p=1,
-    max_output_tokens=4096,
     parallel_tool_calls=True,
     tool_choice=LLMToolChoiceMode.AUTO,
     api_key_source=LLMApiKeySource(
@@ -131,12 +132,11 @@ response = client.generate(
         tool_choice=LLMToolChoiceMode.AUTO,
         parallel_tool_calls=True,
         temperature=provider.temperature,
-        max_tokens=provider.max_output_tokens,
         top_p=provider.top_p,
     )
 )
 
-if not response.ok:
+if response.finish_type != LLMFinishType.TOOL_CALLS:
     raise SystemExit(response.error or "MiniMax tool request failed")
 if len(response.tool_calls) != 1:
     raise SystemExit("MiniMax response did not include exactly one tool call")
@@ -157,7 +157,7 @@ print(
             "status": "SUCCEEDED",
             "provider": "minimax",
             "model": response.model.value,
-            "finish_reason": response.finish_reason,
+            "finish_type": response.finish_type.value,
             "tool_calls": len(response.tool_calls),
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,

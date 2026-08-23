@@ -25,8 +25,17 @@ from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 pytestmark = pytest.mark.unit
 
 
-def _model(value: str = "model1", context_window_tokens: int = 100_000) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+def _model(
+    value: str = "model1",
+    context_window_tokens: int = 100_000,
+    *,
+    max_output_tokens: int | None = None,
+) -> LLMModelDefinition:
+    return LLMModelDefinition(
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=max_output_tokens,
+    )
 
 
 def _provider(
@@ -44,7 +53,6 @@ def _provider(
         base_url="http://localhost/v1",
         temperature=temperature,
         top_p=1,
-        max_output_tokens=4096,
         parallel_tool_calls=True,
         tool_choice=LLMToolChoiceMode.AUTO,
         api_key_source=None,
@@ -125,6 +133,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert request.model == _model()
@@ -205,6 +214,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert request.messages == (
@@ -296,6 +306,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert request.messages == (
@@ -342,6 +353,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert request.messages == (LLMSystemMessage("Be useful."),)
@@ -351,7 +363,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
     builder = AgentPromptBuilder()
     provider = _provider(
         name="minimax",
-        model=_model("MiniMax-M2.7", 204_800),
+        model=_model("MiniMax-M2.7", 204_800, max_output_tokens=4096),
         temperature=1,
     )
 
@@ -364,11 +376,12 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert isinstance(request, OpenAILLMRequest)
     assert request.temperature == 1
-    assert request.max_tokens == 4096
+    assert request.model.max_output_tokens == 4096
     assert request.top_p == 1
 
 
@@ -376,7 +389,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
     builder = AgentPromptBuilder()
     provider = _provider(
         name="lmstudio",
-        model=_model("google/gemma-4-12b-qat", 131_072),
+        model=_model("google/gemma-4-12b-qat", 131_072, max_output_tokens=4096),
         temperature=0.2,
     )
 
@@ -389,11 +402,12 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert isinstance(request, OpenAILLMRequest)
     assert request.temperature == 0.2
-    assert request.max_tokens == 4096
+    assert request.model.max_output_tokens == 4096
     assert request.top_p == 1
 
 
@@ -407,7 +421,6 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         credentials_file="/tmp/openai-codex.json",
         timeout_seconds=120,
         parallel_tool_calls=True,
-        max_output_tokens=4096,
     )
 
     request = builder.build_request(
@@ -419,12 +432,14 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=True,
     )
 
     assert isinstance(request, CodexLLMRequest)
     assert request.model == model
     assert request.parallel_tool_calls is True
     assert request.session_id == "context-1"
+    assert request.log_streaming is True
     assert not hasattr(request, "temperature")
     assert not hasattr(request, "max_tokens")
     assert not hasattr(request, "top_p")
@@ -432,14 +447,17 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
 
 def test_agent_prompt_builder_returns_bedrock_request() -> None:
     builder = AgentPromptBuilder()
-    model = _model("us.anthropic.claude-opus-4-6-v1", 200_000)
+    model = _model(
+        "us.anthropic.claude-opus-4-6-v1",
+        200_000,
+        max_output_tokens=4096,
+    )
     provider = BedrockLLMProviderDefinition(
         name="bedrock",
         models=(model,),
         enabled=True,
         profile="claude-bedrock",
         timeout_seconds=120,
-        max_output_tokens=4096,
     )
 
     request = builder.build_request(
@@ -451,11 +469,12 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert isinstance(request, BedrockLLMRequest)
     assert request.model == model
-    assert request.max_tokens == 4096
+    assert request.model.max_output_tokens == 4096
     assert not hasattr(request, "top_p")
 
 
@@ -472,6 +491,7 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
         context_id="context-1",
         log_request_file=None,
         log_override_file=True,
+        log_streaming=False,
     )
 
     assert request.tools == (tool,)

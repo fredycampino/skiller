@@ -4,11 +4,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Mapping, Protocol, TypeAlias, runtime_checkable
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
+
 
 @runtime_checkable
 class LLMModelLike(Protocol):
     value: str
     model_context_window_tokens: int
+    max_output_tokens: int | None
 
 
 def validate_llm_model_like(value: object, *, label: str) -> LLMModelLike:
@@ -21,6 +24,10 @@ def validate_llm_model_like(value: object, *, label: str) -> LLMModelLike:
         or value.model_context_window_tokens <= 0
     ):
         raise TypeError(f"{label} context window must be a positive integer")
+    if value.max_output_tokens is not None and (
+        not isinstance(value.max_output_tokens, int) or value.max_output_tokens <= 0
+    ):
+        raise TypeError(f"{label} max output tokens must be a positive integer or None")
     return value
 
 
@@ -143,11 +150,10 @@ def _usage_model_value(value: object) -> str:
 
 @dataclass(frozen=True)
 class LLMResponse:
-    ok: bool
     model: LLMModelLike
+    finish_type: LLMFinishType
     content: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
-    finish_reason: str | None = None
     usage: LLMUsage | None = None
     error: str | None = None
     error_code: str | None = None
@@ -155,11 +161,6 @@ class LLMResponse:
     def __post_init__(self) -> None:
         validate_llm_model_like(self.model, label="LLMResponse model")
         object.__setattr__(self, "content", _clean_optional_string(self.content))
-        object.__setattr__(
-            self,
-            "finish_reason",
-            _clean_optional_string(self.finish_reason),
-        )
         object.__setattr__(self, "error", _clean_optional_string(self.error))
         object.__setattr__(self, "error_code", _clean_optional_string(self.error_code))
 
@@ -170,10 +171,6 @@ class LLMResponse:
     @property
     def has_tool_calls(self) -> bool:
         return bool(self.tool_calls)
-
-    @property
-    def is_error(self) -> bool:
-        return self.ok is False
 
 
 def _clean_optional_string(value: str | None) -> str | None:

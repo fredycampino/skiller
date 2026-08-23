@@ -127,6 +127,7 @@ class FileLLMProviderCatalogMapper:
             LLMModelDefinition(
                 model=m.model,
                 context_window_tokens=m.context_window_tokens,
+                max_output_tokens=m.max_output_tokens,
             )
             for m in config.models
         )
@@ -135,7 +136,6 @@ class FileLLMProviderCatalogMapper:
             enabled=config.enabled,
             timeout_seconds=config.timeout_seconds,
             models=models,
-            max_output_tokens=config.max_output_tokens,
             profile=config.profile,
         )
 
@@ -145,6 +145,7 @@ class FileLLMProviderCatalogMapper:
             LLMModelDefinition(
                 model=m.model,
                 context_window_tokens=m.context_window_tokens,
+                max_output_tokens=m.max_output_tokens,
             )
             for m in config.models
         )
@@ -154,7 +155,6 @@ class FileLLMProviderCatalogMapper:
             enabled=config.enabled,
             timeout_seconds=config.timeout_seconds,
             models=models,
-            max_output_tokens=config.max_output_tokens,
             base_url=config.base_url,
             temperature=config.temperature,
             top_p=config.top_p,
@@ -170,6 +170,7 @@ class FileLLMProviderCatalogMapper:
             LLMModelDefinition(
                 model=m.model,
                 context_window_tokens=m.context_window_tokens,
+                max_output_tokens=m.max_output_tokens,
             )
             for m in config.models
         )
@@ -178,7 +179,6 @@ class FileLLMProviderCatalogMapper:
             enabled=config.enabled,
             timeout_seconds=config.timeout_seconds,
             models=models,
-            max_output_tokens=config.max_output_tokens,
             credentials_file=config.credentials_file,
             parallel_tool_calls=config.parallel_tool_calls,
         )
@@ -257,6 +257,7 @@ def _to_model_definitions(
         LLMModelDefinition(
             model=model.model,
             context_window_tokens=model.context_window_tokens,
+            max_output_tokens=model.max_output_tokens,
         )
         for model in models
     )

@@ -65,7 +65,11 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
     default_provider = _openai_provider(
         timeout_seconds=30,
         temperature=1.0,
-        models=(LLMModelDefinition(model="MiniMax-M2.5", context_window_tokens=204_800),),
+        models=(
+            LLMModelDefinition(
+                model="MiniMax-M2.5", context_window_tokens=204_800, max_output_tokens=None
+            ),
+        ),
         api_key_env="PROVIDER_API_KEY",
     )
     datasource = _FakeFileLLMProviderCatalogDatasource(
@@ -185,7 +189,9 @@ def _openai_provider(
     timeout_seconds: float = 30,
     temperature: float = 1.0,
     models: tuple[LLMModelDefinition, ...] = (
-        LLMModelDefinition(model="MiniMax-M2.5", context_window_tokens=204_800),
+        LLMModelDefinition(
+            model="MiniMax-M2.5", context_window_tokens=204_800, max_output_tokens=None
+        ),
     ),
     api_key_env: str | None = "PROVIDER_API_KEY",
     api_key_file: str | None = None,
@@ -209,7 +215,6 @@ def _openai_provider(
         base_url="https://provider.example/v1",
         temperature=temperature,
         top_p=1.0,
-        max_output_tokens=4096,
         parallel_tool_calls=True,
         tool_choice=LLMToolChoiceMode.AUTO,
         api_key_source=api_key_source,
@@ -221,8 +226,11 @@ def _bedrock_provider() -> BedrockLLMProviderDefinition:
     return BedrockLLMProviderDefinition(
         name="minimax",
         timeout_seconds=45,
-        models=(LLMModelDefinition(model="bedrock-model", context_window_tokens=200_000),),
+        models=(
+            LLMModelDefinition(
+                model="bedrock-model", context_window_tokens=200_000, max_output_tokens=None
+            ),
+        ),
         enabled=True,
         profile="default",
-        max_output_tokens=4096,
     )

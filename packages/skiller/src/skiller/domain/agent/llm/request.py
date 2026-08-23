@@ -20,6 +20,7 @@ class LLMRequest:
     response_format: LLMResponseFormat | None = field(default=None, kw_only=True)
     log_request_file: str | None = field(default=None, kw_only=True)
     log_override_file: bool = field(default=True, kw_only=True)
+    log_streaming: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         validate_llm_model_like(self.model, label="LLMRequest model")
@@ -31,7 +32,6 @@ class OpenAILLMRequest(LLMRequest):
     tool_choice: LLMToolChoiceMode
     parallel_tool_calls: bool
     temperature: float
-    max_tokens: int
     top_p: float
 
     def __post_init__(self) -> None:

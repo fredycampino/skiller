@@ -36,13 +36,16 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+    )
 
 
 @dataclass(frozen=True)
 class _CustomModel:
     value: str
     model_context_window_tokens: int
+    max_output_tokens: int | None
 
 
 RUN_ID = "run-1"
@@ -151,8 +154,6 @@ def _append_compact_fixture(store: AgentContextStore) -> None:
     )
 
 
-
-
 def _set_compact_delta_tokens(
     db_path,
     *,
@@ -169,7 +170,6 @@ def _set_compact_delta_tokens(
             """,
             (value, context_id, sequence),
         )
-
 
 
 def _selected_window_tokens(db_path: Path, *, state: AgentContextState) -> int:
@@ -202,6 +202,7 @@ def _selected_window_tokens(db_path: Path, *, state: AgentContextState) -> int:
         ).fetchone()
     assert row is not None
     return int(row[0])
+
 
 def _append_compaction_selection_block(
     store: AgentContextStore,
@@ -362,7 +363,6 @@ def test_agent_context_store_lists_entries_from_sequence(tmp_path) -> None:
     assert [entry.sequence for entry in entries] == [second.sequence, third.sequence]
 
 
-
 def test_agent_context_store_lists_fixed_compact_range_and_prunes_entries(tmp_path) -> None:
     db_path = tmp_path / "agent-context-fixed-compact-range.db"
     store = _store_with_run(db_path)
@@ -422,7 +422,6 @@ def test_agent_context_store_returns_empty_compact_range_with_only_prunable_entr
 
     assert compact.entries == []
     assert compact.estimated_tokens == 0
-
 
 
 def test_agent_context_store_keeps_unweighted_compact_entries_at_zero_tokens(tmp_path) -> None:
@@ -947,7 +946,6 @@ def test_agent_context_store_selects_repeated_compaction_from_current_state(
     )
 
 
-
 def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
     db_path = tmp_path / "agent-context-custom-model.db"
     run_store = SqliteRunStorePort(str(db_path))
@@ -963,6 +961,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
     model = _CustomModel(
         value="google/gemma-4-12b-qat",
         model_context_window_tokens=100_000,
+        max_output_tokens=None,
     )
 
     entry = store.append_final_assistant_message(
@@ -1357,8 +1356,6 @@ def test_agent_context_store_estimates_delta_tokens_from_current_payload(
     )
 
 
-
-
 def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
     tmp_path,
 ) -> None:
@@ -1454,7 +1451,6 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
     assert stats.window.start_sequence == current_start.sequence
     assert stats.window.end_sequence == latest.sequence
     assert stats.window.current_tokens == 30
-
 
 
 def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path) -> None:

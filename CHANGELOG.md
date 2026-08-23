@@ -40,7 +40,6 @@ All notable changes to this project should be summarized here before a version i
 - Support partial user and env-file overrides merged by provider name via `dataclasses.replace`, keeping provider definitions frozen.
 
 ### Added
-- Add Bedrock stream truncation probe (`scripts/qa/bedrock_stream_truncation_probe.py`) to reproduce tool_use truncation by `max_tokens`.
 - Document the required `enabled` and `max_output_tokens` fields in the agent LLM config guide.
 
 ### Notes

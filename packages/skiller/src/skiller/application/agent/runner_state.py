@@ -24,9 +24,6 @@ class AgentRunnerState:
             return
         if results.has_exception():
             self.fail_tool_execution(results.exception_message())
-            return
-        if not results.items:
-            self.finish = AgentStopReason.FINAL
 
     def record_llm_response(self, response: LLMResponse) -> None:
         self.response_model = response.model

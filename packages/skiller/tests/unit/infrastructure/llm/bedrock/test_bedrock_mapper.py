@@ -12,24 +12,32 @@ from skiller.domain.agent.llm.model import (
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
-from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 pytestmark = pytest.mark.unit
 
 
-def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+def _model(
+    value: str,
+    context_window_tokens: int,
+    *,
+    max_output_tokens: int | None = None,
+) -> LLMModelDefinition:
+    return LLMModelDefinition(
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=max_output_tokens,
+    )
 
 
 def test_bedrock_mapper_adds_cache_point_before_last_message() -> None:
     request = BedrockLLMRequest(
         messages=(LLMUserMessage("history"), LLMUserMessage("new")),
-        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
-        max_tokens=4096,
+        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000, max_output_tokens=4096),
     )
 
-    kwargs = BedrockMapper(usage_mapper=DefaultLLMUsageMapper()).to_kwargs(request)
+    kwargs = BedrockMapper().to_kwargs(request)
 
+    assert kwargs["inferenceConfig"] == {"maxTokens": 4096}
     assert kwargs["messages"] == [
         {
             "role": "user",
@@ -43,7 +51,7 @@ def test_bedrock_mapper_adds_cache_point_before_last_message() -> None:
             "content": [
                 {"text": "new"},
             ],
-        }
+        },
     ]
 
 
@@ -72,11 +80,10 @@ def test_bedrock_mapper_groups_consecutive_tool_results() -> None:
             LLMToolMessage('{"ok":true}', tool_call_id="tooluse_1"),
             LLMToolMessage('{"ok":true}', tool_call_id="tooluse_2"),
         ),
-        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
-        max_tokens=4096,
+        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000, max_output_tokens=4096),
     )
 
-    kwargs = BedrockMapper(usage_mapper=DefaultLLMUsageMapper()).to_kwargs(request)
+    kwargs = BedrockMapper().to_kwargs(request)
 
     assert kwargs["messages"] == [
         {"role": "user", "content": [{"text": "run tools"}]},
@@ -90,15 +97,15 @@ def test_bedrock_mapper_groups_consecutive_tool_results() -> None:
                         "input": {"command": "pwd"},
                     }
                 },
-                    {
-                        "toolUse": {
-                            "toolUseId": "tooluse_2",
-                            "name": "shell",
-                            "input": {"command": "whoami"},
-                        }
-                    },
-                    {"cachePoint": {"type": "default"}},
-                ],
+                {
+                    "toolUse": {
+                        "toolUseId": "tooluse_2",
+                        "name": "shell",
+                        "input": {"command": "whoami"},
+                    }
+                },
+                {"cachePoint": {"type": "default"}},
+            ],
         },
         {
             "role": "user",
@@ -120,3 +127,14 @@ def test_bedrock_mapper_groups_consecutive_tool_results() -> None:
             ],
         },
     ]
+
+
+def test_bedrock_mapper_omits_inference_config_when_model_has_no_limit() -> None:
+    request = BedrockLLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
+    )
+
+    kwargs = BedrockMapper().to_kwargs(request)
+
+    assert "inferenceConfig" not in kwargs

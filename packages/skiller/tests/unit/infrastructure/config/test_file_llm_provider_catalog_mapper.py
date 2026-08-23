@@ -34,7 +34,7 @@ def test_mapper_builds_openai_domain_provider() -> None:
     assert provider.enabled is True
     assert provider.temperature == 1
     assert provider.top_p == 1
-    assert provider.max_output_tokens == 4096
+    assert provider.models[0].max_output_tokens is None
     assert provider.parallel_tool_calls is True
     assert provider.tool_choice == LLMToolChoiceMode.AUTO
     assert provider.api_key_source is not None
@@ -77,8 +77,8 @@ def test_mapper_builds_bedrock_domain_provider() -> None:
                     "enabled": True,
                     "profile": " default ",
                     "timeout_seconds": 45,
-                    "max_output_tokens": 4096,
-                    "models": [_model("bedrock-model", 200_000)],
+                        "max_output_tokens": 4096,
+                        "models": [_model("bedrock-model", 200_000, max_output_tokens=512)],
                 }
             }
         }
@@ -89,7 +89,7 @@ def test_mapper_builds_bedrock_domain_provider() -> None:
     assert isinstance(provider, BedrockLLMProviderDefinition)
     assert provider.adapter == LLMAdapterType.BEDROCK
     assert provider.profile == "default"
-    assert provider.max_output_tokens == 4096
+    assert provider.models[0].max_output_tokens == 512
 
 
 def test_mapper_builds_codex_domain_provider() -> None:
@@ -116,7 +116,7 @@ def test_mapper_builds_codex_domain_provider() -> None:
     assert provider.adapter == LLMAdapterType.CODEX
     assert provider.credentials_file == "~/.skiller/secrets/openai-codex.json"
     assert provider.parallel_tool_calls is True
-    assert provider.max_output_tokens == 4096
+    assert provider.models[0].max_output_tokens is None
 
 
 def test_mapper_rejects_openai_fields_for_codex_provider() -> None:
@@ -271,10 +271,30 @@ def test_mapper_rejects_explicit_null_field() -> None:
         )
 
 
-def test_mapper_rejects_zero_max_output_tokens() -> None:
+def test_mapper_ignores_legacy_provider_max_output_tokens() -> None:
     mapper = FileLLMProviderCatalogMapper()
     entry = _openai_entry()
     entry["max_output_tokens"] = 0
+
+    provider = mapper.to_provider_configs({"providers": {"minimax": entry}})[0]
+
+    assert provider.models[0].max_output_tokens is None
+
+
+def test_mapper_ignores_legacy_provider_max_output_tokens_override() -> None:
+    mapper = FileLLMProviderCatalogMapper()
+
+    overrides = mapper.to_override_configs(
+        {"providers": {"minimax": {"max_output_tokens": 4096}}},
+    )
+
+    assert dict(overrides[0].fields) == {}
+
+
+def test_mapper_rejects_zero_model_max_output_tokens() -> None:
+    mapper = FileLLMProviderCatalogMapper()
+    entry = _openai_entry()
+    entry["models"] = [_model("MiniMax-M2.7", 204_800, max_output_tokens=0)]
 
     with pytest.raises(ValueError, match="Invalid LLM provider catalog"):
         mapper.to_provider_configs({"providers": {"minimax": entry}})
@@ -363,15 +383,22 @@ def _openai_entry() -> dict[str, object]:
         "timeout_seconds": 30,
         "temperature": 1,
         "top_p": 1,
-        "max_output_tokens": 4096,
         "parallel_tool_calls": True,
         "tool_choice": "auto",
         "models": [_model("MiniMax-M2.7", 204_800)],
     }
 
 
-def _model(model: str, context_window_tokens: int) -> dict[str, object]:
-    return {
+def _model(
+    model: str,
+    context_window_tokens: int,
+    *,
+    max_output_tokens: int | None = None,
+) -> dict[str, object]:
+    value: dict[str, object] = {
         "model": model,
         "context_window_tokens": context_window_tokens,
     }
+    if max_output_tokens is not None:
+        value["max_output_tokens"] = max_output_tokens
+    return value

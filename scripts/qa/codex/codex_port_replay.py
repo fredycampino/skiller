@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a recorded Codex tool continuation through ``CodexLLMPort``.
+"""Replay a recorded Codex tool continuation through ``ResponsesLLMPort``.
 
 This is the integrated counterpart to ``codex_stream_probe``. It reconstructs
 the semantic request from a request log, sends a seed turn, then sends the
@@ -26,6 +26,7 @@ try:
 except ModuleNotFoundError:
     from codex_stream_probe import CodexProbeSource, load_probe_source
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -47,7 +48,6 @@ from skiller.domain.tool.tool_contract import (
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
-from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
 from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
 from skiller.infrastructure.llm.codex.codex_model_capabilities import (
     CodexModelCapabilitiesResolver,
@@ -56,8 +56,11 @@ from skiller.infrastructure.llm.codex.codex_request_logger import (
     CODEX_TURN_STATE_HEADER,
 )
 from skiller.infrastructure.llm.codex.codex_turn_session import CodexTurnSessionManager
+from skiller.infrastructure.llm.codex.collect_codex_response import CollectCodexResponse
 from skiller.infrastructure.llm.codex.responses_general_mapper import ResponsesGeneralMapper
 from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
+from skiller.infrastructure.llm.codex.responses_llm_port import ResponsesLLMPort
+from skiller.infrastructure.llm.codex.responses_mapper import ResponsesMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 
 
@@ -133,7 +136,8 @@ def _request_summary(request: object) -> dict[str, object]:
 
 
 def _response_summary(response: object) -> dict[str, object]:
-    payload = _object_mapping(response)
+    raw_response = getattr(response, "response", response)
+    payload = _object_mapping(raw_response)
     usage = _object_mapping(payload.get("usage"))
     output = payload.get("output")
     output_items = output if isinstance(output, list) else []
@@ -302,19 +306,21 @@ def _build_port(
     credentials_file: str,
     timeout_seconds: float,
     trace_file: Path,
-) -> CodexLLMPort:
+) -> ResponsesLLMPort:
     mapper = CodexMapper(
-        usage_mapper=DefaultLLMUsageMapper(),
         capabilities_resolver=CodexModelCapabilitiesResolver(),
         responses_mapper=ResponsesGeneralMapper(),
         responses_lite_mapper=ResponsesLiteMapper(),
     )
-    return CodexLLMPort(
+    usage_mapper = DefaultLLMUsageMapper()
+    return ResponsesLLMPort(
         credentials_file=credentials_file,
         timeout_seconds=timeout_seconds,
         credentials_datasource=CodexCredentialsDatasource(),
         request_logger=_TraceLogger(trace_file),
-        mapper=mapper,
+        request_mapper=mapper,
+        response_mapper=ResponsesMapper(usage_mapper=usage_mapper),
+        collector=CollectCodexResponse(),
         turn_session_manager=CodexTurnSessionManager(),
     )
 
@@ -423,7 +429,7 @@ def main() -> int:
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     if not args.live:
-        print("DRY RUN: add --live to call Codex through CodexLLMPort.")
+        print("DRY RUN: add --live to call Codex through ResponsesLLMPort.")
         return 0
     if args.repeat <= 0:
         print("ERROR: --repeat must be positive", file=sys.stderr)
@@ -463,8 +469,8 @@ def main() -> int:
             first = port.generate(seed_request)
             if not first.ok or not first.tool_calls:
                 raise RuntimeError("seed did not return tool calls")
-            if first.finish_reason != "completed":
-                raise RuntimeError(f"seed finish_reason={first.finish_reason!r}")
+            if first.finish_type != LLMFinishType.TOOL_CALLS:
+                raise RuntimeError(f"seed finish_type={first.finish_type!r}")
             continuation = _continuation_messages(
                 seed_messages=messages,
                 tool_calls=first.tool_calls,
@@ -482,8 +488,8 @@ def main() -> int:
             )
             if not second.ok:
                 raise RuntimeError(second.error or "continuation failed")
-            if second.finish_reason != "completed":
-                raise RuntimeError(f"continuation finish_reason={second.finish_reason!r}")
+            if second.finish_type != LLMFinishType.STOP:
+                raise RuntimeError(f"continuation finish_type={second.finish_type!r}")
             if second.usage is None or second.usage.total_tokens is None:
                 raise RuntimeError("continuation did not include usage")
             results.append(
@@ -491,7 +497,7 @@ def main() -> int:
                     "attempt": attempt,
                     "status": "SUCCEEDED",
                     "seed_tool_calls": len(first.tool_calls),
-                    "continuation_finish_reason": second.finish_reason,
+                    "continuation_finish_type": second.finish_type.value,
                     "continuation_total_tokens": second.usage.total_tokens,
                     "trace_file": str(attempt_trace),
                 }

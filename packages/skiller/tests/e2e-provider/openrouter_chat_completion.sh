@@ -50,6 +50,7 @@ import json
 import os
 from pathlib import Path
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
 from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.infrastructure.config.file_llm_provider_catalog_datasource import (
@@ -84,12 +85,11 @@ response = client.generate(
         tool_choice=LLMToolChoiceMode.AUTO,
         parallel_tool_calls=provider.parallel_tool_calls,
         temperature=provider.temperature,
-        max_tokens=provider.max_output_tokens,
         top_p=provider.top_p,
     )
 )
 
-if not response.ok:
+if response.finish_type != LLMFinishType.STOP:
     raise SystemExit(response.error or "OpenRouter chat completion failed")
 if not response.content or not response.content.strip():
     raise SystemExit("OpenRouter response did not include text content")
@@ -101,7 +101,7 @@ print(
             "provider": provider.name,
             "adapter": provider.adapter.value,
             "model": response.model.value,
-            "finish_reason": response.finish_reason,
+            "finish_type": response.finish_type.value,
             "content": response.content,
             "usage": None
             if response.usage is None

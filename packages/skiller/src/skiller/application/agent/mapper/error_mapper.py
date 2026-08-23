@@ -25,16 +25,13 @@ class AgentErrorMapper:
         if response.error_code:
             return f"error_code={response.error_code}"
 
-        if response.finish_reason:
-            return f"finish_reason={response.finish_reason}"
-
-        return f"model={response.model.value} returned ok=false without error"
+        return f"finish_type={response.finish_type.value}"
 
 
 def _response_payload(response: LLMResponse) -> dict[str, object]:
     return {
-        "ok": response.ok,
         "model": response.model.value,
+        "finish_type": response.finish_type.value,
         "content": response.content,
         "tool_calls": [
             {
@@ -44,7 +41,6 @@ def _response_payload(response: LLMResponse) -> dict[str, object]:
             }
             for tool_call in response.tool_calls
         ],
-        "finish_reason": response.finish_reason,
         "usage": _usage_payload(response.usage),
         "error": response.error,
         "error_code": response.error_code,

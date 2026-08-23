@@ -31,10 +31,15 @@ def test_file_datasource_reads_provider_catalog(tmp_path: Path) -> None:
                     "timeout_seconds": 60,
                     "temperature": 1,
                     "top_p": 1,
-                    "max_output_tokens": 4096,
                     "parallel_tool_calls": True,
                     "tool_choice": "auto",
-                    "models": [{"model": "MiniMax-M2.5", "context_window_tokens": 204_800}],
+                    "models": [
+                        {
+                            "model": "MiniMax-M2.5",
+                            "context_window_tokens": 204_800,
+                            "max_output_tokens": 4096,
+                        }
+                    ],
                 }
             }
         },
@@ -145,10 +150,15 @@ def test_file_port_adds_complete_custom_provider(tmp_path: Path) -> None:
                     "timeout_seconds": 30,
                     "temperature": 1,
                     "top_p": 1,
-                    "max_output_tokens": 4096,
                     "parallel_tool_calls": True,
                     "tool_choice": "auto",
-                    "models": [{"model": "custom-model", "context_window_tokens": 128_000}],
+                    "models": [
+                        {
+                            "model": "custom-model",
+                            "context_window_tokens": 128_000,
+                            "max_output_tokens": 4096,
+                        }
+                    ],
                 }
             }
         },

@@ -32,6 +32,7 @@ class DebugConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     log_request: bool = False
+    log_streaming: bool = False
     log_request_file: str | None = None
     log_override_file: bool = True
 

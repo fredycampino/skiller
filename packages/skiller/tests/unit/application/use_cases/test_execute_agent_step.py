@@ -36,6 +36,7 @@ from skiller.domain.agent.context.stats_model import (
     AgentContextObservedStats,
     AgentContextObservedWindowStats,
 )
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
     LLMMessage,
@@ -88,7 +89,9 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+    )
 
 
 def _assert_system_message_contains(
@@ -456,32 +459,23 @@ class _FakeAgentContextStore:
 class _FakeLLM:
     def __init__(
         self,
-        response: object | None = None,
-        responses: list[object] | None = None,
+        response: LLMResponse | None = None,
+        responses: list[LLMResponse] | None = None,
     ) -> None:
-        self.response = response or {"ok": True, "content": "Hello back.", "model": "model1"}
+        default_response = LLMResponse(
+            model=_model("model1", 100_000),
+            finish_type=LLMFinishType.STOP,
+            content="Hello back.",
+        )
+        self.response = response if response is not None else default_response
         self.responses = list(responses or [])
         self.calls: list[LLMRequest] = []
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(request)
         if self.responses:
-            return self._to_llm_response(self.responses.pop(0))
-        return self._to_llm_response(self.response)
-
-    def _to_llm_response(self, value: object) -> LLMResponse:
-        if isinstance(value, LLMResponse):
-            return value
-        if isinstance(value, dict):
-            return LLMResponse(
-                ok=bool(value.get("ok")),
-                content=value.get("content")
-                if isinstance(value.get("content"), str)
-                else (None if value.get("content") is None else str(value.get("content"))),
-                model=_model("model1", 100_000),
-                error=value.get("error") if isinstance(value.get("error"), str) else None,
-            )
-        return LLMResponse(ok=True, content=str(value), model=_model("model1", 100_000))
+            return self.responses.pop(0)
+        return self.response
 
 
 class _FakeTool(ToolDefinition[ToolRequest]):
@@ -771,8 +765,8 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
     llm = _FakeLLM(
         responses=[
             LLMResponse(
-                ok=True,
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -782,12 +776,11 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                         ),
                     ),
                 ),
-                finish_reason="tool_calls",
             ),
             LLMResponse(
-                ok=True,
                 content="Done.",
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.STOP,
                 usage=LLMUsage(
                     estimated_system_tokens=None,
                     cache_read_tokens=None,
@@ -910,8 +903,8 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
         response=LLMResponse(
-            ok=True,
             model=_model("model1", 100_000),
+            finish_type=LLMFinishType.TOOL_CALLS,
             tool_calls=(
                 LLMToolCall(
                     id="openai-call-1",
@@ -921,7 +914,6 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
                     ),
                 ),
             ),
-            finish_reason="tool_calls",
         )
     )
     use_case = _build_use_case(
@@ -984,8 +976,8 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     llm = _FakeLLM(
         responses=[
             LLMResponse(
-                ok=True,
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -995,7 +987,6 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
                         ),
                     ),
                 ),
-                finish_reason="tool_calls",
             )
         ]
     )
@@ -1058,9 +1049,9 @@ def test_execute_agent_step_advances_when_agent_returns_invalid_final_message() 
     llm = _FakeLLM(
         responses=[
             LLMResponse(
-                ok=True,
                 content="   ",
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.STOP,
             )
         ]
     )
@@ -1097,8 +1088,8 @@ def test_execute_agent_step_advances_when_agent_returns_invalid_final_message() 
     assert result.execution.output.data.context_id
     assert result.execution.output.data.message == (
         "Agent step 'support_agent' returned no final answer: "
-        '{"ok":true,"model":"model1","content":null,"tool_calls":[],'
-        '"finish_reason":null,"usage":null,"error":null,"error_code":null}'
+        '{"model":"model1","finish_type":"stop","content":null,'
+        '"tool_calls":[],"usage":null,"error":null,"error_code":null}'
     )
     assert context.step_executions["support_agent"] == result.execution
     assert store.updated == [
@@ -1115,8 +1106,8 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
     llm = _FakeLLM(
         responses=[
             LLMResponse(
-                ok=True,
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
                     LLMToolCall(
                         id="openai-call-1",
@@ -1126,9 +1117,12 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
                         ),
                     ),
                 ),
-                finish_reason="tool_calls",
             ),
-            LLMResponse(ok=True, content="Done.", model=_model("model1", 100_000)),
+            LLMResponse(
+                content="Done.",
+                model=_model("model1", 100_000),
+                finish_type=LLMFinishType.STOP,
+            ),
         ]
     )
     tool_manager = _FakeToolManager(
@@ -1192,8 +1186,8 @@ def test_execute_agent_step_advances_when_llm_request_fails() -> None:
         context_store=_FakeAgentContextStore(),
         llm=_FakeLLM(
             response=LLMResponse(
-                ok=False,
                 model=_model("model1", 100_000),
+                finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
                 error="invalid params",
                 error_code="2013",
             )

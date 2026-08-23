@@ -66,12 +66,15 @@ def fake_llm_provider_definition() -> OpenAILLMProviderDefinition:
     return OpenAILLMProviderDefinition(
         name="fake",
         timeout_seconds=30,
-        models=(LLMModelDefinition(model="model1", context_window_tokens=100_000),),
+        models=(
+            LLMModelDefinition(
+                model="model1", context_window_tokens=100_000, max_output_tokens=None
+            ),
+        ),
         enabled=True,
         base_url="http://localhost/v1",
         temperature=0,
         top_p=1,
-        max_output_tokens=4096,
         parallel_tool_calls=True,
         tool_choice=LLMToolChoiceMode.AUTO,
         api_key_source=None,
@@ -86,6 +89,7 @@ def fake_llm_provider_catalog() -> LLMProviderCatalog:
 def agent_config(
     *,
     log_request: bool = False,
+    log_streaming: bool = False,
     log_request_file: str | None = None,
     max_turns: int = 1,
     max_tool_calls: int = 1,
@@ -116,6 +120,7 @@ def agent_config(
         ),
         debug=AgentDebugConfig(
             log_request=log_request,
+            log_streaming=log_streaming,
             log_request_file=log_request_file,
             log_override_file=True,
         ),
@@ -126,6 +131,7 @@ def agent_config(
 def agent_runner_config(
     *,
     log_request: bool = False,
+    log_streaming: bool = False,
     log_request_file: str | None = None,
     system: str = "Be useful.",
     task: str = "Hi",
@@ -144,6 +150,7 @@ def agent_runner_config(
             max_tool_calls=max_tool_calls,
             window_width_tokens=window_width_tokens,
             log_request=log_request,
+            log_streaming=log_streaming,
             log_request_file=log_request_file,
         ),
         provider_definition=fake_llm_provider_definition(),

@@ -38,12 +38,15 @@ class LLMApiKeySource:
 class LLMModelDefinition:
     model: str
     context_window_tokens: int
+    max_output_tokens: int | None
 
     def __post_init__(self) -> None:
         if not self.model:
             raise ValueError("LLM model definition requires model")
         if self.context_window_tokens <= 0:
             raise ValueError("LLM model context window must be positive")
+        if self.max_output_tokens is not None and self.max_output_tokens <= 0:
+            raise ValueError("LLM model max output tokens must be positive")
 
     @property
     def value(self) -> str:
@@ -63,7 +66,6 @@ class OpenAILLMProviderDefinition:
     base_url: str
     temperature: float
     top_p: float
-    max_output_tokens: int
     parallel_tool_calls: bool
     tool_choice: LLMToolChoiceMode
     api_key_source: LLMApiKeySource | None
@@ -85,8 +87,6 @@ class OpenAILLMProviderDefinition:
             raise ValueError("OpenAI LLM provider temperature must not be negative")
         if self.top_p <= 0 or self.top_p > 1:
             raise ValueError("OpenAI LLM provider top_p must be greater than zero and at most one")
-        if self.max_output_tokens <= 0:
-            raise ValueError("OpenAI LLM provider max output tokens must be positive")
         object.__setattr__(self, "options", MappingProxyType(dict(self.options)))
 
 
@@ -97,7 +97,6 @@ class BedrockLLMProviderDefinition:
     models: tuple[LLMModelDefinition, ...]
     enabled: bool
     profile: str
-    max_output_tokens: int
     adapter: Literal[LLMAdapterType.BEDROCK] = field(
         default=LLMAdapterType.BEDROCK,
         init=False,
@@ -111,8 +110,6 @@ class BedrockLLMProviderDefinition:
         )
         if not self.profile:
             raise ValueError("Bedrock LLM provider requires profile")
-        if self.max_output_tokens <= 0:
-            raise ValueError("Bedrock LLM provider max output tokens must be positive")
 
 
 @dataclass(frozen=True)
@@ -123,7 +120,6 @@ class CodexLLMProviderDefinition:
     enabled: bool
     credentials_file: str
     parallel_tool_calls: bool
-    max_output_tokens: int
     adapter: Literal[LLMAdapterType.CODEX] = field(
         default=LLMAdapterType.CODEX,
         init=False,
@@ -137,8 +133,6 @@ class CodexLLMProviderDefinition:
         )
         if not self.credentials_file:
             raise ValueError("Codex LLM provider requires credentials_file")
-        if self.max_output_tokens <= 0:
-            raise ValueError("Codex LLM provider max output tokens must be positive")
 
 
 LLMProviderDefinition: TypeAlias = (

@@ -15,6 +15,7 @@ from skiller.application.agent.runner_state import (
 )
 from skiller.application.agent.tools.agent_tool_executor import AgentToolExecutor
 from skiller.domain.agent.context.context_store_port import AgentContextStorePort
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.run.loop import AgentLoop
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.tool.tool_execution_model import (
@@ -74,7 +75,11 @@ class AgentRunner:
                 provider=config.provider_definition,
                 request=context_request.llm_request,
             )
-            if response.ok is False:
+            state.record_llm_response(response)
+            if response.finish_type not in {
+                LLMFinishType.STOP,
+                LLMFinishType.TOOL_CALLS,
+            }:
                 state.fail_llm_request(
                     self.error_mapper.llm_request(
                         agent_id=context.agent_id,
@@ -82,12 +87,11 @@ class AgentRunner:
                     )
                 )
                 break
-            state.record_llm_response(response)
 
             final_content = response.content
             has_invalid_final_content = final_content is None or not final_content.strip()
 
-            if not tools_enabled and has_invalid_final_content:
+            if response.finish_type == LLMFinishType.STOP and has_invalid_final_content:
                 error = self.error_mapper.invalid_final_message(
                     agent_id=context.agent_id,
                     response=response,
@@ -95,7 +99,7 @@ class AgentRunner:
                 state.fail_invalid_final_message(error)
                 break
 
-            if not tools_enabled:
+            if response.finish_type == LLMFinishType.STOP:
                 assert final_content is not None
                 final_text = final_content.strip()
                 entry = self.context_publisher.publish_final_assistant_message(
@@ -111,6 +115,14 @@ class AgentRunner:
                 )
                 state.finish_final(final_text)
                 turn_loop.advance()
+                break
+
+            if not tools_enabled:
+                error = self.error_mapper.invalid_final_message(
+                    agent_id=context.agent_id,
+                    response=response,
+                )
+                state.fail_invalid_final_message(error)
                 break
 
             allowed_tools = [tool.name for tool in config.tools]
@@ -136,30 +148,6 @@ class AgentRunner:
             state.record_tool_execution(tool_execution_results)
             if state.finish is None:
                 continue
-            if state.finish == AgentStopReason.FINAL and has_invalid_final_content:
-                error = self.error_mapper.invalid_final_message(
-                    agent_id=context.agent_id,
-                    response=response,
-                )
-                state.fail_invalid_final_message(error)
-                break
-
-            if state.finish == AgentStopReason.FINAL:
-                assert final_content is not None
-                final_text = final_content.strip()
-                entry = self.context_publisher.publish_final_assistant_message(
-                    context=context,
-                    turn_id=turn_id,
-                    text=final_text,
-                    usage=response.usage,
-                )
-                self.event_publisher.emit_final_assistant_message(
-                    entry=entry,
-                    config=config.config.event_output,
-                    context_metrics=context_metrics,
-                )
-                state.finish_final(final_text)
-                break
             if state.finish == AgentStopReason.INTERRUPTED:
                 self.event_publisher.emit_interrupted(
                     run_id=context.run_id,

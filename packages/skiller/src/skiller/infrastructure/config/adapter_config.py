@@ -1,9 +1,8 @@
 """Adapter-specific configuration models for the LLM provider catalog.
 
 Each LLM provider adapter declares its own configuration model with all
-required fields. Defaults are intentionally absent: every value must be
-present in the catalog JSON. This makes the JSON explicit and avoids
-silent fallback values in code.
+required adapter fields. Model limits are optional because the external
+provider may define its default when no limit is configured.
 """
 
 from __future__ import annotations
@@ -23,6 +22,7 @@ class LLMModelConfigModel(BaseModel):
 
     model: str = Field(min_length=1)
     context_window_tokens: int = Field(gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
 
     @field_validator("model")
     @classmethod
@@ -40,7 +40,6 @@ class _LLMAdapterConfigModelBase(BaseModel):
     enabled: bool
     timeout_seconds: float = Field(gt=0)
     models: tuple[LLMModelConfigModel, ...] = Field(min_length=1)
-    max_output_tokens: int = Field(gt=0)
 
     @field_validator("name")
     @classmethod
@@ -58,7 +57,6 @@ class _LLMAdapterOverrideModelBase(BaseModel):
     enabled: bool | None = None
     timeout_seconds: float | None = Field(default=None, gt=0)
     models: tuple[LLMModelConfigModel, ...] | None = Field(default=None, min_length=1)
-    max_output_tokens: int | None = Field(default=None, gt=0)
 
     @field_validator("name")
     @classmethod
@@ -200,7 +198,6 @@ class LLMProviderCatalogOverrideModel(BaseModel):
     enabled: bool | None = None
     timeout_seconds: float | None = Field(default=None, gt=0)
     models: tuple[LLMModelConfigModel, ...] | None = Field(default=None, min_length=1)
-    max_output_tokens: int | None = Field(default=None, gt=0)
     profile: str | None = Field(default=None, min_length=1)
     credentials_file: str | None = Field(default=None, min_length=1)
     base_url: str | None = Field(default=None, min_length=1)
@@ -276,7 +273,9 @@ class LLMProviderCatalogOverrideSourceModel(BaseModel):
                 raise ValueError(
                     "LLM provider name must be declared as the map key, not inside the entry",
                 )
-            injected[raw_name] = {"name": raw_name, **raw_provider}
+            provider = dict(raw_provider)
+            provider.pop("max_output_tokens", None)
+            injected[raw_name] = {"name": raw_name, **provider}
         return {"providers": injected}
 
 
@@ -302,5 +301,7 @@ class LLMProviderCatalogSourceModel(BaseModel):
                 raise ValueError(
                     "LLM provider name must be declared as the map key, not inside the entry",
                 )
-            injected[raw_name] = {"name": raw_name, **raw_provider}
+            provider = dict(raw_provider)
+            provider.pop("max_output_tokens", None)
+            injected[raw_name] = {"name": raw_name, **provider}
         return {"providers": injected}

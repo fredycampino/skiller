@@ -7,6 +7,10 @@ RequestT = TypeVar("RequestT", bound=LLMRequest, contravariant=True)
 RawResponseT = TypeVar("RawResponseT", contravariant=True)
 
 
+class LLMRequestMapper(Protocol[RequestT]):
+    def to_kwargs(self, request: RequestT) -> dict[str, object]: ...
+
+
 class LLMProtocolMapper(Protocol[RequestT, RawResponseT]):
     def to_kwargs(self, request: RequestT) -> dict[str, object]: ...
 

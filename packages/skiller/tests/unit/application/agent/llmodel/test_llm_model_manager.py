@@ -1,6 +1,7 @@
 import pytest
 
 from skiller.application.agent.llmodel.llm_model_manager import LLMModelManager
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMResponse,
     LLMToolChoiceMode,
@@ -19,8 +20,8 @@ from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 pytestmark = pytest.mark.unit
 
 
-MODEL = LLMModelDefinition(model="model1", context_window_tokens=100_000)
-MODEL_2 = LLMModelDefinition(model="model2", context_window_tokens=200_000)
+MODEL = LLMModelDefinition(model="model1", context_window_tokens=100_000, max_output_tokens=None)
+MODEL_2 = LLMModelDefinition(model="model2", context_window_tokens=200_000, max_output_tokens=None)
 
 
 class _FakeLLM:
@@ -52,7 +53,6 @@ def _provider() -> OpenAILLMProviderDefinition:
         base_url="http://localhost/v1",
         temperature=0,
         top_p=1,
-        max_output_tokens=4096,
         parallel_tool_calls=True,
         tool_choice=LLMToolChoiceMode.AUTO,
         api_key_source=None,
@@ -63,14 +63,20 @@ def _provider() -> OpenAILLMProviderDefinition:
 def test_llm_model_manager_uses_factory_client() -> None:
     provider = _provider()
     request = _request()
-    client_resolver = _FakeClientResolver(LLMResponse(ok=True, model=MODEL, content="fake"))
+    client_resolver = _FakeClientResolver(
+        LLMResponse(
+            model=MODEL,
+            finish_type=LLMFinishType.STOP,
+            content="fake",
+        )
+    )
     manager = LLMModelManager(client_resolver=client_resolver)
 
     response = manager.generate(provider=provider, request=request)
 
     assert response == LLMResponse(
-        ok=True,
         model=MODEL,
+        finish_type=LLMFinishType.STOP,
         content="fake",
     )
     assert client_resolver.providers == [provider]
@@ -81,7 +87,13 @@ def test_llm_model_manager_reuses_client_when_only_model_changes() -> None:
     provider = _provider()
     request = _request()
     second_request = _request(model=MODEL_2)
-    client_resolver = _FakeClientResolver(LLMResponse(ok=True, model=MODEL, content="fake"))
+    client_resolver = _FakeClientResolver(
+        LLMResponse(
+            model=MODEL,
+            finish_type=LLMFinishType.STOP,
+            content="fake",
+        )
+    )
     manager = LLMModelManager(client_resolver=client_resolver)
 
     manager.generate(provider=provider, request=request)
@@ -94,8 +106,8 @@ def test_llm_model_manager_reuses_client_when_only_model_changes() -> None:
 def test_llm_model_manager_adds_provider_usage_metadata() -> None:
     provider = _provider()
     response = LLMResponse(
-        ok=True,
         model=MODEL,
+        finish_type=LLMFinishType.STOP,
         content="fake",
         usage=LLMUsage(
             estimated_system_tokens=None,
@@ -142,7 +154,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 credentials_file="/tmp/openai-codex.json",
                 timeout_seconds=120,
                 parallel_tool_calls=True,
-                max_output_tokens=4096,
             ),
             "Codex LLM provider requires CodexLLMRequest",
         ),
@@ -153,7 +164,6 @@ def test_llm_model_manager_adds_provider_usage_metadata() -> None:
                 enabled=True,
                 profile="claude-bedrock",
                 timeout_seconds=120,
-                max_output_tokens=4096,
             ),
             "Bedrock LLM provider requires BedrockLLMRequest",
         ),
@@ -163,7 +173,12 @@ def test_llm_model_manager_rejects_provider_request_mismatch(
     provider: LLMProviderDefinition,
     error: str,
 ) -> None:
-    client_resolver = _FakeClientResolver(LLMResponse(ok=True, model=MODEL))
+    client_resolver = _FakeClientResolver(
+        LLMResponse(
+            model=MODEL,
+            finish_type=LLMFinishType.STOP,
+        )
+    )
     manager = LLMModelManager(client_resolver=client_resolver)
 
     with pytest.raises(RuntimeError, match=error):
@@ -179,7 +194,6 @@ def _request(*, model: LLMModelDefinition = MODEL) -> OpenAILLMRequest:
         tool_choice=LLMToolChoiceMode.AUTO,
         parallel_tool_calls=True,
         temperature=0,
-        max_tokens=4096,
         top_p=1,
     )
 

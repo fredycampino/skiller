@@ -109,6 +109,7 @@ class AgentContextManager:
             context_id=context.context_id,
             log_request_file=log_request_file,
             log_override_file=config.config.debug.log_override_file,
+            log_streaming=config.config.debug.log_streaming,
         )
         return AgentContextLLMRequest(
             context_id=context.context_id,

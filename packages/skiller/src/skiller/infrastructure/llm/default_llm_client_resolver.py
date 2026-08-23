@@ -14,13 +14,18 @@ from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
     BedrockFileLLMRequestLogger,
 )
-from skiller.infrastructure.llm.bedrock.bedrock_streaming_port import (
-    BedrockStreamingLLMPort,
+from skiller.infrastructure.llm.bedrock.collect_converse_response import (
+    CollectConverseResponse,
+)
+from skiller.infrastructure.llm.bedrock.converse_llm_port import (
+    ConverseLLMPort,
+)
+from skiller.infrastructure.llm.bedrock.converse_mapper import (
+    ConverseMapper,
 )
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
 )
-from skiller.infrastructure.llm.codex.codex_llm_port import CodexLLMPort
 from skiller.infrastructure.llm.codex.codex_mapper import CodexMapper
 from skiller.infrastructure.llm.codex.codex_model_capabilities import (
     CodexModelCapabilitiesResolver,
@@ -29,10 +34,13 @@ from skiller.infrastructure.llm.codex.codex_request_logger import (
     CodexFileLLMRequestLogger,
 )
 from skiller.infrastructure.llm.codex.codex_turn_session import CodexTurnSessionManager
+from skiller.infrastructure.llm.codex.collect_codex_response import CollectCodexResponse
 from skiller.infrastructure.llm.codex.responses_general_mapper import (
     ResponsesGeneralMapper,
 )
 from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
+from skiller.infrastructure.llm.codex.responses_llm_port import ResponsesLLMPort
+from skiller.infrastructure.llm.codex.responses_mapper import ResponsesMapper
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
 from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
     OpenAIApiKeyDatasource,
@@ -74,25 +82,29 @@ class DefaultLLMClientResolver:
                 request_logger=OpenAIFileLLMRequestLogger(),
             )
         if isinstance(provider, CodexLLMProviderDefinition):
-            codex_mapper = CodexMapper(
-                usage_mapper=DefaultLLMUsageMapper(),
+            usage_mapper = DefaultLLMUsageMapper()
+            request_mapper = CodexMapper(
                 capabilities_resolver=CodexModelCapabilitiesResolver(),
                 responses_mapper=ResponsesGeneralMapper(),
                 responses_lite_mapper=ResponsesLiteMapper(),
             )
-            return CodexLLMPort(
+            return ResponsesLLMPort(
                 credentials_file=provider.credentials_file,
                 timeout_seconds=provider.timeout_seconds,
                 credentials_datasource=CodexCredentialsDatasource(),
                 request_logger=CodexFileLLMRequestLogger(),
-                mapper=codex_mapper,
+                request_mapper=request_mapper,
+                response_mapper=ResponsesMapper(usage_mapper=usage_mapper),
+                collector=CollectCodexResponse(),
                 turn_session_manager=CodexTurnSessionManager(),
             )
         if isinstance(provider, BedrockLLMProviderDefinition):
-            return BedrockStreamingLLMPort(
+            return ConverseLLMPort(
                 profile=provider.profile,
                 timeout_seconds=provider.timeout_seconds,
                 request_logger=BedrockFileLLMRequestLogger(),
-                mapper=BedrockMapper(usage_mapper=DefaultLLMUsageMapper()),
+                request_mapper=BedrockMapper(),
+                response_mapper=ConverseMapper(usage_mapper=DefaultLLMUsageMapper()),
+                collector=CollectConverseResponse(),
             )
         raise RuntimeError(f"Unsupported LLM adapter: {provider.adapter}")

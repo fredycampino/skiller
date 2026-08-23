@@ -48,6 +48,7 @@ from skiller.domain.agent.llm.provider_catalog import (
     LLMModelDefinition,
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
@@ -89,6 +90,7 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
 model = LLMModelDefinition(
     model=os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "gpt-5.6-luna"),
     context_window_tokens=1_050_000,
+    max_output_tokens=None,
 )
 provider = CodexLLMProviderDefinition(
     name="codex",
@@ -116,7 +118,7 @@ response = client.generate(
     )
 )
 
-if not response.ok:
+if response.finish_type != LLMFinishType.TOOL_CALLS:
     raise SystemExit(response.error or "Codex tool request failed")
 if len(response.tool_calls) != 1:
     raise SystemExit("Codex response did not include exactly one tool call")
@@ -137,7 +139,7 @@ print(
             "status": "SUCCEEDED",
             "provider": "codex",
             "model": response.model.value,
-            "finish_reason": response.finish_reason,
+            "finish_type": response.finish_type.value,
             "tool_calls": len(response.tool_calls),
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,

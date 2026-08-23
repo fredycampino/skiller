@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMToolChoiceMode, LLMUserMessage
 from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.request import OpenAILLMRequest
@@ -16,7 +17,11 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=4096,
+    )
 
 
 class _FakeCompletions:
@@ -83,7 +88,6 @@ def _openai_compatible_request(*, log_request_file: str | None = None) -> OpenAI
         model=_model("kimi-k3", 256_000),
         tool_choice=LLMToolChoiceMode.AUTO,
         temperature=1,
-        max_tokens=4096,
         top_p=1,
         parallel_tool_calls=True,
         log_request_file=log_request_file,
@@ -128,10 +132,9 @@ def test_openai_llm_generates_response_with_fake_client(monkeypatch: pytest.Monk
         "timeout": 30.0,
     }
     assert llm.client.completions.calls == [_expected_openai_kwargs(reasoning_split=True)]
-    assert result.ok is True
+    assert result.finish_type == LLMFinishType.STOP
     assert result.content == "hello"
     assert result.model == _model("kimi-k3", 256_000)
-    assert result.finish_reason == "stop"
     assert result.tool_calls == ()
     assert logger.requests == []
     assert logger.responses == []
@@ -150,7 +153,7 @@ def test_openai_llm_returns_error_when_api_key_missing() -> None:
 
     result = llm.generate(_openai_compatible_request())
 
-    assert result.ok is False
+    assert result.finish_type == LLMFinishType.ERROR_API_KEY_MISSING
     assert result.error == "API key is not configured for the selected model provider"
     assert result.error_code == "api_key_missing"
     assert logger.requests == []
@@ -174,7 +177,7 @@ def test_openai_llm_logs_request_and_response_when_enabled(
 
     result = llm.generate(_openai_compatible_request(log_request_file="/tmp/skiller-llm.json"))
 
-    assert result.ok is True
+    assert result.finish_type == LLMFinishType.STOP
     assert logger.requests == [_expected_openai_kwargs()]
     assert logger.responses == [llm.client.completions.response]
     assert logger.errors == []
@@ -206,7 +209,7 @@ def test_openai_llm_logs_error_when_request_fails(
 
     result = llm.generate(_openai_compatible_request(log_request_file="/tmp/skiller-llm.json"))
 
-    assert result.ok is False
+    assert result.finish_type == LLMFinishType.ERROR_REQUEST_FAILED
     assert result.error == "OpenAI request failed: network down"
     assert logger.requests == [_expected_openai_kwargs()]
     assert logger.responses == []

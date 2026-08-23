@@ -1,5 +1,6 @@
 import pytest
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.request import LLMRequest
@@ -9,7 +10,9 @@ pytestmark = pytest.mark.unit
 
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+    return LLMModelDefinition(
+        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+    )
 
 
 def test_fake_llm_returns_configured_text_payload() -> None:
@@ -26,7 +29,7 @@ def test_fake_llm_returns_configured_text_payload() -> None:
     )
 
     assert result == LLMResponse(
-        ok=True,
         content='{"summary":"ok","severity":"low","next_action":"retry"}',
         model=_model("model1", 100_000),
+        finish_type=LLMFinishType.STOP,
     )

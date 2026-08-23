@@ -27,13 +27,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
+from skiller.infrastructure.llm.codex.codex_api import CODEX_BASE_URL, codex_headers
 from skiller.infrastructure.llm.codex.codex_credentials_datasource import (
     CodexCredentialsDatasource,
     CodexCredentialsError,
-)
-from skiller.infrastructure.llm.codex.codex_llm_port import (
-    CODEX_BASE_URL,
-    _codex_headers,
 )
 
 TURN_STATE_HEADER = "x-codex-turn-state"
@@ -186,7 +183,7 @@ class CodexOpenAIProbeClient:
             api_key=self.access_token,
             base_url=CODEX_BASE_URL,
             timeout=self.timeout_seconds,
-            default_headers=_codex_headers(self.account_id),
+            default_headers=codex_headers(self.account_id),
         )
         try:
             response_context = client.responses.with_streaming_response.create(**request)
@@ -913,7 +910,7 @@ def _parse_args() -> argparse.Namespace:
         "--timeout-seconds",
         type=float,
         default=120,
-        help="Per-read timeout used by the same OpenAI client as CodexLLMPort.",
+        help="Per-read timeout used by the same OpenAI client as ResponsesLLMPort.",
     )
     parser.add_argument(
         "--trace-file",
@@ -1007,4 +1004,3 @@ def main() -> int:
     print(f"continuation_completed={continuation_result.completed}")
     print(f"continuation_error={continuation_result.error}")
     return 0 if success else 1
-

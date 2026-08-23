@@ -67,8 +67,12 @@ class _FakeAgentConfig:
 class _FakeCatalogPort:
     def get_catalog(self) -> LLMProviderCatalog:
         models = (
-            LLMModelDefinition(model="model1", context_window_tokens=100_000),
-            LLMModelDefinition(model="model2", context_window_tokens=100_000),
+            LLMModelDefinition(
+                model="model1", context_window_tokens=100_000, max_output_tokens=None
+            ),
+            LLMModelDefinition(
+                model="model2", context_window_tokens=100_000, max_output_tokens=None
+            ),
         )
         provider = OpenAILLMProviderDefinition(
             name="fake",
@@ -78,7 +82,6 @@ class _FakeCatalogPort:
             base_url="http://localhost/v1",
             temperature=0,
             top_p=1,
-            max_output_tokens=4096,
             parallel_tool_calls=True,
             tool_choice=LLMToolChoiceMode.AUTO,
             api_key_source=None,

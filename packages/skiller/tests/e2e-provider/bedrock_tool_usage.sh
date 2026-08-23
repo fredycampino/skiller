@@ -42,6 +42,7 @@ from skiller.domain.agent.llm.provider_bedrock import (
     AgentBedrockProvider,
     BedrockLLMRequest,
 )
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
 from skiller.domain.tool.tool_contract import (
     ToolDefinition,
@@ -95,12 +96,11 @@ response = client.generate(
             LLMSystemMessage("You must call the requested tool. Do not answer in text."),
             LLMUserMessage(f"Call the shell tool with command: {command}"),
         ),
-        max_tokens=provider.max_output_tokens,
         tools=(ShellSmokeTool(),),
     )
 )
 
-if not response.ok:
+if response.finish_type != LLMFinishType.TOOL_CALLS:
     raise SystemExit(response.error or "Bedrock tool request failed")
 if len(response.tool_calls) != 1:
     raise SystemExit("Bedrock response did not include exactly one tool call")
@@ -121,7 +121,7 @@ print(
             "status": "SUCCEEDED",
             "provider": "bedrock",
             "model": response.model.value,
-            "finish_reason": response.finish_reason,
+            "finish_type": response.finish_type.value,
             "tool_calls": len(response.tool_calls),
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,

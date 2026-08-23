@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
 from skiller.domain.agent.llm.request import LLMRequest
@@ -47,8 +48,8 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
 
         if not self.api_key.strip():
             response = LLMResponse(
-                ok=False,
                 model=request.model,
+                finish_type=LLMFinishType.ERROR_API_KEY_MISSING,
                 error="API key is not configured for the selected model provider",
                 error_code="api_key_missing",
             )
@@ -63,8 +64,8 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
             if log_file is not None:
                 self.request_logger.log_error(error=error)
             return LLMResponse(
-                ok=False,
                 model=request.model,
+                finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
                 error=error,
                 error_code="request_failed",
             )

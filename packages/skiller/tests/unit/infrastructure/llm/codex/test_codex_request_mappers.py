@@ -40,8 +40,17 @@ from skiller.infrastructure.llm.codex.responses_lite_mapper import (
 pytestmark = pytest.mark.unit
 
 
-def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
-    return LLMModelDefinition(model=value, context_window_tokens=context_window_tokens)
+def _model(
+    value: str,
+    context_window_tokens: int,
+    *,
+    max_output_tokens: int | None = None,
+) -> LLMModelDefinition:
+    return LLMModelDefinition(
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=max_output_tokens,
+    )
 
 
 class _ShellTool(ToolDefinition[ToolRequest]):
@@ -69,13 +78,13 @@ def test_codex_model_capabilities_resolve_protocol_without_reasoning_policy() ->
     assert CODEX_DEFAULT_REASONING_EFFORT.value == "medium"
 
 
-def test_generic_responses_mapper_adds_reasoning_without_lite_framing() -> None:
+def test_generic_responses_mapper_omits_model_output_limit() -> None:
     request = CodexLLMRequest(
         messages=(
             LLMSystemMessage("system"),
             LLMUserMessage("hello"),
         ),
-        model=_model("gpt-5.5", 1_050_000),
+        model=_model("gpt-5.5", 1_050_000, max_output_tokens=2_048),
         parallel_tool_calls=True,
         session_id="session-1",
         tools=(_ShellTool(),),
@@ -96,6 +105,7 @@ def test_generic_responses_mapper_adds_reasoning_without_lite_framing() -> None:
     ]
     assert kwargs["parallel_tool_calls"] is True
     assert kwargs["reasoning"] == {"effort": "medium"}
+    assert "max_output_tokens" not in kwargs
     assert kwargs["include"] == ["reasoning.encrypted_content"]
     assert CODEX_RESPONSES_LITE_HEADER not in kwargs["extra_headers"]
 
@@ -115,7 +125,7 @@ def test_lite_mapper_uses_lite_framing_and_replays_turn_state() -> None:
             LLMAssistantMessage(tool_calls=(tool_call,)),
             LLMToolMessage("result", tool_call_id="call-1"),
         ),
-        model=_model("gpt-5.6-luna", 1_050_000),
+        model=_model("gpt-5.6-luna", 1_050_000, max_output_tokens=2_048),
         parallel_tool_calls=True,
         session_id="session-1",
         tools=(_ShellTool(),),
@@ -184,6 +194,7 @@ def test_lite_mapper_uses_lite_framing_and_replays_turn_state() -> None:
         "output": "result",
     }
     assert kwargs["extra_body"]["client_metadata"]["turn_id"] == "turn-1"
+    assert "max_output_tokens" not in kwargs
 
 
 def _turn_session(*, model: str) -> CodexTurnSession:

@@ -19,6 +19,27 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.33 - 2026-08-23
+
+### Changed
+- Unify all LLM adapter ports (OpenAI, Bedrock, Codex) around a shared `FinishType` enum and typed response models.
+- Replace the legacy `bedrock_llm_port` and `bedrock_streaming_port` with a single `converse_llm_port` using Bedrock Converse API.
+- Replace the legacy `codex_llm_port` with `responses_llm_port` using typed response collection.
+- Add per-adapter response collection layers (`collect_converse_response`, `collect_codex_response`) and typed response models.
+- Introduce `request_error_mapper` for consistent error handling across all adapters.
+
+### Added
+- Add `FinishType` domain enum (`end_turn`, `tool_use`, `max_tokens`, `error`) for structured stop reason handling.
+- Add `agent-llmresponse.md` documentation for the new LLM response model architecture.
+- Add e2e adapter tests for Bedrock Converse, Codex Responses, and OpenAI ports.
+
+### Removed
+- Remove legacy `bedrock_llm_port.py`, `bedrock_streaming_port.py`, `codex_llm_port.py`, and `codex_mapper.py`.
+- Remove `bedrock_stream_truncation_probe.py` QA script (replaced by converse-based testing).
+
+### Notes
+- Includes PR #129.
+
 ## 0.1.0-beta.32 - 2026-08-21
 
 ### Added

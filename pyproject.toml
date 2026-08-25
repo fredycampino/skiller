@@ -41,6 +41,18 @@ packages = ["packages/skiller/src/skiller", "apps/tui/src/stui"]
 "apps/instructions" = "apps/instructions"
 "packages/skiller/docs" = "skiller/docs"
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "/README.md",
+  "/LICENSE",
+  "/pyproject.toml",
+  "/packages/skiller/src",
+  "/packages/skiller/docs",
+  "/apps/tui/src",
+  "/apps/agents",
+  "/apps/instructions",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["packages/skiller/tests", "apps/agents/tests", "apps/tui/tests"]
 addopts = "--strict-markers"

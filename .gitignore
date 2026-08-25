@@ -21,6 +21,12 @@ ENV/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.astro/
+
+# JavaScript dependencies and build artifacts
+node_modules/
+website/dist/
+
 .pyre/
 .pytype/
 .hypothesis/

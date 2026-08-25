@@ -1,0 +1,38 @@
+---
+title: Hello workflow
+description: Run a minimal deterministic workflow with inputs, assign, and notify.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import flow from '../../../../../../examples/hello-workflow/flow.yaml?raw';
+
+This demo passes a root input through an `assign` step and renders it in a `notify` step. It does not require an LLM or external service.
+
+## Run it
+
+From the repository root:
+
+```bash
+skiller run --file examples/hello-workflow/flow.yaml --arg name=Ada
+```
+
+The run reaches `SUCCEEDED` and its transcript contains `Hello, Ada!`.
+
+## Workflow
+
+<Code code={flow} lang="yaml" title="examples/hello-workflow/flow.yaml" />
+
+## Inspect the run
+
+Copy the `run_id` returned by the command:
+
+```bash
+skiller status <run_id>
+skiller logs <run_id>
+```
+
+Use `status` for the current state and `logs` for the ordered runtime events.
+
+## Next
+
+Continue with the [Interactive flow](./interactive-flow/) to pause a run for human input and resume it from persisted state.

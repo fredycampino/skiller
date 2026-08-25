@@ -1,0 +1,24 @@
+name: branching_workflow
+description: "Route execution from an input value"
+version: "0.1"
+start: choose_path
+
+inputs:
+  path: string
+
+steps:
+  - switch: choose_path
+    value: "{{inputs.path}}"
+    cases:
+      docs: open_docs
+      demo: run_demo
+    default: unknown_path
+
+  - notify: open_docs
+    message: "Read the documentation at https://skiller.run/docs/."
+
+  - notify: run_demo
+    message: "Run another example from the examples directory."
+
+  - notify: unknown_path
+    message: "Choose either docs or demo."

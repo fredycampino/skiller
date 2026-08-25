@@ -1,0 +1,19 @@
+name: agent_chat
+description: "Minimal agent conversation"
+version: "0.1"
+start: ask_user
+
+steps:
+  - wait_input: ask_user
+    prompt: "Ask the agent a question."
+    next: answer
+
+  - agent: answer
+    system: |
+      You are a concise and helpful assistant.
+    task: '{{output_value("ask_user").payload.text}}'
+    max_turns: 1
+    next: show_answer
+
+  - notify: show_answer
+    message: '{{output_value("answer").data.final}}'

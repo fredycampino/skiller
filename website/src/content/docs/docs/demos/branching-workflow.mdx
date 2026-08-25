@@ -1,0 +1,29 @@
+---
+title: Branching workflow
+description: Route a workflow deterministically with a root input and switch.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import flow from '../../../../../../examples/branching-workflow/flow.yaml?raw';
+
+This demo selects exactly one path from a root input. It does not require an LLM.
+
+## Run a branch
+
+```bash
+skiller run --file examples/branching-workflow/flow.yaml --arg path=docs
+```
+
+Try `path=demo` or another value to exercise the default branch.
+
+## Workflow
+
+<Code code={flow} lang="yaml" title="examples/branching-workflow/flow.yaml" />
+
+## What this proves
+
+Agentic workflows do not need an LLM at every step. Deterministic routing stays explicit and testable in the YAML definition.
+
+## Next
+
+Try the [Webhook workflow](./webhook-workflow/) to resume a persisted run from an external event.

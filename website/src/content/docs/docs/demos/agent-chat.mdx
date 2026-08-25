@@ -1,0 +1,35 @@
+---
+title: Agent chat
+description: Send persisted human input to a minimal LLM-backed agent step.
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+import flow from '../../../../../../examples/agent-chat/flow.yaml?raw';
+
+This demo collects a question, runs one agent turn, and renders the final answer.
+
+<Aside type="note" title="LLM configuration required">
+  Configure a provider and model before running this demo. The effective agent configuration must define an `llm.provider` and `llm.model`, plus any credentials required by that provider.
+</Aside>
+
+## Start the flow
+
+```bash
+skiller run --file examples/agent-chat/flow.yaml
+```
+
+## Ask a question
+
+```bash
+skiller input receive <run_id> --text "What makes a workflow durable?" --wait
+```
+
+The agent runs one turn, the answer is written to the transcript, and the run reaches `SUCCEEDED`.
+
+## Workflow
+
+<Code code={flow} lang="yaml" title="examples/agent-chat/flow.yaml" />
+
+## Next
+
+Read [Configure an LLM](/docs/getting-started/configure-an-llm/) for the configuration boundary, or try the [Branching workflow](./branching-workflow/) for deterministic routing.

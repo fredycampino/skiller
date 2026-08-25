@@ -1,0 +1,38 @@
+---
+title: Webhook workflow
+description: Resume a persisted workflow when an external event arrives.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import flow from '../../../../../../examples/webhook-workflow/flow.yaml?raw';
+
+This demo waits for the correlation pair `demo-build + build-42`, then uses the received JSON payload.
+
+## Start the local server and flow
+
+`wait_webhook` requires the local ingress server:
+
+```bash
+skiller server start
+skiller run --file examples/webhook-workflow/flow.yaml
+```
+
+The run reaches `WAITING`. Stop the managed server with `skiller server stop` when you finish.
+
+## Deliver the event
+
+In another terminal:
+
+```bash
+skiller webhook receive demo-build build-42 --json '{"status":"passed"}'
+```
+
+The matching run resumes, emits `Build status: passed`, and reaches `SUCCEEDED`.
+
+## Workflow
+
+<Code code={flow} lang="yaml" title="examples/webhook-workflow/flow.yaml" />
+
+## HTTP delivery
+
+The CLI delivery command exercises the same persisted event contract as HTTP ingress. To expose a real endpoint, register `demo-build` with `skiller webhook register demo-build` and use the returned URL and secret.

@@ -1,0 +1,37 @@
+---
+title: Interactive flow
+description: Pause for human input and resume a persisted run.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import flow from '../../../../../../examples/interactive-flow/flow.yaml?raw';
+
+This demo reaches `WAITING`, persists that state, and resumes when you deliver input.
+
+## Start the flow
+
+```bash
+skiller run --file examples/interactive-flow/flow.yaml
+```
+
+The response includes a `run_id`, the `WAITING` status, and the prompt `What is your name?`.
+
+## Resume it
+
+```bash
+skiller input receive <run_id> --text "Ada" --wait
+```
+
+The same run resumes, emits `Hello, Ada!`, and reaches `SUCCEEDED`.
+
+## Workflow
+
+<Code code={flow} lang="yaml" title="examples/interactive-flow/flow.yaml" />
+
+## What this proves
+
+Waiting is persisted rather than simulated in memory. The process that started the run does not need to remain attached while the workflow waits.
+
+## Next
+
+Run the [Agent chat](./agent-chat/) to use human input as the task for an LLM-backed step.

@@ -1,0 +1,16 @@
+name: hello_workflow
+description: "Minimal deterministic workflow"
+version: "0.1"
+start: prepare_greeting
+
+inputs:
+  name: string
+
+steps:
+  - assign: prepare_greeting
+    values:
+      name: "{{inputs.name}}"
+    next: greet
+
+  - notify: greet
+    message: 'Hello, {{output_value("prepare_greeting").assigned.name}}!'

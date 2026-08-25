@@ -1,0 +1,12 @@
+name: interactive_flow
+description: "Wait for human input and resume from persisted state"
+version: "0.1"
+start: ask_name
+
+steps:
+  - wait_input: ask_name
+    prompt: "What is your name?"
+    next: greet
+
+  - notify: greet
+    message: 'Hello, {{output_value("ask_name").payload.text}}!'

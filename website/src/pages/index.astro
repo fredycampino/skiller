@@ -1,0 +1,226 @@
+---
+import '../styles/landing.css';
+
+const githubUrl = 'https://github.com/fredycampino/skiller';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="Define agentic workflows in YAML and run them with durable, observable execution."
+    />
+    <link rel="canonical" href="https://skiller.run/" />
+    <title>skiller.run — Agentic workflows that keep running</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="skiller.run home">skiller.run</a>
+      <nav aria-label="Main navigation">
+        <a href={githubUrl}>GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow">A runtime for agentic workflows</p>
+        <h1 id="hero-title">Agentic workflows<br />that keep running.</h1>
+        <p class="intro">
+          Define agents and workflows in YAML, run them from your terminal, and resume every
+          execution from persistent state.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="#get-started">Get started</a>
+          <a class="button secondary" href={githubUrl}>View on GitHub</a>
+        </div>
+      </section>
+
+      <section class="feature harness" aria-labelledby="harness-title">
+        <div class="harness-visual" aria-label="Agent step and observable runtime events">
+          <div class="code-header">
+            <span>flow.yaml</span>
+            <span>Agent step</span>
+          </div>
+          <pre><code><span class="key">steps:</span>
+  - <span class="key">wait_input:</span> ask_user
+    <span class="key">prompt:</span> "What CI, PR, or release task should I prepare?"
+    <span class="key">next:</span> ci
+
+  - <span class="key">agent:</span> ci
+    <span class="key">system:</span>
+      <span class="key">file:</span> "./system.md"
+    <span class="key">task:</span> '&#123;&#123;output_value("ask_user").payload.text&#125;&#125;'
+    <span class="key">instructions:</span>
+      - "skiller-ci"
+      - "response-style"
+    <span class="key">tools:</span>
+      - shell
+      - files
+    <span class="key">next:</span> ask_user</code></pre>
+        </div>
+        <div class="section-copy">
+          <p class="eyebrow">Agent harness</p>
+          <h2 id="harness-title">Give agents a runtime, not just a prompt.</h2>
+          <p>
+            Run agents as explicit workflow steps with configured models, tools, instructions,
+            limits, persistent context, and observable events.
+          </p>
+        </div>
+      </section>
+
+      <section class="feature stui" aria-labelledby="stui-title">
+        <div class="section-copy">
+          <p class="eyebrow">STUI</p>
+          <h2 id="stui-title">Work with agents from your terminal.</h2>
+          <p>
+            Chat with agents, launch workflows, provide human input, and inspect live execution
+            without leaving the terminal.
+          </p>
+        </div>
+        <div class="stui-frame" aria-label="Example Skiller terminal UI session">
+          <div class="code-header">
+            <span>skiller-stui</span>
+            <span>Agent session</span>
+          </div>
+          <div class="stui-simulation">
+            <div class="stui-transcript">
+              <div class="stui-edit-block">
+                <span class="stui-tool-mark">▪</span>
+                <pre><code><span class="syntax-section">[tool.hatch.build.targets.sdist]</span>
+<span class="syntax-name">include</span> = [
+  <span class="syntax-string">"/README.md"</span>,
+  <span class="syntax-string">"/LICENSE"</span>,
+  <span class="syntax-string">"/pyproject.toml"</span>,
+  <span class="syntax-string">"/packages/skiller/src"</span>,
+  <span class="syntax-string">"/packages/skiller/docs"</span>,
+  <span class="syntax-string">"/apps/tui/src"</span>,
+  <span class="syntax-string">"/apps/agents"</span>,
+  <span class="syntax-string">"/ap...</span></code></pre>
+              </div>
+              <div class="stui-answer">
+                <span class="stui-agent-mark">‹</span>
+                <div>
+                  <p>The Python package configuration now keeps web concerns outside the published distribution. A focused test can make that boundary explicit:</p>
+                  <pre><code><span class="syntax-keyword">import</span> tomllib
+<span class="syntax-keyword">from</span> pathlib <span class="syntax-keyword">import</span> Path
+
+
+<span class="syntax-keyword">def</span> <span class="syntax-function">test_sdist_excludes_website_and_examples</span>() -&gt; <span class="syntax-type">None</span>:
+    pyproject = tomllib.loads(
+        Path(<span class="syntax-string">"pyproject.toml"</span>).read_text(encoding=<span class="syntax-string">"utf-8"</span>)
+    )
+
+    included_paths = pyproject[<span class="syntax-string">"tool"</span>][<span class="syntax-string">"hatch"</span>][<span class="syntax-string">"build"</span>][<span class="syntax-string">"targets"</span>][<span class="syntax-string">"sdist"</span>][<span class="syntax-string">"include"</span>]
+
+    <span class="syntax-keyword">assert</span> <span class="syntax-string">"/website"</span> <span class="syntax-keyword">not in</span> included_paths
+    <span class="syntax-keyword">assert</span> <span class="syntax-string">"/examples"</span> <span class="syntax-keyword">not in</span> included_paths
+    <span class="syntax-keyword">assert</span> <span class="syntax-string">"/.github"</span> <span class="syntax-keyword">not in</span> included_paths
+    <span class="syntax-keyword">assert</span> <span class="syntax-string">"/.env.development"</span> <span class="syntax-keyword">not in</span> included_paths</code></pre>
+                </div>
+              </div>
+            </div>
+            <div class="stui-prompt">
+              <span class="stui-prompt-label">… [Write a task…]</span>
+              <div class="stui-prompt-box"><span>&gt;</span> type / for commands</div>
+            </div>
+            <div class="stui-footer" aria-label="Agent context: gpt-5.6-sol, 129.1 thousand of 200 thousand tokens">
+              <div class="stui-context">
+                <div class="stui-footer-row"><span>gpt-5.6-sol</span><span>70ce26df-ef19-4a2a-a99d-11c3acd89f87</span></div>
+                <div class="stui-footer-row"><span>129.1k</span><span>200K</span><span>/stui.yaml</span></div>
+                <div class="stui-context-bar" aria-hidden="true"><span></span><i>▾</i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature workflow" aria-labelledby="workflow-title">
+        <div class="section-copy">
+          <p class="eyebrow">Workflows as code</p>
+          <h2 id="workflow-title">Simple, explicit YAML.</h2>
+          <p>Combine deterministic steps, agents, tools, and human input in one readable flow.</p>
+        </div>
+        <div class="code-window" aria-label="Example YAML workflow">
+          <div class="code-header">
+            <span>agent.yaml</span>
+            <span>YAML</span>
+          </div>
+          <pre><code><span class="key">name:</span> support
+<span class="key">start:</span> ask
+
+<span class="key">steps:</span>
+  - <span class="key">wait_input:</span> ask
+    <span class="key">prompt:</span> What should I do?
+    <span class="key">next:</span> answer
+
+  - <span class="key">agent:</span> answer
+    <span class="key">system:</span> Be concise and helpful.
+    <span class="key">task:</span> '&#123;&#123;output_value("ask").payload.text&#125;&#125;'
+    <span class="key">tools:</span> [shell, files]
+    <span class="key">next:</span> ask</code></pre>
+        </div>
+      </section>
+
+      <section class="feature run-anywhere" aria-labelledby="run-anywhere-title">
+        <div class="section-copy">
+          <p class="eyebrow">Run anywhere</p>
+          <h2 id="run-anywhere-title">Run workflows wherever the work happens.</h2>
+          <p>Use the same YAML definition from your desktop, the CLI, CI, or a server.</p>
+        </div>
+        <div class="runtime-panel" aria-label="Supported execution environments">
+          <div class="runtime-source">
+            <span>flow.yaml</span>
+            <small>one workflow definition</small>
+          </div>
+          <div class="runtime-targets">
+            <article><span>01</span><div><h3>Desktop</h3><p>Interactive sessions through STUI.</p></div></article>
+            <article><span>02</span><div><h3>CLI</h3><p>Explicit local runtime operations.</p></div></article>
+            <article><span>03</span><div><h3>CI</h3><p>Repeatable workflows in pipelines.</p></div></article>
+            <article><span>04</span><div><h3>Server</h3><p>Detached and webhook-driven runs.</p></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="principles" aria-label="Runtime principles">
+        <article>
+          <span>01</span>
+          <h2>Durable by design</h2>
+          <p>Pause and resume executions without losing state.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h2>Fully observable</h2>
+          <p>Inspect status, outputs, and ordered runtime events.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h2>Human when needed</h2>
+          <p>Wait for input or approval, then continue the same run.</p>
+        </article>
+      </section>
+
+      <section class="closing" id="get-started" aria-labelledby="closing-title">
+        <p class="eyebrow">Get started</p>
+        <h2 id="closing-title">Start running workflows.</h2>
+        <div class="install" aria-label="Installation command">
+          <span aria-hidden="true">$</span>
+          <code>pipx install skiller</code>
+        </div>
+        <div class="actions">
+          <a class="button primary" href={githubUrl}>Explore the repository</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>skiller.run</strong> — A runtime for agentic workflows.</p>
+      <nav aria-label="Footer navigation">
+        <a href={githubUrl}>GitHub</a>
+        <a href="https://github.com/fredycampino/skiller/blob/main/LICENSE">Apache 2.0</a>
+      </nav>
+    </footer>
+  </body>
+</html>

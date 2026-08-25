@@ -1,0 +1,13 @@
+name: webhook_workflow
+description: "Wait for an external webhook event"
+version: "0.1"
+start: wait_for_build
+
+steps:
+  - wait_webhook: wait_for_build
+    webhook: demo-build
+    key: build-42
+    next: show_result
+
+  - notify: show_result
+    message: 'Build status: {{output_value("wait_for_build").payload.status}}'

@@ -19,6 +19,21 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.34 - 2026-08-26
+
+### Added
+- Add the skiller.run landing page and workflow examples.
+
+### Changed
+- Improve agent context and event handling in the TUI.
+- Update provider configuration for max-token handling.
+
+### Fixed
+- Keep shell process failures recoverable and clean up process resources reliably.
+
+### Notes
+- Includes PRs #132 and #134.
+
 ## 0.1.0-beta.33 - 2026-08-23
 
 ### Changed

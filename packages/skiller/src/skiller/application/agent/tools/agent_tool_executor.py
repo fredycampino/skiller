@@ -30,10 +30,14 @@ from skiller.domain.tool.tool_execution_model import (
     ToolExecutionStatus,
 )
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessInterrupt,
+    ToolProcessInterrupted,
     ToolProcessInterruptSignal,
+    ToolProcessStartFailed,
+    ToolProcessTimedOut,
     ToolProcessWait,
-    ToolProcessWaitStatus,
+    ToolProcessWaitFailed,
 )
 from skiller.domain.tool.tool_process_port import ToolProcessPort
 
@@ -308,14 +312,33 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
         if not isinstance(tool, ProcessTool):
             raise ValueError(f"Agent tool '{prepared.name}' is not a ProcessTool")
 
-        process_request = tool.call(
-            config=prepared.config,
-            request=prepared.request,
-        )
-        handle = self.process_runner.popen(process_request)
+        try:
+            process_request = tool.call(
+                config=prepared.config,
+                request=prepared.request,
+            )
+        except (RuntimeError, ValueError) as exc:
+            return ToolResult(
+                name=prepared.name,
+                status=ToolResultStatus.FAILED,
+                data={"error": "process_request_failed"},
+                text=None,
+                error=str(exc),
+            )
+
+        start_result = self.process_runner.popen(process_request)
+        if isinstance(start_result, ToolProcessStartFailed):
+            return ToolResult(
+                name=prepared.name,
+                status=ToolResultStatus.FAILED,
+                data={"error": "process_start_failed"},
+                text=None,
+                error=start_result.error,
+            )
+
         wait_result = self.process_runner.wait(
             ToolProcessWait(
-                handle=handle,
+                handle=start_result.handle,
                 timeout=process_request.timeout,
                 interrupt=ToolProcessInterrupt(
                     run_id=run_id,
@@ -323,7 +346,15 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 ),
             )
         )
-        if wait_result.status == ToolProcessWaitStatus.INTERRUPTED:
+        if isinstance(wait_result, ToolProcessWaitFailed):
+            return ToolResult(
+                name=prepared.name,
+                status=ToolResultStatus.FAILED,
+                data={"error": "process_wait_failed"},
+                text=None,
+                error=wait_result.error,
+            )
+        if isinstance(wait_result, ToolProcessInterrupted):
             return ToolResult(
                 name=prepared.name,
                 status=ToolResultStatus.INTERRUPTED,
@@ -331,7 +362,7 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 text=None,
                 error="Tool execution interrupted by user",
             )
-        if wait_result.status == ToolProcessWaitStatus.TIMEOUT:
+        if isinstance(wait_result, ToolProcessTimedOut):
             return ToolResult(
                 name=prepared.name,
                 status=ToolResultStatus.TIMEOUT,
@@ -339,10 +370,10 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 text=None,
                 error=f"Tool '{prepared.name}' timed out after {process_request.timeout}s",
             )
-        if wait_result.output is None:
-            raise RuntimeError("Process runner returned completed status without output")
+        if isinstance(wait_result, ToolProcessCompleted):
+            return tool.result(wait_result.output)
 
-        return tool.result(wait_result.output)
+        raise RuntimeError(f"Unsupported tool process wait result: {type(wait_result).__name__}")
 
     def is_interrupted(self, run_id: str) -> bool:
         interrupted = bool(self.steering.pop(run_id, SteeringAgentInterrupt))

@@ -13,12 +13,18 @@ from skiller.domain.step.step_execution_model import ShellOutput
 from skiller.domain.step.step_execution_result_model import StepExecutionStatus
 from skiller.domain.step.step_type import StepType
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessHandle,
+    ToolProcessInterrupted,
     ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStarted,
+    ToolProcessStartFailed,
+    ToolProcessStartResult,
+    ToolProcessTimedOut,
     ToolProcessWait,
+    ToolProcessWaitFailed,
     ToolProcessWaitResult,
-    ToolProcessWaitStatus,
 )
 
 pytestmark = pytest.mark.unit
@@ -50,21 +56,25 @@ class _FakeProcessRunner:
         self,
         *,
         output: ToolProcessOutput | None = None,
-        wait_status: ToolProcessWaitStatus = ToolProcessWaitStatus.COMPLETED,
+        start_result: ToolProcessStartResult | None = None,
+        wait_result: ToolProcessWaitResult | None = None,
     ) -> None:
         self.output = output or ToolProcessOutput(
             exit_code=0,
             stdout="hello\n",
             stderr="",
         )
-        self.wait_status = wait_status
+        self.start_result = start_result
+        self.wait_result = wait_result
         self.requests: list[ToolProcessRequest] = []
         self.terminated: list[ToolProcessHandle] = []
         self.interrupt_signal_seen = False
 
-    def popen(self, request: ToolProcessRequest) -> ToolProcessHandle:
+    def popen(self, request: ToolProcessRequest) -> ToolProcessStartResult:
         self.requests.append(request)
-        return ToolProcessHandle(id="process-1", pid=1234)
+        return self.start_result or ToolProcessStarted(
+            handle=ToolProcessHandle(id="process-1", pid=1234)
+        )
 
     def write(self, handle: ToolProcessHandle, payload: str) -> None:
         _ = handle, payload
@@ -87,14 +97,8 @@ class _FakeProcessRunner:
         if request.interrupt is not None:
             self.interrupt_signal_seen = True
             if request.interrupt.signal.is_interrupted(request.interrupt.run_id):
-                return ToolProcessWaitResult(
-                    status=ToolProcessWaitStatus.INTERRUPTED,
-                    output=None,
-                )
-        return ToolProcessWaitResult(
-            status=self.wait_status,
-            output=self.output if self.wait_status == ToolProcessWaitStatus.COMPLETED else None,
-        )
+                return ToolProcessInterrupted()
+        return self.wait_result or ToolProcessCompleted(output=self.output)
 
 
 class _FakeAgentSteeringStore:
@@ -313,8 +317,60 @@ def test_execute_shell_step_keeps_non_zero_exit_in_output_when_check_is_false() 
     )
 
 
+@pytest.mark.parametrize(
+    ("start_result", "wait_result", "error"),
+    [
+        (ToolProcessStartFailed(error="process could not start"), None, "process could not start"),
+        (
+            None,
+            ToolProcessWaitFailed(error="process could not complete"),
+            "process could not complete",
+        ),
+    ],
+)
+@pytest.mark.parametrize("check", [False, True])
+def test_execute_shell_step_handles_process_failure(
+    start_result: ToolProcessStartResult | None,
+    wait_result: ToolProcessWaitResult | None,
+    error: str,
+    check: bool,
+) -> None:
+    process_runner = _FakeProcessRunner(
+        start_result=start_result,
+        wait_result=wait_result,
+    )
+    use_case = _build_use_case(process_runner=process_runner)
+    context = RunContext(inputs={}, step_executions={})
+    current_step = CurrentStep(
+        run_id="run-1",
+        step_index=0,
+        step_id="run_tests",
+        step_type=StepType.SHELL,
+        step={"command": "pwd", "check": check},
+        context=context,
+    )
+
+    if check:
+        with pytest.raises(ValueError, match=error):
+            use_case.execute(current_step)
+        assert context.step_executions == {}
+        return
+
+    result = use_case.execute(current_step)
+
+    assert result.status == StepExecutionStatus.COMPLETED
+    assert result.execution is not None
+    assert result.execution.output == ShellOutput(
+        text=error,
+        ok=False,
+        exit_code=1,
+        stdout="",
+        stderr=error,
+    )
+
+
 def test_execute_shell_step_raises_clear_timeout_error() -> None:
-    process_runner = _FakeProcessRunner(wait_status=ToolProcessWaitStatus.TIMEOUT)
+    process_runner = _FakeProcessRunner(wait_result=ToolProcessTimedOut())
     use_case = _build_use_case(process_runner=process_runner)
 
     with pytest.raises(ValueError, match="timed out after 3s"):

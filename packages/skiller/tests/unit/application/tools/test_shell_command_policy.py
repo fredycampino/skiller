@@ -57,6 +57,37 @@ def test_shell_command_policy_rejects_cwd_outside_allowed_paths(tmp_path) -> Non
         policy.resolve_cwd("../outside")
 
 
+def test_shell_command_policy_rejects_nonexistent_cwd_inside_allowed_path(tmp_path) -> None:
+    allowed = tmp_path / "workspace"
+    allowed.mkdir()
+    missing = allowed / "missing"
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(allowed,),
+        )
+    )
+
+    with pytest.raises(ValueError, match=f"shell cwd does not exist: {missing}"):
+        policy.resolve_cwd("missing")
+
+
+def test_shell_command_policy_rejects_file_cwd_inside_allowed_path(tmp_path) -> None:
+    allowed = tmp_path / "workspace"
+    allowed.mkdir()
+    file_path = allowed / "file.txt"
+    file_path.touch()
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(
+            definition=ShellProcessTool,
+            allowed_paths=(allowed,),
+        )
+    )
+
+    with pytest.raises(ValueError, match=f"shell cwd is not a directory: {file_path}"):
+        policy.resolve_cwd("file.txt")
+
+
 def test_shell_command_policy_validates_each_allowlisted_segment() -> None:
     policy = ShellCommandPolicy(
         config=ShellToolRuntimeConfig(

@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 
 @dataclass(frozen=True)
@@ -16,6 +15,19 @@ class ToolProcessRequest:
 class ToolProcessHandle:
     id: str
     pid: int
+
+
+@dataclass(frozen=True)
+class ToolProcessStarted:
+    handle: ToolProcessHandle
+
+
+@dataclass(frozen=True)
+class ToolProcessStartFailed:
+    error: str
+
+
+ToolProcessStartResult: TypeAlias = ToolProcessStarted | ToolProcessStartFailed
 
 
 @dataclass(frozen=True)
@@ -42,13 +54,29 @@ class ToolProcessWait:
     interrupt: ToolProcessInterrupt | None = None
 
 
-class ToolProcessWaitStatus(str, Enum):
-    COMPLETED = "COMPLETED"
-    TIMEOUT = "TIMEOUT"
-    INTERRUPTED = "INTERRUPTED"
+@dataclass(frozen=True)
+class ToolProcessCompleted:
+    output: ToolProcessOutput
 
 
 @dataclass(frozen=True)
-class ToolProcessWaitResult:
-    status: ToolProcessWaitStatus
-    output: ToolProcessOutput | None = None
+class ToolProcessTimedOut:
+    pass
+
+
+@dataclass(frozen=True)
+class ToolProcessInterrupted:
+    pass
+
+
+@dataclass(frozen=True)
+class ToolProcessWaitFailed:
+    error: str
+
+
+ToolProcessWaitResult: TypeAlias = (
+    ToolProcessCompleted
+    | ToolProcessTimedOut
+    | ToolProcessInterrupted
+    | ToolProcessWaitFailed
+)

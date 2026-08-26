@@ -16,13 +16,17 @@ from skiller.domain.step.step_execution_result_model import (
     StepAdvance,
     StepExecutionStatus,
 )
-from skiller.domain.tool.tool_contract import ToolInput, ToolResult
+from skiller.domain.tool.tool_contract import ToolInput, ToolResult, ToolResultStatus
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessInterrupt,
+    ToolProcessInterrupted,
     ToolProcessInterruptSignal,
     ToolProcessRequest,
+    ToolProcessStartFailed,
+    ToolProcessTimedOut,
     ToolProcessWait,
-    ToolProcessWaitStatus,
+    ToolProcessWaitFailed,
 )
 from skiller.domain.tool.tool_process_port import ToolProcessPort
 
@@ -76,15 +80,19 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             raise ValueError(f"Shell step '{step_id}' policy returned no request")
         shell_request = policy_result.request
 
-        process_request = self.shell_tool.call(
-            config=shell_config,
-            request=shell_request,
-        )
-        result = self._execute_shell_process(
-            run_id=current_step.run_id,
-            step_id=step_id,
-            request=process_request,
-        )
+        try:
+            process_request = self.shell_tool.call(
+                config=shell_config,
+                request=shell_request,
+            )
+        except (RuntimeError, ValueError) as exc:
+            result = self._process_failure_result(error=str(exc))
+        else:
+            result = self._execute_shell_process(
+                run_id=current_step.run_id,
+                step_id=step_id,
+                request=process_request,
+            )
 
         result_data = result.data
         if check and bool(result_data.get("ok")) is False:
@@ -157,10 +165,13 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         step_id: str,
         request: ToolProcessRequest,
     ) -> ToolResult:
-        handle = self.process_runner.popen(request)
+        start_result = self.process_runner.popen(request)
+        if isinstance(start_result, ToolProcessStartFailed):
+            return self._process_failure_result(error=start_result.error)
+
         wait_result = self.process_runner.wait(
             ToolProcessWait(
-                handle=handle,
+                handle=start_result.handle,
                 timeout=request.timeout,
                 interrupt=ToolProcessInterrupt(
                     run_id=run_id,
@@ -168,16 +179,28 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
                 ),
             )
         )
-        if wait_result.status == ToolProcessWaitStatus.TIMEOUT:
+        if isinstance(wait_result, ToolProcessWaitFailed):
+            return self._process_failure_result(error=wait_result.error)
+        if isinstance(wait_result, ToolProcessTimedOut):
             timeout = _format_timeout(request.timeout)
             raise ValueError(
                 f"Shell step '{step_id}' timed out after {timeout}"
             )
-        if wait_result.status == ToolProcessWaitStatus.INTERRUPTED:
+        if isinstance(wait_result, ToolProcessInterrupted):
             raise ValueError(f"Shell step '{step_id}' was interrupted")
-        if wait_result.output is None:
-            raise ValueError(f"Shell step '{step_id}' did not return process output")
-        return self.shell_tool.result(wait_result.output)
+        if isinstance(wait_result, ToolProcessCompleted):
+            return self.shell_tool.result(wait_result.output)
+
+        raise RuntimeError(f"Unsupported tool process wait result: {type(wait_result).__name__}")
+
+    def _process_failure_result(self, *, error: str) -> ToolResult:
+        return ToolResult(
+            name=self.shell_tool.name,
+            status=ToolResultStatus.FAILED,
+            data={"ok": False, "exit_code": 1, "stdout": "", "stderr": error},
+            text=error,
+            error=error,
+        )
 
     def is_interrupted(self, run_id: str) -> bool:
         return bool(self.agent_steering_store.pop(run_id, SteeringStepInterrupt))

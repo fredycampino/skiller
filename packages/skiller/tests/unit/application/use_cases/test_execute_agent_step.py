@@ -734,6 +734,8 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
             context=AgentContextMetrics(
                 effective_window_tokens=100_000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100_000,
+                model_context_window_tokens=100_000,
             ),
         ),
     )
@@ -844,6 +846,8 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
             context=AgentContextMetrics(
                 effective_window_tokens=100_000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100_000,
+                model_context_window_tokens=100_000,
             ),
             usage=AgentUsageOutput(
                 estimated_system_tokens=None,

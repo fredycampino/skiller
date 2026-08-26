@@ -22,6 +22,31 @@ def test_action_done_payload_requires_uid() -> None:
         )
 
 
+def test_legacy_agent_message_context_keeps_metrics_without_model_window() -> None:
+    payload = runtime_event_payload_from_dict(
+        event_type=RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+        value={
+            "step_id": "support_agent",
+            "turn_id": "turn-1",
+            "agent_sequence": 1,
+            "body": {
+                "total_tokens": 100,
+                "text": "Inspecting.",
+                "context": {
+                    "effective_window_tokens": 100_000,
+                    "max_total_tokens_ratio": 0.8,
+                },
+            },
+        },
+    )
+
+    assert payload.body.context is not None
+    assert payload.body.context.effective_window_tokens == 100_000
+    assert payload.body.context.max_total_tokens_ratio == 0.8
+    assert payload.body.context.window_width_tokens is None
+    assert payload.body.context.model_context_window_tokens is None
+
+
 def test_context_compacted_payload_round_trips() -> None:
     payload = AgentContextCompactedPayload(
         context_id="ctx-1",

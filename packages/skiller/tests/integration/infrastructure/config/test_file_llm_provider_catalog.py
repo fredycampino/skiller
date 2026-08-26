@@ -92,7 +92,7 @@ def test_builtin_application_catalog_is_valid() -> None:
         "deepseek-v4-flash",
         "deepseek-v4-pro",
     ]
-    assert all(model.context_window_tokens == 128000 for model in deepseek.models)
+    assert all(model.context_window_tokens == 1_000_000 for model in deepseek.models)
     lmstudio = catalog.get("lmstudio")
     assert lmstudio.adapter == LLMAdapterType.OPENAI
     assert [model.model for model in lmstudio.models] == [

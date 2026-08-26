@@ -431,10 +431,14 @@ def _agent_step_context(
         return AgentStepContext(
             effective_window_tokens=value.effective_window_tokens,
             max_total_tokens_ratio=value.max_total_tokens_ratio,
+            window_width_tokens=value.window_width_tokens,
+            model_context_window_tokens=value.model_context_window_tokens,
         )
     return AgentStepContext(
         effective_window_tokens=cast(int | None, value.get("effective_window_tokens")),
         max_total_tokens_ratio=cast(float | None, value.get("max_total_tokens_ratio")),
+        window_width_tokens=cast(int | None, value.get("window_width_tokens")),
+        model_context_window_tokens=cast(int | None, value.get("model_context_window_tokens")),
     )
 
 

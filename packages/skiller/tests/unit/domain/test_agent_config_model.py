@@ -58,6 +58,8 @@ def test_agent_context_window_uses_smaller_model_limit() -> None:
     ) == AgentContextMetrics(
         effective_window_tokens=131_072,
         max_total_tokens_ratio=0.8,
+        window_width_tokens=200_000,
+        model_context_window_tokens=131_072,
     )
     assert (
         context_smaller_than_model.effective_context_tokens(
@@ -88,6 +90,8 @@ def test_agent_context_window_uses_smaller_model_limit() -> None:
     ) == AgentContextMetrics(
         effective_window_tokens=100_000,
         max_total_tokens_ratio=0.8,
+        window_width_tokens=100_000,
+        model_context_window_tokens=131_072,
     )
 
 

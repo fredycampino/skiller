@@ -98,6 +98,8 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
                     context=AgentContextPayload(
                         effective_window_tokens=100000,
                         max_total_tokens_ratio=0.8,
+                        window_width_tokens=100000,
+                        model_context_window_tokens=100000,
                     ),
                 ),
             ),
@@ -303,6 +305,8 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
                     context=AgentContextPayload(
                         effective_window_tokens=100000,
                         max_total_tokens_ratio=0.8,
+                        window_width_tokens=100000,
+                        model_context_window_tokens=100000,
                     ),
                 ),
             ),
@@ -354,6 +358,8 @@ def test_event_transcript_mapper_uses_agent_step_success_as_final_output() -> No
                                 "context": {
                                     "effective_window_tokens": 100000,
                                     "max_total_tokens_ratio": 0.8,
+                                    "window_width_tokens": 100000,
+                                    "model_context_window_tokens": 100000,
                                 },
                             }
                         ),

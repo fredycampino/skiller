@@ -105,6 +105,8 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 context=AgentContextMetrics(
                     effective_window_tokens=100_000,
                     max_total_tokens_ratio=0.8,
+                    window_width_tokens=100_000,
+                    model_context_window_tokens=100_000,
                 ),
                 usage=AgentUsageOutput(
                     estimated_system_tokens=None,
@@ -136,6 +138,8 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                 "context": {
                     "effective_window_tokens": 100000,
                     "max_total_tokens_ratio": 0.8,
+                    "window_width_tokens": 100000,
+                    "model_context_window_tokens": 100000,
                 },
                 "usage": {
                     "prompt_tokens": 100,
@@ -151,6 +155,40 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
         },
     }
     assert StepExecution.from_dict(persisted) == execution
+
+
+def test_agent_final_output_restores_legacy_context_metrics() -> None:
+    persisted = {
+        "step_type": "agent",
+        "input": {},
+        "evaluation": {},
+        "output": {
+            "text": "Done.",
+            "body_ref": None,
+            "value": {
+                "data": {
+                    "stop_reason": "final",
+                    "context_id": "ctx-legacy",
+                    "final": "Done.",
+                    "turn_count": 1,
+                    "tool_call_count": 0,
+                    "context": {
+                        "effective_window_tokens": 100_000,
+                        "max_total_tokens_ratio": 0.8,
+                    },
+                }
+            },
+        },
+    }
+
+    execution = StepExecution.from_dict(persisted)
+
+    assert execution.output is not None
+    assert execution.output.data.context is not None
+    assert execution.output.data.context.effective_window_tokens == 100_000
+    assert execution.output.data.context.max_total_tokens_ratio == 0.8
+    assert execution.output.data.context.window_width_tokens is None
+    assert execution.output.data.context.model_context_window_tokens is None
 
 
 def test_agent_final_output_restores_lmstudio_usage_model_name() -> None:

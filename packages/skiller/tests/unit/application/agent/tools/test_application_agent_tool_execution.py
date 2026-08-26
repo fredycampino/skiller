@@ -342,6 +342,8 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         context_metrics=AgentContextMetrics(
             effective_window_tokens=100_000,
             max_total_tokens_ratio=0.8,
+            window_width_tokens=100_000,
+            model_context_window_tokens=100_000,
         ),
         turn_loop=AgentLoop(max_turns=10),
     )
@@ -714,6 +716,8 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         context_metrics=AgentContextMetrics(
             effective_window_tokens=100_000,
             max_total_tokens_ratio=0.8,
+            window_width_tokens=100_000,
+            model_context_window_tokens=100_000,
         ),
         turn_loop=AgentLoop(max_turns=10),
     )

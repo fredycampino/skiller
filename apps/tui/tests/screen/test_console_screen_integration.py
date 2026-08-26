@@ -471,10 +471,7 @@ def test_console_screen_compacts_multiline_paste_into_single_line_reference() ->
             await pilot.pause()
 
             assert prompt.text == "[paste #1 +2 lines][paste #2 +1 line]"
-            assert (
-                app.state.prompt.text
-                == "linea asdasdasd\nsegunda linea\ntercera lineauno\ndos"
-            )
+            assert app.state.prompt.text == "linea asdasdasd\nsegunda linea\ntercera lineauno\ndos"
 
     asyncio.run(run())
 
@@ -557,6 +554,8 @@ def test_console_screen_limits_wide_footer_context_bar_width() -> None:
             context=AgentStepContext(
                 effective_window_tokens=100000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100000,
+                model_context_window_tokens=100000,
             ),
         )
         app = ConsoleScreen(viewmodel=viewmodel)
@@ -584,8 +583,8 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
         )
         viewmodel.state.agent_metrics = AgentMetricsState(
             usage=AgentStepUsage(
-                    estimated_system_tokens=None,
-                    prompt_tokens=79200,
+                estimated_system_tokens=None,
+                prompt_tokens=79200,
                 output_tokens=None,
                 total_tokens=79200,
                 cache_read_tokens=None,
@@ -596,6 +595,8 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
             context=AgentStepContext(
                 effective_window_tokens=100000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100000,
+                model_context_window_tokens=100000,
             ),
         )
         app = ConsoleScreen(viewmodel=viewmodel)
@@ -608,9 +609,7 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
             footer_context = app.query_one("#footer-narrow-context", Static)
             assert footer_wide.display is False
             assert footer_narrow.display is True
-            assert footer_session.content == (
-                "0a76a0b2-8a37-4cb3-80ac-c319d1dfcba3\nstui.yaml"
-            )
+            assert footer_session.content == ("0a76a0b2-8a37-4cb3-80ac-c319d1dfcba3\nstui.yaml")
             rendered_context = str(footer_context.render())
             assert len(rendered_context.splitlines()[2]) == footer_context.size.width
             assert footer_session.region.y < footer_context.region.y
@@ -1012,9 +1011,7 @@ def test_console_screen_shows_runs_empty_message_from_strings() -> None:
             navigation_hint = app.query_one("#runs-table-navigation", Static)
 
             assert app.state.runs_table.visible is True
-            assert empty_message.content.plain == (
-                "No runs yet. Use /run to execute your flows."
-            )
+            assert empty_message.content.plain == ("No runs yet. Use /run to execute your flows.")
             assert navigation_hint.content.plain == "↑↓ · Enter · Esc"
 
     asyncio.run(run())
@@ -1313,10 +1310,7 @@ def test_console_screen_rerenders_transcript_after_resize() -> None:
             waiting_port=NeverCalledWaitingPort(),
             runs_port=FakeRunsPort(),
         )
-        url = (
-            "http://127.0.0.1:8001/webhooks/example-auth/"
-            "GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl"
-        )
+        url = "http://127.0.0.1:8001/webhooks/example-auth/GrbyVerTlIkPm33R-DbTe_7h3WKNbKkl"
         viewmodel.state.transcript.items.append(
             StepNotifyOutputItem(
                 run_id="run-1",
@@ -1384,9 +1378,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
 
             transcript = app.query_one("#transcript-log", TranscriptLog)
             rendered_lines = [
-                strip.text.rstrip()
-                for strip in transcript.lines
-                if strip.text.rstrip()
+                strip.text.rstrip() for strip in transcript.lines if strip.text.rstrip()
             ]
 
             assert "› /dev" in rendered_lines

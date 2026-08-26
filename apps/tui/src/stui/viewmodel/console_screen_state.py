@@ -155,6 +155,8 @@ class AgentStepUsage:
 class AgentStepContext:
     effective_window_tokens: int | None
     max_total_tokens_ratio: float | None
+    window_width_tokens: int | None = None
+    model_context_window_tokens: int | None = None
 
 
 @dataclass(frozen=True)

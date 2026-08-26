@@ -44,6 +44,8 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
             context=AgentContextMetrics(
                 effective_window_tokens=100_000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100_000,
+                model_context_window_tokens=100_000,
             ),
         )
     )
@@ -62,6 +64,8 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
     assert payload.context == AgentContextMetrics(
         effective_window_tokens=100_000,
         max_total_tokens_ratio=0.8,
+        window_width_tokens=100_000,
+        model_context_window_tokens=100_000,
     )
 
 

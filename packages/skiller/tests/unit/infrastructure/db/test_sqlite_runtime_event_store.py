@@ -74,9 +74,7 @@ def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> N
     assert last_event.id == second_event_id
     assert last_event.run_id == run_id
     assert last_event.sequence == events[1].sequence
-    assert runtime_event_store.list_events(run_id, after_sequence=events[0].sequence) == [
-        events[1]
-    ]
+    assert runtime_event_store.list_events(run_id, after_sequence=events[0].sequence) == [events[1]]
     assert runtime_event_store.list_events(run_id, limit=1) == [events[0]]
     assert runtime_event_store.list_events(
         run_id,
@@ -107,11 +105,11 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
                 step_id="support_agent",
                 turn_id="turn-1",
                 agent_sequence=33,
-            body=AgentToolCallEventBody(
-                turn_id="turn-1",
-                parent_sequence=32,
-                tool_call_id="call-1",
-                tool="shell",
+                body=AgentToolCallEventBody(
+                    turn_id="turn-1",
+                    parent_sequence=32,
+                    tool_call_id="call-1",
+                    tool="shell",
                     args={"command": "pwd"},
                 ),
             ),
@@ -386,6 +384,8 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                     context=AgentContextMetrics(
                         effective_window_tokens=100_000,
                         max_total_tokens_ratio=0.8,
+                        window_width_tokens=100_000,
+                        model_context_window_tokens=100_000,
                     ),
                     usage=LLMUsage(
                         estimated_system_tokens=None,
@@ -418,6 +418,8 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
             context=AgentContextMetrics(
                 effective_window_tokens=100_000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100_000,
+                model_context_window_tokens=100_000,
             ),
             usage=LLMUsage(
                 estimated_system_tokens=None,
@@ -434,10 +436,10 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
     assert event.model_dump(mode="json")["payload"] == {
         "total_tokens": 1000,
         "text": "I will inspect.",
-            "usage": {
-                "prompt_tokens": 1200,
-                "estimated_system_tokens": None,
-                "output_tokens": 300,
+        "usage": {
+            "prompt_tokens": 1200,
+            "estimated_system_tokens": None,
+            "output_tokens": 300,
             "total_tokens": 1000,
             "cache_read_tokens": 700,
             "cache_write_tokens": 20,
@@ -447,6 +449,8 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
         "context": {
             "effective_window_tokens": 100000,
             "max_total_tokens_ratio": 0.8,
+            "window_width_tokens": 100000,
+            "model_context_window_tokens": 100000,
         },
     }
 
@@ -480,6 +484,8 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                     context=AgentContextMetrics(
                         effective_window_tokens=100_000,
                         max_total_tokens_ratio=0.8,
+                        window_width_tokens=100_000,
+                        model_context_window_tokens=100_000,
                     ),
                 ),
             ),
@@ -501,6 +507,8 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
             context=AgentContextMetrics(
                 effective_window_tokens=100_000,
                 max_total_tokens_ratio=0.8,
+                window_width_tokens=100_000,
+                model_context_window_tokens=100_000,
             ),
         ),
     )
@@ -510,6 +518,8 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
         "context": {
             "effective_window_tokens": 100000,
             "max_total_tokens_ratio": 0.8,
+            "window_width_tokens": 100000,
+            "model_context_window_tokens": 100000,
         },
     }
 
@@ -562,6 +572,8 @@ def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
                     context=AgentContextMetrics(
                         effective_window_tokens=100_000,
                         max_total_tokens_ratio=0.8,
+                        window_width_tokens=100_000,
+                        model_context_window_tokens=100_000,
                     ),
                 ),
             ),

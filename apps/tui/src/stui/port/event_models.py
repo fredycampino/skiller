@@ -69,9 +69,7 @@ class ActionPostValue(ActionBaseValue):
     auto: bool = False
 
 
-ActionValue: TypeAlias = (
-    ActionBaseValue | ActionOpenUrlValue | ActionRunValue | ActionPostValue
-)
+ActionValue: TypeAlias = ActionBaseValue | ActionOpenUrlValue | ActionRunValue | ActionPostValue
 
 
 @dataclass(frozen=True)
@@ -284,6 +282,8 @@ class AgentUsagePayload:
 class AgentContextPayload:
     effective_window_tokens: int | None
     max_total_tokens_ratio: float | None
+    window_width_tokens: int | None = None
+    model_context_window_tokens: int | None = None
 
 
 @dataclass(frozen=True)

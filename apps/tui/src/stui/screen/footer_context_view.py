@@ -89,7 +89,12 @@ def _render_footer_context(
     capacity_tokens = context.effective_window_tokens
     limit_tokens = int(capacity_tokens * context.max_total_tokens_ratio)
     cached_tokens = usage.cache_read_tokens or 0
-    text = Text(usage.model, style=theme.color_text_secondary)
+    model_label = usage.model
+    if context.model_context_window_tokens is not None:
+        model_label = (
+            f"{model_label} {_format_limit_tokens(context.model_context_window_tokens)}"
+        )
+    text = Text(model_label, style=theme.color_text_secondary)
     text.append("\n")
     text.append(
         _token_header(

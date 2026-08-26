@@ -11,12 +11,18 @@ from pathlib import Path
 from typing import TextIO
 
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessHandle,
+    ToolProcessInterrupted,
     ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStarted,
+    ToolProcessStartFailed,
+    ToolProcessStartResult,
+    ToolProcessTimedOut,
     ToolProcessWait,
+    ToolProcessWaitFailed,
     ToolProcessWaitResult,
-    ToolProcessWaitStatus,
 )
 from skiller.domain.tool.tool_process_port import ToolProcessPort
 
@@ -32,28 +38,36 @@ class DefaultToolProcessRunner(ToolProcessPort):
         self.poll_interval_seconds = poll_interval_seconds
         self._processes: dict[str, _ManagedProcess] = {}
 
-    def popen(self, request: ToolProcessRequest) -> ToolProcessHandle:
+    def popen(self, request: ToolProcessRequest) -> ToolProcessStartResult:
+        stdout_file: TextIO | None = None
+        stderr_file: TextIO | None = None
+        try:
+            stdout_file = tempfile.NamedTemporaryFile(
+                mode="w+",
+                encoding="utf-8",
+                delete=False,
+            )
+            stderr_file = tempfile.NamedTemporaryFile(
+                mode="w+",
+                encoding="utf-8",
+                delete=False,
+            )
+            process = subprocess.Popen(  # noqa: S603
+                request.command,
+                cwd=request.cwd,
+                env=self._build_env(request.env),
+                stdin=subprocess.PIPE,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                text=True,
+                start_new_session=True,
+            )
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            self._cleanup_start_files(stdout_file=stdout_file, stderr_file=stderr_file)
+            return ToolProcessStartFailed(error=f"Tool process could not start: {exc}")
+
         process_id = str(uuid.uuid4())
-        stdout_file = tempfile.NamedTemporaryFile(
-            mode="w+",
-            encoding="utf-8",
-            delete=False,
-        )
-        stderr_file = tempfile.NamedTemporaryFile(
-            mode="w+",
-            encoding="utf-8",
-            delete=False,
-        )
-        process = subprocess.Popen(  # noqa: S603
-            request.command,
-            cwd=request.cwd,
-            env=self._build_env(request.env),
-            stdin=subprocess.PIPE,
-            stdout=stdout_file,
-            stderr=stderr_file,
-            text=True,
-            start_new_session=True,
-        )
+        handle = ToolProcessHandle(id=process_id, pid=process.pid)
         self._processes[process_id] = _ManagedProcess(
             process=process,
             stdout_file=stdout_file,
@@ -61,14 +75,15 @@ class DefaultToolProcessRunner(ToolProcessPort):
             stdout_path=Path(stdout_file.name),
             stderr_path=Path(stderr_file.name),
         )
-        if request.stdin is not None:
-            self.write(
-                ToolProcessHandle(id=process_id, pid=process.pid),
-                request.stdin,
-            )
-        elif process.stdin is not None:
-            process.stdin.close()
-        return ToolProcessHandle(id=process_id, pid=process.pid)
+        try:
+            if request.stdin is not None:
+                self.write(handle, request.stdin)
+            elif process.stdin is not None:
+                process.stdin.close()
+        except (OSError, ValueError) as exc:
+            self._cleanup_failed_process(handle)
+            return ToolProcessStartFailed(error=f"Tool process could not start: {exc}")
+        return ToolProcessStarted(handle=handle)
 
     def write(self, handle: ToolProcessHandle, payload: str) -> None:
         process = self._get_process(handle).process
@@ -84,8 +99,8 @@ class DefaultToolProcessRunner(ToolProcessPort):
         managed = self._get_process(handle)
         process = managed.process
         managed.close_output_files()
-        stdout = managed.stdout_path.read_text(encoding="utf-8")
-        stderr = managed.stderr_path.read_text(encoding="utf-8")
+        stdout = managed.stdout_path.read_text(encoding="utf-8", errors="replace")
+        stderr = managed.stderr_path.read_text(encoding="utf-8", errors="replace")
         self._processes.pop(handle.id, None)
         managed.unlink_output_files()
         return ToolProcessOutput(
@@ -105,22 +120,54 @@ class DefaultToolProcessRunner(ToolProcessPort):
         self,
         request: ToolProcessWait,
     ) -> ToolProcessWaitResult:
-        started_at = time.monotonic()
-        while self.poll(request.handle) is None:
-            if self._interrupted(request):
-                self.terminate(request.handle)
-                return ToolProcessWaitResult(status=ToolProcessWaitStatus.INTERRUPTED)
+        try:
+            started_at = time.monotonic()
+            while self.poll(request.handle) is None:
+                if self._interrupted(request):
+                    self.terminate(request.handle)
+                    return ToolProcessInterrupted()
 
-            if self._timed_out(started_at=started_at, timeout=request.timeout):
-                self.terminate(request.handle)
-                return ToolProcessWaitResult(status=ToolProcessWaitStatus.TIMEOUT)
+                if self._timed_out(started_at=started_at, timeout=request.timeout):
+                    self.terminate(request.handle)
+                    return ToolProcessTimedOut()
 
-            time.sleep(self.poll_interval_seconds)
+                time.sleep(self.poll_interval_seconds)
 
-        return ToolProcessWaitResult(
-            status=ToolProcessWaitStatus.COMPLETED,
-            output=self.read(request.handle),
-        )
+            return ToolProcessCompleted(output=self.read(request.handle))
+        except (OSError, subprocess.SubprocessError) as exc:
+            self._cleanup_failed_process(request.handle)
+            return ToolProcessWaitFailed(error=f"Tool process could not complete: {exc}")
+
+    def _cleanup_failed_process(self, handle: ToolProcessHandle) -> None:
+        managed = self._processes.pop(handle.id, None)
+        if managed is None:
+            return
+        try:
+            if managed.process.poll() is None:
+                self._terminate_process_group(process=managed.process)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        try:
+            managed.close_output_files()
+            managed.unlink_output_files()
+        except OSError:
+            pass
+
+    def _cleanup_start_files(
+        self,
+        *,
+        stdout_file: TextIO | None,
+        stderr_file: TextIO | None,
+    ) -> None:
+        for output_file in (stdout_file, stderr_file):
+            if output_file is None:
+                continue
+            output_path = Path(output_file.name)
+            try:
+                output_file.close()
+                output_path.unlink(missing_ok=True)
+            except OSError:
+                continue
 
     def _interrupted(self, request: ToolProcessWait) -> bool:
         if request.interrupt is None:

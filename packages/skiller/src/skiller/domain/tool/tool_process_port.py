@@ -4,13 +4,14 @@ from skiller.domain.tool.tool_process_model import (
     ToolProcessHandle,
     ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStartResult,
     ToolProcessWait,
     ToolProcessWaitResult,
 )
 
 
 class ToolProcessPort(Protocol):
-    def popen(self, request: ToolProcessRequest) -> ToolProcessHandle: ...
+    def popen(self, request: ToolProcessRequest) -> ToolProcessStartResult: ...
 
     def write(self, handle: ToolProcessHandle, payload: str) -> None: ...
 

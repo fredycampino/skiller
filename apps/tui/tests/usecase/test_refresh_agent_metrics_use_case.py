@@ -29,6 +29,8 @@ def test_refresh_agent_metrics_updates_state() -> None:
         context=AgentStepContext(
             effective_window_tokens=100000,
             max_total_tokens_ratio=0.8,
+            window_width_tokens=100000,
+            model_context_window_tokens=100000,
         ),
     )
 

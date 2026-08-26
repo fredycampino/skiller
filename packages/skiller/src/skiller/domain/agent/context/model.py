@@ -9,6 +9,8 @@ from skiller.domain.agent.llm.model import LLMUsage
 class AgentContextMetrics:
     effective_window_tokens: int
     max_total_tokens_ratio: float
+    window_width_tokens: int | None
+    model_context_window_tokens: int | None
 
 
 class AgentContextEntryType(str, Enum):

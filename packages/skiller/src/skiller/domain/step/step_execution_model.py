@@ -256,16 +256,29 @@ def _agent_context_metrics(raw_context: object) -> AgentContextMetrics | None:
 
     effective_window_tokens = raw_context.get("effective_window_tokens")
     max_total_tokens_ratio = raw_context.get("max_total_tokens_ratio")
+    window_width_tokens = raw_context.get("window_width_tokens")
+    model_context_window_tokens = raw_context.get("model_context_window_tokens")
     if isinstance(effective_window_tokens, bool) or not isinstance(effective_window_tokens, int):
         return None
     if isinstance(max_total_tokens_ratio, bool):
         return None
     if not isinstance(max_total_tokens_ratio, (float, int)):
         return None
+    if window_width_tokens is not None and (
+        isinstance(window_width_tokens, bool) or not isinstance(window_width_tokens, int)
+    ):
+        return None
+    if model_context_window_tokens is not None and (
+        isinstance(model_context_window_tokens, bool)
+        or not isinstance(model_context_window_tokens, int)
+    ):
+        return None
 
     return AgentContextMetrics(
         effective_window_tokens=effective_window_tokens,
         max_total_tokens_ratio=float(max_total_tokens_ratio),
+        window_width_tokens=window_width_tokens,
+        model_context_window_tokens=model_context_window_tokens,
     )
 
 

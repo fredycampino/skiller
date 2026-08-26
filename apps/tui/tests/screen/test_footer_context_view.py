@@ -28,11 +28,39 @@ def test_render_footer_context_shows_model_tokens_capacity_and_bar() -> None:
     )
 
     plain = rendered.plain
-    assert plain.startswith("gpt-5.5\n59.5k")
+    assert plain.startswith("gpt-5.5 128K\n59.5k")
     assert "100K" in plain
     assert "┴" not in plain
     assert "▾" in plain
     assert plain.splitlines()[2] == "━━━━━━━━━━━━━━━━━━─────▾──────"
+
+
+def test_render_footer_context_omits_model_capacity_when_unavailable() -> None:
+    metrics = _metrics(
+        current_tokens=59500,
+        estimated_system_tokens=0,
+        limit_tokens=80000,
+        capacity_tokens=100000,
+        cached_tokens=42000,
+    )
+    assert metrics.context is not None
+    metrics = AgentMetricsState(
+        usage=metrics.usage,
+        context=AgentStepContext(
+            effective_window_tokens=100000,
+            max_total_tokens_ratio=0.8,
+            model_context_window_tokens=None,
+        ),
+    )
+
+    rendered = _render_footer_context(
+        metrics=metrics,
+        fallback_text="/ for commands",
+        theme=DEFAULT_TUI_THEME,
+        bar_width=30,
+    )
+
+    assert rendered.plain.startswith("gpt-5.5\n59.5k")
 
 
 def test_render_footer_context_keeps_one_visible_non_cached_token() -> None:
@@ -54,7 +82,6 @@ def test_render_footer_context_keeps_one_visible_non_cached_token() -> None:
     assert "╍" not in bar
 
 
-
 def test_render_footer_context_keeps_limit_marker_fixed_when_usage_overflows() -> None:
     rendered = _render_footer_context(
         metrics=_metrics(
@@ -73,7 +100,6 @@ def test_render_footer_context_keeps_limit_marker_fixed_when_usage_overflows() -
     assert bar[23] == "▾"
     assert bar[24:] == "──────"
     assert bar[:23] == "━━━━━━━━━━━━━━━━━━━━━━━"
-
 
 
 def test_render_footer_context_draws_estimated_system_tokens_first_in_primary_color() -> None:
@@ -99,15 +125,9 @@ def test_render_footer_context_draws_estimated_system_tokens_first_in_primary_co
         for span in rendered.spans
         if span.start >= bar_start and span.end <= bar_start + len(bar)
     ]
-    assert [span.style for span in bar_spans[:3]] == [
-        DEFAULT_TUI_THEME.color_text_secondary
-    ] * 3
-    assert [span.style for span in bar_spans[3:13]] == [
-        DEFAULT_TUI_THEME.color_text_muted
-    ] * 10
-    assert [span.style for span in bar_spans[13:18]] == [
-        DEFAULT_TUI_THEME.color_text_primary
-    ] * 5
+    assert [span.style for span in bar_spans[:3]] == [DEFAULT_TUI_THEME.color_text_secondary] * 3
+    assert [span.style for span in bar_spans[3:13]] == [DEFAULT_TUI_THEME.color_text_muted] * 10
+    assert [span.style for span in bar_spans[13:18]] == [DEFAULT_TUI_THEME.color_text_primary] * 5
 
 
 def test_token_style_uses_limit_as_warning_threshold() -> None:
@@ -176,5 +196,6 @@ def _metrics(
         context=AgentStepContext(
             effective_window_tokens=capacity_tokens,
             max_total_tokens_ratio=limit_tokens / capacity_tokens,
+            model_context_window_tokens=128000,
         ),
     )

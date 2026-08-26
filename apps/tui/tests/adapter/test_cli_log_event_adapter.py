@@ -823,6 +823,8 @@ def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> 
                     "context": {
                         "effective_window_tokens": 100000,
                         "max_total_tokens_ratio": 0.8,
+                        "window_width_tokens": 100000,
+                        "model_context_window_tokens": 128000,
                     },
                 },
             }
@@ -844,6 +846,8 @@ def test_cli_log_event_adapter_parses_agent_assistant_message_total_tokens() -> 
     assert event.payload.context is not None
     assert event.payload.context.effective_window_tokens == 100000
     assert event.payload.context.max_total_tokens_ratio == 0.8
+    assert event.payload.context.window_width_tokens == 100000
+    assert event.payload.context.model_context_window_tokens == 128000
 
 
 def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() -> None:
@@ -873,6 +877,8 @@ def test_cli_log_event_adapter_parses_agent_final_assistant_message_context() ->
                     "context": {
                         "effective_window_tokens": 100000,
                         "max_total_tokens_ratio": 0.8,
+                        "window_width_tokens": 100000,
+                        "model_context_window_tokens": 100000,
                     },
                 },
             }

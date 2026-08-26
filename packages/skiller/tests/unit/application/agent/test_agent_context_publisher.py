@@ -400,6 +400,8 @@ def _tool_request() -> ToolExecutionRequest:
         context_metrics=AgentContextMetrics(
             effective_window_tokens=100_000,
             max_total_tokens_ratio=0.8,
+            window_width_tokens=100_000,
+            model_context_window_tokens=100_000,
         ),
         turn_loop=AgentLoop(max_turns=10),
     )

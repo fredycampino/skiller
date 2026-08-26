@@ -297,6 +297,8 @@ class AgentContextModel(BaseModel):
 
     effective_window_tokens: int | None
     max_total_tokens_ratio: float | None
+    window_width_tokens: int | None = None
+    model_context_window_tokens: int | None = None
 
 
 class AgentAssistantMessageModel(BaseModel):
@@ -420,9 +422,7 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_WAITING:
             model = _validate_model(RunWaitingModel, payload, "payload")
-            return RunWaitingPayload(
-                output=_to_output_payload(event.step_type, model.output)
-            )
+            return RunWaitingPayload(output=_to_output_payload(event.step_type, model.output))
 
         if event_type == LogEventType.RUN_FINISHED:
             model = _validate_model(RunFinishedModel, payload, "payload")
@@ -441,9 +441,7 @@ class LogEventMapper:
             model = _validate_model(ActionDoneModel, payload, "payload")
             uid = model.uid.strip()
             if not uid:
-                raise RuntimeError(
-                    "logs command returned invalid payload: action uid is required"
-                )
+                raise RuntimeError("logs command returned invalid payload: action uid is required")
             return ActionDonePayload(
                 uid=uid,
                 type=model.type,
@@ -548,6 +546,8 @@ def _to_agent_context_payload(model: AgentContextModel | None) -> AgentContextPa
     return AgentContextPayload(
         effective_window_tokens=model.effective_window_tokens,
         max_total_tokens_ratio=model.max_total_tokens_ratio,
+        window_width_tokens=model.window_width_tokens,
+        model_context_window_tokens=model.model_context_window_tokens,
     )
 
 

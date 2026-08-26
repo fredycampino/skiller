@@ -44,6 +44,8 @@ class AgentContextConfig:
                 model_context_window_tokens=model_context_window_tokens,
             ),
             max_total_tokens_ratio=self.compaction.compaction_trigger_ratio,
+            window_width_tokens=self.window_width_tokens,
+            model_context_window_tokens=model_context_window_tokens,
         )
 
     def effective_context_tokens(self, *, model_context_window_tokens: int) -> int:

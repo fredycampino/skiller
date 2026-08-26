@@ -48,6 +48,10 @@ class ShellCommandPolicy:
             requested = self.allowed_roots[0] / requested
         resolved = requested.resolve(strict=False)
         self._ensure_path_allowed(resolved, label="cwd")
+        if not resolved.exists():
+            raise ValueError(f"shell cwd does not exist: {resolved}")
+        if not resolved.is_dir():
+            raise ValueError(f"shell cwd is not a directory: {resolved}")
         return str(resolved)
 
     def validate_command(self, *, command: str, effective_cwd: str) -> None:

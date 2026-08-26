@@ -48,11 +48,13 @@ def test_shell_process_tool_schema_defines_string_env_values() -> None:
     }
 
 
-def test_shell_process_tool_builds_process_request() -> None:
+def test_shell_process_tool_builds_process_request(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
     tool = ShellProcessTool(shell="/bin/zsh")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(Path("/workspace"),),
+        allowed_paths=(workspace,),
     )
 
     raw_request = tool.request(
@@ -62,7 +64,7 @@ def test_shell_process_tool_builds_process_request() -> None:
             tool_call_id="call-1",
             args={
                 "command": "pytest -q",
-                "cwd": "/workspace",
+                "cwd": str(workspace),
                 "env": {"CI": "1"},
                 "timeout": 30,
             },
@@ -84,7 +86,7 @@ def test_shell_process_tool_builds_process_request() -> None:
 
     assert request == ToolProcessRequest(
         command=["/bin/zsh", "-lc", "pytest -q"],
-        cwd="/workspace",
+        cwd=str(workspace),
         env={"CI": "1"},
         timeout=30,
     )

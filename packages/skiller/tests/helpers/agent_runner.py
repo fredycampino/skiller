@@ -30,12 +30,14 @@ from skiller.domain.run.run_model import RunAgent
 from skiller.domain.run.steering_model import SteeringItem, SteeringItemType
 from skiller.domain.shared.steering_port import SteeringPort
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessHandle,
     ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStarted,
+    ToolProcessStartResult,
     ToolProcessWait,
     ToolProcessWaitResult,
-    ToolProcessWaitStatus,
 )
 
 
@@ -199,8 +201,8 @@ def build_agent_runner(
 
 
 class _FakeToolProcessRunner:
-    def popen(self, request: ToolProcessRequest) -> ToolProcessHandle:
-        return ToolProcessHandle(id="test-process", pid=1)
+    def popen(self, request: ToolProcessRequest) -> ToolProcessStartResult:
+        return ToolProcessStarted(handle=ToolProcessHandle(id="test-process", pid=1))
 
     def write(self, handle: ToolProcessHandle, payload: str) -> None:
         return None
@@ -215,7 +217,4 @@ class _FakeToolProcessRunner:
         return None
 
     def wait(self, request: ToolProcessWait) -> ToolProcessWaitResult:
-        return ToolProcessWaitResult(
-            status=ToolProcessWaitStatus.COMPLETED,
-            output=self.read(request.handle),
-        )
+        return ToolProcessCompleted(output=self.read(request.handle))

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -78,12 +78,17 @@ from skiller.domain.tool.tool_execution_model import (
     ToolExecutionStatus,
 )
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
     ToolProcessHandle,
+    ToolProcessInterrupted,
     ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStarted,
+    ToolProcessStartFailed,
+    ToolProcessStartResult,
     ToolProcessWait,
+    ToolProcessWaitFailed,
     ToolProcessWaitResult,
-    ToolProcessWaitStatus,
 )
 
 pytestmark = pytest.mark.unit
@@ -439,6 +444,88 @@ def test_agent_tool_execution_persists_invalid_shell_cwd_as_tool_result() -> Non
     assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
     assert context_store.appended[-1]["payload"]["error"] == (
         "shell cwd escapes allowed_paths: /outside/workspace"
+    )
+
+
+@pytest.mark.parametrize(
+    ("start_error", "wait_error", "error_code", "error_message"),
+    [
+        ("process could not start", None, "process_start_failed", "process could not start"),
+        (None, "process could not complete", "process_wait_failed", "process could not complete"),
+    ],
+)
+def test_agent_tool_execution_persists_process_failures_as_tool_results(
+    start_error: str | None,
+    wait_error: str | None,
+    error_code: str,
+    error_message: str,
+) -> None:
+    process_runner = _FakeProcessRunner(
+        start_error=start_error,
+        wait_error=wait_error,
+    )
+    context_store = _FakeAgentContextStore()
+    executor = _build_executor(
+        context_store=context_store,
+        process_runner=process_runner,
+    )
+
+    results = executor.execute(_request_with_tool("shell", '{"command":"pwd"}'))
+
+    assert results.items[0].status == ToolExecutionStatus.EXECUTED
+    assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
+    assert context_store.appended[-1]["payload"]["data"] == {"error": error_code}
+    assert context_store.appended[-1]["payload"]["error"] == error_message
+
+
+def test_agent_tool_execution_persists_nonexistent_shell_cwd_as_tool_result(
+    tmp_path: Path,
+) -> None:
+    process_runner = _FakeProcessRunner()
+    context_store = _FakeAgentContextStore()
+    executor = _build_executor(
+        context_store=context_store,
+        process_runner=process_runner,
+    )
+    allowed = tmp_path / "workspace"
+    allowed.mkdir()
+    missing = allowed / "missing"
+    runtime_configs = ToolRuntimeConfigs(
+        items=(
+            ShellToolRuntimeConfig(
+                definition=ShellProcessTool,
+                allowed_paths=(allowed,),
+            ),
+        ),
+    )
+    request = replace(
+        _request_with_tool(
+            "shell",
+            f'{{"command":"pwd","cwd":"{missing}"}}',
+        ),
+        runtime_configs=runtime_configs,
+    )
+
+    results = executor.execute(request)
+
+    assert results == ToolExecutionResults(
+        items=[
+            ToolExecutionResult(
+                tool_call_id="call-1",
+                tool="shell",
+                status=ToolExecutionStatus.EXECUTED,
+            )
+        ]
+    )
+    assert process_runner.requests == []
+    assert [item["entry_type"] for item in context_store.appended] == [
+        AgentContextEntryType.TOOL_CALL,
+        AgentContextEntryType.TOOL_RESULT,
+    ]
+    assert context_store.appended[-1]["payload"]["status"] == ToolResultStatus.FAILED.value
+    assert context_store.appended[-1]["payload"]["data"] == {"error": "policy_blocked"}
+    assert context_store.appended[-1]["payload"]["error"] == (
+        f"shell cwd does not exist: {missing}"
     )
 
 
@@ -867,15 +954,21 @@ class _FakeProcessRunner:
         *,
         output: ToolProcessOutput | None = None,
         poll_results: list[int | None] | None = None,
+        start_error: str | None = None,
+        wait_error: str | None = None,
     ) -> None:
         self.output = output or ToolProcessOutput(exit_code=0, stdout="", stderr="")
         self.poll_results = list(poll_results or [0])
+        self.start_error = start_error
+        self.wait_error = wait_error
         self.requests: list[ToolProcessRequest] = []
         self.terminated: list[ToolProcessHandle] = []
 
-    def popen(self, request: ToolProcessRequest) -> ToolProcessHandle:
+    def popen(self, request: ToolProcessRequest) -> ToolProcessStartResult:
         self.requests.append(request)
-        return ToolProcessHandle(id="proc-1", pid=123)
+        if self.start_error is not None:
+            return ToolProcessStartFailed(error=self.start_error)
+        return ToolProcessStarted(handle=ToolProcessHandle(id="proc-1", pid=123))
 
     def write(self, handle: ToolProcessHandle, payload: str) -> None:
         return None
@@ -892,15 +985,14 @@ class _FakeProcessRunner:
         self.terminated.append(handle)
 
     def wait(self, request: ToolProcessWait) -> ToolProcessWaitResult:
+        if self.wait_error is not None:
+            return ToolProcessWaitFailed(error=self.wait_error)
         if request.interrupt is not None and request.interrupt.signal.is_interrupted(
             request.interrupt.run_id
         ):
             self.terminate(request.handle)
-            return ToolProcessWaitResult(status=ToolProcessWaitStatus.INTERRUPTED)
-        return ToolProcessWaitResult(
-            status=ToolProcessWaitStatus.COMPLETED,
-            output=self.output,
-        )
+            return ToolProcessInterrupted()
+        return ToolProcessCompleted(output=self.output)
 
 
 class _FakeSteering:

@@ -3,15 +3,24 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from skiller.domain.tool.tool_process_model import (
+    ToolProcessCompleted,
+    ToolProcessHandle,
     ToolProcessInterrupt,
+    ToolProcessInterrupted,
+    ToolProcessOutput,
     ToolProcessRequest,
+    ToolProcessStarted,
+    ToolProcessStartFailed,
+    ToolProcessStartResult,
+    ToolProcessTimedOut,
     ToolProcessWait,
-    ToolProcessWaitStatus,
+    ToolProcessWaitFailed,
 )
 from skiller.infrastructure.tools.process.default_tool_process import (
     DefaultToolProcessRunner,
@@ -28,7 +37,7 @@ def test_popen_starts_process_group_and_returns_handle(
     _patch_popen(monkeypatch=monkeypatch, process=process, recorded=recorded)
 
     runner = DefaultToolProcessRunner()
-    handle = runner.popen(
+    start_result = runner.popen(
         ToolProcessRequest(
             command=["/bin/bash", "-lc", "pwd"],
             cwd="/tmp",
@@ -37,6 +46,8 @@ def test_popen_starts_process_group_and_returns_handle(
         )
     )
 
+    assert isinstance(start_result, ToolProcessStarted)
+    handle = start_result.handle
     assert handle.pid == 1234
     assert handle.id
     assert process.stdin.value == "hello"
@@ -61,7 +72,7 @@ def test_poll_and_read_return_process_output(monkeypatch: pytest.MonkeyPatch) ->
     _patch_popen(monkeypatch=monkeypatch, process=process)
     runner = DefaultToolProcessRunner()
 
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     assert runner.poll(handle) == 7
     assert runner.read(handle).exit_code == 7
@@ -76,7 +87,7 @@ def test_popen_closes_stdin_when_payload_is_not_provided(
     _patch_popen(monkeypatch=monkeypatch, process=process)
     runner = DefaultToolProcessRunner()
 
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     assert process.stdin.closed is True
     runner.read(handle)
@@ -93,7 +104,7 @@ def test_terminate_sends_sigterm_to_process_group(
         lambda pid, sig: killed.append((pid, sig)),
     )
     runner = DefaultToolProcessRunner()
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     runner.terminate(handle)
 
@@ -114,7 +125,7 @@ def test_terminate_escalates_to_sigkill_after_timeout(
         lambda pid, sig: killed.append((pid, sig)),
     )
     runner = DefaultToolProcessRunner(terminate_timeout_seconds=0.5)
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     runner.terminate(handle)
 
@@ -128,11 +139,11 @@ def test_wait_returns_completed_with_output_even_when_exit_code_is_non_zero(
     process = _FakeProcess(stdout="", stderr="boom", returncode=7)
     _patch_popen(monkeypatch=monkeypatch, process=process)
     runner = DefaultToolProcessRunner()
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     result = runner.wait(ToolProcessWait(handle=handle))
 
-    assert result.status == ToolProcessWaitStatus.COMPLETED
+    assert isinstance(result, ToolProcessCompleted)
     assert result.output is not None
     assert result.output.exit_code == 7
     assert result.output.stderr == "boom"
@@ -154,7 +165,7 @@ def test_wait_terminates_and_returns_timeout(
         lambda: next(timestamps),
     )
     runner = DefaultToolProcessRunner(poll_interval_seconds=0)
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     result = runner.wait(
         ToolProcessWait(
@@ -163,8 +174,7 @@ def test_wait_terminates_and_returns_timeout(
         )
     )
 
-    assert result.status == ToolProcessWaitStatus.TIMEOUT
-    assert result.output is None
+    assert isinstance(result, ToolProcessTimedOut)
     assert killed == [(1234, signal.SIGTERM)]
 
 
@@ -179,7 +189,7 @@ def test_wait_terminates_and_returns_interrupted(
         lambda pid, sig: killed.append((pid, sig)),
     )
     runner = DefaultToolProcessRunner(poll_interval_seconds=0)
-    handle = runner.popen(ToolProcessRequest(command=["cmd"]))
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
 
     result = runner.wait(
         ToolProcessWait(
@@ -191,9 +201,116 @@ def test_wait_terminates_and_returns_interrupted(
         )
     )
 
-    assert result.status == ToolProcessWaitStatus.INTERRUPTED
-    assert result.output is None
+    assert isinstance(result, ToolProcessInterrupted)
     assert killed == [(1234, signal.SIGTERM)]
+
+
+def test_popen_returns_failed_and_cleans_output_files_on_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "skiller.infrastructure.tools.process.default_tool_process.subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("missing cwd")),
+    )
+    runner = DefaultToolProcessRunner()
+
+    result = runner.popen(ToolProcessRequest(command=["cmd"]))
+
+    assert result == ToolProcessStartFailed(error="Tool process could not start: missing cwd")
+
+
+def test_popen_returns_failed_and_cleans_output_files_on_value_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_paths: list[Path] = []
+
+    def fail_popen(*_args: object, **kwargs: object) -> None:
+        stdout_file = kwargs["stdout"]
+        stderr_file = kwargs["stderr"]
+        output_paths.extend([Path(stdout_file.name), Path(stderr_file.name)])
+        raise ValueError("embedded null byte")
+
+    monkeypatch.setattr(
+        "skiller.infrastructure.tools.process.default_tool_process.subprocess.Popen",
+        fail_popen,
+    )
+    runner = DefaultToolProcessRunner()
+
+    result = runner.popen(ToolProcessRequest(command=["cmd\x00"]))
+
+    assert result == ToolProcessStartFailed(
+        error="Tool process could not start: embedded null byte"
+    )
+    assert runner._processes == {}
+    assert all(not path.exists() for path in output_paths)
+
+
+def test_popen_returns_failed_when_stdin_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess()
+    _patch_popen(monkeypatch=monkeypatch, process=process)
+    monkeypatch.setattr(
+        "skiller.infrastructure.tools.process.default_tool_process.os.killpg",
+        lambda *_args: None,
+    )
+    runner = DefaultToolProcessRunner()
+    monkeypatch.setattr(
+        runner,
+        "write",
+        lambda *_args: (_ for _ in ()).throw(BrokenPipeError("stdin closed")),
+    )
+
+    result = runner.popen(ToolProcessRequest(command=["cmd"], stdin="hello"))
+
+    assert result == ToolProcessStartFailed(error="Tool process could not start: stdin closed")
+
+
+def test_wait_returns_failed_on_process_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess(returncode=0)
+    _patch_popen(monkeypatch=monkeypatch, process=process)
+    runner = DefaultToolProcessRunner()
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
+    monkeypatch.setattr(
+        "skiller.infrastructure.tools.process.default_tool_process.Path.read_text",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("read failed")),
+    )
+
+    managed = runner._processes[handle.id]
+    output_paths = (managed.stdout_path, managed.stderr_path)
+
+    result = runner.wait(ToolProcessWait(handle=handle))
+
+    assert isinstance(result, ToolProcessWaitFailed)
+    assert result.error == "Tool process could not complete: read failed"
+    assert runner._processes == {}
+    assert all(not path.exists() for path in output_paths)
+
+
+def test_wait_replaces_non_utf8_process_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess(returncode=0)
+    _patch_popen(monkeypatch=monkeypatch, process=process)
+    runner = DefaultToolProcessRunner()
+    handle = _started_handle(runner.popen(ToolProcessRequest(command=["cmd"])))
+    managed = runner._processes[handle.id]
+    managed.stdout_file.buffer.write(b"\xff")
+    managed.stdout_file.flush()
+
+    result = runner.wait(ToolProcessWait(handle=handle))
+
+    assert result == ToolProcessCompleted(
+        output=ToolProcessOutput(exit_code=0, stdout="�", stderr="")
+    )
+    assert runner._processes == {}
+
+
+def _started_handle(result: ToolProcessStartResult) -> ToolProcessHandle:
+    assert isinstance(result, ToolProcessStarted)
+    return result.handle
 
 
 def _patch_popen(

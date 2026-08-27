@@ -31,6 +31,7 @@ def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -
         "method",
         "auth",
         "payload_source",
+        "token_header",
         "enabled",
         "created_at",
     }
@@ -239,3 +240,33 @@ def _table_columns(db_path, table: str) -> set[str]:  # noqa: ANN001
     with sqlite3.connect(db_path) as conn:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(row[1]) for row in rows}
+
+
+def test_sqlite_runtime_bootstrap_migrates_webhook_token_header_without_data_loss(tmp_path) -> None:
+    db_path = tmp_path / "runtime.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE webhook_registrations (
+              webhook TEXT PRIMARY KEY,
+              secret TEXT NOT NULL,
+              method TEXT NOT NULL DEFAULT 'POST',
+              auth TEXT NOT NULL DEFAULT 'signed',
+              payload_source TEXT NOT NULL DEFAULT 'body_json',
+              enabled INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO webhook_registrations (webhook, secret)
+            VALUES ('github', 'secret-1');
+            PRAGMA user_version = 10;
+            """
+        )
+
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT webhook, secret, token_header FROM webhook_registrations"
+        ).fetchone()
+    assert row == ("github", "secret-1", None)
+    assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION

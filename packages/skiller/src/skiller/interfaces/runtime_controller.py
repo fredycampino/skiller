@@ -165,6 +165,7 @@ class RuntimeController:
         method: str = "POST",
         auth: str = "signed",
         payload_source: str = "body_json",
+        token_header: str | None = None,
     ) -> dict[str, Any]:
         try:
             request = self.webhook_wait_mapper.to_register_input(
@@ -172,6 +173,7 @@ class RuntimeController:
                 method=method,
                 auth=auth,
                 payload_source=payload_source,
+                token_header=token_header,
             )
         except ValueError as exc:
             return self.webhook_wait_mapper.to_register_error_dict(webhook, str(exc))

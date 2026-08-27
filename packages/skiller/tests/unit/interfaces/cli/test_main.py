@@ -283,8 +283,9 @@ class _FakeController:
         method: str = "POST",
         auth: str = "signed",
         payload_source: str = "body_json",
+        token_header: str | None = None,
     ) -> dict[str, object]:
-        self.register_webhook_calls.append((webhook, method, auth, payload_source))
+        self.register_webhook_calls.append((webhook, method, auth, payload_source, token_header))
         return {
             "webhook": webhook,
             "status": "REGISTERED",
@@ -999,6 +1000,35 @@ def test_webhook_receive_forwards_payload_and_resumes_matched_runs(
     assert data["resumed_runs"] == ["run-1"]
 
 
+
+def test_webhook_register_forwards_token_header(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(
+        [
+            "webhook",
+            "register",
+            "provider-events",
+            "--auth",
+            "token",
+            "--token-header",
+            "X-Webhook-Token",
+        ]
+    )
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 0
+    assert controller.register_webhook_calls == [
+        ("provider-events", "POST", "token", "body_json", "X-Webhook-Token")
+    ]
+    assert data["auth"] == "token"
+
+
 def test_webhook_register_forwards_ingress_options_and_prints_url(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -1024,7 +1054,7 @@ def test_webhook_register_forwards_ingress_options_and_prints_url(
     data, _ = _read_json(capsys)
     assert exit_code == 0
     assert controller.register_webhook_calls == [
-        ("example-auth", "GET", "none", "query")
+        ("example-auth", "GET", "none", "query", None)
     ]
     assert data["webhook_url"] == "http://127.0.0.1:8001/webhooks/example-auth/{key}"
 

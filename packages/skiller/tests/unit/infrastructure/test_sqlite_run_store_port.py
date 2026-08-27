@@ -12,6 +12,7 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
     WebhookPayloadSource,
+    WebhookRegistration,
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
@@ -550,24 +551,33 @@ def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     registry.register_webhook(
-        "github-ci",
-        "secret-1",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="github-ci",
+            secret="secret-1",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
     registry.register_webhook(
-        "market-signal",
-        "secret-2",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="market-signal",
+            secret="secret-2",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
 
     webhooks = registry.list_webhook_registrations()
 
-    assert sorted(item["webhook"] for item in webhooks) == ["github-ci", "market-signal"]
-    assert all(item["method"] == "POST" for item in webhooks)
-    assert all(item["auth"] == "signed" for item in webhooks)
-    assert all(item["payload_source"] == "body_json" for item in webhooks)
-    assert all("created_at" in item for item in webhooks)
+    assert sorted(item.webhook for item in webhooks) == ["github-ci", "market-signal"]
+    assert all(item.method.value == "POST" for item in webhooks)
+    assert all(item.auth.value == "signed" for item in webhooks)
+    assert all(item.payload_source.value == "body_json" for item in webhooks)
+    assert all(item.token_header is None for item in webhooks)
+    assert all(item.created_at is not None for item in webhooks)

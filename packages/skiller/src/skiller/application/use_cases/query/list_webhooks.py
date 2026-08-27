@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 
+from skiller.domain.event.webhook_registration_model import WebhookRegistration
 from skiller.domain.event.webhook_registry_port import WebhookRegistryPort
 
 
 @dataclass(frozen=True)
 class ListWebhooksResult:
-    webhooks: list[dict[str, object]]
+    webhooks: list[WebhookRegistration]
 
 
 class ListWebhooksUseCase:

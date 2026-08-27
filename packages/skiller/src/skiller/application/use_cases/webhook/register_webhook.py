@@ -6,6 +6,7 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
     WebhookPayloadSource,
+    WebhookRegistration,
 )
 from skiller.domain.event.webhook_registry_port import WebhookRegistryPort
 
@@ -16,6 +17,7 @@ class RegisterWebhookInput:
     method: WebhookMethod
     auth: WebhookAuth
     payload_source: WebhookPayloadSource
+    token_header: str | None
 
 
 class RegisterWebhookStatus(str, Enum):
@@ -34,6 +36,7 @@ class RegisterWebhookResult:
     payload_source: WebhookPayloadSource
     secret: str | None = None
     enabled: bool | None = None
+    token_header: str | None = None
     error: str | None = None
 
 
@@ -69,11 +72,15 @@ class RegisterWebhookUseCase:
 
         secret = secrets.token_urlsafe(32)
         self.registry.register_webhook(
-            normalized,
-            secret,
-            method=request.method,
-            auth=request.auth,
-            payload_source=request.payload_source,
+            WebhookRegistration(
+                webhook=normalized,
+                secret=secret,
+                method=request.method,
+                auth=request.auth,
+                payload_source=request.payload_source,
+                token_header=request.token_header,
+                enabled=True,
+            )
         )
         return RegisterWebhookResult(
             status=RegisterWebhookStatus.REGISTERED,
@@ -83,4 +90,5 @@ class RegisterWebhookUseCase:
             payload_source=request.payload_source,
             secret=secret,
             enabled=True,
+            token_header=request.token_header,
         )

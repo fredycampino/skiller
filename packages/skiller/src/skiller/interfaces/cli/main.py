@@ -485,7 +485,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser.add_argument(
         "--auth",
         default="signed",
-        choices=["signed", "none"],
+        choices=["signed", "token", "none"],
         help="Webhook endpoint authentication mode",
     )
     register_parser.add_argument(
@@ -493,6 +493,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="body_json",
         choices=["body_json", "query"],
         help="Where the webhook endpoint reads the event payload from",
+    )
+    register_parser.add_argument(
+        "--token-header",
+        help="Header carrying the webhook token when --auth token is selected",
     )
 
     webhook_sub.add_parser("list", help="List registered webhook channels")
@@ -848,6 +852,7 @@ def main(argv: list[str] | None = None) -> int:
             method=args.method,
             auth=args.auth,
             payload_source=args.payload_source,
+            token_header=args.token_header,
         )
         if result["status"] == "REGISTERED":
             result["webhook_url"] = (

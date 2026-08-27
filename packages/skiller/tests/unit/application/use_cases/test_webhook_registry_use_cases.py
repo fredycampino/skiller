@@ -12,35 +12,21 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
     WebhookPayloadSource,
+    WebhookRegistration,
 )
 
 
 class _FakeRegistry:
     def __init__(self) -> None:
-        self.records: dict[str, dict[str, object]] = {}
+        self.records: dict[str, WebhookRegistration] = {}
 
-    def register_webhook(
-        self,
-        webhook: str,
-        secret: str,
-        *,
-        method: WebhookMethod,
-        auth: WebhookAuth,
-        payload_source: WebhookPayloadSource,
-    ) -> None:
-        self.records[webhook] = {
-            "webhook": webhook,
-            "secret": secret,
-            "method": method.value,
-            "auth": auth.value,
-            "payload_source": payload_source.value,
-            "enabled": True,
-        }
+    def register_webhook(self, registration: WebhookRegistration) -> None:
+        self.records[registration.webhook] = registration
 
-    def get_webhook_registration(self, webhook: str) -> dict[str, object] | None:
+    def get_webhook_registration(self, webhook: str) -> WebhookRegistration | None:
         return self.records.get(webhook)
 
-    def list_webhook_registrations(self) -> list[dict[str, object]]:
+    def list_webhook_registrations(self) -> list[WebhookRegistration]:
         return list(self.records.values())
 
     def remove_webhook(self, webhook: str) -> bool:
@@ -56,6 +42,7 @@ def test_register_webhook_creates_secret_once() -> None:
             method=WebhookMethod.POST,
             auth=WebhookAuth.SIGNED,
             payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
         )
     )
 
@@ -65,7 +52,7 @@ def test_register_webhook_creates_secret_once() -> None:
     assert result.auth == WebhookAuth.SIGNED
     assert result.payload_source == WebhookPayloadSource.BODY_JSON
     assert result.secret
-    assert registry.records["github-ci"]["secret"] == result.secret
+    assert registry.records["github-ci"].secret == result.secret
 
 
 def test_register_webhook_accepts_get_query_without_signature() -> None:
@@ -77,6 +64,7 @@ def test_register_webhook_accepts_get_query_without_signature() -> None:
             method=WebhookMethod.GET,
             auth=WebhookAuth.NONE,
             payload_source=WebhookPayloadSource.QUERY,
+            token_header=None,
         )
     )
 
@@ -84,19 +72,23 @@ def test_register_webhook_accepts_get_query_without_signature() -> None:
     assert result.method == WebhookMethod.GET
     assert result.auth == WebhookAuth.NONE
     assert result.payload_source == WebhookPayloadSource.QUERY
-    assert registry.records["example-auth"]["method"] == "GET"
-    assert registry.records["example-auth"]["auth"] == "none"
-    assert registry.records["example-auth"]["payload_source"] == "query"
+    assert registry.records["example-auth"].method == WebhookMethod.GET
+    assert registry.records["example-auth"].auth == WebhookAuth.NONE
+    assert registry.records["example-auth"].payload_source == WebhookPayloadSource.QUERY
 
 
 def test_register_webhook_rejects_duplicate() -> None:
     registry = _FakeRegistry()
     registry.register_webhook(
-        "github-ci",
-        "secret",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="github-ci",
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
 
     result = RegisterWebhookUseCase(registry).execute(
@@ -105,6 +97,7 @@ def test_register_webhook_rejects_duplicate() -> None:
             method=WebhookMethod.POST,
             auth=WebhookAuth.SIGNED,
             payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
         )
     )
 
@@ -115,11 +108,15 @@ def test_register_webhook_rejects_duplicate() -> None:
 def test_remove_webhook_deletes_registration() -> None:
     registry = _FakeRegistry()
     registry.register_webhook(
-        "github-ci",
-        "secret",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="github-ci",
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
 
     result = RemoveWebhookUseCase(registry).execute("github-ci")
@@ -140,20 +137,46 @@ def test_remove_webhook_returns_not_found() -> None:
 def test_list_webhooks_returns_registered_channels() -> None:
     registry = _FakeRegistry()
     registry.register_webhook(
-        "github-ci",
-        "secret-1",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="github-ci",
+            secret="secret-1",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
     registry.register_webhook(
-        "market-signal",
-        "secret-2",
-        method=WebhookMethod.POST,
-        auth=WebhookAuth.SIGNED,
-        payload_source=WebhookPayloadSource.BODY_JSON,
+        WebhookRegistration(
+            webhook="market-signal",
+            secret="secret-2",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        )
     )
 
     result = ListWebhooksUseCase(registry).execute()
 
-    assert [item["webhook"] for item in result.webhooks] == ["github-ci", "market-signal"]
+    assert [item.webhook for item in result.webhooks] == ["github-ci", "market-signal"]
+
+
+def test_register_webhook_persists_token_header() -> None:
+    registry = _FakeRegistry()
+
+    result = RegisterWebhookUseCase(registry).execute(
+        RegisterWebhookInput(
+            webhook="provider-events",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.TOKEN,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header="X-Webhook-Token",
+        )
+    )
+
+    assert result.auth == WebhookAuth.TOKEN
+    assert result.token_header == "X-Webhook-Token"
+    assert registry.records["provider-events"].token_header == "X-Webhook-Token"

@@ -6,6 +6,12 @@ import json
 import httpx
 import pytest
 
+from skiller.domain.event.webhook_registration_model import (
+    WebhookAuth,
+    WebhookMethod,
+    WebhookPayloadSource,
+    WebhookRegistration,
+)
 from skiller.local.server import app as webhooks_app
 
 
@@ -34,14 +40,15 @@ def test_receive_webhook_calls_launcher(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "POST",
-            "auth": "signed",
-            "payload_source": "body_json",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        ),
     )
     monkeypatch.setattr(
         webhooks_app.launcher,
@@ -81,14 +88,15 @@ def test_receive_webhook_get_reads_query_payload_without_signature(
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "GET",
-            "auth": "none",
-            "payload_source": "query",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.GET,
+            auth=WebhookAuth.NONE,
+            payload_source=WebhookPayloadSource.QUERY,
+            token_header=None,
+            enabled=True,
+        ),
     )
     monkeypatch.setattr(
         webhooks_app.launcher,
@@ -121,14 +129,15 @@ def test_receive_webhook_rejects_unregistered_method(
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "POST",
-            "auth": "signed",
-            "payload_source": "body_json",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        ),
     )
 
     response = _request("GET", "/webhooks/test/42?ok=true")
@@ -143,14 +152,15 @@ def test_receive_webhook_rejects_non_object_payload() -> None:
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "POST",
-            "auth": "signed",
-            "payload_source": "body_json",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        ),
     )
     response = _request(
         "POST",
@@ -173,14 +183,15 @@ def test_receive_webhook_requires_signature_when_registered(
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "POST",
-            "auth": "signed",
-            "payload_source": "body_json",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        ),
     )
 
     response = _request("POST", "/webhooks/test/42", json={"ok": True})
@@ -202,14 +213,15 @@ def test_receive_webhook_rejects_invalid_signature(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         webhooks_app,
         "_load_registration",
-        lambda webhook: {
-            "webhook": webhook,
-            "secret": "secret",
-            "method": "POST",
-            "auth": "signed",
-            "payload_source": "body_json",
-            "enabled": True,
-        },
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.SIGNED,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header=None,
+            enabled=True,
+        ),
     )
 
     response = _request(
@@ -221,6 +233,123 @@ def test_receive_webhook_rejects_invalid_signature(monkeypatch: pytest.MonkeyPat
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid signature"
+
+
+
+def test_receive_webhook_accepts_configured_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="token-secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.TOKEN,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header="X-Webhook-Token",
+            enabled=True,
+        ),
+    )
+    monkeypatch.setattr(
+        webhooks_app.launcher,
+        "receive_webhook",
+        lambda webhook, key, payload, dedup_key=None: {"accepted": True},
+    )
+
+    response = _request(
+        "POST",
+        "/webhooks/provider/inbox",
+        json={"message": "hello"},
+        headers={"X-Webhook-Token": "token-secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"accepted": True}
+
+
+def test_receive_webhook_rejects_missing_or_invalid_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="token-secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.TOKEN,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header="X-Webhook-Token",
+            enabled=True,
+        ),
+    )
+
+    missing = _request("POST", "/webhooks/provider/inbox", json={"message": "hello"})
+    invalid = _request(
+        "POST",
+        "/webhooks/provider/inbox",
+        json={"message": "hello"},
+        headers={"X-Webhook-Token": "wrong"},
+    )
+
+    assert missing.status_code == 401
+    assert missing.json()["detail"] == "Missing webhook token"
+    assert invalid.status_code == 401
+    assert invalid.json()["detail"] == "Invalid webhook token"
+
+
+def test_receive_webhook_rejects_missing_token_before_reading_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="token-secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.TOKEN,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header="X-Webhook-Token",
+            enabled=True,
+        ),
+    )
+
+    async def fail_if_body_is_read(_: object) -> bytes:
+        raise AssertionError("body must not be read before token authentication")
+
+    monkeypatch.setattr(webhooks_app.Request, "body", fail_if_body_is_read)
+
+    response = _request("POST", "/webhooks/provider/inbox", content=b"arbitrarily-large-body")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing webhook token"
+
+
+def test_receive_webhook_rejects_non_ascii_token_without_server_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        webhooks_app,
+        "_load_registration",
+        lambda webhook: WebhookRegistration(
+            webhook=webhook,
+            secret="token-secret",
+            method=WebhookMethod.POST,
+            auth=WebhookAuth.TOKEN,
+            payload_source=WebhookPayloadSource.BODY_JSON,
+            token_header="X-Webhook-Token",
+            enabled=True,
+        ),
+    )
+
+    response = _request(
+        "POST",
+        "/webhooks/provider/inbox",
+        json={"message": "hello"},
+        headers={"X-Webhook-Token": b"\xff"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid webhook token"
 
 
 def test_receive_channel_calls_launcher(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,6 +19,14 @@ All notable changes to this project should be summarized here before a version i
 ### Notes
 - Update this section when a branch is ready for release.
 
+## 0.1.0-beta.35 - 2026-08-27
+
+### Added
+- Add webhook header token authentication.
+
+### Notes
+- Includes PR #136.
+
 ## 0.1.0-beta.34 - 2026-08-26
 
 ### Added

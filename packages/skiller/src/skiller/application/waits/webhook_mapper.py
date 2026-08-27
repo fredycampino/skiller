@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from skiller.application.use_cases.ingress.handle_webhook import (
@@ -21,6 +22,10 @@ from skiller.domain.event.webhook_registration_model import (
 )
 
 WEBHOOK_CONFIG_ERROR = "webhook method and payload source must be POST/body_json or GET/query"
+WEBHOOK_TOKEN_HEADER_ERROR = "webhook token authentication requires token_header"
+WEBHOOK_TOKEN_HEADER_UNSUPPORTED_ERROR = "token_header is only supported with token authentication"
+WEBHOOK_TOKEN_HEADER_INVALID_ERROR = "token_header must be a valid HTTP field name"
+HTTP_FIELD_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
 class WebhookWaitMapper:
@@ -58,6 +63,7 @@ class WebhookWaitMapper:
         method: str,
         auth: str,
         payload_source: str,
+        token_header: str | None,
     ) -> RegisterWebhookInput:
         parsed_method = self._parse_method(method)
         parsed_auth = self._parse_auth(auth)
@@ -72,12 +78,23 @@ class WebhookWaitMapper:
         }
         if not valid_pair:
             raise ValueError(WEBHOOK_CONFIG_ERROR)
+        normalized_token_header = (token_header or "").strip() or None
+        if parsed_auth == WebhookAuth.TOKEN and normalized_token_header is None:
+            raise ValueError(WEBHOOK_TOKEN_HEADER_ERROR)
+        if (
+            normalized_token_header is not None
+            and not HTTP_FIELD_NAME.fullmatch(normalized_token_header)
+        ):
+            raise ValueError(WEBHOOK_TOKEN_HEADER_INVALID_ERROR)
+        if parsed_auth != WebhookAuth.TOKEN and normalized_token_header is not None:
+            raise ValueError(WEBHOOK_TOKEN_HEADER_UNSUPPORTED_ERROR)
 
         return RegisterWebhookInput(
             webhook=webhook.strip(),
             method=parsed_method,
             auth=parsed_auth,
             payload_source=parsed_payload_source,
+            token_header=normalized_token_header,
         )
 
     def to_register_dict(self, result: RegisterWebhookResult) -> dict[str, Any]:
@@ -92,6 +109,8 @@ class WebhookWaitMapper:
             payload["secret"] = result.secret
         if result.enabled is not None:
             payload["enabled"] = result.enabled
+        if result.token_header is not None:
+            payload["token_header"] = result.token_header
         if result.error is not None:
             payload["error"] = result.error
         return payload
@@ -104,7 +123,19 @@ class WebhookWaitMapper:
         }
 
     def to_list_dict(self, result: ListWebhooksResult) -> list[dict[str, Any]]:
-        return result.webhooks
+        return [
+            {
+                "webhook": registration.webhook,
+                "secret": registration.secret,
+                "method": registration.method.value,
+                "auth": registration.auth.value,
+                "payload_source": registration.payload_source.value,
+                "token_header": registration.token_header,
+                "enabled": registration.enabled,
+                "created_at": registration.created_at,
+            }
+            for registration in result.webhooks
+        ]
 
     def to_remove_input(self, webhook: str) -> str:
         return webhook.strip()

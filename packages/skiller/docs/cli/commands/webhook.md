@@ -11,6 +11,7 @@ Receives webhook payloads and manages webhook registrations.
 | `skiller webhook receive <webhook> <key> --json '{"ok": true}' --dedup-key <key>` | Delivers an idempotent webhook payload. | Delivery result and resumed run ids. |
 | `skiller webhook register <webhook>` | Registers a local webhook channel and secret. | Registration details. |
 | `skiller webhook register <webhook> --method GET --auth none --payload-source query` | Registers a query-string webhook. | Registration details. |
+| `skiller webhook register <webhook> --auth token --token-header X-Webhook-Token` | Registers a fixed-token webhook. | Registration details. |
 | `skiller webhook list` | Lists local webhook registrations. | JSON array of registrations. |
 | `skiller webhook remove <webhook>` | Removes a local webhook registration. | Removal result. |
 
@@ -75,7 +76,8 @@ skiller webhook register github-ci
 Options:
 
 - `--method`: accepted HTTP method. Supported values: `POST`, `GET`.
-- `--auth`: endpoint authentication mode. Supported values: `signed`, `none`.
+- `--auth`: endpoint authentication mode. Supported values: `signed`, `token`, `none`.
+- `--token-header`: required with `--auth token`; the request header carrying the fixed token. It is invalid with other authentication modes.
 - `--payload-source`: where the endpoint reads the payload. Supported values: `body_json`, `query`.
 
 Valid method and payload-source pairs:
@@ -105,6 +107,23 @@ skiller webhook register oauth-callback --method GET --auth none --payload-sourc
 ```
 
 Invalid method and payload-source combinations return `INVALID_CONFIG`.
+
+### Header token webhook
+
+Use `token` when a provider sends a fixed shared secret in a request header:
+
+```bash
+skiller webhook register provider-events \
+  --auth token \
+  --token-header X-Webhook-Token
+```
+
+The registration response contains the generated `secret` and `token_header`. Configure the
+provider to send that secret as the exact value of the configured header. Skiller compares the
+value in constant time. Do not store the secret in flow files or source control.
+
+`token_header` is required only for `--auth token`. The server returns `401` when the header is
+missing or its value does not match.
 
 ## List
 

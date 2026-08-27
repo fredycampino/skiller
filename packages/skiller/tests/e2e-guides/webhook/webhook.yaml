@@ -1,0 +1,13 @@
+name: webhook-example
+description: Receive a webhook event
+version: "0.1"
+start: wait_event
+
+steps:
+  - wait_webhook: wait_event
+    webhook: provider-events
+    key: inbox
+    next: show_event
+
+  - notify: show_event
+    message: '{{output_value("wait_event").payload.message}}'

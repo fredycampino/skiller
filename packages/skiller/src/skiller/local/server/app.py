@@ -8,12 +8,13 @@ from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from skiller.domain.event.webhook_registration_model import WebhookRegistration
 from skiller.infrastructure.config.settings import get_settings
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.local.server import launcher
 
 
-def _load_registration(webhook: str) -> dict[str, Any] | None:
+def _load_registration(webhook: str) -> WebhookRegistration | None:
     settings = get_settings()
     registry = SqliteWebhookRegistry(settings.db_path)
     return registry.get_webhook_registration(webhook)
@@ -24,16 +25,17 @@ def _build_signature(secret: str, raw_body: bytes) -> str:
     return f"sha256={digest}"
 
 
-def _registration_method(registration: dict[str, Any]) -> str:
-    return str(registration.get("method") or "POST").strip().upper()
-
-
-def _registration_auth(registration: dict[str, Any]) -> str:
-    return str(registration.get("auth") or "signed").strip().lower()
-
-
-def _registration_payload_source(registration: dict[str, Any]) -> str:
-    return str(registration.get("payload_source") or "body_json").strip().lower()
+def _validate_webhook_token(request: Request, registration: WebhookRegistration) -> None:
+    token_header = registration.token_header
+    if token_header is None:
+        raise HTTPException(status_code=500, detail="Invalid webhook token configuration")
+    received_token = request.headers.get(token_header)
+    if not received_token:
+        raise HTTPException(status_code=401, detail="Missing webhook token")
+    if not hmac.compare_digest(
+        received_token.encode("utf-8"), registration.secret.encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
 
 
 def _channel_token_file() -> Path:
@@ -73,23 +75,26 @@ def create_app() -> Any:
         registration = _load_registration(webhook)
         if registration is None:
             raise HTTPException(status_code=404, detail=f"Webhook '{webhook}' is not registered")
-        if not bool(registration.get("enabled", False)):
+        if not registration.enabled:
             raise HTTPException(status_code=403, detail=f"Webhook '{webhook}' is disabled")
-        if method != _registration_method(registration):
+        if method != registration.method.value:
             raise HTTPException(status_code=405, detail="Webhook method is not allowed")
 
-        raw_body = await request.body()
-        auth = _registration_auth(registration)
-        if auth not in {"signed", "none"}:
+        auth = registration.auth.value
+        if auth not in {"signed", "token", "none"}:
             raise HTTPException(status_code=500, detail="Invalid webhook auth configuration")
+        if auth == "token":
+            _validate_webhook_token(request, registration)
+
+        raw_body = await request.body()
         if auth == "signed":
             if not x_signature:
                 raise HTTPException(status_code=401, detail="Missing signature")
-            expected_signature = _build_signature(str(registration["secret"]), raw_body)
+            expected_signature = _build_signature(registration.secret, raw_body)
             if not hmac.compare_digest(x_signature, expected_signature):
                 raise HTTPException(status_code=401, detail="Invalid signature")
 
-        payload_source = _registration_payload_source(registration)
+        payload_source = registration.payload_source.value
         if payload_source not in {"body_json", "query"}:
             raise HTTPException(status_code=500, detail="Invalid webhook payload configuration")
         if payload_source == "body_json":

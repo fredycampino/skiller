@@ -18,6 +18,7 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
     WebhookPayloadSource,
+    WebhookRegistration,
 )
 
 pytestmark = pytest.mark.unit
@@ -59,6 +60,7 @@ def test_mapper_builds_register_webhook_input() -> None:
         method="get",
         auth=" none ",
         payload_source=" query ",
+        token_header=None,
     )
 
     assert request.webhook == "example-auth"
@@ -76,6 +78,7 @@ def test_mapper_rejects_invalid_register_webhook_options() -> None:
             method="GET",
             auth="none",
             payload_source="body_json",
+            token_header=None,
         )
 
     assert mapper.to_register_error_dict("example-auth", WEBHOOK_CONFIG_ERROR) == {
@@ -93,6 +96,7 @@ def test_mapper_serializes_register_webhook_result() -> None:
         method=WebhookMethod.POST,
         auth=WebhookAuth.SIGNED,
         payload_source=WebhookPayloadSource.BODY_JSON,
+        token_header=None,
         secret="secret-1",
         enabled=True,
     )
@@ -113,10 +117,14 @@ def test_mapper_serializes_list_and_remove_results() -> None:
 
     list_result = ListWebhooksResult(
         webhooks=[
-            {
-                "webhook": "github-ci",
-                "secret": "secret-1",
-            }
+            WebhookRegistration(
+                webhook="github-ci",
+                secret="secret-1",
+                method=WebhookMethod.POST,
+                auth=WebhookAuth.SIGNED,
+                payload_source=WebhookPayloadSource.BODY_JSON,
+                enabled=True,
+            )
         ]
     )
     remove_result = RemoveWebhookResult(
@@ -124,10 +132,72 @@ def test_mapper_serializes_list_and_remove_results() -> None:
         webhook="github-ci",
     )
 
-    assert mapper.to_list_dict(list_result) == [{"webhook": "github-ci", "secret": "secret-1"}]
+    assert mapper.to_list_dict(list_result) == [
+        {
+            "webhook": "github-ci",
+            "secret": "secret-1",
+            "method": "POST",
+            "auth": "signed",
+            "payload_source": "body_json",
+            "token_header": None,
+            "enabled": True,
+            "created_at": None,
+        }
+    ]
     assert mapper.to_remove_input(" github-ci ") == "github-ci"
     assert mapper.to_remove_dict(remove_result) == {
         "webhook": "github-ci",
         "status": "REMOVED",
         "removed": True,
     }
+
+
+def test_mapper_builds_token_authenticated_webhook_registration() -> None:
+    mapper = WebhookWaitMapper()
+
+    request = mapper.to_register_input(
+        "telegram",
+        method="POST",
+        auth="token",
+        payload_source="body_json",
+        token_header=" X-Webhook-Token ",
+    )
+
+    assert request.auth == WebhookAuth.TOKEN
+    assert request.token_header == "X-Webhook-Token"
+
+
+def test_mapper_rejects_token_header_without_token_authentication() -> None:
+    mapper = WebhookWaitMapper()
+
+    with pytest.raises(ValueError, match="token authentication requires token_header"):
+        mapper.to_register_input(
+            "telegram",
+            method="POST",
+            auth="token",
+            payload_source="body_json",
+            token_header=None,
+        )
+
+    with pytest.raises(ValueError, match="only supported with token authentication"):
+        mapper.to_register_input(
+            "github",
+            method="POST",
+            auth="signed",
+            payload_source="body_json",
+            token_header="X-Webhook-Token",
+        )
+
+
+@pytest.mark.parametrize("token_header", ["Bad Header", "X:Token", "X-Ünicode"])
+def test_mapper_rejects_invalid_http_token_header(token_header: str) -> None:
+    mapper = WebhookWaitMapper()
+
+    with pytest.raises(ValueError, match="valid HTTP field name"):
+        mapper.to_register_input(
+            "provider",
+            method="POST",
+            auth="token",
+            payload_source="body_json",
+            token_header=token_header,
+        )

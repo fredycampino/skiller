@@ -268,6 +268,7 @@ def test_controller_maps_register_webhook_to_typed_service_input() -> None:
         method="get",
         auth="none",
         payload_source="query",
+        token_header=None,
     )
 
     assert wait_service.register_request.webhook == "example-auth"
@@ -294,6 +295,7 @@ def test_controller_rejects_invalid_register_webhook_params_before_service() -> 
         method="GET",
         auth="none",
         payload_source="body_json",
+        token_header=None,
     )
 
     assert wait_service.register_request is None

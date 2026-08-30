@@ -9,6 +9,7 @@ from skiller.domain.run.run_model import (
 )
 from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 from skiller.domain.run.run_store_port import RunStorePort
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.infrastructure.db.datasource.sqlite_run_datasource import SqliteRunDatasource
 from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
 
@@ -30,9 +31,7 @@ class SqliteRunStorePort(RunStorePort):
         snapshot_json = json.dumps(snapshot)
         inputs_json = json.dumps(context.inputs)
         step_executions_json = json.dumps(context.to_dict()["step_executions"])
-        steering_queue_json = json.dumps(
-            [item.to_dict() for item in context.steering_queue]
-        )
+        steering_queue_json = json.dumps([item.to_dict() for item in context.steering_queue])
         try:
             return self.run_datasource.create_run_row(
                 run_id=run_id,
@@ -75,13 +74,19 @@ class SqliteRunStorePort(RunStorePort):
         )
 
     def get_run(self, run_id: str) -> Run | None:
-        row = self.run_datasource.get_run_row(run_id)
+        try:
+            row = self.run_datasource.get_run_row(run_id)
+        except sqlite3.Error as exc:
+            raise RuntimeQueryError(f"Runtime query failed: {exc}") from exc
         if row is None:
             return None
         return build_run_from_row(row)
 
     def get_status(self, run_id: str) -> RunStatusRuntime | None:
-        row = self.run_datasource.get_status_row(run_id)
+        try:
+            row = self.run_datasource.get_status_row(run_id)
+        except sqlite3.Error as exc:
+            raise RuntimeQueryError(f"Runtime query failed: {exc}") from exc
         if row is None:
             return None
         return RunStatusRuntime(

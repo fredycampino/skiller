@@ -9,6 +9,7 @@ from skiller.domain.event.event_model import (
     RuntimeEventType,
 )
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
+from skiller.domain.flow.flow_load_error import FlowLoadError
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.run_step_model import find_run_step, validate_skill_snapshot
 from skiller.domain.step.runner_port import RunnerPort
@@ -53,7 +54,7 @@ class SyncSnapshotUseCase:
 
         try:
             raw_flow = self.runner.load(state.source, state.ref)
-        except (FileNotFoundError, ValueError) as exc:
+        except (FlowLoadError, ValueError) as exc:
             error = f"Could not sync snapshot '{state.ref}': {exc}"
             return SyncSnapshotResult(
                 status=SyncSnapshotStatus.FLOW_LOAD_FAILED,

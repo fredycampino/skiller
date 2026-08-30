@@ -242,7 +242,7 @@ def _dispatch_error() -> RunDispatch:
         status=RunRuntimeStatusKind.FAILED,
         worker_pid=0,
         error=RunDispatchError(
-            kind=RunDispatchErrorKind.RUN_NOT_FOUND,
+            kind=RunDispatchErrorKind.FLOW_NOT_FOUND,
             message="agent not found: auths/auth",
         ),
     )

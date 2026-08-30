@@ -33,10 +33,10 @@ class CliRunAdapter:
             command_args = ("run", *args, "--detach")
             if args and _looks_like_skill_file(args[0]):
                 command_args = ("run", "--file", *args, "--detach")
-            payload = _run_json_command(
-                self.invoker,
-                *command_args,
-            )
+            completed = self.invoker.run(*command_args)
+            if completed.returncode != 0:
+                return _dispatch_error_from_payload(_parse_error_payload(completed.stdout))
+            payload = _parse_success_payload(completed.stdout)
             run_id = _require_text(payload, "run_id")
             status = _parse_runtime_status(payload.get("status"))
             if status is None:
@@ -51,28 +51,9 @@ class CliRunAdapter:
                 ),
             )
         except RuntimeError as exc:
-            sanitized_error = _sanitize_dispatch_error(
-                str(exc),
-                raw_args=normalized_args,
-            )
-            if _is_run_not_found_dispatch_error(sanitized_error):
-                return _dispatch_error(
-                    kind=RunDispatchErrorKind.RUN_NOT_FOUND,
-                    message=sanitized_error,
-                )
-            if _is_invalid_args_dispatch_error(sanitized_error):
-                return _dispatch_error(
-                    kind=RunDispatchErrorKind.INVALID_ARGS,
-                    message=sanitized_error,
-                )
-            if _is_worker_start_dispatch_error(sanitized_error):
-                return _dispatch_error(
-                    kind=RunDispatchErrorKind.WORKER_START_FAILED,
-                    message=sanitized_error,
-                )
             return _dispatch_error(
                 kind=RunDispatchErrorKind.RUNTIME_ERROR,
-                message=sanitized_error,
+                message=str(exc),
             )
 
     def status(self, run_id: str) -> RunRuntimeStatus | None:
@@ -95,20 +76,51 @@ class CliRunAdapter:
 
 def _run_json_command(invoker: CliInvoker, *args: str) -> dict[str, Any]:
     completed = invoker.run(*args)
-
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "runtime command failed"
-        raise RuntimeError(detail)
+        raise RuntimeError("runtime command failed")
+    return _parse_success_payload(completed.stdout)
 
+
+def _parse_success_payload(stdout: str) -> dict[str, Any]:
+    payload = _parse_json_object(stdout)
+    if "error" in payload:
+        raise RuntimeError("runtime command returned an error payload")
+    return payload
+
+
+def _parse_error_payload(stdout: str) -> tuple[str, str]:
+    payload = _parse_json_object(stdout)
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        raise RuntimeError("runtime command returned invalid error payload")
+    code = _require_text(error, "code")
+    message = _require_text(error, "message")
+    return code, message
+
+
+def _parse_json_object(stdout: str) -> dict[str, Any]:
     try:
-        payload = json.loads(completed.stdout)
+        payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("runtime command returned invalid JSON") from exc
-
     if not isinstance(payload, dict):
         raise RuntimeError("runtime command returned invalid payload")
-
     return payload
+
+
+def _dispatch_error_from_payload(error: tuple[str, str]) -> RunDispatch:
+    code, message = error
+    kinds = {
+        "RUN_ARGUMENT_INVALID": RunDispatchErrorKind.INVALID_ARGS,
+        "FLOW_NOT_FOUND": RunDispatchErrorKind.FLOW_NOT_FOUND,
+        "WEBHOOK_WAIT_CONFLICT": RunDispatchErrorKind.WEBHOOK_WAIT_CONFLICT,
+        "WORKER_START_FAILED": RunDispatchErrorKind.WORKER_START_FAILED,
+        "RUNTIME_INITIALIZATION_FAILED": RunDispatchErrorKind.INITIALIZATION_FAILED,
+        "RUN_CREATE_FAILED": RunDispatchErrorKind.CREATE_FAILED,
+    }
+    return _dispatch_error(
+        kind=kinds.get(code, RunDispatchErrorKind.RUNTIME_ERROR), message=message
+    )
 
 
 def _looks_like_skill_file(value: str) -> bool:
@@ -166,47 +178,3 @@ def _dispatch_error(*, kind: RunDispatchErrorKind, message: str) -> RunDispatch:
         worker_pid=0,
         error=RunDispatchError(kind=kind, message=message),
     )
-
-
-def _is_run_not_found_dispatch_error(error: str) -> bool:
-    return error.startswith("agent not found") or error.startswith("Invalid skill format")
-
-
-def _is_invalid_args_dispatch_error(error: str) -> bool:
-    return error.startswith("Invalid --arg") or error.startswith("Use either ")
-
-
-def _is_worker_start_dispatch_error(error: str) -> bool:
-    return "worker" in error.lower() and (
-        "start" in error.lower()
-        or "spawn" in error.lower()
-        or "process" in error.lower()
-    )
-
-
-def _sanitize_dispatch_error(raw_error: str, *, raw_args: str) -> str:
-    normalized = raw_error.strip()
-    if not normalized:
-        return "runtime command failed"
-
-    skill_ref = raw_args.split()[0].strip() if raw_args.split() else raw_args.strip()
-
-    if "FileNotFoundError: Skill not found:" in normalized:
-        if skill_ref:
-            return f"agent not found: {skill_ref}"
-        return "agent not found"
-
-    for line in normalized.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("FileNotFoundError: Skill not found:"):
-            if skill_ref:
-                return f"agent not found: {skill_ref}"
-            return "agent not found"
-        if stripped.startswith("ValueError:"):
-            return stripped
-        if stripped.startswith("RuntimeError:"):
-            return stripped
-
-    return normalized.splitlines()[-1].strip()

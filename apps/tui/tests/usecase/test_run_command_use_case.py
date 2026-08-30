@@ -36,6 +36,7 @@ class FakeRunPort:
         self.called_with.append(raw_args)
         return self.dispatch
 
+
 class FakeObserver:
     def notify(self, events: list[LogEvent]) -> None:
         _ = events
@@ -299,7 +300,7 @@ def _dispatch_error() -> RunDispatch:
         status=RunRuntimeStatusKind.FAILED,
         worker_pid=0,
         error=RunDispatchError(
-            kind=RunDispatchErrorKind.RUN_NOT_FOUND,
+            kind=RunDispatchErrorKind.FLOW_NOT_FOUND,
             message="agent not found: chat",
-        )
+        ),
     )

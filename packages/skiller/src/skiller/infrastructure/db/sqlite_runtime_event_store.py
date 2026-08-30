@@ -14,6 +14,7 @@ from skiller.domain.event.event_model import (
     runtime_event_step_type,
 )
 from skiller.domain.event.runtime_event_store_port import RuntimeEventStorePort
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
@@ -92,13 +93,25 @@ class SqliteRuntimeEventStore(SqliteConnectionSource, RuntimeEventStorePort):
             query += " LIMIT ?"
             params.append(limit)
 
-        with self._connect() as conn:
-            rows = conn.execute(query, tuple(params)).fetchall()
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(query, tuple(params)).fetchall()
+        except sqlite3.Error as exc:
+            raise RuntimeQueryError(f"Runtime query failed: {exc}") from exc
         return [self._build_runtime_event(row) for row in rows]
 
     def get_last_event(self, run_id: str) -> RuntimeEvent | None:
+        try:
+            row = self._get_last_event_row(run_id)
+        except sqlite3.Error as exc:
+            raise RuntimeQueryError(f"Runtime query failed: {exc}") from exc
+        if row is None:
+            return None
+        return self._build_runtime_event(row)
+
+    def _get_last_event_row(self, run_id: str) -> sqlite3.Row | None:
         with self._connect() as conn:
-            row = conn.execute(
+            return conn.execute(
                 """
                 SELECT
                   sequence,
@@ -117,9 +130,6 @@ class SqliteRuntimeEventStore(SqliteConnectionSource, RuntimeEventStorePort):
                 """,
                 (run_id,),
             ).fetchone()
-        if row is None:
-            return None
-        return self._build_runtime_event(row)
 
     def _build_runtime_event(self, row: sqlite3.Row) -> RuntimeEvent:
         return RuntimeEvent(

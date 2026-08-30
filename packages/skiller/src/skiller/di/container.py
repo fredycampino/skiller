@@ -87,6 +87,7 @@ from skiller.application.use_cases.render.render_current_step import (
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.check_webhook_wait import CheckWebhookWaitUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.create_run import CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
@@ -250,6 +251,10 @@ def build_runtime_container(
     )
 
     create_run_use_case = CreateRunUseCase(store, skill_runner)
+    check_webhook_wait_use_case = CheckWebhookWaitUseCase(
+        wait_store=wait_store,
+        skill_runner=skill_runner,
+    )
     delete_run_use_case = DeleteRunUseCase(store)
     append_runtime_event_use_case = AppendRuntimeEventUseCase(runtime_event_store)
     complete_run_use_case = CompleteRunUseCase(store)
@@ -474,6 +479,7 @@ def build_runtime_container(
         bootstrap_runtime_use_case=bootstrap_runtime_use_case,
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
+        check_webhook_wait_use_case=check_webhook_wait_use_case,
         delete_run_use_case=delete_run_use_case,
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=get_start_step_use_case,

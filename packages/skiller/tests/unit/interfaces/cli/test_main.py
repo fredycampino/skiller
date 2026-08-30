@@ -4,6 +4,10 @@ from typing import Any
 
 import pytest
 
+from skiller.application.runs.errors import WebhookWaitConflictError
+from skiller.application.use_cases.run.check_webhook_wait import WebhookWaitConflict
+from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.interfaces.cli import main as cli_main
 
 SKILL_NAME = "unit_skill"
@@ -441,9 +445,7 @@ def test_run_file_selection_forwards_path_without_loading_file(
         worker_process_service=worker_process_service,
     )
 
-    exit_code = cli_main.main(
-        ["run", "--file", SKILL_FILE, "--arg", "message=ok", "--detach"]
-    )
+    exit_code = cli_main.main(["run", "--file", SKILL_FILE, "--arg", "message=ok", "--detach"])
 
     data, stderr = _read_json(capsys)
     assert exit_code == 0
@@ -487,98 +489,381 @@ def test_run_waiting_result_merges_wait_metadata(
     assert data["prompt"] == "Write a short summary"
 
 
-def test_run_can_start_server_before_dispatching_worker(
+def test_run_returns_json_for_invalid_argument(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController()
-    worker_process_service = _FakeWorkerProcessService()
-    _install_runtime(
-        monkeypatch,
-        fake_container,
-        controller,
-        worker_process_service=worker_process_service,
-    )
-    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
-
-    class _FakeWebhookProcessService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def start(self) -> SimpleNamespace:
-            return SimpleNamespace(
-                endpoint="http://127.0.0.1:8001/health",
-                pid=1234,
-                started=True,
-                running=True,
-                managed=True,
-            )
-
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-
-    exit_code = cli_main.main(["run", SKILL_NAME, "--start-server"])
-
-    data, _ = _read_json(capsys)
-    assert exit_code == 0
-    assert data["server_started"] is True
-    assert data["server_pid"] == 1234
-    assert worker_process_service.calls == [("start", "run-1")]
-
-
-def test_run_start_server_failure_can_include_logs(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    controller = _FakeController()
-    worker_process_service = _FakeWorkerProcessService()
-    _install_runtime(
-        monkeypatch,
-        fake_container,
-        controller,
-        worker_process_service=worker_process_service,
-    )
-
-    class _FakeWebhookProcessService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def start(self) -> SimpleNamespace:
-            raise RuntimeError("server process did not become ready")
-
-    monkeypatch.setattr(cli_main, "WebhookProcessService", _FakeWebhookProcessService)
-
-    exit_code = cli_main.main(["run", SKILL_NAME, "--start-server", "--logs"])
-
-    data, _ = _read_json(capsys)
-    assert exit_code == 1
-    assert data["server_started"] is False
-    assert data["error"] == "server process did not become ready"
-    assert "logs" in data
-    assert controller.logs_calls == [
-        {
-            "run_id": "run-1",
-            "after_sequence": None,
-            "limit": None,
-        }
-    ]
-    assert worker_process_service.calls == []
-
-
-def test_run_rejects_missing_or_duplicated_skill_selection(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_container: SimpleNamespace,
 ) -> None:
     _install_runtime(monkeypatch, fake_container, _FakeController())
 
-    with pytest.raises(SystemExit) as missing:
-        cli_main.main(["run"])
-    assert missing.value.code == 2
+    exit_code = cli_main.main(["run", SKILL_NAME, "--arg", "invalid"])
 
-    with pytest.raises(SystemExit) as duplicated:
-        cli_main.main(["run", SKILL_NAME, "--file", SKILL_FILE])
-    assert duplicated.value.code == 2
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUN_ARGUMENT_INVALID",
+            "message": "Invalid --arg 'invalid'. Expected key=value.",
+        }
+    }
+    assert stderr == ""
+
+
+def test_run_returns_json_when_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    def reject_creation(*args: object, **kwargs: object) -> dict[str, object]:
+        _ = (args, kwargs)
+        raise ValueError("FLOW_START_MISSING: flow requires non-empty start")
+
+    controller.create_run = reject_creation  # type: ignore[method-assign]
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUN_CREATE_FAILED",
+            "message": "FLOW_START_MISSING: flow requires non-empty start",
+        }
+    }
+    assert stderr == ""
+
+
+def test_run_returns_json_for_runtime_bootstrap_error(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    def fail_initialization() -> None:
+        raise RuntimeBootstrapError("Runtime storage initialization failed")
+
+    controller.initialize = fail_initialization  # type: ignore[method-assign]
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUNTIME_INITIALIZATION_FAILED",
+            "message": "Runtime storage initialization failed",
+        }
+    }
+    assert stderr == ""
+
+
+def test_run_returns_json_for_webhook_wait_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    def raise_conflict(*args: object, **kwargs: object) -> dict[str, object]:
+        _ = (args, kwargs)
+        raise WebhookWaitConflictError(
+            WebhookWaitConflict(
+                run_id="existing-run",
+                webhook="github",
+                key="42",
+            )
+        )
+
+    controller.create_run = raise_conflict  # type: ignore[method-assign]
+    worker_process_service = _FakeWorkerProcessService()
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=worker_process_service,
+    )
+
+    exit_code = cli_main.main(["run", SKILL_NAME, "--arg", "key=42"])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "WEBHOOK_WAIT_CONFLICT",
+            "message": (
+                "Webhook 'github:42' is already being waited by run 'existing-run'. "
+                "Delete it with 'skiller delete existing-run' or wait for it to finish."
+            ),
+        }
+    }
+    assert stderr == ""
+    assert worker_process_service.calls == []
+
+
+def test_run_returns_json_when_worker_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    class _FailingWorkerProcessService(_FakeWorkerProcessService):
+        def start(self, run_id: str) -> SimpleNamespace:
+            raise OSError("worker unavailable")
+
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=_FailingWorkerProcessService(),
+    )
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "run_id": "run-1",
+        "status": "CREATED",
+        "error": {
+            "code": "WORKER_START_FAILED",
+            "message": "worker unavailable",
+        },
+    }
+    assert stderr == ""
+
+
+def test_run_failed_result_contains_normalized_error(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    controller.status_results = [{"run_id": "run-1", "status": "FAILED"}]
+    controller.logs_result = [
+        {
+            "id": "evt-failed",
+            "type": "RUN_FINISHED",
+            "payload": {"status": "FAILED", "error": "step failed"},
+        }
+    ]
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=_FakeWorkerProcessService(),
+    )
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "run_id": "run-1",
+        "status": "FAILED",
+        "worker_pid": 101,
+        "error": {
+            "code": "RUN_EXECUTION_FAILED",
+            "message": "step failed",
+        },
+    }
+    assert "RUN_FINISHED" in stderr
+    assert "FAILED" in stderr
+
+
+def test_run_returns_json_when_watch_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    def fail_status(run_id: str) -> dict[str, object] | None:
+        _ = run_id
+        raise RuntimeQueryError("Runtime query failed: database is locked")
+
+    controller.status = fail_status  # type: ignore[method-assign]
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=_FakeWorkerProcessService(),
+    )
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "run_id": "run-1",
+        "status": "CREATED",
+        "worker_pid": 101,
+        "error": {
+            "code": "RUN_WATCH_FAILED",
+            "message": "Runtime query failed: database is locked",
+        },
+    }
+    assert "[1] CREATED" in stderr
+
+
+def test_run_returns_json_when_requested_logs_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+
+    def fail_logs(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        _ = (args, kwargs)
+        raise RuntimeQueryError("Runtime query failed: database is locked")
+
+    controller.logs = fail_logs  # type: ignore[method-assign]
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=_FakeWorkerProcessService(),
+    )
+
+    exit_code = cli_main.main(["run", SKILL_NAME, "--detach", "--logs"])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "run_id": "run-1",
+        "status": "CREATED",
+        "worker_pid": 101,
+        "error": {
+            "code": "RUN_LOGS_FAILED",
+            "message": "Runtime query failed: database is locked",
+        },
+    }
+    assert stderr == ""
+
+
+def test_run_preserves_execution_failure_when_requested_logs_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    controller.status_results = [{"run_id": "run-1", "status": "FAILED"}]
+
+    log_calls = 0
+
+    def fail_final_logs(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        nonlocal log_calls
+        _ = (args, kwargs)
+        log_calls += 1
+        if log_calls == 1:
+            return []
+        raise RuntimeQueryError("Runtime query failed: database is locked")
+
+    controller.logs = fail_final_logs  # type: ignore[method-assign]
+    _install_runtime(
+        monkeypatch,
+        fake_container,
+        controller,
+        worker_process_service=_FakeWorkerProcessService(),
+    )
+    monkeypatch.setattr(cli_main.time, "sleep", lambda _: None)
+
+    exit_code = cli_main.main(["run", SKILL_NAME, "--logs"])
+
+    data, _ = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "run_id": "run-1",
+        "status": "FAILED",
+        "worker_pid": 101,
+        "error": {
+            "code": "RUN_EXECUTION_FAILED",
+            "message": "Run execution failed.",
+        },
+    }
+
+
+def test_run_rejects_removed_start_server_option(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _install_runtime(monkeypatch, fake_container, _FakeController())
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli_main.main(["run", SKILL_NAME, "--start-server"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert "unrecognized arguments: --start-server" in captured.err
+
+
+def test_run_without_skill_returns_json_argument_error(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _install_runtime(monkeypatch, fake_container, _FakeController())
+
+    exit_code = cli_main.main(["run"])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUN_ARGUMENT_INVALID",
+            "message": "Use either an internal skill name or --file PATH.",
+        }
+    }
+    assert stderr == ""
+
+
+def test_run_with_skill_and_file_returns_json_argument_error(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _install_runtime(monkeypatch, fake_container, _FakeController())
+
+    exit_code = cli_main.main(["run", SKILL_NAME, "--file", SKILL_FILE])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUN_ARGUMENT_INVALID",
+            "message": "Use either an internal skill name or --file PATH.",
+        }
+    }
+    assert stderr == ""
+
+
+def test_run_returns_json_when_runtime_initialization_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_container_build() -> None:
+        raise FileNotFoundError("Runtime configuration not found")
+
+    monkeypatch.setattr(cli_main, "build_runtime_container", fail_container_build)
+
+    exit_code = cli_main.main(["run", SKILL_NAME])
+
+    data, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert data == {
+        "error": {
+            "code": "RUNTIME_INITIALIZATION_FAILED",
+            "message": "Runtime configuration not found",
+        }
+    }
+    assert stderr == ""
 
 
 def test_resume_dispatches_worker_process(
@@ -771,9 +1056,7 @@ def test_action_done_command_marks_runtime_action(
 
     data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.action_done_calls == [
-        {"run_id": "run-1", "step_id": "auth_link"}
-    ]
+    assert controller.action_done_calls == [{"run_id": "run-1", "step_id": "auth_link"}]
     assert data == {
         "run_id": "run-1",
         "step_id": "auth_link",
@@ -857,9 +1140,7 @@ def test_input_receive_waits_for_resumed_run_status(
         worker_process_service=worker_process_service,
     )
 
-    exit_code = cli_main.main(
-        ["input", "receive", "run-1", "--text", "next", "--wait"]
-    )
+    exit_code = cli_main.main(["input", "receive", "run-1", "--text", "next", "--wait"])
 
     data, _ = _read_json(capsys)
     assert exit_code == 0
@@ -914,15 +1195,11 @@ def test_input_receive_wait_handles_fast_finished_run(
         worker_process_service=worker_process_service,
     )
 
-    exit_code = cli_main.main(
-        ["input", "receive", "run-1", "--text", "next", "--wait"]
-    )
+    exit_code = cli_main.main(["input", "receive", "run-1", "--text", "next", "--wait"])
 
     data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.logs_calls == [
-        {"run_id": "run-1", "after_sequence": 5, "limit": None}
-    ]
+    assert controller.logs_calls == [{"run_id": "run-1", "after_sequence": 5, "limit": None}]
     assert data["wait_results"] == [{"run_id": "run-1", "status": "SUCCEEDED"}]
 
 
@@ -1000,7 +1277,6 @@ def test_webhook_receive_forwards_payload_and_resumes_matched_runs(
     assert data["resumed_runs"] == ["run-1"]
 
 
-
 def test_webhook_register_forwards_token_header(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
@@ -1053,9 +1329,7 @@ def test_webhook_register_forwards_ingress_options_and_prints_url(
 
     data, _ = _read_json(capsys)
     assert exit_code == 0
-    assert controller.register_webhook_calls == [
-        ("example-auth", "GET", "none", "query", None)
-    ]
+    assert controller.register_webhook_calls == [("example-auth", "GET", "none", "query", None)]
     assert data["webhook_url"] == "http://127.0.0.1:8001/webhooks/example-auth/{key}"
 
 

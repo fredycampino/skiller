@@ -29,6 +29,8 @@ steps:
       - "solve-task-style"
       - "create-flows"
       - "response-style"
+      - "code-style"
+
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell

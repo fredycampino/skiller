@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from skiller.domain.action.action_model import (
@@ -23,11 +25,21 @@ from skiller.domain.event.event_model import (
     StepStartedPayload,
 )
 from skiller.domain.run.run_context_model import RunContext
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 
 pytestmark = pytest.mark.unit
+
+
+def test_runtime_event_store_translates_list_query_error(tmp_path) -> None:
+    store = SqliteRuntimeEventStore(str(tmp_path / "uninitialized.db"))
+
+    with pytest.raises(RuntimeQueryError, match="Runtime query failed") as exc_info:
+        store.list_events("run-1")
+
+    assert isinstance(exc_info.value.__cause__, sqlite3.Error)
 
 
 def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> None:

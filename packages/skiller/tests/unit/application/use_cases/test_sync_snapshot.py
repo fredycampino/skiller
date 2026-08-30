@@ -10,6 +10,7 @@ from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     RuntimeEventType,
 )
+from skiller.domain.flow.flow_load_error import FlowLoadError, FlowNotFoundError
 from skiller.domain.run.run_model import RunSnapshotSyncState
 
 pytestmark = pytest.mark.unit
@@ -153,12 +154,12 @@ def test_sync_snapshot_keeps_snapshot_when_current_is_missing() -> None:
     assert events.events == []
 
 
-def test_sync_snapshot_reports_load_failure() -> None:
+def test_sync_snapshot_reports_external_flow_load_failure() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            source="file",
+            ref="/tmp/flow.yaml",
             current="ask_user",
             snapshot={},
         )
@@ -166,7 +167,31 @@ def test_sync_snapshot_reports_load_failure() -> None:
     events = _FakeEvents()
     use_case = SyncSnapshotUseCase(
         store=store,
-        runner=_FakeRunner(FileNotFoundError("missing flow")),
+        runner=_FakeRunner(FlowNotFoundError("missing flow")),
+        events=events,
+    )
+
+    result = use_case.execute("run-1")
+
+    assert result.status == SyncSnapshotStatus.FLOW_LOAD_FAILED
+    assert store.updated == []
+    assert events.events == []
+
+
+def test_sync_snapshot_reports_invalid_flow_load() -> None:
+    store = _FakeStore(
+        RunSnapshotSyncState(
+            run_id="run-1",
+            source="internal",
+            ref="mono",
+            current="ask_user",
+            snapshot={"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
+        )
+    )
+    events = _FakeEvents()
+    use_case = SyncSnapshotUseCase(
+        store=store,
+        runner=_FakeRunner(FlowLoadError("invalid YAML")),
         events=events,
     )
 

@@ -1,7 +1,10 @@
 import sqlite3
 from pathlib import Path
 
-from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapPort
+from skiller.domain.run.runtime_bootstrap_port import (
+    RuntimeBootstrapError,
+    RuntimeBootstrapPort,
+)
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 SQLITE_RUNTIME_DB_VERSION = 11
@@ -9,6 +12,12 @@ SQLITE_RUNTIME_DB_VERSION = 11
 
 class SqliteRuntimeBootstrap(SqliteConnectionSource, RuntimeBootstrapPort):
     def init_db(self) -> None:
+        try:
+            self._init_db()
+        except sqlite3.Error as exc:
+            raise RuntimeBootstrapError(f"Runtime storage initialization failed: {exc}") from exc
+
+    def _init_db(self) -> None:
         db_path = Path(self.db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         if _should_reset_db(db_path):
@@ -42,6 +51,7 @@ def apply_db_updates(conn: sqlite3.Connection, *, db_path: str) -> None:
         "Runtime DB version mismatch: "
         f"db={current_version}, expected={SQLITE_RUNTIME_DB_VERSION}, path={db_path}"
     )
+
 
 def _db_version(conn: sqlite3.Connection) -> int:
     row = conn.execute("PRAGMA user_version").fetchone()

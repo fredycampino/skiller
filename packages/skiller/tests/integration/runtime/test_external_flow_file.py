@@ -58,6 +58,7 @@ from skiller.application.use_cases.render.render_current_step import (
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.check_webhook_wait import CheckWebhookWaitUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
 from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
@@ -89,6 +90,7 @@ from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import
 from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
+from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
 from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
@@ -248,6 +250,10 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=CreateRunUseCase(store, skill_runner),
+        check_webhook_wait_use_case=CheckWebhookWaitUseCase(
+            wait_store=wait_store,
+            skill_runner=skill_runner,
+        ),
         delete_run_use_case=DeleteRunUseCase(store),
         fail_run_use_case=fail_run_use_case,
         get_start_step_use_case=GetStartStepUseCase(store=store),
@@ -293,6 +299,78 @@ def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
     )
+
+
+def test_run_external_flow_uses_snapshot_when_source_is_removed() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_wait.yaml"
+        skill_path.write_text(
+            (
+                "name: external_wait\n"
+                "start: ask\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - wait_input: ask\n"
+                "    prompt: Answer\n"
+                "    next: done\n"
+                "  - notify: done\n"
+                "    message: Done\n"
+            ),
+            encoding="utf-8",
+        )
+        store = SqliteRunStorePort(db_path)
+        SqliteRuntimeBootstrap(store.db_path).init_db()
+        runtime = _build_runtime(store)
+
+        created = runtime.create_run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
+        runtime.prepare_run(created.run_id)
+        skill_path.unlink()
+
+        runtime.dispatch_run(created.run_id)
+
+        run = store.get_run(created.run_id)
+        assert run is not None
+        assert run.status == "WAITING", _event_store(store).list_events(created.run_id)
+        assert run.snapshot["name"] == "external_wait"
+
+
+def test_external_shell_uses_flow_directory_after_source_is_removed() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_shell.yaml"
+        helper_path = Path(tmpdir) / "helper.py"
+        helper_path.write_text("print('snapshot shell')\n", encoding="utf-8")
+        skill_path.write_text(
+            (
+                "name: external_shell\n"
+                "start: run_helper\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - shell: run_helper\n"
+                '    command: \'"{{runtime.python}}" "{{flow.dir}}/helper.py"\'\n'
+            ),
+            encoding="utf-8",
+        )
+        store = SqliteRunStorePort(db_path)
+        SqliteRuntimeBootstrap(store.db_path).init_db()
+        runtime = _build_runtime(store)
+
+        created = runtime.create_run(
+            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+        )
+        runtime.prepare_run(created.run_id)
+        skill_path.unlink()
+
+        runtime.dispatch_run(created.run_id)
+
+        run = store.get_run(created.run_id)
+        assert run is not None
+        assert run.status == "SUCCEEDED"
+        output = run.context.step_executions["run_helper"].output.to_public_dict()
+        assert output["value"]["stdout"] == "snapshot shell\n"
 
 
 def test_run_external_flow_file_succeeds() -> None:
@@ -502,8 +580,10 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         assert run.status == "WAITING"
 
         wait_event = next(
-            event for event in _event_store(store).list_events(run_id)
-            if event.type == "RUN_WAITING")
+            event
+            for event in _event_store(store).list_events(run_id)
+            if event.type == "RUN_WAITING"
+        )
         assert isinstance(wait_event.payload, RunWaitingPayload)
         assert wait_event.payload.output["value"]["webhook"] == "github-pr-merged"
         assert wait_event.payload.output["value"]["key"] == "42"
@@ -519,8 +599,53 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         events = _event_store(store).list_events(run_id)
         assert any(event.type == "RUN_RESUME" for event in events)
         assert not any(
-            event.type == "STEP_SUCCESS" and event.step_type == "notify"
-            for event in events
+            event.type == "STEP_SUCCESS" and event.step_type == "notify" for event in events
+        )
+
+
+def test_external_wait_webhook_file_rejects_duplicate_key() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "external_wait.yaml"
+        skill_path.write_text(
+            (
+                "name: external_wait\n"
+                "start: wait_merge\n"
+                "inputs:\n"
+                "  pr: string\n"
+                "steps:\n"
+                "  - wait_webhook: wait_merge\n"
+                "    webhook: github-pr-merged\n"
+                '    key: "{{inputs.pr}}"\n'
+                "    next: done\n"
+                "  - notify: done\n"
+                "    message: resumed ok\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteRunStorePort(db_path)
+        SqliteRuntimeBootstrap(store.db_path).init_db()
+        runtime = _build_runtime(store)
+        request = CreateRunInput(
+            skill_ref=str(skill_path),
+            inputs={"pr": "42"},
+            skill_source="file",
+        )
+
+        first_result = runtime.run(request)
+        first_events = _event_store(store).list_events(first_result.run_id)
+
+        with pytest.raises(ValueError, match=f"skiller delete {first_result.run_id}"):
+            runtime.create_run(request)
+
+        assert store.get_run(first_result.run_id) is not None
+        runs = SqliteRunQueryStore(db_path).list_runs(limit=10)
+        assert [run.id for run in runs] == [first_result.run_id]
+        assert len(_event_store(store).list_events(first_result.run_id)) == len(first_events)
+        assert not any(
+            event.type == "RUN_CREATE" and event.payload.ref == str(skill_path)
+            for event in _event_store(store).list_events(first_result.run_id)[1:]
         )
 
 
@@ -627,9 +752,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         assert run_result.status.value == "WAITING"
 
         waits = _build_waits(store)
-        input_result = waits.handle_input(
-            HandleInputInput(run_id=run_id, text="database timeout")
-        )
+        input_result = waits.handle_input(HandleInputInput(run_id=run_id, text="database timeout"))
         waiting_run = store.get_run(run_id)
 
         assert input_result.accepted is True
@@ -744,9 +867,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
             if event.type == "STEP_SUCCESS" and event.step_id == "ask_user"
         ]
         notify_events = [
-            event
-            for event in events
-            if event.type == "STEP_SUCCESS" and event.step_id == "echo"
+            event for event in events if event.type == "STEP_SUCCESS" and event.step_id == "echo"
         ]
         input_waiting_events = [event for event in events if event.type == "RUN_WAITING"]
 
@@ -767,7 +888,5 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
 
 def _step_success_event(events: list[object], *, step_id: str):
     return next(
-        event
-        for event in events
-        if event.type == "STEP_SUCCESS" and event.step_id == step_id
+        event for event in events if event.type == "STEP_SUCCESS" and event.step_id == step_id
     )

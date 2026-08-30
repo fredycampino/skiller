@@ -32,6 +32,32 @@ run_output="$(
 
 run_id="$(printf '%s\n' "${run_output}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 
+set +e
+duplicate_output="$(
+  PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \
+    --file packages/skiller/tests/e2e/skills/wait_webhook_cli_e2e.yaml \
+    --arg "key=${webhook_key}"
+)"
+duplicate_exit_code=$?
+set -e
+
+if [[ "${duplicate_exit_code}" -ne 1 ]]; then
+  printf 'Expected duplicate run to exit with 1, got %s\n' "${duplicate_exit_code}" >&2
+  exit 1
+fi
+
+printf '%s\n' "${duplicate_output}" | python3 -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+error = payload["error"]
+assert error["code"] == "WEBHOOK_WAIT_CONFLICT", payload
+assert "skiller delete" in error["message"], payload
+assert set(payload) == {"error"}, payload
+assert set(error) == {"code", "message"}, payload
+'
+
 receive_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller webhook receive \
     test \

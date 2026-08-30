@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import sys
@@ -6,10 +5,10 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.step.runner_port import RunnerPort
+from skiller.domain.step.template_resolution_error import UnresolvedTemplateError
+from skiller.infrastructure.flow.flow_file_loader import load_existing_flow
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
 _FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")
@@ -25,9 +24,7 @@ class FilesystemRunnerPort(RunnerPort):
         flows_dir: Path | None,
     ) -> None:
         self.flows_dir = (
-            Path(flows_dir)
-            if flows_dir is not None
-            else _find_default_internal_flow_catalog_dir()
+            Path(flows_dir) if flows_dir is not None else _find_default_internal_flow_catalog_dir()
         )
 
     def load(self, source: str, ref: str) -> dict[str, Any]:
@@ -46,12 +43,7 @@ class FilesystemRunnerPort(RunnerPort):
         else:
             raise ValueError(f"Unsupported flow source: {source}")
 
-        if yaml_path.exists():
-            return yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-        if json_path.exists():
-            return json.loads(json_path.read_text(encoding="utf-8"))
-
-        raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
+        return load_existing_flow(yaml_path=yaml_path, json_path=json_path)
 
     def read_file(
         self,
@@ -96,12 +88,7 @@ class FilesystemRunnerPort(RunnerPort):
             flow_context = {}
 
         flow_context = dict(flow_context)
-        flow_context["dir"] = str(
-            self._resolve_base_path(
-                source=flow.source,
-                ref=flow.ref,
-            ).resolve()
-        )
+        flow_context["dir"] = str(self.resolve_flow_dir(flow.source, flow.ref).resolve())
         flow_context["run_id"] = flow.id
         render_context["flow"] = flow_context
         render_context["runtime"] = {
@@ -124,10 +111,7 @@ class FilesystemRunnerPort(RunnerPort):
             raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
 
         if source == "file":
-            flow_path = Path(ref)
-            if not flow_path.exists():
-                raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
-            return flow_path.parent
+            return Path(ref).parent
 
         raise ValueError(f"Unsupported flow source: {source}")
 
@@ -196,7 +180,7 @@ class FilesystemRunnerPort(RunnerPort):
     ) -> Any:
         step_executions = context.get("step_executions")
         if not isinstance(step_executions, dict) or step_id not in step_executions:
-            raise ValueError(
+            raise UnresolvedTemplateError(
                 "OUTPUT_VALUE_STEP_NOT_EXECUTED: referenced step has no execution yet "
                 f"(step_id={step_id})"
             )

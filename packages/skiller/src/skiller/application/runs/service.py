@@ -1,3 +1,4 @@
+from skiller.application.runs.errors import WebhookWaitConflictError
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.models import (
     ResumeRunApplicationResult,
@@ -16,6 +17,10 @@ from skiller.application.use_cases.flow.flow_readiness_checker import (
 from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.check_webhook_wait import (
+    CheckWebhookWaitInput,
+    CheckWebhookWaitUseCase,
+)
 from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunResult, DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
@@ -41,6 +46,7 @@ class RunApplicationService:
         bootstrap_runtime_use_case: BootstrapRuntimeUseCase,
         append_runtime_event_use_case: AppendRuntimeEventUseCase,
         create_run_use_case: CreateRunUseCase,
+        check_webhook_wait_use_case: CheckWebhookWaitUseCase,
         delete_run_use_case: DeleteRunUseCase,
         fail_run_use_case: FailRunUseCase,
         get_start_step_use_case: GetStartStepUseCase,
@@ -54,6 +60,7 @@ class RunApplicationService:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
         self.create_run_use_case = create_run_use_case
+        self.check_webhook_wait_use_case = check_webhook_wait_use_case
         self.delete_run_use_case = delete_run_use_case
         self.fail_run_use_case = fail_run_use_case
         self.get_start_step_use_case = get_start_step_use_case
@@ -120,6 +127,16 @@ class RunApplicationService:
         if readiness_check_result.status == FlowReadinessCheckStatus.INVALID:
             messages = [item.message for item in readiness_check_result.errors]
             raise ValueError("\n".join(messages))
+        webhook_check = self.check_webhook_wait_use_case.execute(
+            CheckWebhookWaitInput(
+                skill_source=request.skill_source,
+                skill_ref=request.skill_ref,
+                inputs=request.inputs,
+            )
+        )
+        if webhook_check.conflict is not None:
+            raise WebhookWaitConflictError(webhook_check.conflict)
+
         run_id = self.create_run_use_case.execute(request)
         self.append_runtime_event_use_case.execute(
             run_id,

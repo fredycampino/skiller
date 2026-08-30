@@ -18,8 +18,6 @@ Stable states observed by `run` without `--detach`:
 - `SUCCEEDED`
 - `FAILED`
 - `CANCELLED`
-- `TIMEOUT`
-- `INTERRUPTED`
 
 ## Output Model
 
@@ -39,7 +37,7 @@ Command:
 skiller run <flow>
 ```
 
-Internal flow ids resolve from `apps/agents/<id>/agent.yaml`.
+Internal flow ids resolve from `apps/agents/<id>/agent.yaml`. The catalog definition and any files referenced by the flow must remain available while the run executes.
 
 Output when the run succeeds:
 
@@ -70,7 +68,11 @@ Output when the run fails:
 {
   "run_id": "run-uuid",
   "status": "FAILED",
-  "worker_pid": 12345
+  "worker_pid": 12345,
+  "error": {
+    "code": "RUN_EXECUTION_FAILED",
+    "message": "Step 'send_message' requires channel"
+  }
 }
 ```
 
@@ -91,6 +93,8 @@ Output:
   "worker_pid": 12345
 }
 ```
+
+The run keeps a persisted snapshot. If this external flow file disappears after the run is created, the run continues from that snapshot; files explicitly referenced by its steps must still be available.
 
 ## Arguments
 
@@ -163,6 +167,39 @@ Output:
 ```
 
 `logs` contains raw runtime events. It is not the rendered transcript.
+
+## Error Output
+
+Errors handled by `run` are written as one JSON object to `stdout`. The error
+contract contains only a stable `code` and an actionable `message`:
+
+```json
+{
+  "error": {
+    "code": "WEBHOOK_WAIT_CONFLICT",
+    "message": "Webhook 'github:42' is already being waited by run 'existing-run'. Delete it with 'skiller delete existing-run' or wait for it to finish."
+  }
+}
+```
+
+When the run was created before the failure, its existing fields are preserved:
+
+```json
+{
+  "run_id": "run-uuid",
+  "status": "CREATED",
+  "error": {
+    "code": "WORKER_START_FAILED",
+    "message": "worker unavailable"
+  }
+}
+```
+
+A failed execution reports `RUN_EXECUTION_FAILED` and preserves `run_id`,
+`status`, and `worker_pid`. A missing flow reports `FLOW_NOT_FOUND`; a runtime
+startup failure reports `RUNTIME_INITIALIZATION_FAILED`. Invalid run target or
+`--arg` values report `RUN_ARGUMENT_INVALID`. Watch progress remains on `stderr`
+and is not mixed with the final JSON document.
 
 ## Exit Code
 

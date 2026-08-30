@@ -8,13 +8,14 @@ All notable changes to this project should be summarized here before a version i
 - Nothing yet.
 
 ### Changed
-- Nothing yet.
+- Reject creation of a run when another run is already waiting for the same webhook and key, reporting the existing run id and the `skiller delete <run_id>` recovery command.
+- Normalize handled `skiller run` failures as minimal JSON errors with stable `code` and actionable `message` fields, including argument, initialization, missing-flow, webhook-conflict, worker, watch, and execution failures.
 
 ### Fixed
 - Nothing yet.
 
 ### Removed
-- Nothing yet.
+- Remove the `skiller run --start-server` option; use the independent `skiller server start` command instead.
 
 ### Notes
 - Update this section when a branch is ready for release.

@@ -66,11 +66,7 @@ def test_default_internal_catalog_uses_installed_apps_agents_path(
 ) -> None:  # noqa: ANN001
     site_packages_dir = tmp_path / "site-packages"
     module_file = (
-        site_packages_dir
-        / "skiller"
-        / "infrastructure"
-        / "skills"
-        / "filesystem_runner_port.py"
+        site_packages_dir / "skiller" / "infrastructure" / "skills" / "filesystem_runner_port.py"
     )
     module_file.parent.mkdir(parents=True)
     module_file.write_text("", encoding="utf-8")
@@ -249,7 +245,6 @@ def test_render_step_preserves_type_for_full_template_value(tmp_path) -> None:  
     assert rendered["values"]["text"] == "severity=low"
 
 
-
 def test_render_step_can_resolve_env_values(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -373,6 +368,21 @@ def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa:
     )
 
     assert rendered["command"] == f'python3 "{tmp_path}/helper.py" check'
+
+
+def test_file_flow_directory_remains_resolvable_after_flow_is_removed(tmp_path) -> None:  # noqa: ANN001
+    flow_file = tmp_path / "external.yaml"
+    flow_file.write_text("name: external\n", encoding="utf-8")
+    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+    flow = _FlowReference(id="run-external", source="file", ref=str(flow_file))
+    flow_file.unlink()
+
+    assert runner.resolve_flow_dir(flow.source, flow.ref) == tmp_path
+    assert runner.render(
+        {"directory": "{{flow.dir}}"},
+        {"inputs": {}, "step_executions": {}},
+        flow=flow,
+    ) == {"directory": str(tmp_path)}
 
 
 def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) -> None:  # noqa: ANN001

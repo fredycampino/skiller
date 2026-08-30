@@ -14,6 +14,10 @@ from skiller.application.use_cases.flow.flow_readiness_checker import (
     FlowReadinessCheckStatus,
 )
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
+from skiller.application.use_cases.run.check_webhook_wait import (
+    CheckWebhookWaitResult,
+    WebhookWaitConflict,
+)
 from skiller.application.use_cases.run.create_run import CreateRunInput
 from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
 from skiller.domain.event.event_model import (
@@ -38,6 +42,16 @@ class _FakeCreateRunUseCase:
             }
         )
         return "run-1"
+
+
+class _FakeCheckWebhookWaitUseCase:
+    def __init__(self, conflict: WebhookWaitConflict | None = None) -> None:
+        self.conflict = conflict
+        self.calls: list[object] = []
+
+    def execute(self, request):  # noqa: ANN001
+        self.calls.append(request)
+        return CheckWebhookWaitResult(conflict=self.conflict)
 
 
 class _FakeAppendRuntimeEventUseCase:
@@ -153,6 +167,7 @@ def _build_service(
     get_run_use_case: _FakeGetRunUseCase | None = None,
     flow_checker_use_case: _FakeFlowCheckerUseCase | None = None,
     flow_readiness_checker_use_case: _FakeFlowReadinessCheckerUseCase | None = None,
+    check_webhook_wait_use_case: _FakeCheckWebhookWaitUseCase | None = None,
     worker_final_status: str = "SUCCEEDED",
 ) -> tuple[
     RunApplicationService,
@@ -170,6 +185,9 @@ def _build_service(
         flow_readiness_checker_use_case or _FakeFlowReadinessCheckerUseCase()
     )
     final_get_run_use_case = get_run_use_case or _FakeGetRunUseCase()
+    final_check_webhook_wait_use_case = (
+        check_webhook_wait_use_case or _FakeCheckWebhookWaitUseCase()
+    )
     get_start_step_use_case = _FakeGetStartStepUseCase(get_run_use_case=final_get_run_use_case)
     run_executor = _FakeRunExecutor(
         get_run_use_case=final_get_run_use_case,
@@ -181,6 +199,7 @@ def _build_service(
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=create_run_use_case,
+        check_webhook_wait_use_case=final_check_webhook_wait_use_case,
         delete_run_use_case=SimpleNamespace(execute=lambda run_id: None),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=get_start_step_use_case,
@@ -253,6 +272,50 @@ def test_create_run_only_creates_run() -> None:
     ]
 
 
+
+
+def test_create_run_rejects_duplicate_webhook_wait_before_persisting() -> None:
+    check_use_case = _FakeCheckWebhookWaitUseCase(
+        conflict=WebhookWaitConflict(
+            run_id="existing-run",
+            webhook="github",
+            key="42",
+        )
+    )
+    (
+        service,
+        append_runtime_event_use_case,
+        create_run_use_case,
+        _get_start_step_use_case,
+        _run_executor,
+        _flow_checker_use_case,
+        _flow_readiness_checker_use_case,
+    ) = _build_service(check_webhook_wait_use_case=check_use_case)
+
+    with pytest.raises(ValueError, match="skiller delete existing-run"):
+        service.create_run(
+            CreateRunInput(skill_ref="webhook_test", inputs={"key": "42"})
+        )
+
+    assert len(check_use_case.calls) == 1
+    assert create_run_use_case.calls == []
+    assert append_runtime_event_use_case.calls == []
+
+
+def test_create_run_allows_a_different_webhook_key() -> None:
+    check_use_case = _FakeCheckWebhookWaitUseCase()
+    service, _events, create_run_use_case, *_rest = _build_service(
+        check_webhook_wait_use_case=check_use_case
+    )
+
+    result = service.create_run(
+        CreateRunInput(skill_ref="webhook_test", inputs={"key": "43"})
+    )
+
+    assert result.run_id == "run-1"
+    assert create_run_use_case.calls[0]["inputs"] == {"key": "43"}
+
+
 def test_run_prepares_dispatches_and_reads_final_status() -> None:
     get_run_use_case = _FakeGetRunUseCase(status="WAITING")
     (
@@ -269,11 +332,7 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
     )
 
     result = service.run(
-        CreateRunInput(
-            skill_ref="notify_test",
-            inputs={},
-            skill_source="internal",
-        )
+        CreateRunInput(skill_ref="notify_test", inputs={}, skill_source="internal")
     )
 
     assert result.run_id == "run-1"
@@ -340,6 +399,7 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         ),
         append_runtime_event_use_case=append_runtime_event_use_case,
         create_run_use_case=_FakeCreateRunUseCase(),
+        check_webhook_wait_use_case=_FakeCheckWebhookWaitUseCase(),
         delete_run_use_case=SimpleNamespace(execute=lambda run_id: None),
         fail_run_use_case=_FakeFailRunUseCase(),
         get_start_step_use_case=_FakeGetStartStepUseCase(

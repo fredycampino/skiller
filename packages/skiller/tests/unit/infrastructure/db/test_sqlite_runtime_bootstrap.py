@@ -2,12 +2,26 @@ import sqlite3
 
 import pytest
 
+from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import (
     SQLITE_RUNTIME_DB_VERSION,
     SqliteRuntimeBootstrap,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_sqlite_runtime_bootstrap_translates_backend_error(tmp_path) -> None:
+    database_path = tmp_path / "database-directory"
+    database_path.mkdir()
+
+    with pytest.raises(
+        RuntimeBootstrapError,
+        match="Runtime storage initialization failed",
+    ) as exc_info:
+        SqliteRuntimeBootstrap(str(database_path)).init_db()
+
+    assert isinstance(exc_info.value.__cause__, sqlite3.Error)
 
 
 def test_sqlite_runtime_bootstrap_creates_schema_and_sets_db_version(tmp_path) -> None:

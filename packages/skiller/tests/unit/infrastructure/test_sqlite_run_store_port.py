@@ -16,6 +16,7 @@ from skiller.domain.event.webhook_registration_model import (
 )
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.domain.run.steering_model import (
     SteeringAgentInterrupt,
     SteeringAgentMessage,
@@ -40,6 +41,15 @@ from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
 pytestmark = pytest.mark.unit
+
+
+def test_sqlite_run_store_translates_status_query_error(tmp_path) -> None:
+    store = SqliteRunStorePort(str(tmp_path / "uninitialized.db"))
+
+    with pytest.raises(RuntimeQueryError, match="Runtime query failed") as exc_info:
+        store.get_status("run-1")
+
+    assert isinstance(exc_info.value.__cause__, sqlite3.Error)
 
 
 def _switch_execution(next_step_id: str, value: object) -> StepExecution:

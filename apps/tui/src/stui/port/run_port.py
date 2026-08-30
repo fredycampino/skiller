@@ -29,9 +29,12 @@ class RunRuntimeWaitType(StrEnum):
 
 class RunDispatchErrorKind(StrEnum):
     NONE = "none"
-    RUN_NOT_FOUND = "run_not_found"
+    FLOW_NOT_FOUND = "flow_not_found"
     INVALID_ARGS = "invalid_args"
+    WEBHOOK_WAIT_CONFLICT = "webhook_wait_conflict"
     WORKER_START_FAILED = "worker_start_failed"
+    INITIALIZATION_FAILED = "initialization_failed"
+    CREATE_FAILED = "create_failed"
     RUNTIME_ERROR = "runtime_error"
 
 

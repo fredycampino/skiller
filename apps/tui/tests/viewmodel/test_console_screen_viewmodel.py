@@ -96,6 +96,7 @@ from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
 
 pytestmark = pytest.mark.unit
 
+
 def _event(
     event_type: LogEventType,
     *,
@@ -499,9 +500,7 @@ def test_notify_clears_interrupt_pending_when_run_leaves_running_chat() -> None:
                 LogEventType.RUN_WAITING,
                 step_type="wait_input",
                 payload=RunWaitingPayload(
-                    output=_waiting_output(
-                        "Write a message. Type exit, quit, or bye to stop."
-                    )
+                    output=_waiting_output("Write a message. Type exit, quit, or bye to stop.")
                 ),
                 event_id="evt-1",
             )
@@ -768,9 +767,7 @@ def test_prompt_enter_opens_auth_table_with_trailing_space() -> None:
         models_port = FakeModelsPort()
         viewmodel = build_viewmodel(
             session_key="main",
-            run_port=FakeRunPort(
-                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
-            ),
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
             waiting_port=FakeWaitingPort(),
             models_port=models_port,
         )
@@ -919,9 +916,7 @@ def test_console_screen_viewmodel_opens_auth_table_without_active_run() -> None:
         )
         viewmodel = build_viewmodel(
             session_key="main",
-            run_port=FakeRunPort(
-                CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
-            ),
+            run_port=FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")),
             waiting_port=FakeWaitingPort(),
             models_port=models_port,
         )
@@ -1111,9 +1106,7 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
         )
 
         providers = {provider.name: provider for provider in viewmodel.state.models_table.rows}
-        minimax_models = {
-            model.name: model for model in providers["minimax"].models
-        }
+        minimax_models = {model.name: model for model in providers["minimax"].models}
         assert selected is True
         assert models_port.select_called_with == [
             ("run-123", "minimax", "MiniMax-M2.5"),
@@ -1130,9 +1123,7 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
 def test_console_screen_viewmodel_refreshes_events_after_selecting_waiting_run() -> None:
     async def run() -> None:
         events_port = FakeEventsPort()
-        run_port = FakeRunPort(
-            CommandAck(status=CommandAckStatus.ACCEPTED, message="unused")
-        )
+        run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
         run_port.status = lambda run_id: RunRuntimeStatus(  # type: ignore[method-assign]
             run_id=run_id,
             status=RunRuntimeStatusKind.WAITING,
@@ -1281,9 +1272,9 @@ def test_console_screen_viewmodel_maps_dispatch_error() -> None:
             status=RunRuntimeStatusKind.FAILED,
             worker_pid=0,
             error=RunDispatchError(
-                kind=RunDispatchErrorKind.RUN_NOT_FOUND,
+                kind=RunDispatchErrorKind.FLOW_NOT_FOUND,
                 message="agent not found: missing_skill",
-            )
+            ),
         )
     )
 
@@ -1298,8 +1289,7 @@ def test_console_screen_viewmodel_maps_dispatch_error() -> None:
 
         assert isinstance(viewmodel.state.transcript.items[1], DispatchErrorItem)
         assert (
-            viewmodel.state.transcript.items[1].message
-            == "error: agent not found: missing_skill"
+            viewmodel.state.transcript.items[1].message == "error: agent not found: missing_skill"
         )
         assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
         assert viewmodel.state.session_key == "main"
@@ -1319,21 +1309,23 @@ def test_console_screen_viewmodel_subscribes_and_applies_log_events() -> None:
     )
 
     attach_run_observer(viewmodel, events_port, "run-1234")
-    viewmodel.notify([
-        _event(
-            LogEventType.STEP_STARTED,
-            step_id="show_message",
-            step_type="notify",
-            payload=StepStartedPayload(),
-            event_id="evt-1",
-        ),
-        _event(
-            LogEventType.RUN_FINISHED,
-            payload=RunFinishedPayload(status="SUCCEEDED"),
-            event_id="evt-2",
-            sequence=2,
-        ),
-    ])
+    viewmodel.notify(
+        [
+            _event(
+                LogEventType.STEP_STARTED,
+                step_id="show_message",
+                step_type="notify",
+                payload=StepStartedPayload(),
+                event_id="evt-1",
+            ),
+            _event(
+                LogEventType.RUN_FINISHED,
+                payload=RunFinishedPayload(status="SUCCEEDED"),
+                event_id="evt-2",
+                sequence=2,
+            ),
+        ]
+    )
 
     assert events_port.subscribe_calls == ["run-1234"]
     assert viewmodel.state.view_status.kind == ViewStatusKind.HIDDEN
@@ -1633,8 +1625,9 @@ def test_console_screen_viewmodel_maps_waiting_input_rejection() -> None:
         asyncio.run(run())
 
 
-def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiting_step_type(
-) -> None:
+def test_console_screen_viewmodel_does_not_infer_waiting_input_without_run_waiting_step_type() -> (
+    None
+):
     run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
     waiting_port = FakeWaitingPort(
         WaitingInputAck(

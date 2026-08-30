@@ -6,8 +6,20 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from skiller.application.runs.errors import WebhookWaitConflictError
 from skiller.di.container import build_runtime_container
+from skiller.domain.flow.flow_load_error import FlowLoadError, FlowNotFoundError
 from skiller.domain.run.run_model import RunStatus, SkillSource
+from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
+from skiller.domain.run.runtime_query_error import RuntimeQueryError
+from skiller.interfaces.cli.run_output import (
+    RunCommandError,
+    RunCommandFailure,
+    RunCommandRequest,
+    RunCommandWatchResult,
+    RunErrorCode,
+    RunOutputMapper,
+)
 from skiller.interfaces.runtime_controller import RuntimeController
 from skiller.local.server.process_service import WebhookProcessService
 from skiller.local.workers.process_service import WorkerProcessService
@@ -91,6 +103,30 @@ def _normalize_status_filters(statuses: list[str] | None) -> list[str]:
     return normalized
 
 
+def _print_run_error(
+    code: RunErrorCode,
+    message: str,
+    *,
+    run_result: dict[str, Any] | None,
+) -> None:
+    payload = RunOutputMapper().to_error_dict(
+        RunCommandError(code=code, message=message),
+        run_result=run_result,
+    )
+    print(json.dumps(payload, indent=2))
+
+
+def _execution_error_message(events: list[dict[str, Any]]) -> str:
+    for event in reversed(events):
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        message = payload.get("error")
+        if isinstance(message, str) and message.strip():
+            return message
+    return "Run execution failed."
+
+
 def _merge_waiting_metadata(
     run_result: dict[str, Any],
     status_payload: dict[str, Any] | None,
@@ -104,41 +140,14 @@ def _merge_waiting_metadata(
     return run_result
 
 
-def _resolve_run_target(
-    parser: argparse.ArgumentParser,
-    args: argparse.Namespace,
-) -> tuple[str, str]:
+def _resolve_run_target(args: argparse.Namespace) -> tuple[str, str]:
     if bool(args.skill) == bool(args.skill_file):
-        parser.error("Use either an internal skill name or --file PATH.")
+        raise ValueError("Use either an internal skill name or --file PATH.")
 
     if args.skill_file:
         return args.skill_file, SkillSource.FILE.value
 
     return args.skill, SkillSource.INTERNAL.value
-
-
-def _maybe_start_server(
-    args: argparse.Namespace,
-    controller: RuntimeController,
-    container_settings: Any,
-    run_result: dict[str, Any],
-) -> tuple[dict[str, Any], int]:
-    if not args.start_server:
-        return run_result, 0
-
-    try:
-        server_result = WebhookProcessService(container_settings).start()
-        run_result["server_started"] = server_result.started
-        run_result["server_endpoint"] = server_result.endpoint
-        if server_result.pid is not None:
-            run_result["server_pid"] = server_result.pid
-        return run_result, 0
-    except RuntimeError as exc:
-        run_result["server_started"] = False
-        run_result["error"] = str(exc)
-        if args.logs:
-            run_result["logs"] = controller.logs(run_result["run_id"])
-        return run_result, 1
 
 
 def _watch_run(
@@ -178,9 +187,7 @@ def _watch_run(
             print(formatted_event, file=sys.stderr, flush=True)
 
         status = str(run.get("status", "")).upper()
-        stale_terminal_status = (
-            status in _WATCH_TERMINAL_STATUSES and not terminal_event_seen
-        )
+        stale_terminal_status = status in _WATCH_TERMINAL_STATUSES and not terminal_event_seen
         if status and status != last_status and not stale_terminal_status:
             _print_watch_status(run_id, status)
             last_status = status
@@ -309,11 +316,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--logs",
         action="store_true",
         help="Include current run logs in the run response payload",
-    )
-    run_parser.add_argument(
-        "--start-server",
-        action="store_true",
-        help="Start the local webhooks server before dispatching the run",
     )
     run_parser.add_argument(
         "--detach",
@@ -520,17 +522,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    effective_argv = list(sys.argv[1:] if argv is None else argv)
-    if not effective_argv:
-        _load_tui_runner()()
-        return 0
-
-    parser = build_parser()
-    args = parser.parse_args(effective_argv)
-
-    container = build_runtime_container()
-    controller = RuntimeController(
+def _build_runtime_controller(container: Any) -> RuntimeController:
+    return RuntimeController(
         agent_service=container.agent_service,
         agent_mapper=container.agent_mapper,
         run_service=container.run_service,
@@ -542,56 +535,181 @@ def main(argv: list[str] | None = None) -> int:
         channel_wait_mapper=container.channel_wait_mapper,
         webhook_wait_mapper=container.webhook_wait_mapper,
     )
-    controller.initialize()
+
+
+def _run_failure(
+    code: RunErrorCode,
+    message: str,
+    *,
+    run_result: dict[str, Any] | None,
+) -> RunCommandFailure:
+    return RunCommandFailure(
+        error=RunCommandError(code=code, message=message),
+        run_result=run_result,
+    )
+
+
+def _print_run_failure(failure: RunCommandFailure) -> int:
+    _print_run_error(
+        failure.error.code,
+        failure.error.message,
+        run_result=failure.run_result,
+    )
+    return 1
+
+
+def _resolve_run_request(
+    args: argparse.Namespace,
+) -> RunCommandRequest | RunCommandFailure:
+    try:
+        skill_ref, skill_source = _resolve_run_target(args)
+        inputs = _parse_key_value(args.arg)
+        return RunCommandRequest(
+            skill_ref=skill_ref,
+            skill_source=skill_source,
+            inputs=inputs,
+        )
+    except ValueError as exc:
+        return _run_failure(RunErrorCode.ARGUMENT_INVALID, str(exc), run_result=None)
+
+
+def _initialize_run_controller() -> RuntimeController | RunCommandFailure:
+    try:
+        container = build_runtime_container()
+        controller = _build_runtime_controller(container)
+        controller.initialize()
+        return controller
+    except RuntimeBootstrapError as exc:
+        return _run_failure(RunErrorCode.INITIALIZATION_FAILED, str(exc), run_result=None)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _run_failure(RunErrorCode.INITIALIZATION_FAILED, str(exc), run_result=None)
+
+
+def _create_cli_run(
+    controller: RuntimeController,
+    request: RunCommandRequest,
+) -> dict[str, Any] | RunCommandFailure:
+    try:
+        return controller.create_run(
+            request.skill_ref,
+            request.inputs,
+            skill_source=request.skill_source,
+        )
+    except WebhookWaitConflictError as exc:
+        return _run_failure(RunErrorCode.WEBHOOK_WAIT_CONFLICT, str(exc), run_result=None)
+    except FlowNotFoundError as exc:
+        return _run_failure(RunErrorCode.FLOW_NOT_FOUND, str(exc), run_result=None)
+    except (FlowLoadError, ValueError) as exc:
+        return _run_failure(RunErrorCode.CREATE_FAILED, str(exc), run_result=None)
+
+
+def _start_cli_run_worker(
+    run_result: dict[str, Any],
+) -> dict[str, Any] | RunCommandFailure:
+    try:
+        worker_result = WorkerProcessService().start(run_result["run_id"])
+    except OSError as exc:
+        return _run_failure(
+            RunErrorCode.WORKER_START_FAILED,
+            str(exc),
+            run_result=run_result,
+        )
+    run_result["worker_pid"] = worker_result.pid
+    return run_result
+
+
+def _watch_cli_run(
+    controller: RuntimeController,
+    run_result: dict[str, Any],
+) -> RunCommandWatchResult | RunCommandFailure:
+    try:
+        watched = _watch_run(
+            controller,
+            run_result["run_id"],
+            initial_status=run_result["status"],
+        )
+        run_result["status"] = watched["status"]
+        if watched["status"] == RunStatus.WAITING.value:
+            run_result = _merge_waiting_metadata(
+                run_result,
+                controller.status(run_result["run_id"]),
+            )
+        return RunCommandWatchResult(
+            run_result=run_result,
+            events=tuple(watched["events"]),
+        )
+    except (RuntimeError, RuntimeQueryError) as exc:
+        return _run_failure(RunErrorCode.WATCH_FAILED, str(exc), run_result=run_result)
+
+
+def _add_cli_run_logs(
+    controller: RuntimeController,
+    run_result: dict[str, Any],
+) -> dict[str, Any] | RunCommandFailure:
+    try:
+        run_result["logs"] = controller.logs(run_result["run_id"])
+        return run_result
+    except RuntimeQueryError as exc:
+        return _run_failure(RunErrorCode.LOGS_FAILED, str(exc), run_result=run_result)
+
+
+def _run_command(args: argparse.Namespace) -> int:
+    request = _resolve_run_request(args)
+    if isinstance(request, RunCommandFailure):
+        return _print_run_failure(request)
+
+    controller = _initialize_run_controller()
+    if isinstance(controller, RunCommandFailure):
+        return _print_run_failure(controller)
+
+    run_result = _create_cli_run(controller, request)
+    if isinstance(run_result, RunCommandFailure):
+        return _print_run_failure(run_result)
+
+    run_result = _start_cli_run_worker(run_result)
+    if isinstance(run_result, RunCommandFailure):
+        return _print_run_failure(run_result)
+
+    if not args.detach:
+        watched = _watch_cli_run(controller, run_result)
+        if isinstance(watched, RunCommandFailure):
+            return _print_run_failure(watched)
+        run_result = watched.run_result
+        if run_result["status"] == RunStatus.FAILED.value:
+            if args.logs:
+                logs_result = _add_cli_run_logs(controller, run_result)
+                if not isinstance(logs_result, RunCommandFailure):
+                    run_result = logs_result
+            failure = _run_failure(
+                RunErrorCode.EXECUTION_FAILED,
+                _execution_error_message(list(watched.events)),
+                run_result=run_result,
+            )
+            return _print_run_failure(failure)
+
+    if args.logs and "logs" not in run_result:
+        run_result = _add_cli_run_logs(controller, run_result)
+        if isinstance(run_result, RunCommandFailure):
+            return _print_run_failure(run_result)
+    print(json.dumps(run_result, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    if not effective_argv:
+        _load_tui_runner()()
+        return 0
+
+    parser = build_parser()
+    args = parser.parse_args(effective_argv)
 
     if args.command == "run":
-        try:
-            skill_ref, skill_source = _resolve_run_target(parser, args)
-            inputs = _parse_key_value(args.arg)
-            run_result = controller.create_run(
-                skill_ref,
-                inputs,
-                skill_source=skill_source,
-            )
-        except ValueError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
+        return _run_command(args)
 
-        run_result, exit_code = _maybe_start_server(
-            args,
-            controller,
-            container.settings,
-            run_result,
-        )
-        if exit_code == 0:
-            try:
-                worker_result = WorkerProcessService().start(run_result["run_id"])
-                run_result["worker_pid"] = worker_result.pid
-            except OSError as exc:
-                print(str(exc), file=sys.stderr)
-                return 1
-            if not args.detach:
-                try:
-                    watched = _watch_run(
-                        controller,
-                        run_result["run_id"],
-                        initial_status=run_result["status"],
-                    )
-                except RuntimeError as exc:
-                    print(str(exc), file=sys.stderr)
-                    return 1
-                run_result["status"] = watched["status"]
-                if watched["status"] == RunStatus.WAITING.value:
-                    run_result = _merge_waiting_metadata(
-                        run_result,
-                        controller.status(run_result["run_id"]),
-                    )
-        if args.logs and "logs" not in run_result:
-            run_result["logs"] = controller.logs(run_result["run_id"])
-        print(json.dumps(run_result, indent=2))
-        if exit_code != 0:
-            return exit_code
-        return 0 if run_result["status"] != RunStatus.FAILED.value else 1
+    container = build_runtime_container()
+    controller = _build_runtime_controller(container)
+    controller.initialize()
 
     if args.command == "resume":
         try:

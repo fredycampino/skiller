@@ -107,9 +107,7 @@ def test_cli_run_adapter_returns_none_when_status_command_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(returncode=1, stdout="", stderr="boom")
-    )
+    adapter = CliRunAdapter(invoker=_invoker(returncode=1, stdout="", stderr="boom"))
 
     result = adapter.status("run-1234")
 
@@ -120,9 +118,7 @@ def test_cli_run_adapter_returns_none_when_status_payload_is_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(stdout="not-json")
-    )
+    adapter = CliRunAdapter(invoker=_invoker(stdout="not-json"))
 
     result = adapter.status("run-1234")
 
@@ -133,98 +129,63 @@ def test_cli_run_adapter_returns_none_when_status_is_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(stdout='{"status": "BOGUS"}')
-    )
+    adapter = CliRunAdapter(invoker=_invoker(stdout='{"status": "BOGUS"}'))
 
     result = adapter.status("run-1234")
 
     assert result is None
 
 
-def test_cli_run_adapter_returns_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(returncode=1, stdout="", stderr="boom")
-    )
+def test_cli_run_adapter_rejects_non_json_runtime_error() -> None:
+    adapter = CliRunAdapter(invoker=_invoker(returncode=1, stdout="", stderr="boom"))
 
     result = adapter.run("ant")
 
     assert result.error.kind == RunDispatchErrorKind.RUNTIME_ERROR
-    assert result.error.message == "boom"
+    assert result.error.message == "runtime command returned invalid JSON"
 
 
-def test_cli_run_adapter_returns_dispatch_error_when_skill_is_not_found(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("code", "kind"),
+    [
+        ("RUN_ARGUMENT_INVALID", RunDispatchErrorKind.INVALID_ARGS),
+        ("FLOW_NOT_FOUND", RunDispatchErrorKind.FLOW_NOT_FOUND),
+        ("WEBHOOK_WAIT_CONFLICT", RunDispatchErrorKind.WEBHOOK_WAIT_CONFLICT),
+        ("WORKER_START_FAILED", RunDispatchErrorKind.WORKER_START_FAILED),
+        ("RUNTIME_INITIALIZATION_FAILED", RunDispatchErrorKind.INITIALIZATION_FAILED),
+        ("RUN_CREATE_FAILED", RunDispatchErrorKind.CREATE_FAILED),
+    ],
+)
+def test_cli_run_adapter_maps_normalized_runtime_errors(
+    code: str,
+    kind: RunDispatchErrorKind,
 ) -> None:
-    _ = monkeypatch
     adapter = CliRunAdapter(
         invoker=_invoker(
             returncode=1,
-            stdout="",
-            stderr=(
-                "Traceback (most recent call last):\n"
-                '  File "/tmp/x.py", line 1, in <module>\n'
-                "FileNotFoundError: Skill not found: source=internal ref=av\n"
-            ),
-        )
-    )
-    result = adapter.run("av")
-
-    assert result.error.kind == RunDispatchErrorKind.RUN_NOT_FOUND
-    assert result.error.message == "agent not found: av"
-
-
-def test_cli_run_adapter_returns_run_not_found_when_skill_is_invalid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(
-            returncode=1,
-            stdout="",
-            stderr="Invalid skill format for 'broken'. Skill requires non-empty root 'start'",
-        )
-    )
-
-    result = adapter.run("broken")
-
-    assert result.error.kind == RunDispatchErrorKind.RUN_NOT_FOUND
-    assert (
-        result.error.message
-        == "Invalid skill format for 'broken'. Skill requires non-empty root 'start'"
-    )
-
-
-def test_cli_run_adapter_returns_invalid_args_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(
-            returncode=1,
-            stdout="",
-            stderr="Invalid --arg 'foo'. Expected key=value.",
-        )
-    )
-
-    result = adapter.run("ant --arg foo")
-
-    assert result.error.kind == RunDispatchErrorKind.INVALID_ARGS
-    assert result.error.message == "Invalid --arg 'foo'. Expected key=value."
-
-
-def test_cli_run_adapter_returns_worker_start_failed_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _ = monkeypatch
-    adapter = CliRunAdapter(
-        invoker=_invoker(
-            returncode=1,
-            stdout="",
-            stderr="worker process did not start",
+            stdout=f'{{"error": {{"code": "{code}", "message": "failure"}}}}',
         )
     )
 
     result = adapter.run("ant")
 
-    assert result.error.kind == RunDispatchErrorKind.WORKER_START_FAILED
-    assert result.error.message == "worker process did not start"
+    assert result.error.kind == kind
+    assert result.error.message == "failure"
+
+
+def test_cli_run_adapter_preserves_webhook_conflict_message() -> None:
+    message = (
+        "Webhook 'github:42' is already being waited by run 'existing'. "
+        "Delete it with 'skiller delete existing' or wait for it to finish."
+    )
+    adapter = CliRunAdapter(
+        invoker=_invoker(
+            returncode=1,
+            stdout=f'{{"error": {{"code": "WEBHOOK_WAIT_CONFLICT", "message": "{message}"}}}}',
+        )
+    )
+
+    result = adapter.run("deploy --arg pr=42")
+
+    assert result.error.kind == RunDispatchErrorKind.WEBHOOK_WAIT_CONFLICT
+    assert result.error.message == message

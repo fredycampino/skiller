@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from skiller.domain.step.run_step_model import parse_run_steps
@@ -13,8 +14,7 @@ from skiller.domain.wait.wait_store_port import WaitStorePort
 
 @dataclass(frozen=True)
 class CheckWebhookWaitInput:
-    skill_source: str
-    skill_ref: str
+    flow_path: Path
     inputs: dict[str, Any]
 
 
@@ -33,8 +33,7 @@ class CheckWebhookWaitResult:
 @dataclass(frozen=True)
 class _CheckFlowReference:
     id: str
-    source: str
-    ref: str
+    flow_path: Path
 
 
 class CheckWebhookWaitUseCase:
@@ -43,13 +42,12 @@ class CheckWebhookWaitUseCase:
         self.skill_runner = skill_runner
 
     def execute(self, request: CheckWebhookWaitInput) -> CheckWebhookWaitResult:
-        raw_skill = self.skill_runner.load(request.skill_source, request.skill_ref)
+        raw_skill = self.skill_runner.load(request.flow_path)
         raw_steps = raw_skill.get("steps", [])
         rendered_context = {"inputs": request.inputs, "step_executions": {}}
         flow = _CheckFlowReference(
             id=str(uuid.uuid4()),
-            source=request.skill_source,
-            ref=request.skill_ref,
+            flow_path=request.flow_path,
         )
 
         for run_step in parse_run_steps(raw_steps):

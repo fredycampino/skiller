@@ -65,13 +65,11 @@ class RenderCurrentStepUseCase:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_STEP)
         if parsed_step.step_type == StepType.AGENT:
             step = self._resolve_agent_system_file(
-                skill_source=run.source,
-                skill_ref=run.ref,
+                flow_path=run.flow_path,
                 step=step,
             )
             step = self._resolve_agent_instructions(
-                skill_source=run.source,
-                skill_ref=run.ref,
+                flow_path=run.flow_path,
                 step=step,
             )
 
@@ -91,8 +89,7 @@ class RenderCurrentStepUseCase:
     def _resolve_agent_system_file(
         self,
         *,
-        skill_source: str,
-        skill_ref: str,
+        flow_path: Path,
         step: dict[str, Any],
     ) -> dict[str, Any]:
         raw_system = step.get("system")
@@ -105,8 +102,7 @@ class RenderCurrentStepUseCase:
 
         resolved_step = dict(step)
         resolved_step["system"] = self.skill_runner.read_file(
-            skill_source,
-            skill_ref,
+            flow_path,
             file_ref,
         )
         return resolved_step
@@ -114,8 +110,7 @@ class RenderCurrentStepUseCase:
     def _resolve_agent_instructions(
         self,
         *,
-        skill_source: str,
-        skill_ref: str,
+        flow_path: Path,
         step: dict[str, Any],
     ) -> dict[str, Any]:
         raw_instructions = step.get("instructions")
@@ -130,8 +125,7 @@ class RenderCurrentStepUseCase:
                 raise ValueError("Agent step instructions must contain non-empty strings")
             resolved_instructions.append(
                 self._read_instruction(
-                    skill_source=skill_source,
-                    skill_ref=skill_ref,
+                    flow_path=flow_path,
                     instruction_ref=instruction_ref.strip(),
                 )
             )
@@ -143,12 +137,11 @@ class RenderCurrentStepUseCase:
     def _read_instruction(
         self,
         *,
-        skill_source: str,
-        skill_ref: str,
+        flow_path: Path,
         instruction_ref: str,
     ) -> str:
         if instruction_ref.startswith("./") or instruction_ref.startswith("../"):
-            return self.skill_runner.read_file(skill_source, skill_ref, instruction_ref)
+            return self.skill_runner.read_file(flow_path, instruction_ref)
         if not _PACKAGED_INSTRUCTION_PATTERN.fullmatch(instruction_ref):
             raise ValueError("Agent step instruction package names must be slugs")
 

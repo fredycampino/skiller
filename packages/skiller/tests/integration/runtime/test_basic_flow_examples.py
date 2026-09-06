@@ -15,6 +15,7 @@ from skiller.application.agent.mapper.agent_step_execution_mapper import (
 )
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.models import RunRequest
 from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -38,6 +39,7 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
 from skiller.application.use_cases.flow.flow_readiness_checker import FlowReadinessCheckerUseCase
+from skiller.application.use_cases.flow.resolve_flow import ResolveFlowUseCase
 from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.render.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
@@ -45,7 +47,7 @@ from skiller.application.use_cases.run.append_runtime_event import AppendRuntime
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.check_webhook_wait import CheckWebhookWaitUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
@@ -60,6 +62,7 @@ from skiller.application.use_cases.run.resolve_end_action_config import (
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.domain.event.event_model import StepSuccessPayload
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
@@ -112,13 +115,8 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         SqliteAgentContextDatasource(store.db_path),
     )
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
-    skill_runner = FilesystemRunnerPort(
-        flows_dir=Path("skills"),
-    )
-    flow_port = FilesystemFlowPort(
-        flows_dir=str(skill_runner.flows_dir),
-        mapper=FlowYamlMapper(),
-    )
+    skill_runner = FilesystemRunnerPort()
+    flow_port = FilesystemFlowPort(mapper=FlowYamlMapper())
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
@@ -236,6 +234,10 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             server_status=_FakeServerStatus(),
             channel_sender=channel_sender,
         ),
+        get_runtime_config_use_case=SimpleNamespace(
+            execute=lambda: SimpleNamespace(flow_paths=(Path("skills"),)),
+        ),
+        resolve_flow_use_case=ResolveFlowUseCase(home_path=Path.home()),
         resume_run_use_case=ResumeRunUseCase(store=store),
         mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
             store=store,
@@ -258,7 +260,9 @@ def test_basic_flow_examples_succeed(
         SqliteRuntimeBootstrap(store.db_path).init_db()
 
         runtime = _build_runtime(store)
-        run_result = runtime.run(CreateRunInput(skill_ref=skill_ref, inputs=inputs))
+        run_result = runtime.run(
+            RunRequest(reference=FlowReference(f"@{skill_ref}"), inputs=inputs)
+        )
 
         run_id = run_result.run_id
         run = store.get_run(run_id)
@@ -311,10 +315,9 @@ def test_assign_step_succeeds_from_external_flow_file() -> None:
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
-            CreateRunInput(
-                skill_ref=str(skill_path),
+            RunRequest(
+                reference=FlowReference(str(skill_path)),
                 inputs={"issue": "dependency timeout"},
-                skill_source="file",
             )
         )
 
@@ -346,9 +349,9 @@ def test_assign_step_succeeds_from_external_flow_file() -> None:
                         "action": "retry",
                         "summary": "dependency timeout",
                         "meta": {"source": "assign"},
-                }
-            },
-            "body_ref": None,
+                    },
+                },
+                "body_ref": None,
             },
             next="done",
         )
@@ -388,9 +391,7 @@ def test_switch_step_routes_to_matching_branch_from_external_flow_file() -> None
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
 
         run = store.get_run(run_result.run_id)
         assert run is not None
@@ -452,9 +453,7 @@ def test_when_step_routes_to_first_matching_branch_from_external_flow_file() -> 
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
 
         run = store.get_run(run_result.run_id)
         assert run is not None
@@ -483,7 +482,5 @@ def test_when_step_routes_to_first_matching_branch_from_external_flow_file() -> 
 
 def _step_success_event(events: list[object], *, step_id: str):
     return next(
-        event
-        for event in events
-        if event.type == "STEP_SUCCESS" and event.step_id == step_id
+        event for event in events if event.type == "STEP_SUCCESS" and event.step_id == step_id
     )

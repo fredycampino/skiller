@@ -56,6 +56,15 @@ Use `<path-docs>/flows/flow-readiness-checker.md` when a flow depends on local s
 
 Use an isolated `AGENT_DB_PATH` for end-to-end checks. Do not test flows that change user configuration, credentials, external services, or user data without explicit approval.
 
+Run a flow from an effective `flow_paths` entry with its canonical `@` reference, or pass its YAML path directly:
+
+```bash
+skiller run @group/name
+skiller run ./flows/group/name.yaml
+```
+
+Use repeatable `--arg key=value` options for declared inputs. Add `--detach` only when the caller should return immediately after worker dispatch.
+
 ### Common Mistakes
 
 Avoid missing `start` or `next` targets, invalid output paths, undeclared inputs, unsafe branch fallbacks, secrets in flow content, and oversized shell steps.

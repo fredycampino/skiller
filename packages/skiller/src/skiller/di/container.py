@@ -30,6 +30,7 @@ from skiller.application.agent.tools.agent_tool_executor import AgentToolExecuto
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
+from skiller.application.config.service import RuntimeConfigApplicationService
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.executor import RunExecutor
@@ -45,6 +46,7 @@ from skiller.application.use_cases.agent.list_agent_context import ListAgentCont
 from skiller.application.use_cases.agent.list_agent_models import ListAgentModelsUseCase
 from skiller.application.use_cases.agent.list_llm_providers import ListLLMProvidersUseCase
 from skiller.application.use_cases.agent.select_agent_model import SelectAgentModelUseCase
+from skiller.application.use_cases.config.get_runtime_config import GetRuntimeConfigUseCase
 from skiller.application.use_cases.execute.execute_agent_step import (
     ExecuteAgentStepUseCase,
 )
@@ -70,6 +72,7 @@ from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
 from skiller.application.use_cases.flow.flow_readiness_checker import (
     FlowReadinessCheckerUseCase,
 )
+from skiller.application.use_cases.flow.resolve_flow import ResolveFlowUseCase
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
@@ -123,7 +126,16 @@ from skiller.infrastructure.config.file_llm_provider_catalog_port import (
     FileLLMProviderCatalogPort,
 )
 from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
-from skiller.infrastructure.config.settings import Settings, get_settings
+from skiller.infrastructure.config.json_runtime_config_port import JsonRuntimeConfigPort
+from skiller.infrastructure.config.json_skiller_config_datasource import (
+    JsonSkillerConfigDatasource,
+)
+from skiller.infrastructure.config.settings import (
+    Settings,
+    get_config_file_environment_value,
+    get_settings,
+)
+from skiller.infrastructure.config.skiller_config_mapper import SkillerConfigMapper
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
@@ -147,6 +159,9 @@ from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEv
 from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
 from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
+from skiller.infrastructure.flow.filesystem_packaged_flow_paths_port import (
+    FilesystemPackagedFlowPathsPort,
+)
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
 from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
 from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
@@ -162,6 +177,7 @@ from skiller.infrastructure.tools.webhooks.default_server_status import DefaultS
 @dataclass(frozen=True)
 class RuntimeContainer:
     settings: Settings
+    runtime_config_service: RuntimeConfigApplicationService
     agent_service: AgentApplicationService
     agent_mapper: AgentServiceMapper
     run_service: RunApplicationService
@@ -176,8 +192,6 @@ class RuntimeContainer:
 
 def build_runtime_container(
     settings: Settings | None = None,
-    *,
-    flows_dir: str | None = None,
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
@@ -195,13 +209,27 @@ def build_runtime_container(
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
     webhook_registry = SqliteWebhookRegistry(cfg.db_path)
-    filesystem_runner_port = FilesystemRunnerPort(
-        flows_dir=Path(flows_dir) if flows_dir is not None else None,
-    )
+    filesystem_runner_port = FilesystemRunnerPort()
     skill_runner: RunnerPort = filesystem_runner_port
     flow_port = FilesystemFlowPort(
-        flows_dir=str(filesystem_runner_port.flows_dir),
         mapper=FlowYamlMapper(),
+    )
+    runtime_config_port = JsonRuntimeConfigPort(
+        config_datasource=JsonSkillerConfigDatasource(
+            mapper=SkillerConfigMapper(runtime_cwd=Path.cwd()),
+        ),
+    )
+    get_runtime_config_use_case = GetRuntimeConfigUseCase(
+        runtime_config=runtime_config_port,
+        packaged_flow_paths=FilesystemPackagedFlowPathsPort(),
+        environment_config_path=get_config_file_environment_value(),
+        default_config_path=Path.home() / ".skiller" / "settings" / "config.json",
+    )
+    runtime_config_service = RuntimeConfigApplicationService(
+        get_runtime_config_use_case=get_runtime_config_use_case,
+    )
+    resolve_flow_use_case = ResolveFlowUseCase(
+        home_path=Path.home(),
     )
     shell_tool = ShellProcessTool()
     notify_tool = NotifyTool()
@@ -485,6 +513,8 @@ def build_runtime_container(
         get_start_step_use_case=get_start_step_use_case,
         flow_checker_use_case=flow_checker_use_case,
         flow_readiness_checker_use_case=flow_readiness_checker_use_case,
+        get_runtime_config_use_case=get_runtime_config_use_case,
+        resolve_flow_use_case=resolve_flow_use_case,
         resume_run_use_case=resume_run_use_case,
         mark_notify_action_done_use_case=mark_notify_action_done_use_case,
         get_run_use_case=get_run_use_case,
@@ -508,6 +538,7 @@ def build_runtime_container(
     agent_mapper = AgentServiceMapper()
     return RuntimeContainer(
         settings=cfg,
+        runtime_config_service=runtime_config_service,
         agent_service=agent_service,
         agent_mapper=agent_mapper,
         run_service=run_service,

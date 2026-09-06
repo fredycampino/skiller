@@ -6,7 +6,7 @@ from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepUseCase,
     _packaged_instruction_dir_candidates,
 )
-from skiller.domain.flow.flow_reference import FlowReference
+from skiller.domain.flow.flow_run_reference import FlowRunReference
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run, RunStatus
 from skiller.domain.step.current_step_model import CurrentStepStatus
@@ -28,11 +28,11 @@ class _FakeSkillRunner:
     def __init__(self, skill: object) -> None:
         self._skill = skill
         self.render_calls: list[dict[str, object]] = []
-        self.load_calls: list[tuple[str, str]] = []
-        self.read_skill_file_calls: list[tuple[str, str, str]] = []
+        self.load_calls: list[Path] = []
+        self.read_skill_file_calls: list[tuple[Path, str]] = []
 
-    def load(self, source: str, ref: str):  # noqa: ANN202
-        self.load_calls.append((source, ref))
+    def load(self, flow_path: Path):  # noqa: ANN202
+        self.load_calls.append(flow_path)
         return self._skill
 
     def render(
@@ -40,7 +40,7 @@ class _FakeSkillRunner:
         step: dict[str, object],
         context: dict[str, object],
         *,
-        flow: FlowReference,
+        flow: FlowRunReference,
     ) -> dict[str, object]:
         self.render_calls.append(
             {
@@ -53,8 +53,8 @@ class _FakeSkillRunner:
         rendered["rendered"] = True
         return rendered
 
-    def read_file(self, source: str, ref: str, file_ref: str) -> str:
-        self.read_skill_file_calls.append((source, ref, file_ref))
+    def read_file(self, flow_path: Path, file_ref: str) -> str:
+        self.read_skill_file_calls.append((flow_path, file_ref))
         return "Resolved system prompt"
 
 
@@ -66,8 +66,7 @@ def _build_run(
 ) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot=snapshot
         if snapshot is not None
         else {"start": "show_message", "steps": [{"notify": "show_message"}]},
@@ -166,7 +165,7 @@ def test_resolves_agent_system_file() -> None:
     assert result.status == CurrentStepStatus.READY
     assert result.current_step is not None
     assert result.current_step.step["system"] == "Resolved system prompt"
-    assert skill_runner.read_skill_file_calls == [("internal", "demo", "./system.md")]
+    assert skill_runner.read_skill_file_calls == [(Path("/flows/demo.yaml"), "./system.md")]
 
 
 def test_resolves_agent_local_instructions() -> None:
@@ -194,8 +193,8 @@ def test_resolves_agent_local_instructions() -> None:
         "Resolved system prompt",
     ]
     assert skill_runner.read_skill_file_calls == [
-        ("internal", "demo", "./base.md"),
-        ("internal", "demo", "../shared/rules.md"),
+        (Path("/flows/demo.yaml"), "./base.md"),
+        (Path("/flows/demo.yaml"), "../shared/rules.md"),
     ]
 
 

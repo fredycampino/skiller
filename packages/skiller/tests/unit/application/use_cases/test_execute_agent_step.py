@@ -111,8 +111,7 @@ class _FakeStore:
     def get_run(self, run_id: str) -> Run:
         return Run(
             id=run_id,
-            source="internal",
-            ref="demo",
+            flow_path=Path("/flows/demo.yaml"),
             snapshot={"start": "support_agent", "steps": []},
             status=RunStatus.RUNNING.value,
             current="support_agent",
@@ -135,11 +134,10 @@ class _FakeStore:
 class _FakeSkillRunner:
     def resolve_file_path(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         file_ref: str,
     ) -> Path:
-        _ = (source, ref, file_ref)
+        _ = (flow_path, file_ref)
         return Path("__missing__/agent.json")
 
 

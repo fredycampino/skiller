@@ -97,8 +97,7 @@ class EventTranscriptMapper:
             return RunSyncSnapshotItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                source=payload.source,
-                ref=payload.ref,
+                flow_path=payload.flow_path,
                 status=RunSnapshotStatus.UPDATED,
             )
 
@@ -107,8 +106,7 @@ class EventTranscriptMapper:
             return RunSyncSnapshotItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
-                source=payload.source,
-                ref=payload.ref,
+                flow_path=payload.flow_path,
                 status=RunSnapshotStatus.FAILED,
                 error=payload.error,
             )

@@ -181,8 +181,7 @@ class AgentSystemNoticeItem(TranscriptItem):
 @dataclass(frozen=True)
 class RunSyncSnapshotItem(TranscriptItem):
     run_id: str
-    source: str
-    ref: str
+    flow_path: str
     status: RunSnapshotStatus
     error: str = ""
 

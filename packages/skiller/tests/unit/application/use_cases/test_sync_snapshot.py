@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.sync_snapshot import (
@@ -37,10 +39,10 @@ class _FakeStore:
 class _FakeRunner:
     def __init__(self, flow: object) -> None:
         self.flow = flow
-        self.load_calls: list[tuple[str, str]] = []
+        self.load_calls: list[Path] = []
 
-    def load(self, source: str, ref: str) -> object:
-        self.load_calls.append((source, ref))
+    def load(self, flow_path: Path) -> object:
+        self.load_calls.append(flow_path)
         if isinstance(self.flow, Exception):
             raise self.flow
         return self.flow
@@ -66,8 +68,7 @@ def test_sync_snapshot_updates_only_snapshot_when_current_exists() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path=Path("/flows/mono.yaml"),
             current="ask_user",
             snapshot={
                 "start": "ask_user",
@@ -85,14 +86,13 @@ def test_sync_snapshot_updates_only_snapshot_when_current_exists() -> None:
     result = use_case.execute("run-1")
 
     assert result.status == SyncSnapshotStatus.UPDATED
-    assert runner.load_calls == [("internal", "mono")]
+    assert runner.load_calls == [Path("/flows/mono.yaml")]
     assert store.updated == [{"run_id": "run-1", "snapshot": flow}]
     assert len(events.events) == 1
     event = events.events[0]
     assert event.type == RuntimeEventType.RUN_SNAPSHOT_UPDATED
     assert isinstance(event.payload, RunSnapshotUpdatedPayload)
-    assert event.payload.source == "internal"
-    assert event.payload.ref == "mono"
+    assert event.payload.flow_path == "/flows/mono.yaml"
 
 
 def test_sync_snapshot_does_not_update_when_snapshot_is_unchanged() -> None:
@@ -106,8 +106,7 @@ def test_sync_snapshot_does_not_update_when_snapshot_is_unchanged() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path=Path("/flows/mono.yaml"),
             current="ask_user",
             snapshot=flow,
         )
@@ -133,8 +132,7 @@ def test_sync_snapshot_keeps_snapshot_when_current_is_missing() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path=Path("/flows/mono.yaml"),
             current="support_agent",
             snapshot={},
         )
@@ -150,7 +148,9 @@ def test_sync_snapshot_keeps_snapshot_when_current_is_missing() -> None:
 
     assert result.status == SyncSnapshotStatus.CURRENT_STEP_NOT_FOUND
     assert store.updated == []
-    assert result.error == "Could not sync snapshot 'mono': step 'support_agent' was not found"
+    assert result.error == (
+        "Could not sync snapshot '/flows/mono.yaml': step 'support_agent' was not found"
+    )
     assert events.events == []
 
 
@@ -158,8 +158,7 @@ def test_sync_snapshot_reports_external_flow_load_failure() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="file",
-            ref="/tmp/flow.yaml",
+            flow_path=Path("/tmp/flow.yaml"),
             current="ask_user",
             snapshot={},
         )
@@ -182,8 +181,7 @@ def test_sync_snapshot_reports_invalid_flow_load() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path=Path("/flows/mono.yaml"),
             current="ask_user",
             snapshot={"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
         )
@@ -206,8 +204,7 @@ def test_sync_snapshot_reports_invalid_flow() -> None:
     store = _FakeStore(
         RunSnapshotSyncState(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path=Path("/flows/mono.yaml"),
             current="ask_user",
             snapshot={},
         )
@@ -227,6 +224,5 @@ def test_sync_snapshot_reports_invalid_flow() -> None:
     event = events.events[0]
     assert event.type == RuntimeEventType.RUN_SNAPSHOT_FAILED
     assert isinstance(event.payload, RunSnapshotFailedPayload)
-    assert event.payload.source == "internal"
-    assert event.payload.ref == "mono"
+    assert event.payload.flow_path == "/flows/mono.yaml"
     assert event.payload.error == result.error

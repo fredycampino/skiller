@@ -84,7 +84,7 @@ From Skiller STUI, start the flow.
 From the terminal:
 
 ```bash
-skiller run --file ./webhook-example.yaml
+skiller run ./webhook-example.yaml
 ```
 
 ## Trigger the webhook locally

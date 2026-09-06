@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from skiller.domain.event.event_model import (
     RunSnapshotFailedPayload,
@@ -53,9 +54,9 @@ class SyncSnapshotUseCase:
             )
 
         try:
-            raw_flow = self.runner.load(state.source, state.ref)
+            raw_flow = self.runner.load(state.flow_path)
         except (FlowLoadError, ValueError) as exc:
-            error = f"Could not sync snapshot '{state.ref}': {exc}"
+            error = f"Could not sync snapshot '{state.flow_path}': {exc}"
             return SyncSnapshotResult(
                 status=SyncSnapshotStatus.FLOW_LOAD_FAILED,
                 run_id=state.run_id,
@@ -65,8 +66,8 @@ class SyncSnapshotUseCase:
         try:
             snapshot = validate_skill_snapshot(raw_flow)
         except ValueError as exc:
-            error = f"Could not sync snapshot '{state.ref}': {exc}"
-            self._emit_failed(state.run_id, state.source, state.ref, error)
+            error = f"Could not sync snapshot '{state.flow_path}': {exc}"
+            self._emit_failed(state.run_id, state.flow_path, error)
             return SyncSnapshotResult(
                 status=SyncSnapshotStatus.INVALID_FLOW,
                 run_id=state.run_id,
@@ -78,7 +79,7 @@ class SyncSnapshotUseCase:
             try:
                 find_run_step(raw_steps, state.current)
             except ValueError as exc:
-                error = f"Could not sync snapshot '{state.ref}': {exc}"
+                error = f"Could not sync snapshot '{state.flow_path}': {exc}"
                 return SyncSnapshotResult(
                     status=SyncSnapshotStatus.CURRENT_STEP_NOT_FOUND,
                     run_id=state.run_id,
@@ -97,8 +98,7 @@ class SyncSnapshotUseCase:
                 run_id=state.run_id,
                 type=RuntimeEventType.RUN_SNAPSHOT_UPDATED,
                 payload=RunSnapshotUpdatedPayload(
-                    source=state.source,
-                    ref=state.ref,
+                    flow_path=str(state.flow_path),
                 ),
             )
         )
@@ -110,8 +110,7 @@ class SyncSnapshotUseCase:
     def _emit_failed(
         self,
         run_id: str,
-        source: str,
-        ref: str,
+        flow_path: Path,
         error: str,
     ) -> None:
         self.events.append_event(
@@ -119,8 +118,7 @@ class SyncSnapshotUseCase:
                 run_id=run_id,
                 type=RuntimeEventType.RUN_SNAPSHOT_FAILED,
                 payload=RunSnapshotFailedPayload(
-                    source=source,
-                    ref=ref,
+                    flow_path=str(flow_path),
                     error=error,
                 ),
             )

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.domain.run.run_context_model import RunContext
@@ -18,8 +20,7 @@ def test_steering_queue_is_updated_only_through_agent_steering_store(tmp_path) -
     steering_store = SqliteAgentSteeringStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "show_message", "steps": [{"notify": "show_message"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440105",
@@ -54,8 +55,7 @@ def test_agent_steering_store_does_not_duplicate_pending_abort_turn(tmp_path) ->
     steering_store = SqliteAgentSteeringStore(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "show_message", "steps": [{"notify": "show_message"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440106",

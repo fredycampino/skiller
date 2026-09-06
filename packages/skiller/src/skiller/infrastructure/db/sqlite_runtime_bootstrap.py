@@ -7,7 +7,7 @@ from skiller.domain.run.runtime_bootstrap_port import (
 )
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
-SQLITE_RUNTIME_DB_VERSION = 11
+SQLITE_RUNTIME_DB_VERSION = 12
 
 
 class SqliteRuntimeBootstrap(SqliteConnectionSource, RuntimeBootstrapPort):
@@ -43,10 +43,6 @@ def apply_db_updates(conn: sqlite3.Connection, *, db_path: str) -> None:
     if current_version == 0 and table_count == 0:
         _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
         return
-    if current_version == 10:
-        conn.execute("ALTER TABLE webhook_registrations ADD COLUMN token_header TEXT")
-        _set_db_version(conn, SQLITE_RUNTIME_DB_VERSION)
-        return
     raise RuntimeError(
         "Runtime DB version mismatch: "
         f"db={current_version}, expected={SQLITE_RUNTIME_DB_VERSION}, path={db_path}"
@@ -69,7 +65,7 @@ def _should_reset_db(db_path: Path) -> bool:
         return False
     with sqlite3.connect(db_path) as conn:
         current_version = _db_version(conn)
-        if current_version in {10, SQLITE_RUNTIME_DB_VERSION}:
+        if current_version == SQLITE_RUNTIME_DB_VERSION:
             return False
         table_count = _table_count(conn)
     return not (current_version == 0 and table_count == 0)
@@ -113,8 +109,7 @@ def _create_runtime_schema(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS runs (
           id TEXT PRIMARY KEY,
-          source TEXT NOT NULL,
-          ref TEXT NOT NULL,
+          flow_path TEXT NOT NULL,
           snapshot_json TEXT NOT NULL,
           status TEXT NOT NULL,
           current TEXT,

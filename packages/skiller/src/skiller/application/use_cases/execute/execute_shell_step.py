@@ -130,7 +130,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
 
     def _step_shell_config(self, current_step: CurrentStep) -> ShellToolRuntimeConfig:
         run = self.store.get_run(current_step.run_id)
-        flow_dir = self.flow_runner.resolve_flow_dir(run.source, run.ref).resolve()
+        flow_dir = self.flow_runner.resolve_flow_dir(run.flow_path).resolve()
         allowed_paths = [
             Path.cwd().resolve(),
             flow_dir,
@@ -183,9 +183,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             return self._process_failure_result(error=wait_result.error)
         if isinstance(wait_result, ToolProcessTimedOut):
             timeout = _format_timeout(request.timeout)
-            raise ValueError(
-                f"Shell step '{step_id}' timed out after {timeout}"
-            )
+            raise ValueError(f"Shell step '{step_id}' timed out after {timeout}")
         if isinstance(wait_result, ToolProcessInterrupted):
             raise ValueError(f"Shell step '{step_id}' was interrupted")
         if isinstance(wait_result, ToolProcessCompleted):

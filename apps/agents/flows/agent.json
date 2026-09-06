@@ -20,6 +20,7 @@
     "shell": {
       "allowed_paths": [
         "{{flow.dir}}",
+        "{{runtime.cwd}}",
         "{{runtime.venv}}"
       ],
       "allowlist_enabled": true,

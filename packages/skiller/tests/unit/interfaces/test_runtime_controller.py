@@ -29,6 +29,7 @@ from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
 from skiller.domain.agent.config.port import AgentConfigProviderSource
+from skiller.domain.config.skiller_config import RuntimeConfig, SkillerConfig, WebhooksConfig
 from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
@@ -130,6 +131,21 @@ class _FakeWaitService:
         )
 
 
+class _FakeRuntimeConfigService:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.config = SkillerConfig(
+            version=1,
+            runtime=RuntimeConfig(db_path="runtime.db", log_level="INFO"),
+            webhooks=WebhooksConfig(host="127.0.0.1", port=8001),
+            flow_paths=(),
+        )
+
+    def get_runtime_config(self) -> SkillerConfig:
+        self.calls += 1
+        return self.config
+
+
 class _FakeQueryService:
     def __init__(self) -> None:
         self.status_calls: list[str] = []
@@ -151,6 +167,7 @@ def _controller(
     run_service: _FakeRunService | None = None,
     query_service: _FakeQueryService | None = None,
     agent_service: _FakeAgentService | None = None,
+    runtime_config_service: _FakeRuntimeConfigService | None = None,
 ) -> RuntimeController:
     final_run_service = run_service or _FakeRunService()
     return RuntimeController(
@@ -164,7 +181,21 @@ def _controller(
         input_wait_mapper=InputWaitMapper(),
         channel_wait_mapper=ChannelWaitMapper(),
         webhook_wait_mapper=WebhookWaitMapper(),
+        runtime_config_service=runtime_config_service or _FakeRuntimeConfigService(),
     )
+
+
+def test_controller_reads_runtime_config_from_service() -> None:
+    runtime_config_service = _FakeRuntimeConfigService()
+    controller = _controller(
+        _FakeWaitService(),
+        runtime_config_service=runtime_config_service,
+    )
+
+    result = controller.config()
+
+    assert result == runtime_config_service.config
+    assert runtime_config_service.calls == 1
 
 
 def test_controller_maps_status_result_to_public_dict() -> None:
@@ -191,12 +222,10 @@ def test_controller_maps_create_run_to_typed_service_input() -> None:
     result = controller.create_run(
         " notify_test ",
         {"message": "ok"},
-        skill_source="internal",
     )
 
-    assert run_service.create_request.skill_ref == "notify_test"
+    assert run_service.create_request.reference.value == "notify_test"
     assert run_service.create_request.inputs == {"message": "ok"}
-    assert run_service.create_request.skill_source == "internal"
     assert result == {"run_id": "run-1", "status": "CREATED"}
 
 

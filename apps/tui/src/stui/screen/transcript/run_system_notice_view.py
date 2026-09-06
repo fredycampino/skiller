@@ -54,11 +54,9 @@ class RunSystemNoticeView(TranscriptView):
     def _message(self) -> str:
         if self.item.status == RunSnapshotStatus.UPDATED:
             return self.strings.run_snapshot_updated_notice_template.format(
-                source=self.item.source,
-                ref=self.item.ref,
+                flow_path=self.item.flow_path,
             )
         return self.strings.run_snapshot_failed_notice_template.format(
-            source=self.item.source,
-            ref=self.item.ref,
+            flow_path=self.item.flow_path,
             error=self.item.error,
         )

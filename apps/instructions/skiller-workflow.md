@@ -70,7 +70,7 @@ own branch before validation and push the rewritten branch with
 Open the PR with the PR agent from the repository root:
 
 ```bash
-uv run skiller run --file apps/agents/pr/agent.yaml \
+uv run skiller run @pr \
   --arg owner=OWNER \
   --arg repo=REPO \
   --arg head=feature/SHORT-DESCRIPTION \
@@ -149,7 +149,7 @@ for a branch in the canonical repository, or
 `YOUR_USER:release/VERSION` for a fork:
 
 ```bash
-uv run skiller run --file apps/agents/pr/agent.yaml \
+uv run skiller run @pr \
   --arg owner=OWNER \
   --arg repo=REPO \
   --arg head=release/VERSION \

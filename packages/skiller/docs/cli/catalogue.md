@@ -11,7 +11,8 @@ Status values:
 | --- | --- | --- | --- |
 | `skiller --help` | Show root CLI help. | stable | n/a |
 | `skiller --version` | Show installed package version. | stable | n/a |
-| `skiller run` | Start a run from the internal catalogue or an external YAML file. | stable | [`commands/run.md`](commands/run.md) |
+| `skiller run` | Start a run from a flow reference or direct path. | stable | [`commands/run.md`](commands/run.md) |
+| `skiller config` | Show the effective runtime configuration. | stable | [`commands/config.md`](commands/config.md) |
 | `skiller resume` | Resume a waiting run. | stable | [`commands/resume.md`](commands/resume.md) |
 | `skiller status` | Read one run status. | stable | [`commands/status.md`](commands/status.md) |
 | `skiller runs` | List recent runs. | stable | [`commands/runs.md`](commands/runs.md) |

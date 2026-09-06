@@ -104,9 +104,15 @@ class TuiContainer:
     run_event_context: RunEventContext
     use_cases: ConsoleScreenUseCases
 
-    def build_viewmodel(self, *, session_key: str) -> ConsoleScreenViewModel:
+    def build_viewmodel(
+        self,
+        *,
+        session_key: str,
+        initial_run_args: tuple[str, ...] = (),
+    ) -> ConsoleScreenViewModel:
         return ConsoleScreenViewModel(
             session_key=session_key,
+            initial_run_args=initial_run_args,
             run_event_context=self.run_event_context,
             use_cases=self.use_cases,
         )

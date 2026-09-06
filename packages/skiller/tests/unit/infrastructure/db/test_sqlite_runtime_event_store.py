@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -49,8 +50,7 @@ def test_runtime_event_store_lists_events_with_monotonic_sequence(tmp_path) -> N
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440030"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "done", "steps": [{"notify": "done"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -102,8 +102,7 @@ def test_runtime_event_store_roundtrips_agent_event_body(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440031"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -164,8 +163,7 @@ def test_runtime_event_store_roundtrips_action_done_event(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440032"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "auth_link", "steps": [{"notify": "auth_link"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -211,8 +209,7 @@ def test_runtime_event_store_roundtrips_run_finished_action(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440042"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "done", "steps": [{"notify": "done"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -275,8 +272,7 @@ def test_runtime_event_store_roundtrips_run_finished_post_action(tmp_path) -> No
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440043"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "done", "steps": [{"notify": "done"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -333,8 +329,7 @@ def test_runtime_event_store_keeps_agent_lifecycle_metadata_in_envelope(tmp_path
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440032"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -375,8 +370,7 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440033"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -474,8 +468,7 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440034"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -553,8 +546,7 @@ def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_id = "550e8400-e29b-41d4-a716-446655440035"
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,

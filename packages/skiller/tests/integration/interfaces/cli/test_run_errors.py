@@ -12,7 +12,7 @@ def test_run_missing_runtime_config_returns_json_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     missing_config_path = tmp_path / "missing-config.json"
-    monkeypatch.setenv("AGENT_CONFIG_FILE", str(missing_config_path))
+    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(missing_config_path))
 
     exit_code = cli_main.main(["run", "any-flow"])
 
@@ -20,6 +20,24 @@ def test_run_missing_runtime_config_returns_json_error(
     payload = json.loads(captured.out)
     assert exit_code == 1
     assert payload["error"]["code"] == "RUNTIME_INITIALIZATION_FAILED"
+    assert str(missing_config_path) in payload["error"]["message"]
+    assert captured.err == ""
+
+
+def test_config_missing_runtime_config_returns_json_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing_config_path = tmp_path / "missing-config.json"
+    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(missing_config_path))
+
+    exit_code = cli_main.main(["config"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 1
+    assert payload["error"]["code"] == "RUNTIME_CONFIG_ERROR"
     assert str(missing_config_path) in payload["error"]["message"]
     assert captured.err == ""
 

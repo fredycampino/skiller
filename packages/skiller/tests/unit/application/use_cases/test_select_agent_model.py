@@ -160,16 +160,15 @@ class _FakeCatalogPort:
 
 
 class _FakeSkillRunner:
-    def resolve_file_path(self, source: str, ref: str, file_ref: str) -> Path:
-        _ = source, ref, file_ref
+    def resolve_file_path(self, flow_path: Path, file_ref: str) -> Path:
+        _ = flow_path, file_ref
         raise FileNotFoundError
 
 
 def _run() -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot={"start": "agent", "steps": []},
         status="RUNNING",
         current="agent",

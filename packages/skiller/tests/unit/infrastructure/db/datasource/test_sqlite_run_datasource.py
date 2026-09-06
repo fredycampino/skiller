@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -131,8 +132,7 @@ def test_delete_run_removes_run_and_related_data(tmp_path) -> None:
 
 def _create_run(run_store: SqliteRunStorePort, run_id: str) -> None:
     run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "wait", "steps": [{"wait_input": "wait"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,
@@ -197,7 +197,7 @@ def _seed_sensitive_run_data(
         RuntimeEventDraft(
             run_id=run_id,
             type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(ref="skill", source="internal"),
+            payload=RunCreatedPayload(flow_path="skill"),
         )
     )
     event_store.append_event(

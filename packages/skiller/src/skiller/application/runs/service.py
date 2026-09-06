@@ -2,10 +2,12 @@ from skiller.application.runs.errors import WebhookWaitConflictError
 from skiller.application.runs.executor import RunExecutor
 from skiller.application.runs.models import (
     ResumeRunApplicationResult,
+    RunRequest,
     RunResult,
     WorkerStartResult,
     WorkerStartStatus,
 )
+from skiller.application.use_cases.config.get_runtime_config import GetRuntimeConfigUseCase
 from skiller.application.use_cases.flow.flow_checker import (
     FlowCheckerUseCase,
     FlowCheckStatus,
@@ -13,6 +15,11 @@ from skiller.application.use_cases.flow.flow_checker import (
 from skiller.application.use_cases.flow.flow_readiness_checker import (
     FlowReadinessCheckerUseCase,
     FlowReadinessCheckStatus,
+)
+from skiller.application.use_cases.flow.resolve_flow import (
+    ResolveFlowInput,
+    ResolveFlowStatus,
+    ResolveFlowUseCase,
 )
 from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
@@ -37,6 +44,7 @@ from skiller.domain.event.event_model import (
     RunResumedPayload,
     RuntimeEventType,
 )
+from skiller.domain.flow.flow_load_error import FlowNotFoundError
 from skiller.domain.run.run_model import Run, RunStatus
 
 
@@ -52,6 +60,8 @@ class RunApplicationService:
         get_start_step_use_case: GetStartStepUseCase,
         flow_checker_use_case: FlowCheckerUseCase,
         flow_readiness_checker_use_case: FlowReadinessCheckerUseCase,
+        get_runtime_config_use_case: GetRuntimeConfigUseCase,
+        resolve_flow_use_case: ResolveFlowUseCase,
         resume_run_use_case: ResumeRunUseCase,
         mark_notify_action_done_use_case: MarkNotifyActionDoneUseCase,
         get_run_use_case: GetRunUseCase,
@@ -66,6 +76,8 @@ class RunApplicationService:
         self.get_start_step_use_case = get_start_step_use_case
         self.flow_checker_use_case = flow_checker_use_case
         self.flow_readiness_checker_use_case = flow_readiness_checker_use_case
+        self.get_runtime_config_use_case = get_runtime_config_use_case
+        self.resolve_flow_use_case = resolve_flow_use_case
         self.resume_run_use_case = resume_run_use_case
         self.mark_notify_action_done_use_case = mark_notify_action_done_use_case
         self.get_run_use_case = get_run_use_case
@@ -74,7 +86,7 @@ class RunApplicationService:
     def initialize(self) -> None:
         self.bootstrap_runtime_use_case.initialize()
 
-    def run(self, request: CreateRunInput) -> RunResult:
+    def run(self, request: RunRequest) -> RunResult:
         created = self.create_run(request)
         self.prepare_run(created.run_id)
         self.dispatch_run(created.run_id)
@@ -112,36 +124,48 @@ class RunApplicationService:
         self.dispatch_run(run_id)
         return self.get_run_result(run_id)
 
-    def create_run(self, request: CreateRunInput) -> RunResult:
-        check_result = self.flow_checker_use_case.execute(
-            request.skill_ref,
-            flow_source=request.skill_source,
+    def create_run(self, request: RunRequest) -> RunResult:
+        runtime_config = self.get_runtime_config_use_case.execute()
+        resolve_result = self.resolve_flow_use_case.execute(
+            ResolveFlowInput(
+                reference=request.reference,
+                flow_paths=runtime_config.flow_paths,
+            )
         )
+        if resolve_result.status == ResolveFlowStatus.NOT_FOUND:
+            raise FlowNotFoundError(resolve_result.error or "Flow not found")
+        if resolve_result.status == ResolveFlowStatus.INVALID_EXTENSION:
+            raise ValueError(resolve_result.error or "Invalid flow extension")
+        if resolve_result.flow is None:
+            raise ValueError("Flow resolution returned no path")
+        flow_path = resolve_result.flow.flow_path
+
+        check_result = self.flow_checker_use_case.execute(flow_path)
         if check_result.status == FlowCheckStatus.INVALID:
             messages = [item.message for item in check_result.errors]
             raise ValueError("\n".join(messages))
-        readiness_check_result = self.flow_readiness_checker_use_case.execute(
-            request.skill_ref,
-            flow_source=request.skill_source,
-        )
+        readiness_check_result = self.flow_readiness_checker_use_case.execute(flow_path)
         if readiness_check_result.status == FlowReadinessCheckStatus.INVALID:
             messages = [item.message for item in readiness_check_result.errors]
             raise ValueError("\n".join(messages))
         webhook_check = self.check_webhook_wait_use_case.execute(
             CheckWebhookWaitInput(
-                skill_source=request.skill_source,
-                skill_ref=request.skill_ref,
+                flow_path=flow_path,
                 inputs=request.inputs,
             )
         )
         if webhook_check.conflict is not None:
             raise WebhookWaitConflictError(webhook_check.conflict)
 
-        run_id = self.create_run_use_case.execute(request)
+        create_request = CreateRunInput(
+            flow_path=flow_path,
+            inputs=request.inputs,
+        )
+        run_id = self.create_run_use_case.execute(create_request)
         self.append_runtime_event_use_case.execute(
             run_id,
             event_type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(ref=request.skill_ref, source=request.skill_source),
+            payload=RunCreatedPayload(flow_path=str(flow_path)),
         )
         return RunResult(run_id=run_id, status=RunStatus.CREATED)
 

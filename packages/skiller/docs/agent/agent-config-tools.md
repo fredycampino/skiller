@@ -12,17 +12,14 @@ configuration. Current configurable tools are:
 
 ## Shell
 
-`tools.shell` controls what the agent `shell` tool may execute. It restricts the
-working directory, explicit path arguments, and optionally the executable names.
+`tools.shell` restricts the working directory, explicit command paths, and
+optionally the executable names available to the agent `shell` tool.
 
 ```json
 {
   "tools": {
     "shell": {
-      "allowed_paths": [
-        "{{flow.dir}}",
-        "{{runtime.venv}}"
-      ],
+      "allowed_paths": ["{{flow.dir}}", "{{runtime.venv}}"],
       "allowlist_enabled": false,
       "allow_env_prefix": true,
       "allowed_commands": []
@@ -31,41 +28,32 @@ working directory, explicit path arguments, and optionally the executable names.
 }
 ```
 
-### `tools.shell.allowed_paths`
+| Field | Default | Purpose |
+|---|---|---|
+| `allowed_paths` | `[]` | Adds filesystem roots available to `cwd` and explicit command paths. |
+| `allowlist_enabled` | `false` | Requires every executable to be listed in `allowed_commands`. |
+| `allow_env_prefix` | `true` | Allows commands to start with assignments such as `MODE=test`. |
+| `allowed_commands` | `[]` | Lists executable names allowed when the allowlist is enabled. |
 
-Defines the additional filesystem roots where the shell may use `cwd` or
-explicit paths in commands.
+### Allowed paths
 
-Effective allowed paths:
+The runtime always allows:
 
-- `allowed_paths = ({{runtime.cwd}}, {{runtime.python}},configured paths)`
-- `allowlist_enabled = false`
-- `allow_env_prefix = true`
-- `allowed_commands = ()`
+- `{{runtime.cwd}}`: directory where Skiller was started;
+- `{{runtime.python}}`: active Python executable.
 
-The runtime always includes `{{runtime.cwd}}` and `{{runtime.python}}`. Paths
-declared in `agent.json` are added to them. Duplicate paths are kept once.
-Relative configured paths are resolved against the directory of `agent.json`.
+Do not add these paths unless needed for clarity. Configured paths are added to
+the defaults, and duplicates are removed.
 
-Shell path:
+`allowed_paths` accepts absolute paths, `~`, paths relative to the `agent.json`
+that defines `tools`, and these exact templates:
 
-- `"."`: directory containing `agent.json`.
-- `{{flow.dir}}`: directory containing the current flow.
-- `{{runtime.venv}}`: root directory of the active Python virtual environment.
+- `{{flow.dir}}`: directory of that `agent.json`;
+- `{{runtime.cwd}}`: directory where Skiller was started;
+- `{{runtime.python}}`: active Python executable;
+- `{{runtime.venv}}`: active Python environment root.
 
-### `tools.shell.allowlist_enabled`
-
-When `true`, every executable used by the command must appear in
-`tools.shell.allowed_commands`.
-
-### `tools.shell.allow_env_prefix`
-
-When `true`, commands may start with environment assignments such as
-`MODE=test command`.
-
-### `tools.shell.allowed_commands`
-
-List of executable names permitted when `allowlist_enabled` is `true`.
+Any other template is invalid.
 
 ## Files
 
@@ -99,7 +87,15 @@ Defaults:
 `tools.files.all` grants both read and write access. `tools.files.read` only
 grants read access. `tools.files.write` grants write and edit access.
 
-When no files roots are configured, files actions are blocked.
+Path entries accept absolute paths, `~`, paths relative to the `agent.json` that
+defines `tools`, and these exact templates:
+
+- `{{flow.dir}}`: directory of that `agent.json`;
+- `{{runtime.cwd}}`: directory where Skiller was started;
+- `{{runtime.venv}}`: active Python environment root.
+
+Any other template is invalid. Files grants no paths by default; when no roots
+are configured, files actions are blocked.
 
 ## Path Resolution
 

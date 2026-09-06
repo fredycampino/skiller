@@ -39,6 +39,7 @@ async def immediate_to_thread(function, *args, **kwargs):  # noqa: ANN001, ANN00
 def build_viewmodel(
     *,
     session_key: str = "main",
+    initial_run_args: tuple[str, ...] = (),
     run_port,
     events_port=None,
     waiting_port,
@@ -67,7 +68,10 @@ def build_viewmodel(
             installation_state_port=resolved_installation_state_port,
             session_store_port=resolved_session_store_port,
         )
-        return container.build_viewmodel(session_key=session_key)
+        return container.build_viewmodel(
+            session_key=session_key,
+            initial_run_args=initial_run_args,
+        )
 
     container = build_tui_container(
         strings=strings,
@@ -81,7 +85,10 @@ def build_viewmodel(
         installation_state_port=resolved_installation_state_port,
         session_store_port=resolved_session_store_port,
     )
-    return container.build_viewmodel(session_key=session_key)
+    return container.build_viewmodel(
+        session_key=session_key,
+        initial_run_args=initial_run_args,
+    )
 
 
 @contextmanager
@@ -99,15 +106,14 @@ def patched_to_thread(*modules: ModuleType) -> Iterator[None]:
 def make_runs_port_item(
     *,
     run_id: str = "run-1",
-    ref: str = "chat",
+    flow_path: str = "/flows/chat.yaml",
     status: str = "WAITING",
     current: str = "ask_user",
     wait_type: str | None = None,
 ) -> RunsPortItem:
     return RunsPortItem(
         id=run_id,
-        source="internal",
-        ref=ref,
+        flow_path=flow_path,
         status=status,
         current=current,
         created_at="2026-05-04 00:00:00",

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.flow.flow_readiness_checker import (
@@ -12,10 +14,10 @@ pytestmark = pytest.mark.unit
 class _FakeFlowRunner:
     def __init__(self, flow: object) -> None:
         self.flow = flow
-        self.calls: list[dict[str, str]] = []
+        self.calls: list[Path] = []
 
-    def load(self, source: str, ref: str) -> object:
-        self.calls.append({"flow_source": source, "flow_ref": ref})
+    def load(self, flow_path: Path) -> object:
+        self.calls.append(flow_path)
         return self.flow
 
 
@@ -56,7 +58,7 @@ def test_returns_valid_when_flow_does_not_use_server_steps() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("notify_test", flow_source="internal")
+    result = use_case.execute(Path("/flows/notify_test.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
@@ -85,7 +87,7 @@ def test_returns_valid_when_wait_channel_flow_has_server_available() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/whatsapp_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
@@ -114,7 +116,7 @@ def test_returns_invalid_when_wait_channel_flow_has_server_unavailable() -> None
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/whatsapp_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
@@ -151,7 +153,7 @@ def test_returns_valid_when_wait_webhook_flow_has_server_available() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("webhook_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/webhook_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.VALID
     assert result.errors == []
@@ -180,7 +182,7 @@ def test_returns_invalid_when_wait_webhook_flow_has_server_unavailable() -> None
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("webhook_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/webhook_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
@@ -217,7 +219,7 @@ def test_returns_invalid_when_wait_channel_flow_has_whatsapp_unavailable() -> No
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/whatsapp_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [
@@ -255,7 +257,7 @@ def test_returns_invalid_when_send_flow_has_whatsapp_unavailable() -> None:
         channel_sender=channel_sender,
     )
 
-    result = use_case.execute("whatsapp_send_demo", flow_source="internal")
+    result = use_case.execute(Path("/flows/whatsapp_send_demo.yaml"))
 
     assert result.status == FlowReadinessCheckStatus.INVALID
     assert result.errors == [

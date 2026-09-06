@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -113,8 +114,7 @@ def test_get_run_uses_persisted_step_executions_json(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "decide_action", "steps": [{"switch": "decide_action"}]},
         RunContext(inputs={"repo": "acme"}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440001",
@@ -144,8 +144,7 @@ def test_get_run_uses_persisted_when_result(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "decide_score", "steps": [{"when": "decide_score"}]},
         RunContext(inputs={"repo": "acme"}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440002",
@@ -175,8 +174,7 @@ def test_get_run_uses_persisted_notify_action(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "auth_link", "steps": [{"notify": "auth_link"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440003",
@@ -206,8 +204,7 @@ def test_update_run_persists_context_results_without_overwriting_steering_queue(
     initial_item = SteeringAgentInterrupt()
 
     run_id = store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "show_message", "steps": [{"notify": "show_message"}]},
         RunContext(
             inputs={"repo": "acme"},
@@ -241,8 +238,7 @@ def test_create_run_uses_explicit_run_id(tmp_path) -> None:
     explicit_run_id = "550e8400-e29b-41d4-a716-446655440003"
 
     run_id = store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "show_message", "steps": [{"notify": "show_message"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=explicit_run_id,
@@ -263,10 +259,10 @@ def test_create_run_rejects_duplicate_run_id(tmp_path) -> None:
     context = RunContext(inputs={}, step_executions={})
     run_id = "550e8400-e29b-41d4-a716-446655440004"
 
-    store.create_run("internal", "demo", snapshot, context, run_id=run_id)
+    store.create_run(Path("demo"), snapshot, context, run_id=run_id)
 
     with pytest.raises(ValueError, match=f"Run '{run_id}' already exists"):
-        store.create_run("internal", "demo", snapshot, context, run_id=run_id)
+        store.create_run(Path("demo"), snapshot, context, run_id=run_id)
 
 
 def test_get_run_uses_persisted_input_result(tmp_path) -> None:
@@ -275,8 +271,7 @@ def test_get_run_uses_persisted_input_result(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
-        "internal",
-        "chat",
+        Path("chat"),
         {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440099",
@@ -366,8 +361,7 @@ def test_update_run_terminal_status_expires_active_waits(tmp_path) -> None:
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = store.create_run(
-        "internal",
-        "whatsapp_demo",
+        Path("whatsapp_demo"),
         {"start": "listen_whatsapp", "steps": [{"wait_channel": "listen_whatsapp"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440012",
@@ -419,20 +413,20 @@ def test_delete_run_removes_database_rows_tied_to_run(tmp_path) -> None:
     other_run_id = "550e8400-e29b-41d4-a716-446655440022"
     snapshot = {"start": "wait", "steps": [{"wait_channel": "wait"}]}
     context = RunContext(inputs={}, step_executions={})
-    store.create_run("internal", "skill", snapshot, context, run_id=run_id)
-    store.create_run("internal", "skill", snapshot, context, run_id=other_run_id)
+    store.create_run(Path("skill"), snapshot, context, run_id=run_id)
+    store.create_run(Path("skill"), snapshot, context, run_id=other_run_id)
     runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=run_id,
             type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(ref="skill", source="internal"),
+            payload=RunCreatedPayload(flow_path="skill"),
         )
     )
     runtime_event_store.append_event(
         RuntimeEventDraft(
             run_id=other_run_id,
             type=RuntimeEventType.RUN_CREATE,
-            payload=RunCreatedPayload(ref="skill", source="internal"),
+            payload=RunCreatedPayload(flow_path="skill"),
         )
     )
     wait_store.create_wait(

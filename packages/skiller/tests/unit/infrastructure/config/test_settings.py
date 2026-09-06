@@ -9,7 +9,7 @@ from skiller.infrastructure.config import settings as settings_module
 pytestmark = pytest.mark.unit
 
 _SETTINGS_ENV_NAMES = (
-    "AGENT_CONFIG_FILE",
+    "AGENT_RUNTIME_CONFIG_FILE",
     "AGENT_DB_PATH",
     "AGENT_LOG_LEVEL",
     "AGENT_WEBHOOKS_HOST",
@@ -70,7 +70,7 @@ def test_get_settings_loads_explicit_structured_config(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(config_path))
 
     settings = settings_module.get_settings()
 
@@ -95,7 +95,7 @@ def test_get_settings_environment_overrides_structured_config(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(config_path))
     monkeypatch.setenv("AGENT_WEBHOOKS_PORT", "9010")
 
     settings = settings_module.get_settings()
@@ -127,9 +127,9 @@ def test_get_settings_raises_when_explicit_config_is_missing(
 ) -> None:
     _clear_settings_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_CONFIG_FILE", str(tmp_path / "missing.json"))
+    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(tmp_path / "missing.json"))
 
-    with pytest.raises(RuntimeError, match="AGENT_CONFIG_FILE does not exist"):
+    with pytest.raises(RuntimeError, match="AGENT_RUNTIME_CONFIG_FILE does not exist"):
         settings_module.get_settings()
 
 

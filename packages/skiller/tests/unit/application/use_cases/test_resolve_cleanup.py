@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.resolve_cleanup import (
@@ -69,8 +71,7 @@ def test_resolve_cleanup_ignores_missing_run() -> None:
 def _build_run(snapshot: dict[str, object]) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="test",
+        flow_path=Path("/flows/test.yaml"),
         snapshot=snapshot,
         status=RunStatus.SUCCEEDED.value,
         current=None,

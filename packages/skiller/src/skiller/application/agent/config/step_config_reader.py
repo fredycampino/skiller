@@ -160,8 +160,7 @@ class AgentStepConfigReader:
 
         try:
             config_path = self.skill_runner.resolve_file_path(
-                run.source,
-                run.ref,
+                run.flow_path,
                 "agent.json",
             )
         except (FileNotFoundError, ValueError):

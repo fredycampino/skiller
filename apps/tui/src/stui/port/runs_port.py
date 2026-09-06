@@ -7,8 +7,7 @@ from typing import Protocol
 @dataclass(frozen=True)
 class RunsPortItem:
     id: str
-    source: str
-    ref: str
+    flow_path: str
     status: str
     current: str | None
     created_at: str

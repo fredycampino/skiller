@@ -1,8 +1,8 @@
-import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from skiller.application.tools.path_template import resolve_tool_path_template
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 from skiller.domain.tool.tool_contract import ToolDefinition
 
@@ -92,17 +92,13 @@ def _path_value(raw: str, *, base_path: Path) -> Path:
 
 
 def _resolve_path_template(raw: str, *, base_path: Path) -> str:
-    values = {
-        "flow.dir": str(base_path.resolve(strict=False)),
-        "runtime.cwd": str(Path.cwd().resolve(strict=False)),
-        "runtime.python": str(Path(sys.executable).resolve(strict=False)),
-        "runtime.venv": str(Path(sys.prefix).resolve(strict=False)),
-    }
-
-    value = raw.strip()
-    for name, resolved in values.items():
-        value = value.replace("{{" + name + "}}", resolved)
-
-    if re.search(r"{{|}}", value):
-        raise ValueError(f"Tool 'shell' has unsupported path template: {raw}")
-    return value
+    return resolve_tool_path_template(
+        raw,
+        tool_name="shell",
+        values={
+            "flow.dir": str(base_path.resolve(strict=False)),
+            "runtime.cwd": str(Path.cwd().resolve(strict=False)),
+            "runtime.python": str(Path(sys.executable).resolve(strict=False)),
+            "runtime.venv": str(Path(sys.prefix).resolve(strict=False)),
+        },
+    )

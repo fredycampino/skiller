@@ -6,11 +6,10 @@ Runs a flow and writes JSON to `stdout`.
 
 | Command | Behavior | Returns |
 | --- | --- | --- |
-| `skiller run <flow>` | Runs an internal catalog flow. | When the run finishes or reaches a stable state. |
-| `skiller run --file ./flow.yaml` | Runs a flow from a file. | When the run finishes or reaches a stable state. |
-| `skiller run <flow> --arg key=value` | Runs with explicit inputs. | When the run finishes or reaches a stable state. |
-| `skiller run <flow> --detach` | Starts the worker without watching the run. | After the worker is started. |
-| `skiller run <flow> --logs` | Runs and includes raw events in the output. | When the run finishes or reaches a stable state. |
+| `skiller run <reference>` | Runs a flow resolved from the effective flow paths. | When the run finishes or reaches a stable state. |
+| `skiller run <reference> --arg key=value` | Runs with explicit inputs. | When the run finishes or reaches a stable state. |
+| `skiller run <reference> --detach` | Starts the worker without watching the run. | After the worker is started. |
+| `skiller run <reference> --logs` | Runs and includes raw events in the output. | When the run finishes or reaches a stable state. |
 
 Stable states observed by `run` without `--detach`:
 
@@ -29,15 +28,20 @@ Stable states observed by `run` without `--detach`:
 - `prompt`: text to show the user when waiting for input.
 - `logs`: raw runtime event list, present only with `--logs`.
 
-## Internal Catalog Flow
+## Flow References
 
 Command:
 
 ```bash
-skiller run <flow>
+skiller run @flows
+skiller run @reportes/diario
+skiller run ~/flows/reportes/diario
+skiller run ./flows/reportes/diario.yaml
 ```
 
-Internal flow ids resolve from `apps/agents/<id>/agent.yaml`. The catalog definition and any files referenced by the flow must remain available while the run executes.
+References beginning with `@` are searched in the configured `flow_paths` and in the packaged `apps/agents` directory. A simple reference tries `<root>/<reference>.yaml` first and then `<root>/<reference>/<reference>.yaml`. A hierarchical reference maps directly to `<root>/<reference>.yaml`.
+
+References beginning with `~` are resolved from the user's home directory. Relative and absolute paths are used directly, with `.yaml` added when no supported extension is provided. The flow definition and any files referenced by it must remain available while the run executes.
 
 Output when the run succeeds:
 
@@ -76,12 +80,12 @@ Output when the run fails:
 }
 ```
 
-## File Flow
+## Direct Path
 
-Command:
+Pass a home, relative, or absolute path directly:
 
 ```bash
-skiller run --file ./flow.yaml
+skiller run ./flow.yaml
 ```
 
 Output:

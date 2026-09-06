@@ -7,7 +7,7 @@ import yaml
 
 
 def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
-    agent_path = Path("apps/agents/auths/codex/agent.yaml")
+    agent_path = Path("apps/agents/auths/codex/codex.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
@@ -25,7 +25,7 @@ def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
 
 
 def test_codex_auth_check_does_not_delete_credentials_file() -> None:
-    agent_path = Path("apps/agents/auths/codex/agent.yaml")
+    agent_path = Path("apps/agents/auths/codex/codex.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     command = _steps_by_name(agent)["check_codex_credentials"]["command"]
 
@@ -38,7 +38,7 @@ def test_codex_auth_check_does_not_delete_credentials_file() -> None:
 
 def test_codex_auth_updates_user_provider_catalog_and_global_selection() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/codex/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/codex/codex.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
     write_command = steps["write_codex_config"]["command"]
@@ -93,7 +93,7 @@ def test_codex_auth_temp_files_are_stored_outside_secrets(tmp_path, monkeypatch)
 
 
 def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() -> None:
-    agent_path = Path("apps/agents/auths/minimax/agent.yaml")
+    agent_path = Path("apps/agents/auths/minimax/minimax.yaml")
     agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
@@ -111,7 +111,7 @@ def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() 
 def test_minimax_auth_ready_check_uses_existing_secret_without_requiring_config() -> None:
     command = _steps_by_name(
         yaml.safe_load(
-            Path("apps/agents/auths/minimax/agent.yaml").read_text(encoding="utf-8")
+            Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
         )
     )["check_minimax_config"]["command"]
 
@@ -121,7 +121,7 @@ def test_minimax_auth_ready_check_uses_existing_secret_without_requiring_config(
 
 def test_minimax_auth_updates_user_provider_catalog() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/minimax/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
     write_command = steps["write_minimax_config"]["command"]
@@ -135,7 +135,7 @@ def test_minimax_auth_updates_user_provider_catalog() -> None:
 
 def test_minimax_auth_commits_global_agent_selection() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/minimax/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
     commit_command = steps["commit_minimax_config"]["command"]
@@ -168,7 +168,7 @@ def test_minimax_auth_helper_reads_api_key_path_from_user_provider_catalog(
 
 def test_moonshot_auth_updates_user_provider_catalog_and_global_selection() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/moonshot/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/moonshot/moonshot.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
     write_command = steps["write_moonshot_config"]["command"]
@@ -213,7 +213,7 @@ def test_moonshot_auth_helper_reads_api_key_path_from_user_provider_catalog(
 
 def test_bedrock_auth_updates_user_provider_catalog_and_global_selection() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/bedrock/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/bedrock/bedrock.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
 
@@ -273,7 +273,7 @@ def test_bedrock_auth_helper_reads_profile_from_user_provider_catalog(
 
 def test_lmstudio_auth_updates_user_catalog_and_verifies_with_agent() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/lmstudio/agent.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/lmstudio/lmstudio.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
 
@@ -427,7 +427,7 @@ def test_lmstudio_auth_uses_lm_api_token_for_model_catalog(monkeypatch) -> None:
 
 def test_auth_provider_flows_emit_load_session_post_action() -> None:
     for flow in ("codex", "minimax", "moonshot", "bedrock", "lmstudio"):
-        flow_path = Path(f"apps/agents/auths/{flow}/agent.yaml")
+        flow_path = Path(f"apps/agents/auths/{flow}/{flow}.yaml")
         agent = yaml.safe_load(
             flow_path.read_text(encoding="utf-8")
         )
@@ -463,6 +463,7 @@ def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
         assert steps[step_name]["action"]["params"] == (
             "--arg continue_id={{inputs.continue_id}}"
         )
+        assert steps[step_name]["action"]["arg"].startswith("auths/")
 
 
 def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:

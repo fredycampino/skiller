@@ -5,13 +5,25 @@ All notable changes to this project should be summarized here before a version i
 ## Unreleased
 
 ### Added
-- Nothing yet.
+- Add packaged flow path resolution so built-in flows can be addressed with `@` references.
+- Add `skiller config` to display the effective runtime configuration as JSON.
+- Open STUI with an initial flow when `skiller` receives an `@` reference directly.
 
 ### Changed
-- Nothing yet.
+- Resolve simple `@` references using `<reference>.yaml` or `<reference>/<reference>.yaml`.
+- Rename the packaged flows definition from `agent.yaml` to `flows.yaml`.
+- Rename packaged auth and pull-request flow definitions inside their existing component directories to match their `@` references.
+- Declare `{{runtime.cwd}}` in the packaged flows shell allowlist.
 
 ### Fixed
-- Nothing yet.
+- Align STUI runtime-event payloads with the canonical `flow_path` contract.
+- Restore YAML paths in the STUI `/runs` table after the `flow_path` migration.
+- Show `CREATED`, `SUCCEEDED`, and `CANCELLED` runs with their real status in the STUI `/runs` table.
+- Isolate configured-flow integration tests from the development runtime database.
+- Normalize legacy bare flow names at the CLI boundary without changing STUI commands.
+- Align bundled instructions with canonical `skiller run` references, direct paths, and detach behavior.
+- Make the bundled `skiller-user.md` instructions the sole CLI quick guide and remove the obsolete CLI guide entry points.
+- Use the portable `<path-docs>` reference for documentation links in bundled instructions.
 
 ### Removed
 - Nothing yet.

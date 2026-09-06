@@ -171,8 +171,7 @@ class OutputPayload:
 
 @dataclass(frozen=True)
 class RunCreatePayload:
-    ref: str
-    source: str
+    flow_path: str
 
 
 @dataclass(frozen=True)
@@ -182,14 +181,12 @@ class RunResumePayload:
 
 @dataclass(frozen=True)
 class RunSnapshotUpdatedPayload:
-    source: str
-    ref: str
+    flow_path: str
 
 
 @dataclass(frozen=True)
 class RunSnapshotFailedPayload:
-    source: str
-    ref: str
+    flow_path: str
     error: str
 
 

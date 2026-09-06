@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from skiller.infrastructure.skills import filesystem_runner_port
 from skiller.infrastructure.skills.filesystem_runner_port import FilesystemRunnerPort
 
 pytestmark = pytest.mark.unit
@@ -16,8 +14,7 @@ pytestmark = pytest.mark.unit
 @dataclass(frozen=True)
 class _FlowReference:
     id: str
-    source: str
-    ref: str
+    flow_path: Path
 
 
 def _build_render_runner(tmp_path) -> tuple[FilesystemRunnerPort, _FlowReference]:  # noqa: ANN001
@@ -28,112 +25,47 @@ def _build_render_runner(tmp_path) -> tuple[FilesystemRunnerPort, _FlowReference
         "name: demo\nstart: check\nsteps: []\n",
         encoding="utf-8",
     )
-    return FilesystemRunnerPort(flows_dir=agents_dir), _FlowReference(
+    return FilesystemRunnerPort(), _FlowReference(
         id="run-demo",
-        source="internal",
-        ref="demo",
+        flow_path=agent_dir / "agent.yaml",
     )
 
 
-def test_default_internal_catalog_uses_repo_apps_agents(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:  # noqa: ANN001
-    repo_dir = tmp_path / "repo"
-    module_file = (
-        repo_dir
-        / "packages"
-        / "skiller"
-        / "src"
-        / "skiller"
-        / "infrastructure"
-        / "skills"
-        / "filesystem_runner_port.py"
-    )
-    module_file.parent.mkdir(parents=True)
-    module_file.write_text("", encoding="utf-8")
-    apps_agents_dir = repo_dir / "apps" / "agents"
-    apps_agents_dir.mkdir(parents=True)
-
-    monkeypatch.setattr(filesystem_runner_port, "__file__", str(module_file))
-
-    assert filesystem_runner_port._find_default_internal_flow_catalog_dir() == apps_agents_dir
-
-
-def test_default_internal_catalog_uses_installed_apps_agents_path(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:  # noqa: ANN001
-    site_packages_dir = tmp_path / "site-packages"
-    module_file = (
-        site_packages_dir / "skiller" / "infrastructure" / "skills" / "filesystem_runner_port.py"
-    )
-    module_file.parent.mkdir(parents=True)
-    module_file.write_text("", encoding="utf-8")
-
-    monkeypatch.setattr(filesystem_runner_port, "__file__", str(module_file))
-
-    assert filesystem_runner_port._find_default_internal_flow_catalog_dir() == (
-        site_packages_dir / "apps" / "agents"
-    )
-
-
-def test_load_skill_internal_from_yaml(tmp_path) -> None:  # noqa: ANN001
+def test_load_flow_from_yaml(tmp_path) -> None:  # noqa: ANN001
     flows_dir = tmp_path / "skills"
     flows_dir.mkdir()
     (flows_dir / "demo.yaml").write_text(
         "name: demo\nstart: demo_start\nsteps: []\n", encoding="utf-8"
     )
 
-    runner = FilesystemRunnerPort(flows_dir=flows_dir)
+    runner = FilesystemRunnerPort()
 
-    skill = runner.load("internal", "demo")
-
-    assert skill["name"] == "demo"
-    assert skill["steps"] == []
-
-
-def test_load_skill_internal_from_agent_directory_layout(tmp_path) -> None:  # noqa: ANN001
-    agents_dir = tmp_path / "agents"
-    agent_dir = agents_dir / "demo"
-    agent_dir.mkdir(parents=True)
-    (agent_dir / "agent.yaml").write_text(
-        "name: demo\nstart: demo_start\nsteps: []\n", encoding="utf-8"
-    )
-
-    runner = FilesystemRunnerPort(flows_dir=agents_dir)
-
-    skill = runner.load("internal", "demo")
+    skill = runner.load(flows_dir / "demo.yaml")
 
     assert skill["name"] == "demo"
     assert skill["steps"] == []
 
 
-def test_load_skill_file_from_yaml(tmp_path) -> None:  # noqa: ANN001
+def test_load_flow_from_explicit_yaml_path(tmp_path) -> None:  # noqa: ANN001
     skill_file = tmp_path / "external.yaml"
     skill_file.write_text("name: external\nstart: external_start\nsteps: []\n", encoding="utf-8")
 
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+    runner = FilesystemRunnerPort()
 
-    skill = runner.load("file", str(skill_file))
+    skill = runner.load(skill_file)
 
     assert skill["name"] == "external"
     assert skill["steps"] == []
 
 
-def test_load_skill_file_from_json(tmp_path) -> None:  # noqa: ANN001
+def test_load_flow_rejects_json(tmp_path) -> None:  # noqa: ANN001
     skill_file = tmp_path / "external.json"
-    skill_file.write_text(
-        json.dumps({"name": "external-json", "start": "external_start", "steps": []}),
-        encoding="utf-8",
-    )
+    skill_file.write_text("{}", encoding="utf-8")
 
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+    runner = FilesystemRunnerPort()
 
-    skill = runner.load("file", str(skill_file))
-
-    assert skill["name"] == "external-json"
-    assert skill["steps"] == []
+    with pytest.raises(ValueError, match="Unsupported flow file extension"):
+        runner.load(skill_file)
 
 
 def test_read_file_from_internal_agent_directory(tmp_path) -> None:  # noqa: ANN001
@@ -145,9 +77,9 @@ def test_read_file_from_internal_agent_directory(tmp_path) -> None:  # noqa: ANN
         encoding="utf-8",
     )
     (agent_dir / "system.md").write_text("System prompt\n", encoding="utf-8")
-    runner = FilesystemRunnerPort(flows_dir=agents_dir)
+    runner = FilesystemRunnerPort()
 
-    content = runner.read_file("internal", "demo", "./system.md")
+    content = runner.read_file(agent_dir / "agent.yaml", "./system.md")
 
     assert content == "System prompt\n"
 
@@ -160,9 +92,9 @@ def test_resolve_file_path_from_internal_agent_directory(tmp_path) -> None:  # n
         "name: demo\nstart: support_agent\nsteps: []\n",
         encoding="utf-8",
     )
-    runner = FilesystemRunnerPort(flows_dir=agents_dir)
+    runner = FilesystemRunnerPort()
 
-    path = runner.resolve_file_path("internal", "demo", "agent.json")
+    path = runner.resolve_file_path(agent_dir / "agent.yaml", "agent.json")
 
     assert path == agent_dir / "agent.json"
 
@@ -176,10 +108,10 @@ def test_read_file_rejects_escape_from_flow_directory(tmp_path) -> None:  # noqa
         encoding="utf-8",
     )
     (agents_dir / "secret.md").write_text("secret", encoding="utf-8")
-    runner = FilesystemRunnerPort(flows_dir=agents_dir)
+    runner = FilesystemRunnerPort()
 
     with pytest.raises(ValueError, match="escapes flow directory"):
-        runner.read_file("internal", "demo", "../secret.md")
+        runner.read_file(agent_dir / "agent.yaml", "../secret.md")
 
 
 def test_read_file_from_file_source_directory(tmp_path) -> None:  # noqa: ANN001
@@ -189,19 +121,18 @@ def test_read_file_from_file_source_directory(tmp_path) -> None:  # noqa: ANN001
         encoding="utf-8",
     )
     (tmp_path / "system.md").write_text("External system\n", encoding="utf-8")
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+    runner = FilesystemRunnerPort()
 
-    content = runner.read_file("file", str(skill_file), "system.md")
+    content = runner.read_file(skill_file, "system.md")
 
     assert content == "External system\n"
 
 
-@pytest.mark.parametrize(("source", "ref"), [("other", "demo"), ("file", "/tmp/demo.txt")])
-def test_load_rejects_invalid_source_or_extension(source: str, ref: str) -> None:
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+def test_load_rejects_invalid_extension() -> None:
+    runner = FilesystemRunnerPort()
 
-    with pytest.raises((ValueError, FileNotFoundError)):
-        runner.load(source, ref)
+    with pytest.raises(ValueError, match="Unsupported flow file extension"):
+        runner.load(Path("/tmp/demo.txt"))
 
 
 def test_render_step_preserves_type_for_full_template_value(tmp_path) -> None:  # noqa: ANN001
@@ -282,7 +213,7 @@ def test_render_step_can_resolve_internal_flow_directory(tmp_path) -> None:  # n
         "name: auths/minimax\nstart: check_minimax_config\nsteps: []\n",
         encoding="utf-8",
     )
-    runner = FilesystemRunnerPort(flows_dir=agents_dir)
+    runner = FilesystemRunnerPort()
 
     rendered = runner.render(
         {
@@ -291,8 +222,7 @@ def test_render_step_can_resolve_internal_flow_directory(tmp_path) -> None:  # n
         {"inputs": {}, "step_executions": {}},
         flow=_FlowReference(
             id="run-minimax",
-            source="internal",
-            ref="auths/minimax",
+            flow_path=agent_dir / "agent.yaml",
         ),
     )
 
@@ -353,7 +283,7 @@ def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa:
         "name: external\nstart: check\nsteps: []\n",
         encoding="utf-8",
     )
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+    runner = FilesystemRunnerPort()
 
     rendered = runner.render(
         {
@@ -362,8 +292,7 @@ def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa:
         {"inputs": {}, "step_executions": {}},
         flow=_FlowReference(
             id="run-external",
-            source="file",
-            ref=str(flow_file),
+            flow_path=flow_file,
         ),
     )
 
@@ -373,11 +302,11 @@ def test_render_step_can_resolve_file_flow_directory(tmp_path) -> None:  # noqa:
 def test_file_flow_directory_remains_resolvable_after_flow_is_removed(tmp_path) -> None:  # noqa: ANN001
     flow_file = tmp_path / "external.yaml"
     flow_file.write_text("name: external\n", encoding="utf-8")
-    runner = FilesystemRunnerPort(flows_dir=Path("skills"))
-    flow = _FlowReference(id="run-external", source="file", ref=str(flow_file))
+    runner = FilesystemRunnerPort()
+    flow = _FlowReference(id="run-external", flow_path=flow_file)
     flow_file.unlink()
 
-    assert runner.resolve_flow_dir(flow.source, flow.ref) == tmp_path
+    assert runner.resolve_flow_dir(flow.flow_path) == tmp_path
     assert runner.render(
         {"directory": "{{flow.dir}}"},
         {"inputs": {}, "step_executions": {}},

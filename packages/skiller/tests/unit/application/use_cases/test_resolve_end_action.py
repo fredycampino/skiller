@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.action.action_uid_factory import ActionUidFactory
@@ -218,8 +220,7 @@ def test_resolve_end_action_ignores_missing_run() -> None:
 def _build_run(snapshot: dict[str, object]) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="test",
+        flow_path=Path("/flows/test.yaml"),
         snapshot=snapshot,
         status=RunStatus.SUCCEEDED.value,
         current=None,

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.domain.run.run_context_model import RunContext
@@ -18,8 +20,7 @@ def test_run_agent_store_updates_agent_window_without_losing_context(tmp_path) -
     agent_store = SqliteRunAgentStore(SqliteRunAgentDatasource(str(db_path)))
     run_id = "550e8400-e29b-41d4-a716-446655440006"
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=run_id,

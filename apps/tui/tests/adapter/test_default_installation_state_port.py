@@ -88,6 +88,31 @@ def test_default_installation_state_port_reads_configured_db_path(
     assert state.agent_config_exists is False
 
 
+def test_default_installation_state_port_reads_runtime_config_from_environment(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    configured_db = workspace / "state" / "runtime.db"
+    config_path = tmp_path / "runtime-config.json"
+    workspace.mkdir()
+    configured_db.parent.mkdir()
+    configured_db.write_text("", encoding="utf-8")
+    config_path.write_text(
+        json.dumps({"runtime": {"db_path": "state/runtime.db"}}),
+        encoding="utf-8",
+    )
+    port = DefaultInstallationStatePort(
+        home=tmp_path / "home",
+        cwd=workspace,
+        environment={"AGENT_RUNTIME_CONFIG_FILE": str(config_path)},
+    )
+
+    state = port.read()
+
+    assert state.runtime_db_exists is True
+    assert port._runtime_db_path() == configured_db
+
+
 def test_default_installation_state_port_reads_development_env_db_path(
     tmp_path: Path,
 ) -> None:

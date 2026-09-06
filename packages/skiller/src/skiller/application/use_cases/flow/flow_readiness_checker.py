@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from skiller.domain.step.runner_port import RunnerPort
@@ -38,13 +39,8 @@ class FlowReadinessCheckerUseCase:
         self.server_status = server_status
         self.channel_sender = channel_sender
 
-    def execute(
-        self,
-        flow_ref: str,
-        *,
-        flow_source: str,
-    ) -> FlowReadinessCheckResult:
-        raw_flow = self.runner.load(flow_source, flow_ref)
+    def execute(self, flow_path: Path) -> FlowReadinessCheckResult:
+        raw_flow = self.runner.load(flow_path)
         raw_steps = raw_flow["steps"]
         server_required_step = self._find_server_required_step(raw_steps)
         channel_required_step = self._find_channel_required_step(raw_steps)
@@ -58,9 +54,8 @@ class FlowReadinessCheckerUseCase:
                 ),
             )
 
-        if (
-            channel_required_step is not None
-            and not self.channel_sender.is_available(channel=channel_required_step["channel"])
+        if channel_required_step is not None and not self.channel_sender.is_available(
+            channel=channel_required_step["channel"]
         ):
             return self._invalid(
                 code="FLOW_WHATSAPP_UNAVAILABLE",

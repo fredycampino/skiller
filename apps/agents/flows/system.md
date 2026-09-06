@@ -30,7 +30,7 @@ Follow:
 Use the CLI quick guide for common run, inspect, resume, webhook, channel, and
 cleanup workflows:
 
-- [CLI Quick Guide](../../docs/cli/quick-guide.md)
+- [CLI Quick Guide](../../instructions/skiller-user.md)
 - [CLI Command Catalogue](../../docs/cli/catalogue.md)
 
 Use command-specific docs when exact flags, output, or exit behavior matters:

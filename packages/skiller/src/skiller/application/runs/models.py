@@ -1,13 +1,21 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from skiller.application.use_cases.run.resume_run import ResumeRunStatus
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.run.run_model import RunStatus
 
 
 class WorkerStartStatus(str, Enum):
     PREPARED = "PREPARED"
     FAILED = "FAILED"
+
+
+@dataclass(frozen=True)
+class RunRequest:
+    reference: FlowReference
+    inputs: dict[str, Any]
 
 
 @dataclass(frozen=True)

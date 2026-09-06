@@ -17,6 +17,7 @@ def _load_textual_runner() -> Callable[..., str]:
 def run_tui(
     *,
     session_key: str | None = None,
+    initial_run_args: tuple[str, ...] = (),
     textual_runner: Callable[..., str] | None = None,
     theme: TuiTheme = DEFAULT_TUI_THEME,
     strings: TuiStrings = DEFAULT_TUI_STRINGS,
@@ -24,6 +25,7 @@ def run_tui(
     runner = textual_runner or _load_textual_runner()
     return runner(
         session_key=session_key or "main",
+        initial_run_args=initial_run_args,
         theme=theme,
         strings=strings,
     )

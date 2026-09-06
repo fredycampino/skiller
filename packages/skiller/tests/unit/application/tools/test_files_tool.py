@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -151,6 +152,41 @@ def test_files_tool_maps_runtime_config() -> None:
         write=(Path("/workspace/src"),),
         all=(Path("/workspace/shared"),),
     )
+
+
+def test_files_tool_maps_supported_path_templates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool = FilesTool()
+    base_path = tmp_path / "flow"
+    runtime_cwd = tmp_path / "runtime"
+    base_path.mkdir()
+    runtime_cwd.mkdir()
+    monkeypatch.chdir(runtime_cwd)
+
+    config = tool.to_runtime_config(
+        {
+            "read": ["{{flow.dir}}/output"],
+            "write": ["{{runtime.cwd}}"],
+            "all": ["{{runtime.venv}}"],
+        },
+        base_path=base_path,
+    )
+
+    assert config.read == ((base_path / "output").resolve(),)
+    assert config.write == (runtime_cwd.resolve(),)
+    assert config.all == (Path(sys.prefix).resolve(),)
+
+
+def test_files_tool_rejects_unsupported_path_template() -> None:
+    tool = FilesTool()
+
+    with pytest.raises(ValueError, match="Tool 'files' has unsupported path template"):
+        tool.to_runtime_config(
+            {"read": ["{{runtime.python}}"]},
+            base_path=Path("/workspace"),
+        )
 
 
 def test_files_tool_rejects_unsupported_runtime_config_fields() -> None:

@@ -34,14 +34,22 @@ def test_resolve_run_row_status_maps_wait_variants() -> None:
     )
 
 
-def test_resolve_run_row_status_maps_terminal_and_running_statuses() -> None:
+def test_resolve_run_row_status_maps_non_waiting_statuses() -> None:
+    assert (
+        _resolve_run_row_status(_run_item(status="CREATED", wait_type=None))
+        == RunRowStatus.CREATED
+    )
     assert (
         _resolve_run_row_status(_run_item(status="FAILED", wait_type=None))
         == RunRowStatus.FAILED
     )
     assert (
         _resolve_run_row_status(_run_item(status="SUCCEEDED", wait_type=None))
-        == RunRowStatus.SUCCESS
+        == RunRowStatus.SUCCEEDED
+    )
+    assert (
+        _resolve_run_row_status(_run_item(status="CANCELLED", wait_type=None))
+        == RunRowStatus.CANCELLED
     )
     assert (
         _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None))
@@ -110,8 +118,7 @@ def test_build_footer_right_text_shows_empty_icon_without_run() -> None:
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:
     return RunsPortItem(
         id="run-1",
-        source="internal",
-        ref="chat",
+        flow_path="/flows/chat.yaml",
         status=status,
         current="ask_user",
         created_at="2026-05-04 00:00:00",

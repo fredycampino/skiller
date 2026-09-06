@@ -1,7 +1,7 @@
 # Runtime Config
 
-This document describes the current `config.json` contract used by
-`skiller.infrastructure.config.settings.get_settings()`.
+This document describes the current `config.json` contract used by the Skiller
+runtime.
 
 `config.json` is still supported, but its scope is narrow: it configures
 process-level runtime settings. Agent behavior, LLM providers, loop limits, and
@@ -15,13 +15,13 @@ Skiller reads runtime config from:
 ~/.skiller/settings/config.json
 ```
 
-Set `AGENT_CONFIG_FILE` to use an explicit file instead:
+Set `AGENT_RUNTIME_CONFIG_FILE` to use an explicit file instead:
 
 ```bash
-AGENT_CONFIG_FILE=/path/to/config.json skiller run mono
+AGENT_RUNTIME_CONFIG_FILE=/path/to/config.json skiller run @mono
 ```
 
-If `AGENT_CONFIG_FILE` points to a missing file, config loading fails. If the
+If `AGENT_RUNTIME_CONFIG_FILE` points to a missing file, config loading fails. If the
 global file is missing, Skiller uses defaults.
 
 ## Precedence
@@ -61,11 +61,16 @@ Current supported fields:
   "webhooks": {
     "host": "127.0.0.1",
     "port": 8001
-  }
+  },
+  "flow_paths": [
+    "~/flows",
+    "{{runtime.cwd}}/flows"
+  ]
 }
 ```
 
-Unknown top-level fields are ignored by the runtime settings loader.
+The runtime config datasource validates and maps this schema strictly. Unknown
+fields are rejected.
 
 ## Runtime Settings
 
@@ -134,6 +139,29 @@ Default:
 ```text
 8001
 ```
+
+## Flow Settings
+
+### `flow_paths`
+
+Ordered directories used to resolve flow references beginning with `@`.
+Relative paths are resolved from the directory containing `config.json`.
+Use `{{runtime.cwd}}` to reference the directory where Skiller was launched.
+The file is read for each new run, so changes to this list do not require
+rebuilding the runtime container.
+
+Examples:
+
+```bash
+skiller run @reportes/diario
+skiller run ~/flows/reportes/diario
+skiller run ./flows/reportes/diario.yaml
+```
+
+`.yaml` is appended when the reference has no extension. Only `.yaml` and
+`.yml` flow files are accepted.
+
+Default: an empty list.
 
 ## Not In `config.json`
 

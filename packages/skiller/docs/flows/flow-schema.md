@@ -5,8 +5,8 @@
 Pending design.
 
 This document describes the YAML flow shape used by:
-- internal catalog entries under `apps/agents/<id>/agent.yaml`
-- external files passed through `skiller run --file ...`
+- packaged and configured flow references passed through `skiller run @<reference>`
+- direct flow paths passed through `skiller run <path>`
 
 ## Root Shape
 
@@ -144,7 +144,7 @@ on_error:
   action:
     type: run
     label: "Debug failure"
-    arg: "--file ./flows/debug.yaml"
+    arg: "./flows/debug.yaml"
     params: "--run {{inputs.run_id}}"
     auto: true
 ```

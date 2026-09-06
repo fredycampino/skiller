@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.check_webhook_wait import (
@@ -17,7 +19,8 @@ class _FakeRunner:
         self.skill = skill
         self.render_error = render_error
 
-    def load(self, source: str, ref: str) -> dict[str, object]:
+    def load(self, flow_path: Path) -> dict[str, object]:
+        _ = flow_path
         return self.skill
 
     def render(self, step, context, *, flow):  # noqa: ANN001
@@ -47,7 +50,10 @@ def _use_case(waits: list[dict[str, object]]) -> tuple[CheckWebhookWaitUseCase, 
 
 
 def _request(key: object = 42) -> CheckWebhookWaitInput:
-    return CheckWebhookWaitInput(skill_source="internal", skill_ref="skill", inputs={"key": key})
+    return CheckWebhookWaitInput(
+        flow_path=Path("/flows/skill.yaml"),
+        inputs={"key": key},
+    )
 
 
 def test_check_webhook_wait_returns_conflict_with_existing_run_id() -> None:
@@ -87,7 +93,6 @@ def test_check_webhook_wait_propagates_render_errors() -> None:
 
     with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):
         CheckWebhookWaitUseCase(_FakeWaitStore([]), runner).execute(_request())
-
 
 
 def test_check_webhook_wait_uses_webhook_signal_query() -> None:

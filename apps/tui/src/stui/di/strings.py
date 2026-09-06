@@ -47,7 +47,7 @@ class TuiStrings:
     agent_llm_request_failed_notice_title: str = "LLM request failed"
     agent_llm_request_failed_notice_template: str = "{title}\n\n{message}"
     agent_context_stats_title: str = "Agent Context"
-    run_snapshot_updated_notice_template: str = "Run snapshot updated: {ref}"
+    run_snapshot_updated_notice_template: str = "Run snapshot updated: {flow_path}"
     run_snapshot_failed_notice_template: str = "Run snapshot sync failed: {error}"
     run_model_updated_notice_template: str = "Model updated: {provider}/{model}"
     agent_context_compacted_notice_template: str = (

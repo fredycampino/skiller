@@ -112,7 +112,7 @@ class ListAgentContextUseCase:
                 error=f"Agent '{agent_id}' has no attached context in run '{run_id}'",
             )
 
-        config_path = self._resolve_agent_config_path(run.source, run.ref)
+        config_path = self._resolve_agent_config_path(run.flow_path)
         config = self.agent_config.get_config(config_path=config_path)
         catalog = self.llm_provider_catalog.get_catalog()
         model = catalog.get_model(
@@ -168,9 +168,9 @@ class ListAgentContextUseCase:
             estimated_tokens=estimated_tokens,
         )
 
-    def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
+    def _resolve_agent_config_path(self, flow_path: Path) -> Path | None:
         try:
-            config_path = self.skill_runner.resolve_file_path(source, ref, "agent.json")
+            config_path = self.skill_runner.resolve_file_path(flow_path, "agent.json")
         except (FileNotFoundError, ValueError):
             return None
 

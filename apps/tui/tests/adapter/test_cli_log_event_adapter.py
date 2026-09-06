@@ -86,8 +86,7 @@ def test_cli_log_event_adapter_parses_run_create_payload() -> None:
                 "agent_sequence": None,
                 "created_at": "2026-05-12T10:30:15Z",
                 "payload": {
-                    "ref": "ant",
-                    "source": "internal",
+                    "flow_path": "/flows/ant.yaml",
                 },
             }
         ]
@@ -95,8 +94,7 @@ def test_cli_log_event_adapter_parses_run_create_payload() -> None:
 
     assert event.event_type == LogEventType.RUN_CREATE
     assert isinstance(event.payload, RunCreatePayload)
-    assert event.payload.ref == "ant"
-    assert event.payload.source == "internal"
+    assert event.payload.flow_path == "/flows/ant.yaml"
 
 
 def test_cli_log_event_adapter_parses_run_snapshot_updated_payload() -> None:
@@ -112,8 +110,7 @@ def test_cli_log_event_adapter_parses_run_snapshot_updated_payload() -> None:
                 "agent_sequence": None,
                 "created_at": "2026-06-01T10:30:15Z",
                 "payload": {
-                    "source": "internal",
-                    "ref": "mono",
+                    "flow_path": "/flows/mono.yaml",
                 },
             }
         ]
@@ -124,8 +121,7 @@ def test_cli_log_event_adapter_parses_run_snapshot_updated_payload() -> None:
     assert event.step_type is None
     assert event.agent_sequence is None
     assert event.payload == RunSnapshotUpdatedPayload(
-        source="internal",
-        ref="mono",
+        flow_path="/flows/mono.yaml",
     )
 
 
@@ -142,8 +138,7 @@ def test_cli_log_event_adapter_parses_run_snapshot_failed_payload() -> None:
                 "agent_sequence": None,
                 "created_at": "2026-06-01T10:30:15Z",
                 "payload": {
-                    "source": "internal",
-                    "ref": "mono",
+                    "flow_path": "/flows/mono.yaml",
                     "error": "Could not sync snapshot 'mono'",
                 },
             }
@@ -155,8 +150,7 @@ def test_cli_log_event_adapter_parses_run_snapshot_failed_payload() -> None:
     assert event.step_type is None
     assert event.agent_sequence is None
     assert event.payload == RunSnapshotFailedPayload(
-        source="internal",
-        ref="mono",
+        flow_path="/flows/mono.yaml",
         error="Could not sync snapshot 'mono'",
     )
 

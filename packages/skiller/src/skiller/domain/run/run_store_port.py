@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Protocol
 
 from skiller.domain.run.run_context_model import RunContext
@@ -12,8 +13,7 @@ from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 class RunStorePort(Protocol):
     def create_run(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         snapshot: dict[str, object],
         context: RunContext,
         *,

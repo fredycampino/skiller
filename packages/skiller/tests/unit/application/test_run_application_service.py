@@ -1,7 +1,9 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from skiller.application.runs.models import RunRequest
 from skiller.application.runs.service import RunApplicationService
 from skiller.application.use_cases.flow.flow_checker import (
     FlowCheckError,
@@ -13,6 +15,7 @@ from skiller.application.use_cases.flow.flow_readiness_checker import (
     FlowReadinessCheckResult,
     FlowReadinessCheckStatus,
 )
+from skiller.application.use_cases.flow.resolve_flow import ResolveFlowResult, ResolveFlowStatus
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.check_webhook_wait import (
     CheckWebhookWaitResult,
@@ -25,6 +28,7 @@ from skiller.domain.event.event_model import (
     RuntimeEventType,
     runtime_event_payload_to_dict,
 )
+from skiller.domain.flow.flow_reference import FlowReference, ResolvedFlow
 
 pytestmark = pytest.mark.unit
 
@@ -36,9 +40,8 @@ class _FakeCreateRunUseCase:
     def execute(self, request: CreateRunInput) -> str:
         self.calls.append(
             {
-                "skill_ref": request.skill_ref,
+                "flow_path": request.flow_path,
                 "inputs": request.inputs,
-                "skill_source": request.skill_source,
             }
         )
         return "run-1"
@@ -85,8 +88,8 @@ class _FakeFlowCheckerUseCase:
         self.result = result or FlowCheckResult(status=FlowCheckStatus.VALID, errors=[])
         self.calls: list[dict[str, object]] = []
 
-    def execute(self, flow_ref: str, *, flow_source: str) -> FlowCheckResult:
-        self.calls.append({"flow_ref": flow_ref, "flow_source": flow_source})
+    def execute(self, flow_path: Path) -> FlowCheckResult:
+        self.calls.append({"flow_path": flow_path})
         return self.result
 
 
@@ -98,8 +101,8 @@ class _FakeFlowReadinessCheckerUseCase:
         )
         self.calls: list[dict[str, object]] = []
 
-    def execute(self, flow_ref: str, *, flow_source: str) -> FlowReadinessCheckResult:
-        self.calls.append({"flow_ref": flow_ref, "flow_source": flow_source})
+    def execute(self, flow_path: Path) -> FlowReadinessCheckResult:
+        self.calls.append({"flow_path": flow_path})
         return self.result
 
 
@@ -205,6 +208,16 @@ def _build_service(
         get_start_step_use_case=get_start_step_use_case,
         flow_checker_use_case=final_flow_checker_use_case,
         flow_readiness_checker_use_case=final_flow_readiness_checker_use_case,
+        get_runtime_config_use_case=SimpleNamespace(execute=lambda: SimpleNamespace(flow_paths=())),
+        resolve_flow_use_case=SimpleNamespace(
+            execute=lambda request: ResolveFlowResult(
+                status=ResolveFlowStatus.RESOLVED,
+                flow=ResolvedFlow(
+                    request.reference,
+                    Path(request.reference.value),
+                ),
+            )
+        ),
         resume_run_use_case=_FakeResumeRunUseCase(),
         mark_notify_action_done_use_case=SimpleNamespace(
             execute=lambda request: None,
@@ -235,31 +248,22 @@ def test_create_run_only_creates_run() -> None:
     ) = _build_service()
 
     result = service.create_run(
-        CreateRunInput(
-            skill_ref="notify_test",
-            inputs={"message": "ok"},
-            skill_source="internal",
-        )
+        RunRequest(reference=FlowReference("notify_test"), inputs={"message": "ok"})
     )
 
     assert result.run_id == "run-1"
     assert result.status.value == "CREATED"
     assert create_run_use_case.calls == [
         {
-            "skill_ref": "notify_test",
+            "flow_path": Path("notify_test"),
             "inputs": {"message": "ok"},
-            "skill_source": "internal",
         }
     ]
     assert get_start_step_use_case.calls == []
     assert run_executor.calls == []
 
-    assert flow_checker_use_case.calls == [
-        {"flow_ref": "notify_test", "flow_source": "internal"}
-    ]
-    assert flow_readiness_checker_use_case.calls == [
-        {"flow_ref": "notify_test", "flow_source": "internal"}
-    ]
+    assert flow_checker_use_case.calls == [{"flow_path": Path("notify_test")}]
+    assert flow_readiness_checker_use_case.calls == [{"flow_path": Path("notify_test")}]
     assert append_runtime_event_use_case.calls == [
         {
             "run_id": "run-1",
@@ -267,11 +271,9 @@ def test_create_run_only_creates_run() -> None:
             "step_id": None,
             "step_type": None,
             "agent_sequence": None,
-            "payload": {"ref": "notify_test", "source": "internal"},
+            "payload": {"flow_path": "notify_test"},
         }
     ]
-
-
 
 
 def test_create_run_rejects_duplicate_webhook_wait_before_persisting() -> None:
@@ -294,7 +296,7 @@ def test_create_run_rejects_duplicate_webhook_wait_before_persisting() -> None:
 
     with pytest.raises(ValueError, match="skiller delete existing-run"):
         service.create_run(
-            CreateRunInput(skill_ref="webhook_test", inputs={"key": "42"})
+            RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "42"})
         )
 
     assert len(check_use_case.calls) == 1
@@ -309,7 +311,7 @@ def test_create_run_allows_a_different_webhook_key() -> None:
     )
 
     result = service.create_run(
-        CreateRunInput(skill_ref="webhook_test", inputs={"key": "43"})
+        RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "43"})
     )
 
     assert result.run_id == "run-1"
@@ -331,9 +333,7 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
         worker_final_status="WAITING",
     )
 
-    result = service.run(
-        CreateRunInput(skill_ref="notify_test", inputs={}, skill_source="internal")
-    )
+    result = service.run(RunRequest(reference=FlowReference("notify_test"), inputs={}))
 
     assert result.run_id == "run-1"
     assert result.status.value == "WAITING"
@@ -402,11 +402,19 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         check_webhook_wait_use_case=_FakeCheckWebhookWaitUseCase(),
         delete_run_use_case=SimpleNamespace(execute=lambda run_id: None),
         fail_run_use_case=_FakeFailRunUseCase(),
-        get_start_step_use_case=_FakeGetStartStepUseCase(
-            get_run_use_case=get_run_use_case
-        ),
+        get_start_step_use_case=_FakeGetStartStepUseCase(get_run_use_case=get_run_use_case),
         flow_checker_use_case=_FakeFlowCheckerUseCase(),
         flow_readiness_checker_use_case=_FakeFlowReadinessCheckerUseCase(),
+        get_runtime_config_use_case=SimpleNamespace(execute=lambda: SimpleNamespace(flow_paths=())),
+        resolve_flow_use_case=SimpleNamespace(
+            execute=lambda request: ResolveFlowResult(
+                status=ResolveFlowStatus.RESOLVED,
+                flow=ResolvedFlow(
+                    request.reference,
+                    Path(request.reference.value),
+                ),
+            )
+        ),
         resume_run_use_case=resume_run_use_case,
         mark_notify_action_done_use_case=SimpleNamespace(
             execute=lambda request: None,
@@ -463,15 +471,9 @@ def test_create_run_fails_when_flow_checker_reports_errors() -> None:
         ValueError,
         match="FLOW_NOTIFY_MESSAGE_MISSING: notify step requires message",
     ):
-        service.create_run(
-            CreateRunInput(
-                skill_ref="notify_test",
-                inputs={},
-                skill_source="internal",
-            )
-        )
+        service.create_run(RunRequest(reference=FlowReference("notify_test"), inputs={}))
 
-    assert checker.calls == [{"flow_ref": "notify_test", "flow_source": "internal"}]
+    assert checker.calls == [{"flow_path": Path("notify_test")}]
     assert create_run_use_case.calls == []
     assert append_runtime_event_use_case.calls == []
 
@@ -505,19 +507,9 @@ def test_create_run_fails_when_flow_readiness_checker_reports_errors() -> None:
         ValueError,
         match="FLOW_SERVER_UNAVAILABLE: flow requires local server",
     ):
-        service.create_run(
-            CreateRunInput(
-                skill_ref="whatsapp_demo",
-                inputs={},
-                skill_source="internal",
-            )
-        )
+        service.create_run(RunRequest(reference=FlowReference("whatsapp_demo"), inputs={}))
 
-    assert flow_checker_use_case.calls == [
-        {"flow_ref": "whatsapp_demo", "flow_source": "internal"}
-    ]
-    assert flow_readiness_checker_use_case.calls == [
-        {"flow_ref": "whatsapp_demo", "flow_source": "internal"}
-    ]
+    assert flow_checker_use_case.calls == [{"flow_path": Path("whatsapp_demo")}]
+    assert flow_readiness_checker_use_case.calls == [{"flow_path": Path("whatsapp_demo")}]
     assert create_run_use_case.calls == []
     assert append_runtime_event_use_case.calls == []

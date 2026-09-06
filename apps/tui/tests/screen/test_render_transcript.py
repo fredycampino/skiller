@@ -452,27 +452,25 @@ def test_run_system_notice_view_renders_snapshot_updated_with_strings() -> None:
     view = RunSystemNoticeView(
         item=RunSyncSnapshotItem(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path="/flows/mono.yaml",
             status=RunSnapshotStatus.UPDATED,
         ),
         strings=TuiStrings(
-            run_snapshot_updated_notice_template="Snapshot OK: {source}/{ref}",
+            run_snapshot_updated_notice_template="Snapshot OK: {flow_path}",
         ),
     )
     console = Console(width=80, record=True)
 
     console.print(view.render(theme=DEFAULT_TUI_THEME))
 
-    assert console.export_text().rstrip() == "✓ Snapshot OK: internal/mono"
+    assert console.export_text().rstrip() == "✓ Snapshot OK: /flows/mono.yaml"
 
 
 def test_run_system_notice_view_renders_snapshot_failed_with_strings() -> None:
     view = RunSystemNoticeView(
         item=RunSyncSnapshotItem(
             run_id="run-1",
-            source="internal",
-            ref="mono",
+            flow_path="/flows/mono.yaml",
             status=RunSnapshotStatus.FAILED,
             error="Could not sync snapshot 'mono'",
         ),

@@ -48,8 +48,7 @@ class RuntimeEventType(StrEnum):
 
 @dataclass(frozen=True)
 class RunCreatedPayload:
-    ref: str
-    source: str
+    flow_path: str
 
 
 @dataclass(frozen=True)
@@ -59,14 +58,12 @@ class RunResumedPayload:
 
 @dataclass(frozen=True)
 class RunSnapshotUpdatedPayload:
-    source: str
-    ref: str
+    flow_path: str
 
 
 @dataclass(frozen=True)
 class RunSnapshotFailedPayload:
-    source: str
-    ref: str
+    flow_path: str
     error: str
 
 
@@ -268,8 +265,7 @@ def runtime_event_payload_from_dict(
 ) -> RuntimeEventPayload:
     if event_type == RuntimeEventType.RUN_CREATE:
         return RunCreatedPayload(
-            ref=str(value.get("ref", "")),
-            source=str(value.get("source", "")),
+            flow_path=str(value.get("flow_path", "")),
         )
 
     if event_type == RuntimeEventType.RUN_RESUME:
@@ -277,14 +273,12 @@ def runtime_event_payload_from_dict(
 
     if event_type == RuntimeEventType.RUN_SNAPSHOT_UPDATED:
         return RunSnapshotUpdatedPayload(
-            source=str(value.get("source", "")),
-            ref=str(value.get("ref", "")),
+            flow_path=str(value.get("flow_path", "")),
         )
 
     if event_type == RuntimeEventType.RUN_SNAPSHOT_FAILED:
         return RunSnapshotFailedPayload(
-            source=str(value.get("source", "")),
-            ref=str(value.get("ref", "")),
+            flow_path=str(value.get("flow_path", "")),
             error=str(value.get("error", "")),
         )
 

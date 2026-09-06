@@ -53,9 +53,9 @@ class DefaultInstallationStatePort:
         return self.home / ".skiller" / "settings" / "agent.json"
 
     def _read_runtime_config(self, *, env_file: dict[str, str]) -> dict[str, object]:
-        explicit_config_path = self.environment.get("AGENT_CONFIG_FILE", "").strip()
+        explicit_config_path = self.environment.get("AGENT_RUNTIME_CONFIG_FILE", "").strip()
         if not explicit_config_path:
-            explicit_config_path = env_file.get("AGENT_CONFIG_FILE", "").strip()
+            explicit_config_path = env_file.get("AGENT_RUNTIME_CONFIG_FILE", "").strip()
         if explicit_config_path:
             config_path = self._resolve_path(explicit_config_path)
         else:

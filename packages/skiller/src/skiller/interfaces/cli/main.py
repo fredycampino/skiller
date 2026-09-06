@@ -9,7 +9,7 @@ from typing import Any
 from skiller.application.runs.errors import WebhookWaitConflictError
 from skiller.di.container import build_runtime_container
 from skiller.domain.flow.flow_load_error import FlowLoadError, FlowNotFoundError
-from skiller.domain.run.run_model import RunStatus, SkillSource
+from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
 from skiller.domain.run.runtime_query_error import RuntimeQueryError
 from skiller.interfaces.cli.run_output import (
@@ -20,6 +20,7 @@ from skiller.interfaces.cli.run_output import (
     RunErrorCode,
     RunOutputMapper,
 )
+from skiller.interfaces.cli.runtime_config_output import RuntimeConfigOutputMapper
 from skiller.interfaces.runtime_controller import RuntimeController
 from skiller.local.server.process_service import WebhookProcessService
 from skiller.local.workers.process_service import WorkerProcessService
@@ -140,14 +141,19 @@ def _merge_waiting_metadata(
     return run_result
 
 
-def _resolve_run_target(args: argparse.Namespace) -> tuple[str, str]:
-    if bool(args.skill) == bool(args.skill_file):
-        raise ValueError("Use either an internal skill name or --file PATH.")
+def _resolve_run_target(args: argparse.Namespace) -> str:
+    if bool(args.flow_reference) == bool(args.flow_file):
+        raise ValueError("Use either a flow reference or --file PATH.")
 
-    if args.skill_file:
-        return args.skill_file, SkillSource.FILE.value
+    if args.flow_file:
+        return args.flow_file
 
-    return args.skill, SkillSource.INTERNAL.value
+    flow_reference = args.flow_reference
+    if flow_reference.startswith(("@", "~", ".", "/")):
+        return flow_reference
+    if Path(flow_reference).suffix.lower() in {".yaml", ".yml"}:
+        return flow_reference
+    return f"@{flow_reference}"
 
 
 def _watch_run(
@@ -221,10 +227,7 @@ def _format_watch_event(run_id: str, event: dict[str, Any]) -> str | None:
     parts: list[str] = []
 
     if event_type == "RUN_CREATE":
-        parts = [
-            _format_field("ref", payload.get("ref")),
-            _format_field("source", payload.get("source")),
-        ]
+        parts = [_format_field("flow_path", payload.get("flow_path"))]
     elif event_type == "RUN_RESUME":
         parts = [_format_field("source", payload.get("source"))]
     elif event_type == "STEP_STARTED":
@@ -308,9 +311,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = sub.add_parser("run", help="Start a run with a skill")
-    run_parser.add_argument("skill", nargs="?", help="Internal skill name (without extension)")
-    run_parser.add_argument("--file", dest="skill_file", help="Path to an external skill file")
+    sub.add_parser(
+        "config",
+        help="Show the effective runtime configuration",
+        description="Show the effective runtime configuration as JSON.",
+    )
+
+    run_parser = sub.add_parser(
+        "run",
+        help="Start a run with a flow",
+        description="Start a run from a flow reference or a YAML file path.",
+        epilog=(
+            "References: @name, @group/name, ~/path, ./path, or an absolute path.\n"
+            "Examples: skiller run @flows | skiller run @reportes/diario"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    run_parser.add_argument(
+        "flow_reference",
+        nargs="?",
+        help="Flow reference (@name, @group/name, ~path, ./path, or absolute path)",
+    )
+    run_parser.add_argument(
+        "--file",
+        dest="flow_file",
+        help="Flow YAML path (deprecated compatibility alias for a direct path)",
+    )
     run_parser.add_argument("--arg", action="append", default=[], help="Input pair key=value")
     run_parser.add_argument(
         "--logs",
@@ -534,7 +560,33 @@ def _build_runtime_controller(container: Any) -> RuntimeController:
         input_wait_mapper=container.input_wait_mapper,
         channel_wait_mapper=container.channel_wait_mapper,
         webhook_wait_mapper=container.webhook_wait_mapper,
+        runtime_config_service=container.runtime_config_service,
     )
+
+
+def _print_runtime_config_error(error: Exception) -> int:
+    print(
+        json.dumps(
+            {
+                "error": {
+                    "code": "RUNTIME_CONFIG_ERROR",
+                    "message": str(error),
+                }
+            },
+            indent=2,
+        )
+    )
+    return 1
+
+
+def _config_command(controller: RuntimeController) -> int:
+    try:
+        config = controller.config()
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_runtime_config_error(exc)
+
+    print(json.dumps(RuntimeConfigOutputMapper().to_dict(config), indent=2))
+    return 0
 
 
 def _run_failure(
@@ -562,11 +614,10 @@ def _resolve_run_request(
     args: argparse.Namespace,
 ) -> RunCommandRequest | RunCommandFailure:
     try:
-        skill_ref, skill_source = _resolve_run_target(args)
+        flow_reference = _resolve_run_target(args)
         inputs = _parse_key_value(args.arg)
         return RunCommandRequest(
-            skill_ref=skill_ref,
-            skill_source=skill_source,
+            flow_reference=flow_reference,
             inputs=inputs,
         )
     except ValueError as exc:
@@ -591,9 +642,8 @@ def _create_cli_run(
 ) -> dict[str, Any] | RunCommandFailure:
     try:
         return controller.create_run(
-            request.skill_ref,
+            request.flow_reference,
             request.inputs,
-            skill_source=request.skill_source,
         )
     except WebhookWaitConflictError as exc:
         return _run_failure(RunErrorCode.WEBHOOK_WAIT_CONFLICT, str(exc), run_result=None)
@@ -700,12 +750,24 @@ def main(argv: list[str] | None = None) -> int:
     if not effective_argv:
         _load_tui_runner()()
         return 0
+    if effective_argv[0].startswith("@"):
+        initial_run_args = tuple(effective_argv)
+        _load_tui_runner()(initial_run_args=initial_run_args)
+        return 0
 
     parser = build_parser()
     args = parser.parse_args(effective_argv)
 
     if args.command == "run":
         return _run_command(args)
+
+    if args.command == "config":
+        try:
+            container = build_runtime_container()
+            controller = _build_runtime_controller(container)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return _print_runtime_config_error(exc)
+        return _config_command(controller)
 
     container = build_runtime_container()
     controller = _build_runtime_controller(container)

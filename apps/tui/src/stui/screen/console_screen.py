@@ -678,7 +678,7 @@ class ConsoleScreen(App[str]):
     def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
         return RunsTableRow(
             status=_resolve_run_row_status(run),
-            skill=run.ref,
+            skill=run.flow_path,
             updated_at=_format_run_updated_at(run.updated_at),
             run_id=run.id,
         )
@@ -694,12 +694,16 @@ class ConsoleScreen(App[str]):
 def run_console_screen(
     *,
     session_key: str,
+    initial_run_args: tuple[str, ...] = (),
     theme: TuiTheme = DEFAULT_TUI_THEME,
     strings: TuiStrings = DEFAULT_TUI_STRINGS,
 ) -> str:
     resolved_strings = _resolve_runtime_strings(strings)
     container = build_tui_container(theme=theme, strings=resolved_strings)
-    viewmodel = container.build_viewmodel(session_key=session_key)
+    viewmodel = container.build_viewmodel(
+        session_key=session_key,
+        initial_run_args=initial_run_args,
+    )
 
     class ThemedConsoleScreen(ConsoleScreen):
         CSS = build_textual_css(theme)
@@ -731,8 +735,12 @@ def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
     if normalized_status == "failed":
         return RunRowStatus.FAILED
     if normalized_status == "succeeded":
-        return RunRowStatus.SUCCESS
-    return RunRowStatus.RUNNING
+        return RunRowStatus.SUCCEEDED
+    if normalized_status == "cancelled":
+        return RunRowStatus.CANCELLED
+    if normalized_status == "created":
+        return RunRowStatus.CREATED
+    return RunRowStatus(normalized_status)
 
 
 def _format_run_updated_at(value: str) -> str:

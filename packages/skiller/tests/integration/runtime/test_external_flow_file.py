@@ -17,6 +17,7 @@ from skiller.application.agent.mapper.agent_step_execution_mapper import (
 )
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.models import RunRequest
 from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -40,6 +41,7 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
 from skiller.application.use_cases.flow.flow_readiness_checker import FlowReadinessCheckerUseCase
+from skiller.application.use_cases.flow.resolve_flow import ResolveFlowUseCase
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import (
     HandleInputInput,
@@ -83,6 +85,7 @@ from skiller.domain.event.event_model import (
     RunWaitingPayload,
     StepSuccessPayload,
 )
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
@@ -139,13 +142,8 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         SqliteAgentContextDatasource(store.db_path),
     )
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
-    skill_runner = FilesystemRunnerPort(
-        flows_dir=Path("skills"),
-    )
-    flow_port = FilesystemFlowPort(
-        flows_dir=str(skill_runner.flows_dir),
-        mapper=FlowYamlMapper(),
-    )
+    skill_runner = FilesystemRunnerPort()
+    flow_port = FilesystemFlowPort(mapper=FlowYamlMapper())
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
@@ -263,6 +261,10 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             server_status=_FakeServerStatus(),
             channel_sender=channel_sender,
         ),
+        get_runtime_config_use_case=SimpleNamespace(
+            execute=lambda: SimpleNamespace(flow_paths=()),
+        ),
+        resolve_flow_use_case=ResolveFlowUseCase(home_path=Path.home()),
         resume_run_use_case=ResumeRunUseCase(store=store),
         mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
             store=store,
@@ -324,7 +326,7 @@ def test_run_external_flow_uses_snapshot_when_source_is_removed() -> None:
         runtime = _build_runtime(store)
 
         created = runtime.create_run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={})
         )
         runtime.prepare_run(created.run_id)
         skill_path.unlink()
@@ -359,7 +361,7 @@ def test_external_shell_uses_flow_directory_after_source_is_removed() -> None:
         runtime = _build_runtime(store)
 
         created = runtime.create_run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={})
         )
         runtime.prepare_run(created.run_id)
         skill_path.unlink()
@@ -393,15 +395,12 @@ def test_run_external_flow_file_succeeds() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
 
         run = store.get_run(run_result.run_id)
         assert run_result.status.value == "SUCCEEDED"
         assert run is not None
-        assert run.source == "file"
-        assert run.ref == str(skill_path)
+        assert run.flow_path == skill_path
         assert run.snapshot["name"] == "external_notify"
         events = _event_store(store).list_events(run_result.run_id)
         notify_event = _step_success_event(events, step_id="show_message")
@@ -438,10 +437,9 @@ def test_external_flow_end_action_renders_input_in_run_finished_payload() -> Non
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
-            CreateRunInput(
-                skill_ref=str(skill_path),
+            RunRequest(
+                reference=FlowReference(str(skill_path)),
                 inputs={"continue_id": "waiting-run-1"},
-                skill_source="file",
             )
         )
 
@@ -481,9 +479,7 @@ def test_external_notify_can_read_shell_output_value() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
 
         run = store.get_run(run_result.run_id)
         assert run_result.status.value == "SUCCEEDED"
@@ -510,16 +506,14 @@ def test_external_flow_file_is_snapshotted_at_run_creation() -> None:
 
         store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
-        skill_runner = FilesystemRunnerPort(flows_dir=Path("skills"))
+        skill_runner = FilesystemRunnerPort()
         create_run_use_case = CreateRunUseCase(store, skill_runner)
         get_start_step_use_case = GetStartStepUseCase(store=store)
         render_current_step_use_case = RenderCurrentStepUseCase(
             store=store, skill_runner=skill_runner
         )
 
-        run_id = create_run_use_case.execute(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_id = create_run_use_case.execute(CreateRunInput(flow_path=skill_path, inputs={}))
         get_start_step_use_case.execute(run_id)
 
         skill_path.write_text(
@@ -570,7 +564,7 @@ def test_external_wait_webhook_file_can_resume_manually() -> None:
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={"pr": "42"}, skill_source="file")
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={"pr": "42"})
         )
         run_id = run_result.run_id
         run = store.get_run(run_id)
@@ -627,11 +621,7 @@ def test_external_wait_webhook_file_rejects_duplicate_key() -> None:
         store = SqliteRunStorePort(db_path)
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
-        request = CreateRunInput(
-            skill_ref=str(skill_path),
-            inputs={"pr": "42"},
-            skill_source="file",
-        )
+        request = RunRequest(reference=FlowReference(str(skill_path)), inputs={"pr": "42"})
 
         first_result = runtime.run(request)
         first_events = _event_store(store).list_events(first_result.run_id)
@@ -644,7 +634,7 @@ def test_external_wait_webhook_file_rejects_duplicate_key() -> None:
         assert [run.id for run in runs] == [first_result.run_id]
         assert len(_event_store(store).list_events(first_result.run_id)) == len(first_events)
         assert not any(
-            event.type == "RUN_CREATE" and event.payload.ref == str(skill_path)
+            event.type == "RUN_CREATE" and event.payload.flow_path == str(skill_path)
             for event in _event_store(store).list_events(first_result.run_id)[1:]
         )
 
@@ -675,7 +665,7 @@ def test_external_wait_webhook_file_can_resume_from_webhook() -> None:
         runtime = _build_runtime(store)
 
         run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={"pr": "42"}, skill_source="file")
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={"pr": "42"})
         )
         run_id = run_result.run_id
 
@@ -744,9 +734,7 @@ def test_external_wait_input_file_can_resume_from_cli_input() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
         run_id = run_result.run_id
 
         assert run_result.status.value == "WAITING"
@@ -822,9 +810,7 @@ def test_external_wait_input_loop_does_not_reconsume_previous_input() -> None:
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(
-            CreateRunInput(skill_ref=str(skill_path), inputs={}, skill_source="file")
-        )
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
         run_id = run_result.run_id
 
         assert run_result.status.value == "WAITING"

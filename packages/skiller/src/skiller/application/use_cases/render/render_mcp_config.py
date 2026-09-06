@@ -44,18 +44,18 @@ class RenderMcpConfigUseCase:
 
         flow = run.snapshot
         if not isinstance(flow, dict):
-            return self._invalid(f"Invalid flow format for '{run.ref}'. Expected an object.")
+            return self._invalid(f"Invalid flow format for '{run.flow_path}'. Expected an object.")
 
         raw_declared = flow.get("mcp", [])
         if not isinstance(raw_declared, list):
             return self._invalid(
-                f"Invalid MCP configuration for flow '{run.ref}'. Expected a list."
+                f"Invalid MCP configuration for flow '{run.flow_path}'. Expected a list."
             )
 
         raw_config = self._find_server_config(raw_declared, server_name)
         if raw_config is None:
             return self._invalid(
-                f"MCP server '{server_name}' not declared in flow '{run.ref}'"
+                f"MCP server '{server_name}' not declared in flow '{run.flow_path}'"
             )
 
         rendered = self.flow_runner.render(
@@ -175,9 +175,7 @@ class RenderMcpConfigUseCase:
 
         return None
 
-    def _resolve_headers(
-        self, *, server_name: str, raw_headers: dict[str, Any]
-    ) -> dict[str, str]:
+    def _resolve_headers(self, *, server_name: str, raw_headers: dict[str, Any]) -> dict[str, str]:
         headers: dict[str, str] = {}
         for raw_key, raw_value in raw_headers.items():
             key = str(raw_key).strip()

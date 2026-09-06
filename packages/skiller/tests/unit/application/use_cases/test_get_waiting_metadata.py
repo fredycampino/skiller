@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -33,8 +34,7 @@ class _FakeSkillRunner:
 def test_get_waiting_metadata_returns_webhook_data() -> None:
     run = SimpleNamespace(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         status="WAITING",
         current="wait_signal",
         snapshot={
@@ -65,8 +65,7 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
 def test_get_waiting_metadata_returns_input_prompt() -> None:
     run = SimpleNamespace(
         id="run-2",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         status="WAITING",
         current="ask_user",
         snapshot={
@@ -95,8 +94,7 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
 def test_get_waiting_metadata_returns_channel_data() -> None:
     run = SimpleNamespace(
         id="run-3",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         status="WAITING",
         current="listen_whatsapp",
         snapshot={

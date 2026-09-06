@@ -14,8 +14,7 @@ class SqliteAgentSteeringStore(SqliteConnectionSource, SteeringPort):
                 """
                 SELECT
                   id,
-                  source,
-                  ref,
+                  flow_path,
                   snapshot_json,
                   status,
                   current,

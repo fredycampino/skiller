@@ -65,7 +65,7 @@ class ListAgentModelsUseCase:
                 error=f"Run '{run_id}' not found",
             )
 
-        config_path = self._resolve_agent_config_path(run.source, run.ref)
+        config_path = self._resolve_agent_config_path(run.flow_path)
         config = self.agent_config.get_config(config_path=config_path)
         catalog = self.llm_provider_catalog.get_catalog()
         providers = tuple(
@@ -103,11 +103,10 @@ class ListAgentModelsUseCase:
             models=models,
         )
 
-    def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
+    def _resolve_agent_config_path(self, flow_path: Path) -> Path | None:
         try:
             config_path = self.skill_runner.resolve_file_path(
-                source,
-                ref,
+                flow_path,
                 "agent.json",
             )
         except (FileNotFoundError, ValueError):

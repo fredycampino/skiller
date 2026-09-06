@@ -6,7 +6,7 @@ description: Start a workflow and inspect its persisted status and events.
 Start an external YAML workflow with:
 
 ```bash
-skiller run --file ./flow.yaml
+skiller run ./flow.yaml
 ```
 
 The JSON response contains a `run_id` and the observed status. Keep the id for later operations.

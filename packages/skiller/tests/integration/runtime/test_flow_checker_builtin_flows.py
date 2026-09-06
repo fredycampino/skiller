@@ -5,27 +5,23 @@ import pytest
 from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase, FlowCheckStatus
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
-from skiller.infrastructure.skills.filesystem_runner_port import FilesystemRunnerPort
 
 pytestmark = pytest.mark.integration
 
 
-def test_all_builtin_agents_pass_flow_checker() -> None:
-    runner = FilesystemRunnerPort(
-        flows_dir=Path("apps/agents"),
-    )
-    flow_port = FilesystemFlowPort(
-        flows_dir=str(runner.flows_dir),
-        mapper=FlowYamlMapper(),
-    )
+def test_all_packaged_flows_pass_flow_checker() -> None:
+    flow_paths = sorted(Path("apps/agents").rglob("*.yaml"))
+    assert flow_paths, "Expected at least one packaged flow in apps/agents"
+
+    flow_port = FilesystemFlowPort(mapper=FlowYamlMapper())
     checker = FlowCheckerUseCase(flow_port=flow_port)
 
     failures: list[str] = []
-    for agent_path in sorted(Path("apps/agents").glob("*/agent.yaml")):
-        result = checker.execute(agent_path.parent.name, flow_source="internal")
+    for flow_path in flow_paths:
+        result = checker.execute(flow_path)
         if result.status == FlowCheckStatus.VALID:
             continue
         messages = "\n".join(f"- {item.message}" for item in result.errors)
-        failures.append(f"{agent_path.parent.name}\n{messages}")
+        failures.append(f"{flow_path}\n{messages}")
 
-    assert not failures, "Builtin agents failed checker:\n\n" + "\n\n".join(failures)
+    assert not failures, "Packaged flows failed checker:\n\n" + "\n\n".join(failures)

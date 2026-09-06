@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from skiller.domain.run.run_list_item_model import RunListItem
@@ -19,8 +20,7 @@ class SqliteRunQueryStore(SqliteConnectionSource, RunQueryPort):
         query = """
             SELECT
               runs.id,
-              runs.source,
-              runs.ref,
+              runs.flow_path,
               runs.status,
               runs.current,
               runs.created_at,
@@ -57,8 +57,7 @@ class SqliteRunQueryStore(SqliteConnectionSource, RunQueryPort):
             wait_detail = f"{source_name}:{match_key}"
         return RunListItem(
             id=str(row["id"]),
-            source=str(row["source"]),
-            ref=str(row["ref"]),
+            flow_path=Path(str(row["flow_path"])),
             status=str(row["status"]),
             current=(str(row["current"]) if row["current"] is not None else None),
             created_at=str(row["created_at"]),

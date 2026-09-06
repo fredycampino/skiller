@@ -1,7 +1,13 @@
-from typing import Protocol
+from dataclasses import dataclass
+from pathlib import Path
 
 
-class FlowReference(Protocol):
-    id: str
-    source: str
-    ref: str
+@dataclass(frozen=True)
+class FlowReference:
+    value: str
+
+
+@dataclass(frozen=True)
+class ResolvedFlow:
+    reference: FlowReference
+    flow_path: Path

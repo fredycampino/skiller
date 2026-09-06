@@ -175,7 +175,7 @@ return AgentRunnerConfig(
 ## Naming
 
 - Follow
-  [`naming-style.md`](../../packages/skiller/docs/architecture/naming-style.md)
+  `<path-docs>/architecture/naming-style.md`
   for ports, infrastructure port implementations, datasources, and mappers.
 - Name a value or component for its domain role in the current context.
 - Avoid generic names such as `ctx`, `data`, `payload`, `params`, `info`, or `obj` when a more

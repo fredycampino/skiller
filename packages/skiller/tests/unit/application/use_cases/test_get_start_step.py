@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
@@ -30,8 +32,7 @@ class _FakeStore:
 def _build_run(snapshot: object) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot=snapshot,  # type: ignore[arg-type]
         status=RunStatus.CREATED.value,
         current=None,
@@ -49,7 +50,7 @@ def test_sets_current_to_start_when_unique_start_exists() -> None:
                 "steps": [
                     {"notify": "ask_user", "message": "ok"},
                     {"notify": "done", "message": "done"},
-                ]
+                ],
             }
         )
     )

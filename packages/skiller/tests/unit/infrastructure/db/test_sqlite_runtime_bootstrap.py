@@ -64,6 +64,32 @@ def test_sqlite_runtime_bootstrap_resets_version_mismatch(tmp_path) -> None:
     assert _count_rows(db_path, "runs") == 0
 
 
+def test_sqlite_runtime_bootstrap_resets_previous_beta_database(tmp_path) -> None:
+    db_path = tmp_path / "runtime.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE runs (
+              id TEXT PRIMARY KEY,
+              source TEXT NOT NULL,
+              ref TEXT NOT NULL
+            );
+            INSERT INTO runs (id, source, ref)
+            VALUES ('run-1', 'internal', 'demo');
+            PRAGMA user_version = 11;
+            """
+        )
+
+    SqliteRuntimeBootstrap(str(db_path)).init_db()
+
+    columns = _table_columns(db_path, "runs")
+    assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
+    assert "flow_path" in columns
+    assert "source" not in columns
+    assert "ref" not in columns
+    assert _count_rows(db_path, "runs") == 0
+
+
 def test_sqlite_runtime_bootstrap_resets_previous_agent_context_schema(tmp_path) -> None:
     db_path = tmp_path / "runtime.db"
     with sqlite3.connect(db_path) as conn:
@@ -256,7 +282,7 @@ def _table_columns(db_path, table: str) -> set[str]:  # noqa: ANN001
     return {str(row[1]) for row in rows}
 
 
-def test_sqlite_runtime_bootstrap_migrates_webhook_token_header_without_data_loss(tmp_path) -> None:
+def test_sqlite_runtime_bootstrap_resets_v10_database(tmp_path) -> None:
     db_path = tmp_path / "runtime.db"
     with sqlite3.connect(db_path) as conn:
         conn.executescript(
@@ -278,9 +304,6 @@ def test_sqlite_runtime_bootstrap_migrates_webhook_token_header_without_data_los
 
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
-    with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT webhook, secret, token_header FROM webhook_registrations"
-        ).fetchone()
-    assert row == ("github", "secret-1", None)
     assert _db_version(db_path) == SQLITE_RUNTIME_DB_VERSION
+    assert "token_header" in _table_columns(db_path, "webhook_registrations")
+    assert _count_rows(db_path, "webhook_registrations") == 0

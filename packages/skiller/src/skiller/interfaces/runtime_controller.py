@@ -2,6 +2,7 @@ from typing import Any
 
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
+from skiller.application.config.service import RuntimeConfigApplicationService
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.mapper import RunServiceMapper
@@ -10,7 +11,7 @@ from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.service import WaitApplicationService
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
-from skiller.domain.run.run_model import SkillSource
+from skiller.domain.config.skiller_config import SkillerConfig
 
 
 class RuntimeController:
@@ -28,6 +29,7 @@ class RuntimeController:
         input_wait_mapper: InputWaitMapper,
         channel_wait_mapper: ChannelWaitMapper,
         webhook_wait_mapper: WebhookWaitMapper,
+        runtime_config_service: RuntimeConfigApplicationService,
     ) -> None:
         self.agent_service = agent_service
         self.agent_mapper = agent_mapper
@@ -39,21 +41,22 @@ class RuntimeController:
         self.input_wait_mapper = input_wait_mapper
         self.channel_wait_mapper = channel_wait_mapper
         self.webhook_wait_mapper = webhook_wait_mapper
+        self.runtime_config_service = runtime_config_service
 
     def initialize(self) -> None:
         self.run_service.initialize()
 
+    def config(self) -> SkillerConfig:
+        return self.runtime_config_service.get_runtime_config()
+
     def create_run(
         self,
-        skill_ref: str,
+        flow_reference: str,
         inputs: dict[str, Any],
-        *,
-        skill_source: str = SkillSource.INTERNAL.value,
     ) -> dict[str, str]:
         request = self.run_mapper.to_create_input(
-            skill_ref,
+            flow_reference,
             inputs,
-            skill_source=skill_source,
         )
         result = self.run_service.create_run(request)
         return self.run_mapper.to_run_dict(result)

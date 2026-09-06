@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.mark_notify_action_done import (
@@ -219,8 +221,7 @@ def _request(action_uid: str) -> MarkNotifyActionDoneInput:
 def _build_run_with_context(context: RunContext) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="notify_action",
+        flow_path=Path("/flows/notify_action.yaml"),
         snapshot={},
         status=RunStatus.SUCCEEDED.value,
         current=None,

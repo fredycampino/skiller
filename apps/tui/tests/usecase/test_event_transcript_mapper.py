@@ -213,7 +213,7 @@ def test_event_transcript_mapper_uses_snapshot_updated_as_run_snapshot_item() ->
         [
             _event(
                 LogEventType.RUN_SNAPSHOT_UPDATED,
-                payload=RunSnapshotUpdatedPayload(source="internal", ref="mono"),
+                payload=RunSnapshotUpdatedPayload(flow_path="/flows/mono.yaml"),
             ),
         ],
     )
@@ -222,8 +222,7 @@ def test_event_transcript_mapper_uses_snapshot_updated_as_run_snapshot_item() ->
     assert items[0] == RunSyncSnapshotItem(
         sequence=1,
         run_id="run-1",
-        source="internal",
-        ref="mono",
+        flow_path="/flows/mono.yaml",
         status=RunSnapshotStatus.UPDATED,
     )
 
@@ -260,8 +259,7 @@ def test_event_transcript_mapper_uses_snapshot_failed_as_run_snapshot_item() -> 
             _event(
                 LogEventType.RUN_SNAPSHOT_FAILED,
                 payload=RunSnapshotFailedPayload(
-                    source="internal",
-                    ref="mono",
+                    flow_path="/flows/mono.yaml",
                     error="Could not sync snapshot 'mono'",
                 ),
             ),
@@ -272,8 +270,7 @@ def test_event_transcript_mapper_uses_snapshot_failed_as_run_snapshot_item() -> 
     assert items[0] == RunSyncSnapshotItem(
         sequence=1,
         run_id="run-1",
-        source="internal",
-        ref="mono",
+        flow_path="/flows/mono.yaml",
         status=RunSnapshotStatus.FAILED,
         error="Could not sync snapshot 'mono'",
     )

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from skiller.domain.run.run_context_model import RunContext
@@ -12,11 +13,6 @@ class RunStatus(str, Enum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
-
-
-class SkillSource(str, Enum):
-    INTERNAL = "internal"
-    FILE = "file"
 
 
 @dataclass
@@ -34,8 +30,7 @@ class RunAgent:
 @dataclass(frozen=True)
 class RunSnapshotSyncState:
     run_id: str
-    source: str
-    ref: str
+    flow_path: Path
     current: str | None
     snapshot: dict[str, Any]
 
@@ -43,8 +38,7 @@ class RunSnapshotSyncState:
 @dataclass
 class Run:
     id: str
-    source: str
-    ref: str
+    flow_path: Path
     snapshot: dict[str, Any]
     status: str
     current: str | None
@@ -56,13 +50,9 @@ class Run:
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "source": self.source,
-            "ref": self.ref,
+            "flow_path": str(self.flow_path),
             "snapshot": self.snapshot,
-            "agents": {
-                agent_id: agent.to_dict()
-                for agent_id, agent in self.agents.items()
-            },
+            "agents": {agent_id: agent.to_dict() for agent_id, agent in self.agents.items()},
             "status": self.status,
             "current": self.current,
             "context": self.context.to_dict(),

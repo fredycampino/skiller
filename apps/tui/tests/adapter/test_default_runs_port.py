@@ -20,8 +20,7 @@ class FakeRunsAdapter:
         return [
             RunsPortItem(
                 id="run-1",
-                source="internal",
-                ref="chat",
+                flow_path="/flows/chat.yaml",
                 status="WAITING",
                 current="ask_user",
                 created_at="2026-05-04 00:00:00",
@@ -39,8 +38,7 @@ def test_default_runs_port_delegates_to_command_adapter() -> None:
     assert result == [
         RunsPortItem(
             id="run-1",
-            source="internal",
-            ref="chat",
+            flow_path="/flows/chat.yaml",
             status="WAITING",
             current="ask_user",
             created_at="2026-05-04 00:00:00",

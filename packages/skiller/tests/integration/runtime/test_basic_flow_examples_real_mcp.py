@@ -23,6 +23,7 @@ from skiller.application.agent.mapper.agent_step_execution_mapper import (
 )
 from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.runs.executor import RunExecutor
+from skiller.application.runs.models import RunRequest
 from skiller.application.runs.service import RunApplicationService
 from skiller.application.tools.shell import ShellProcessTool
 from skiller.application.use_cases.execute.execute_agent_step import (
@@ -46,6 +47,7 @@ from skiller.application.use_cases.execute.execute_wait_webhook_step import (
 from skiller.application.use_cases.execute.execute_when_step import ExecuteWhenStepUseCase
 from skiller.application.use_cases.flow.flow_checker import FlowCheckerUseCase
 from skiller.application.use_cases.flow.flow_readiness_checker import FlowReadinessCheckerUseCase
+from skiller.application.use_cases.flow.resolve_flow import ResolveFlowUseCase
 from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.render.render_current_step import RenderCurrentStepUseCase
 from skiller.application.use_cases.render.render_mcp_config import RenderMcpConfigUseCase
@@ -53,7 +55,7 @@ from skiller.application.use_cases.run.append_runtime_event import AppendRuntime
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.check_webhook_wait import CheckWebhookWaitUseCase
 from skiller.application.use_cases.run.complete_run import CompleteRunUseCase
-from skiller.application.use_cases.run.create_run import CreateRunInput, CreateRunUseCase
+from skiller.application.use_cases.run.create_run import CreateRunUseCase
 from skiller.application.use_cases.run.delete_run import DeleteRunUseCase
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
 from skiller.application.use_cases.run.get_start_step import GetStartStepUseCase
@@ -67,6 +69,7 @@ from skiller.application.use_cases.run.resolve_end_action_config import (
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
+from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
@@ -134,13 +137,8 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         SqliteAgentContextDatasource(store.db_path),
     )
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
-    skill_runner = FilesystemRunnerPort(
-        flows_dir=Path("skills"),
-    )
-    flow_port = FilesystemFlowPort(
-        flows_dir=str(skill_runner.flows_dir),
-        mapper=FlowYamlMapper(),
-    )
+    skill_runner = FilesystemRunnerPort()
+    flow_port = FilesystemFlowPort(mapper=FlowYamlMapper())
     mcp = DefaultMCP()
     shell_tool = ShellProcessTool()
     agent_tool_manager = ToolManager(tools=[])
@@ -258,6 +256,10 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             server_status=_FakeServerStatus(),
             channel_sender=channel_sender,
         ),
+        get_runtime_config_use_case=SimpleNamespace(
+            execute=lambda: SimpleNamespace(flow_paths=(Path("skills"),)),
+        ),
+        resolve_flow_use_case=ResolveFlowUseCase(home_path=Path.home()),
         resume_run_use_case=ResumeRunUseCase(store=store),
         mark_notify_action_done_use_case=MarkNotifyActionDoneUseCase(
             store=store,
@@ -324,8 +326,8 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
-            CreateRunInput(
-                skill_ref="stdio_mcp_test",
+            RunRequest(
+                reference=FlowReference("@stdio_mcp_test"),
                 inputs={"file_path": str(file_path), "content": "hola-e2e"},
             )
         )
@@ -353,8 +355,8 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
-            CreateRunInput(
-                skill_ref="http_mcp_test",
+            RunRequest(
+                reference=FlowReference("@http_mcp_test"),
                 inputs={"mcp_url": http_mcp_server},
             )
         )

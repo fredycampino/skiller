@@ -4,6 +4,8 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.37 - 2026-09-07
+
 ### Added
 - Add packaged flow path resolution so built-in flows can be addressed with `@` references.
 - Add `skiller config` to display the effective runtime configuration as JSON.
@@ -25,11 +27,8 @@ All notable changes to this project should be summarized here before a version i
 - Make the bundled `skiller-user.md` instructions the sole CLI quick guide and remove the obsolete CLI guide entry points.
 - Use the portable `<path-docs>` reference for documentation links in bundled instructions.
 
-### Removed
-- Nothing yet.
-
 ### Notes
-- Update this section when a branch is ready for release.
+- Includes PR #140.
 
 ## 0.1.0-beta.36 - 2026-08-30
 

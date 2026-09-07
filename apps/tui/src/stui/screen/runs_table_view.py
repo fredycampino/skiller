@@ -12,12 +12,14 @@ from textual.widgets import DataTable, Static
 
 
 class RunRowStatus(StrEnum):
+    CREATED = "created"
     RUNNING = "running"
     WAITING_INPUT = "waiting_input"
     WAITING_WEBHOOK = "waiting_webhook"
     WAITING_CHANNEL = "waiting_channel"
     FAILED = "failed"
-    SUCCESS = "success"
+    SUCCEEDED = "succeeded"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)

@@ -432,7 +432,7 @@ With run action:
       "uid": "action-uuid",
       "type": "run",
       "label": "Debug failure",
-      "arg": "--file ./flows/debug.yaml",
+      "arg": "./flows/debug.yaml",
       "params": "--val pepe",
       "auto": true
     }

@@ -1,70 +1,165 @@
-## Skiller user quick guide
+# CLI Quick Guide
 
-Use this as a short user manual for Skiller. Keep answers concrete and point to repository docs for details.
+This guide shows common `skiller` CLI workflows. Command contracts live in the
+dedicated command documents, and command status is listed in
+`<path-docs>/cli/catalogue.md`.
 
-### What Skiller is
+## Start a Run
 
-Skiller runs YAML-defined workflows. A workflow is made of steps. A run is one execution of a workflow. An agent step lets an LLM work with configured tools.
+Open STUI and start a packaged or configured flow:
 
-Skiller has two user-facing interfaces:
+```bash
+skiller @flows
+skiller @pr --arg owner=my-org --arg repo=my-repo --arg head=feature/demo --arg base=main
+```
 
-- `skiller` is the command-line interface (CLI). It is used to start and inspect runs, read logs, and perform explicit runtime operations.
-- `skiller-stui` is the interactive terminal UI. It is the normal interface for chatting with an agent, selecting models, entering input, and viewing the live transcript.
+On first use, when the runtime database does not exist, STUI ignores the initial reference and runs the existing `auth → info → flows` onboarding sequence.
 
-When a user chats with Skiller, assume the interaction is taking place in `skiller-stui` unless the user explicitly refers to a CLI command. The CLI and STUI operate on the same runtime concepts and events, but their interaction flows are different.
+Start without waiting for the run to finish or reach a wait state:
+
+```bash
+skiller run ./my-flow.yaml --detach
+```
+Start a run without blocking:
+
+```bash
+skiller run ~/flows/my-flow.yaml --detach
+skiller run ./my-flow.yaml --detach
+```
+
+Use a packaged or configured flow reference:
+
+```bash
+skiller run @flows
+skiller run @reportes/diario
+```
+
+Pass root inputs with repeated arguments:
+
+```bash
+skiller run @pr --arg owner=my-org --arg repo=my-repo --arg head=feature/demo --arg base=main
+```
+
+Command contract: `<path-docs>/cli/commands/run.md`.
+
+## Inspect a Run
+
+Read the current run state:
+
+```bash
+skiller status <run_id>
+```
+
+List recent runs:
+
+```bash
+skiller runs
+skiller runs --status WAITING
+skiller runs --status FAILED --limit 50
+```
+
+Read raw runtime events:
+
+```bash
+skiller logs <run_id>
+```
+
+Use `status` for the current snapshot and `logs` when you need event payloads,
+ordering, or failure details.
+
+Command contracts:
+- `<path-docs>/cli/commands/status.md`
+- `<path-docs>/cli/commands/runs.md`
+- `<path-docs>/cli/commands/logs.md`
 
 
-### Essential commands
-Use `--help` on each command for exact flags.
+Show the effective runtime configuration:
 
-- `skiller run ...`: start a flow.
-- `skiller status ...`: status run.
-- `skiller logs ...`: show run logs/transcript.
-- `skiller agent..`: show tools available to the run agent.
-- `skiller --help` and `skiller <command> --help`: command-specific usage.
-
-Command reference: `<path-docs>/cli/commands/`
-
-### Configuration basics
-
-Skiller resolves state from the current environment, working directory, and agent configuration.
-
-- `AGENT_DB_PATH`: selects the runtime database.
-- `cwd`: affects relative paths and `.env.development` loading.
-- `.env.development`: can set defaults such as `AGENT_DB_PATH`.
-- Global agent config: shared defaults stored in the user-level Skiller settings area.
-- Local agent config: project or agent-specific config, usually near the selected agent/flow.
-
-Local config should override global defaults when both define the same setting. If a run is not found, first verify the DB path, current working directory, and which agent config was loaded.
-
-### Reading a flow YAML
-
-Common fields:
-
-- `steps`: ordered or named workflow steps.
-- `agent`: declares an agent step.
-- `system`: step-specific system instruction.
-- `instructions`: reusable instruction blocks appended after `system`.
-- `task`: user request or templated task for the agent.
-- `tools`: tools enabled for the agent step.
-- `next`: next step after completion.
-
-Reference: `<path-docs>/flows/flow-schema.md`
+```bash
+skiller config
+```
 
 
-### Quick troubleshooting
+## Continue a Waiting Run
 
-- `RUN_NOT_FOUND`: likely wrong `AGENT_DB_PATH` or `cwd`.
-- Tools missing or blocked: check `skiller agent tools <run_id>`.
-- Command blocked: inspect shell allowlist and allowed paths in agent tools.
-- Unexpected prompt behavior: check `system`, `instructions`, and agent step docs.
-- Runtime behavior unclear: inspect logs with `skiller logs <run_id>`.
+For a run blocked on human input:
 
-### Documentation map
+```bash
+skiller input receive <run_id> --text "database timeout"
+```
 
-- Flow schema: `<path-docs>/flows/flow-schema.md`
-- Agent step: `<path-docs>/steps/agent.md`
-- LLM providers and models: `<path-docs>/agent/providers.md`
-- Runtime architecture: `<path-docs>/architecture/architecture.md`
-- Runtime development rules: `<path-docs>/architecture/dev-rules.md`
-- Runtime code style: `<path-docs>/architecture/code-style.md`
+To remain attached until the resumed run reaches another wait or finishes:
+
+```bash
+skiller input receive <run_id> --text "database timeout" --wait
+```
+
+For a run blocked on a webhook:
+
+```bash
+skiller webhook receive github-ci build-42 --json '{"status": "ok"}'
+```
+
+For generic channel ingress:
+
+```bash
+skiller channel receive alerts build-42 --json '{"text": "done"}'
+```
+
+`channel` is experimental. Use `input` and `webhook` for stable public flows.
+
+Command contracts:
+- `<path-docs>/cli/commands/input.md`
+- `<path-docs>/cli/commands/webhook.md`
+- `<path-docs>/cli/commands/channel-exp.md`
+
+## Resume Explicitly
+
+Most ingress commands dispatch worker resume when they match a waiting run. Use
+`resume` directly when you need to retry or continue a run manually:
+
+```bash
+skiller resume <run_id>
+```
+
+Command contract: `<path-docs>/cli/commands/resume.md`.
+
+## Agent Operations
+
+Interrupt the active agent turn without deleting the run:
+
+```bash
+skiller agent interrupt <run_id>
+```
+
+Inspect context-window statistics:
+
+```bash
+skiller agent stats <run_id> --agent <agent_id>
+```
+
+Command contract: `<path-docs>/cli/commands/agent.md`.
+
+## Server Operations
+
+Manage the local webhook server process:
+
+```bash
+skiller server start
+skiller server status
+skiller server stop
+```
+
+Command contracts:
+- `<path-docs>/cli/commands/server.md`
+- `<path-docs>/cli/tool-server.md`
+
+## Cleanup
+
+Delete a run and database rows tied to it:
+
+```bash
+skiller delete <run_id>
+```
+
+Command contract: `<path-docs>/cli/commands/delete.md`.

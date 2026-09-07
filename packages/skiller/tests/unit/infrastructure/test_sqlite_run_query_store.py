@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.domain.run.run_context_model import RunContext
@@ -24,15 +26,13 @@ def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
     second_run_id = "550e8400-e29b-41d4-a716-446655440011"
 
     run_store.create_run(
-        "internal",
-        "notify_test",
+        Path("notify_test"),
         {"start": "show_message", "steps": [{"notify": "show_message"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=first_run_id,
     )
     run_store.create_run(
-        "internal",
-        "wait_input_test",
+        Path("wait_input_test"),
         {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=second_run_id,
@@ -43,8 +43,8 @@ def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
     runs = query_store.list_runs(limit=20)
 
     assert [run.id for run in runs] == [second_run_id, first_run_id]
-    assert runs[0].ref == "wait_input_test"
-    assert runs[1].ref == "notify_test"
+    assert runs[0].flow_path == Path("wait_input_test")
+    assert runs[1].flow_path == Path("notify_test")
     assert runs[0].wait_type is None
 
 
@@ -58,15 +58,13 @@ def test_list_runs_can_filter_by_status(tmp_path) -> None:
     failed_run_id = "550e8400-e29b-41d4-a716-446655440013"
 
     run_store.create_run(
-        "internal",
-        "wait_input_test",
+        Path("wait_input_test"),
         {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=waiting_run_id,
     )
     run_store.create_run(
-        "internal",
-        "pull_request",
+        Path("pull_request"),
         {"start": "call_tool", "steps": [{"mcp": "call_tool", "server": "github"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=failed_run_id,
@@ -91,15 +89,13 @@ def test_list_runs_includes_wait_type_and_webhook_detail(tmp_path) -> None:
     input_run_id = "550e8400-e29b-41d4-a716-446655440015"
 
     run_store.create_run(
-        "internal",
-        "webhook_signal_oracle",
+        Path("webhook_signal_oracle"),
         {"start": "wait_signal", "steps": [{"wait_webhook": "wait_signal"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=webhook_run_id,
     )
     run_store.create_run(
-        "internal",
-        "chat",
+        Path("chat"),
         {"start": "ask_user", "steps": [{"wait_input": "ask_user"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=input_run_id,

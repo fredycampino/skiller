@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -19,8 +20,7 @@ def test_external_event_store_creates_pending_event_and_hides_consumed_event(tmp
     SqliteRuntimeBootstrap(str(db_path)).init_db()
 
     run_id = run_store.create_run(
-        "internal",
-        "skill",
+        Path("skill"),
         {"start": "done", "steps": [{"notify": "done", "message": "ok"}]},
         RunContext(inputs={}, step_executions={}),
         run_id="550e8400-e29b-41d4-a716-446655440011",

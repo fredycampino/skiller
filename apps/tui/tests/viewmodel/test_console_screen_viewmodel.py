@@ -9,9 +9,11 @@ import stui.usecase.list_models_use_case as list_models_use_case_module
 import stui.usecase.list_runs_use_case as list_runs_use_case_module
 import stui.usecase.run_command_use_case as run_command_use_case_module
 import stui.usecase.select_model_use_case as select_model_use_case_module
+import stui.usecase.start_console_use_case as start_console_use_case_module
 from apps.tui.tests.support import (
     FakeAgentPort,
     FakeEventsPort,
+    FakeInstallationStatePort,
     FakeModelsPort,
     FakeRunsPort,
     build_viewmodel,
@@ -40,6 +42,7 @@ from stui.port.event_models import (
     WaitInputOutputValue,
     WaitWebhookOutputValue,
 )
+from stui.port.installation_state_port import InstallationState
 from stui.port.models_port import (
     AuthProvidersPortProviderItem,
     ModelsPortModelItem,
@@ -1263,6 +1266,92 @@ def test_console_screen_viewmodel_on_start_preserves_initial_state() -> None:
         assert viewmodel.state.transcript.items == []
 
     asyncio.run(run())
+
+
+def test_console_screen_viewmodel_on_start_runs_initial_arguments() -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(
+            CommandAck(status=CommandAckStatus.ACCEPTED, run_id="run-initial")
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            initial_run_args=("@pr", "--arg", "title=My pull request"),
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+        )
+
+        await viewmodel.on_start()
+
+        assert run_port.called_with == ["@pr --arg 'title=My pull request'"]
+        assert viewmodel.state.session_key == "run-initial"
+        assert viewmodel.state.run_name == "@pr --arg 'title=My pull request'"
+
+    with patched_to_thread(run_command_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_ignores_initial_arguments_without_runtime_db() -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(
+            CommandAck(status=CommandAckStatus.ACCEPTED, run_id="run-auth")
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            initial_run_args=("@pepe",),
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+            installation_state_port=FakeInstallationStatePort(
+                InstallationState(
+                    runtime_db_exists=False,
+                    agent_config_exists=False,
+                )
+            ),
+        )
+
+        await viewmodel.on_start()
+
+        assert run_port.called_with == ["auths/auth"]
+        assert viewmodel.state.session_key == "run-auth"
+        assert viewmodel.state.run_name == "auths/auth"
+
+    with patched_to_thread(start_console_use_case_module):
+        asyncio.run(run())
+
+
+def test_console_screen_viewmodel_ignores_initial_arguments_when_auth_fails() -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(
+            RunDispatch(
+                run_id="",
+                status=RunRuntimeStatusKind.FAILED,
+                worker_pid=0,
+                error=RunDispatchError(
+                    kind=RunDispatchErrorKind.FLOW_NOT_FOUND,
+                    message="Flow 'auths/auth' not found",
+                ),
+            )
+        )
+        viewmodel = build_viewmodel(
+            session_key="main",
+            initial_run_args=("@pepe",),
+            run_port=run_port,
+            waiting_port=FakeWaitingPort(),
+            installation_state_port=FakeInstallationStatePort(
+                InstallationState(
+                    runtime_db_exists=False,
+                    agent_config_exists=False,
+                )
+            ),
+        )
+
+        await viewmodel.on_start()
+
+        assert run_port.called_with == ["auths/auth"]
+        assert viewmodel.state.session_key == "main"
+        assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
+
+    with patched_to_thread(start_console_use_case_module):
+        asyncio.run(run())
 
 
 def test_console_screen_viewmodel_maps_dispatch_error() -> None:

@@ -66,8 +66,7 @@ def _store_with_run(db_path) -> AgentContextStore:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -244,8 +243,7 @@ def test_agent_context_store_appends_and_lists_entries(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -343,8 +341,7 @@ def test_agent_context_store_lists_entries_from_sequence(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -951,8 +948,7 @@ def test_agent_context_store_persists_custom_usage_model_name(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1023,8 +1019,7 @@ def test_agent_context_store_persists_delta_markers(
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1099,8 +1094,7 @@ def test_agent_context_store_keeps_delta_series_markers(
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1157,8 +1151,7 @@ def test_agent_context_store_estimates_window_tokens_from_start_sequence(
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1363,8 +1356,7 @@ def test_agent_context_store_stats_uses_latest_usage_marker_prompt_tokens(
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1458,8 +1450,7 @@ def test_agent_context_store_supports_multiple_tool_calls_in_same_turn(tmp_path)
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1547,8 +1538,7 @@ def test_agent_context_store_returns_next_turn_id(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1591,8 +1581,7 @@ def test_agent_context_store_returns_context_stats(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1668,8 +1657,7 @@ def test_agent_context_store_returns_last_final_usage(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,
@@ -1750,8 +1738,7 @@ def test_agent_context_store_skips_usage_without_prompt_for_last_marker(tmp_path
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
     run_store.create_run(
-        "internal",
-        "demo",
+        Path("demo"),
         {"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         RunContext(inputs={}, step_executions={}),
         run_id=RUN_ID,

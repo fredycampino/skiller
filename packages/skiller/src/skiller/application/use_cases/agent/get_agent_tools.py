@@ -45,8 +45,7 @@ class GetAgentToolsResult:
     status: GetAgentToolsStatus
     run_id: str
     agent_id: str | None = None
-    source: str | None = None
-    ref: str | None = None
+    flow_path: Path | None = None
     config_path: Path | None = None
     cwd: Path | None = None
     tools: AgentToolsConfig | None = None
@@ -84,27 +83,25 @@ class GetAgentToolsUseCase:
             return GetAgentToolsResult(
                 status=GetAgentToolsStatus.AGENT_NOT_FOUND,
                 run_id=run_id,
-                source=run.source,
-                ref=run.ref,
+                flow_path=run.flow_path,
                 error=f"Run '{run_id}' has no attached agents",
             )
 
-        config_path = self._resolve_agent_config_path(run.source, run.ref)
+        config_path = self._resolve_agent_config_path(run.flow_path)
         config = self.agent_config.get_config(config_path=config_path)
         return GetAgentToolsResult(
             status=GetAgentToolsStatus.OK,
             run_id=run_id,
             agent_id=agent.agent_id,
-            source=run.source,
-            ref=run.ref,
+            flow_path=run.flow_path,
             config_path=config_path,
             cwd=Path.cwd(),
             tools=_build_tools_config(config.tools),
         )
 
-    def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
+    def _resolve_agent_config_path(self, flow_path: Path) -> Path | None:
         try:
-            config_path = self.skill_runner.resolve_file_path(source, ref, "agent.json")
+            config_path = self.skill_runner.resolve_file_path(flow_path, "agent.json")
         except (FileNotFoundError, ValueError):
             return None
 

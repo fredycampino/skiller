@@ -98,7 +98,7 @@ class SelectAgentModelUseCase:
                 error=f"Unsupported model='{model}' for provider='{provider}'",
             )
 
-        config_path = self._resolve_agent_config_path(run.source, run.ref)
+        config_path = self._resolve_agent_config_path(run.flow_path)
         self.agent_config.set_model(
             provider=provider,
             model=model,
@@ -121,11 +121,10 @@ class SelectAgentModelUseCase:
             model=model,
         )
 
-    def _resolve_agent_config_path(self, source: str, ref: str) -> Path | None:
+    def _resolve_agent_config_path(self, flow_path: Path) -> Path | None:
         try:
             config_path = self.skill_runner.resolve_file_path(
-                source,
-                ref,
+                flow_path,
                 "agent.json",
             )
         except (FileNotFoundError, ValueError):

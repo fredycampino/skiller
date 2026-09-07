@@ -125,8 +125,7 @@ class NotifyActionValueModel(BaseModel):
 class RunCreateModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ref: str
-    source: str
+    flow_path: str
 
 
 class RunResumeModel(BaseModel):
@@ -138,15 +137,13 @@ class RunResumeModel(BaseModel):
 class RunSnapshotUpdatedModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: str
-    ref: str
+    flow_path: str
 
 
 class RunSnapshotFailedModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: str
-    ref: str
+    flow_path: str
     error: str
 
 
@@ -371,7 +368,7 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_CREATE:
             model = _validate_model(RunCreateModel, payload, "payload")
-            return RunCreatePayload(ref=model.ref, source=model.source)
+            return RunCreatePayload(flow_path=model.flow_path)
 
         if event_type == LogEventType.RUN_RESUME:
             model = _validate_model(RunResumeModel, payload, "payload")
@@ -379,13 +376,12 @@ class LogEventMapper:
 
         if event_type == LogEventType.RUN_SNAPSHOT_UPDATED:
             model = _validate_model(RunSnapshotUpdatedModel, payload, "payload")
-            return RunSnapshotUpdatedPayload(source=model.source, ref=model.ref)
+            return RunSnapshotUpdatedPayload(flow_path=model.flow_path)
 
         if event_type == LogEventType.RUN_SNAPSHOT_FAILED:
             model = _validate_model(RunSnapshotFailedModel, payload, "payload")
             return RunSnapshotFailedPayload(
-                source=model.source,
-                ref=model.ref,
+                flow_path=model.flow_path,
                 error=model.error,
             )
 

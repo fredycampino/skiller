@@ -896,7 +896,13 @@ def test_run_console_screen_disables_textual_mouse(monkeypatch: pytest.MonkeyPat
     class FakeContainer:
         strings = console_screen_module.DEFAULT_TUI_STRINGS
 
-        def build_viewmodel(self, *, session_key: str) -> object:
+        def build_viewmodel(
+            self,
+            *,
+            session_key: str,
+            initial_run_args: tuple[str, ...] = (),
+        ) -> object:
+            _ = initial_run_args
             return viewmodel
 
     resolved_strings: list[object] = []

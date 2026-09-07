@@ -21,9 +21,8 @@ steps:
     )
 
     flow = FilesystemFlowPort(
-        flows_dir=str(tmp_path),
         mapper=FlowYamlMapper(),
-    ).get_yaml_flow(source="file", ref=str(flow_path))
+    ).get_yaml_flow(flow_path)
 
     assert flow.name == "demo"
     assert flow.start == "intro"
@@ -37,9 +36,8 @@ def test_filesystem_flow_port_translates_invalid_yaml(tmp_path) -> None:
 
     with pytest.raises(FlowLoadError, match="Invalid flow YAML") as exc_info:
         FilesystemFlowPort(
-            flows_dir=str(tmp_path),
             mapper=FlowYamlMapper(),
-        ).get_yaml_flow(source="file", ref=str(flow_path))
+        ).get_yaml_flow(flow_path)
 
     assert exc_info.value.__cause__ is not None
 
@@ -59,17 +57,15 @@ steps:
     )
 
     flow = FilesystemFlowPort(
-        flows_dir=str(tmp_path),
         mapper=FlowYamlMapper(),
-    ).get_yaml_flow(source="internal", ref="mono")
+    ).get_yaml_flow(flow_dir / "agent.yaml")
 
     assert flow.name == "mono"
     assert flow.steps[0].step_type == "wait_input"
 
 
-def test_filesystem_flow_port_rejects_unknown_source() -> None:
-    with pytest.raises(ValueError, match="Unsupported flow source"):
+def test_filesystem_flow_port_rejects_invalid_extension(tmp_path) -> None:
+    with pytest.raises(ValueError, match="Unsupported flow file extension"):
         FilesystemFlowPort(
-            flows_dir=".",
             mapper=FlowYamlMapper(),
-        ).get_yaml_flow(source="remote", ref="demo")
+        ).get_yaml_flow(tmp_path / "demo.json")

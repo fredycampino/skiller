@@ -8,8 +8,7 @@ class SqliteRunDatasource(SqliteConnectionSource):
         self,
         *,
         run_id: str,
-        source: str,
-        ref: str,
+        flow_path: str,
         snapshot_json: str,
         status: str,
         inputs_json: str,
@@ -21,8 +20,7 @@ class SqliteRunDatasource(SqliteConnectionSource):
                 """
                 INSERT INTO runs (
                   id,
-                  source,
-                  ref,
+                  flow_path,
                   snapshot_json,
                   status,
                   current,
@@ -31,12 +29,11 @@ class SqliteRunDatasource(SqliteConnectionSource):
                   agents_json,
                   steering_queue_json
                 )
-                VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
-                    source,
-                    ref,
+                    flow_path,
                     snapshot_json,
                     status,
                     inputs_json,
@@ -100,8 +97,7 @@ class SqliteRunDatasource(SqliteConnectionSource):
                 """
                 SELECT
                   id,
-                  source,
-                  ref,
+                  flow_path,
                   snapshot_json,
                   status,
                   current,
@@ -132,7 +128,7 @@ class SqliteRunDatasource(SqliteConnectionSource):
         with self._connect() as conn:
             return conn.execute(
                 """
-                SELECT id, source, ref, current, snapshot_json
+                SELECT id, flow_path, current, snapshot_json
                 FROM runs
                 WHERE id = ?
                 """,

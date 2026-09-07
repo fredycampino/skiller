@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from skiller.domain.flow.flow_reference import FlowReference
+from skiller.domain.flow.flow_run_reference import FlowRunReference
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.template_resolution_error import UnresolvedTemplateError
 from skiller.infrastructure.flow.flow_file_loader import load_existing_flow
@@ -19,67 +19,45 @@ _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
 
 
 class FilesystemRunnerPort(RunnerPort):
-    def __init__(
-        self,
-        flows_dir: Path | None,
-    ) -> None:
-        self.flows_dir = (
-            Path(flows_dir) if flows_dir is not None else _find_default_internal_flow_catalog_dir()
+    def load(self, flow_path: Path) -> dict[str, Any]:
+        suffix = flow_path.suffix.lower()
+        if suffix not in {".yaml", ".yml"}:
+            raise ValueError(f"Unsupported flow file extension: {flow_path}")
+        return load_existing_flow(
+            yaml_path=flow_path,
+            json_path=Path("__missing__.json"),
         )
-
-    def load(self, source: str, ref: str) -> dict[str, Any]:
-        if source == "internal":
-            yaml_path, json_path = _resolve_internal_flow_paths(
-                catalog_dir=self.flows_dir,
-                ref=ref,
-            )
-        elif source == "file":
-            path = Path(ref)
-            suffix = path.suffix.lower()
-            if suffix not in {".yaml", ".yml", ".json"}:
-                raise ValueError(f"Unsupported flow file extension: {path}")
-            yaml_path = path if suffix in {".yaml", ".yml"} else Path("__missing__.yaml")
-            json_path = path if suffix == ".json" else Path("__missing__.json")
-        else:
-            raise ValueError(f"Unsupported flow source: {source}")
-
-        return load_existing_flow(yaml_path=yaml_path, json_path=json_path)
 
     def read_file(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         file_ref: str,
     ) -> str:
-        file_path = self.resolve_file_path(source, ref, file_ref)
+        file_path = self.resolve_file_path(flow_path, file_ref)
         if not file_path.exists():
             raise FileNotFoundError(f"Flow file not found: {file_ref}")
         return file_path.read_text(encoding="utf-8")
 
     def resolve_file_path(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         file_ref: str,
     ) -> Path:
-        base_path = self._resolve_base_path(
-            source=source,
-            ref=ref,
-        )
+        base_path = self.resolve_flow_dir(flow_path)
         return _resolve_file_path(
             base_path=base_path,
             file_ref=file_ref,
         )
 
-    def resolve_flow_dir(self, source: str, ref: str) -> Path:
-        return self._resolve_base_path(source=source, ref=ref)
+    def resolve_flow_dir(self, flow_path: Path) -> Path:
+        return flow_path.parent
 
     def render(
         self,
         step: dict[str, Any],
         context: dict[str, Any],
         *,
-        flow: FlowReference,
+        flow: FlowRunReference,
     ) -> dict[str, Any]:
         rendered = deepcopy(step)
         render_context = dict(context)
@@ -88,7 +66,7 @@ class FilesystemRunnerPort(RunnerPort):
             flow_context = {}
 
         flow_context = dict(flow_context)
-        flow_context["dir"] = str(self.resolve_flow_dir(flow.source, flow.ref).resolve())
+        flow_context["dir"] = str(self.resolve_flow_dir(flow.flow_path).resolve())
         flow_context["run_id"] = flow.id
         render_context["flow"] = flow_context
         render_context["runtime"] = {
@@ -97,23 +75,6 @@ class FilesystemRunnerPort(RunnerPort):
         }
         render_context.setdefault("env", dict(os.environ))
         return self._render_value(rendered, render_context)
-
-    def _resolve_base_path(self, *, source: str, ref: str) -> Path:
-        if source == "internal":
-            yaml_path, json_path = _resolve_internal_flow_paths(
-                catalog_dir=self.flows_dir,
-                ref=ref,
-            )
-            if yaml_path.exists():
-                return yaml_path.parent
-            if json_path.exists():
-                return json_path.parent
-            raise FileNotFoundError(f"Flow not found: source={source} ref={ref}")
-
-        if source == "file":
-            return Path(ref).parent
-
-        raise ValueError(f"Unsupported flow source: {source}")
 
     def _render_value(self, value: Any, context: dict[str, Any]) -> Any:
         if isinstance(value, dict):
@@ -245,31 +206,6 @@ class FilesystemRunnerPort(RunnerPort):
             else:
                 return None
         return current
-
-
-def _find_default_internal_flow_catalog_dir() -> Path:
-    module_path = Path(__file__).resolve()
-
-    for parent in module_path.parents:
-        apps_agents_dir = parent / "apps" / "agents"
-        if apps_agents_dir.is_dir():
-            return apps_agents_dir
-
-    return module_path.parents[3] / "apps" / "agents"
-
-
-def _resolve_internal_flow_paths(*, catalog_dir: Path, ref: str) -> tuple[Path, Path]:
-    normalized_ref = ref.strip().strip("/")
-    nested_yaml_path = catalog_dir / normalized_ref / "agent.yaml"
-    nested_json_path = catalog_dir / normalized_ref / "agent.json"
-    if nested_yaml_path.exists() or nested_json_path.exists():
-        return nested_yaml_path, nested_json_path
-
-    # Keep explicit custom test fixtures working while the runtime catalog
-    # moves to agents/*/agent.yaml.
-    flat_yaml_path = catalog_dir / f"{normalized_ref}.yaml"
-    flat_json_path = catalog_dir / f"{normalized_ref}.json"
-    return flat_yaml_path, flat_json_path
 
 
 def _resolve_file_path(*, base_path: Path, file_ref: str) -> Path:

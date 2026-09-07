@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import (
@@ -21,8 +22,7 @@ class SqliteRunStorePort(RunStorePort):
 
     def create_run(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         snapshot: dict[str, object],
         context: RunContext,
         *,
@@ -35,8 +35,7 @@ class SqliteRunStorePort(RunStorePort):
         try:
             return self.run_datasource.create_run_row(
                 run_id=run_id,
-                source=source,
-                ref=ref,
+                flow_path=str(flow_path),
                 snapshot_json=snapshot_json,
                 status=RunStatus.CREATED.value,
                 inputs_json=inputs_json,
@@ -103,8 +102,7 @@ class SqliteRunStorePort(RunStorePort):
             snapshot = {}
         return RunSnapshotSyncState(
             run_id=str(row["id"]),
-            source=str(row["source"]),
-            ref=str(row["ref"]),
+            flow_path=Path(str(row["flow_path"])),
             current=(str(row["current"]) if row["current"] is not None else None),
             snapshot=snapshot,
         )

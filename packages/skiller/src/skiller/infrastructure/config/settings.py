@@ -37,6 +37,18 @@ def get_settings() -> Settings:
     )
 
 
+def get_config_file_environment_value() -> str | None:
+    env_file = _load_development_env()
+    config_path, explicit = _resolve_json_config_path(
+        env_name="AGENT_RUNTIME_CONFIG_FILE",
+        env_file=env_file,
+        default_path=Path.home() / ".skiller" / "settings" / "config.json",
+    )
+    if not explicit:
+        return None
+    return str(config_path)
+
+
 def _load_development_env() -> dict[str, str]:
     env_path = Path.cwd() / ".env.development"
     if not env_path.exists():
@@ -65,13 +77,13 @@ def _load_development_env() -> dict[str, str]:
 
 def _load_config(env_file: dict[str, str]) -> dict[str, object]:
     config_path, explicit = _resolve_json_config_path(
-        env_name="AGENT_CONFIG_FILE",
+        env_name="AGENT_RUNTIME_CONFIG_FILE",
         env_file=env_file,
         default_path=Path.home() / ".skiller" / "settings" / "config.json",
     )
     return _load_json_config_file(
         config_path=config_path,
-        env_name="AGENT_CONFIG_FILE",
+        env_name="AGENT_RUNTIME_CONFIG_FILE",
         explicit=explicit,
     )
 
@@ -105,8 +117,7 @@ def _load_json_config_file(
     except json.JSONDecodeError as exc:
         display_path = _display_path(config_path)
         raise RuntimeError(
-            f"Invalid JSON config file: {display_path} "
-            f"(line {exc.lineno}, column {exc.colno})"
+            f"Invalid JSON config file: {display_path} (line {exc.lineno}, column {exc.colno})"
         ) from exc
 
     if not isinstance(payload, dict):

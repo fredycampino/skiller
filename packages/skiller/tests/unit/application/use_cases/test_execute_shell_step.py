@@ -120,9 +120,8 @@ class _FakeFlowRunner:
     def __init__(self, flow_dir: Path) -> None:
         self.flow_dir = flow_dir
 
-    def resolve_flow_dir(self, source: object, ref: str) -> Path:
-        _ = source
-        assert ref == "moonshot.yaml"
+    def resolve_flow_dir(self, flow_path: Path) -> Path:
+        assert flow_path == Path("moonshot.yaml")
         return self.flow_dir
 
 
@@ -434,8 +433,7 @@ def _build_run() -> object:
 
     return Run(
         id="run-1",
-        source="file",
-        ref="moonshot.yaml",
+        flow_path=Path("moonshot.yaml"),
         snapshot={},
         status="RUNNING",
         current=None,

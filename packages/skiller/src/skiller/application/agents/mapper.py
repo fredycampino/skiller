@@ -184,8 +184,7 @@ class AgentServiceMapper:
             "agent_id": result.agent_id,
             "status": result.status.value,
             "ok": result.status == GetAgentToolsStatus.OK,
-            "source": result.source,
-            "ref": result.ref,
+            "flow_path": str(result.flow_path) if result.flow_path is not None else None,
             "config_path": str(result.config_path) if result.config_path is not None else None,
             "cwd": str(result.cwd) if result.cwd is not None else None,
         }
@@ -193,9 +192,7 @@ class AgentServiceMapper:
             payload["tools"] = {
                 "shell": {
                     "enabled": result.tools.shell.enabled,
-                    "allowed_paths": [
-                        str(path) for path in result.tools.shell.allowed_paths
-                    ],
+                    "allowed_paths": [str(path) for path in result.tools.shell.allowed_paths],
                     "allowlist_enabled": result.tools.shell.allowlist_enabled,
                     "allow_env_prefix": result.tools.shell.allow_env_prefix,
                     "allowed_commands": list(result.tools.shell.allowed_commands),

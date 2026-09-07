@@ -68,11 +68,20 @@ skiller
 
 ### Use CLI to run flows
 
-Run a YAML flow definition:
+Run a packaged or configured flow reference:
 
 ```bash
-skiller run --file <path>
+skiller run @flows
+skiller run @group/name
 ```
+
+Direct paths are also supported:
+
+```bash
+skiller run ./my-flow.yaml
+skiller run ~/flows/my-flow.yaml
+```
+
 Inspect and manage runs:
 
 ```bash
@@ -162,7 +171,7 @@ The provider, loop limits, shell allowlist, and file roots live in
 
 Core guides:
 
-- [`packages/skiller/docs/cli/command-guide.md`](packages/skiller/docs/cli/command-guide.md)
+- [`apps/instructions/skiller-user.md`](apps/instructions/skiller-user.md)
 - [`packages/skiller/docs/flows/flow-schema.md`](packages/skiller/docs/flows/flow-schema.md)
 - [`packages/skiller/docs/db/schema.md`](packages/skiller/docs/db/schema.md)
 - [`packages/skiller/docs/runtime/execution-model.md`](packages/skiller/docs/runtime/execution-model.md)

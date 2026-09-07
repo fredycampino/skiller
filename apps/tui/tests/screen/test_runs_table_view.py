@@ -11,6 +11,7 @@ from stui.screen.runs_table_view import (
     RunsTableRow,
     RunsTableView,
     format_run_name,
+    format_run_row_status,
     is_run_row_loadable,
 )
 from stui.screen.theme import build_textual_css
@@ -24,7 +25,7 @@ def test_runs_table_view_uses_rows_and_selection() -> None:
     table.set_rows(
         [
             RunsTableRow(
-                status=RunRowStatus.SUCCESS,
+                status=RunRowStatus.SUCCEEDED,
                 skill="completed_flow",
                 updated_at="05-04 00:00",
                 run_id="run-0000",
@@ -90,7 +91,7 @@ def test_runs_table_view_does_not_select_terminal_rows() -> None:
     table.set_rows(
         [
             RunsTableRow(
-                status=RunRowStatus.SUCCESS,
+                status=RunRowStatus.SUCCEEDED,
                 skill="done",
                 updated_at="05-04 00:01",
                 run_id="run-1234",
@@ -140,6 +141,30 @@ def test_runs_table_view_keeps_selection_on_real_rows() -> None:
 def test_runs_table_view_formats_run_name_paths() -> None:
     assert format_run_name("mono") == "mono"
     assert format_run_name("apps/tui/tests/flows/notify/notify.yaml") == "/notify.yaml"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (RunRowStatus.CREATED, "created"),
+        (RunRowStatus.RUNNING, "running"),
+        (RunRowStatus.SUCCEEDED, "succeeded"),
+        (RunRowStatus.FAILED, "failed"),
+        (RunRowStatus.CANCELLED, "cancelled"),
+    ],
+)
+def test_runs_table_view_formats_runtime_statuses(
+    status: RunRowStatus,
+    expected: str,
+) -> None:
+    row = RunsTableRow(
+        status=status,
+        skill="flow.yaml",
+        updated_at="05-04 00:01",
+        run_id="run-1",
+    )
+
+    assert format_run_row_status(row) == expected
 
 
 def test_runs_table_view_renders_selected_flow_expansion_row() -> None:
@@ -196,7 +221,7 @@ def test_runs_table_view_identifies_loadable_rows() -> None:
     )
     assert not is_run_row_loadable(
         RunsTableRow(
-            status=RunRowStatus.SUCCESS,
+            status=RunRowStatus.SUCCEEDED,
             skill="done",
             updated_at="05-04 00:01",
             run_id="run-3",

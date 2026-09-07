@@ -17,7 +17,7 @@ steps:
 Save it as `hello.yaml`, then run:
 
 ```bash
-skiller run --file ./hello.yaml
+skiller run ./hello.yaml
 ```
 
 The Runtime validates the definition, creates a persisted run, executes `greet`, and returns the observed status as JSON.

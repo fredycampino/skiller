@@ -1,12 +1,12 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
 @dataclass(frozen=True)
 class RunListItem:
     id: str
-    source: str
-    ref: str
+    flow_path: Path
     status: str
     current: str | None
     created_at: str
@@ -17,8 +17,7 @@ class RunListItem:
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "id": self.id,
-            "source": self.source,
-            "ref": self.ref,
+            "flow_path": str(self.flow_path),
             "status": self.status,
             "current": self.current,
             "created_at": self.created_at,

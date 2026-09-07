@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document explains the architectural patterns used by the TUI. It does not document command syntax or command semantics. Those live in [`../../../packages/skiller/docs/cli/command-guide.md`](../../../packages/skiller/docs/cli/command-guide.md).
+This document explains the architectural patterns used by the TUI. It does not document command syntax or command semantics. Those live in [`../../instructions/skiller-user.md`](../../instructions/skiller-user.md).
 
 ## Core Patterns
 

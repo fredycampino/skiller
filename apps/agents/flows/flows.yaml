@@ -30,6 +30,8 @@ steps:
       - "create-flows"
       - "response-style"
       - "code-style"
+      - "skiller-permissions"
+      - "skiller-user"
 
     task: '{{output_value("ask_user").payload.text}}'
     tools:

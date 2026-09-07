@@ -159,7 +159,7 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
     reader = AgentStepConfigReader(
         agent_config=agent_cfg,
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        run_store=_FakeRunStore(source="internal", ref="mono"),
+        run_store=_FakeRunStore(flow_path=tmp_path / "mono.yaml"),
         skill_runner=skill_runner,
         tool_manager=ToolManager(tools=[]),
     )
@@ -175,7 +175,7 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
     )
 
     assert agent_cfg.config_paths == [config_path]
-    assert skill_runner.calls == [("internal", "mono", "agent.json")]
+    assert skill_runner.calls == [(str(tmp_path / "mono.yaml"), "agent.json")]
 
 
 def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
@@ -227,15 +227,13 @@ def _current_step() -> CurrentStep:
 
 
 class _FakeRunStore:
-    def __init__(self, *, source: str = "internal", ref: str = "demo") -> None:
-        self.source = source
-        self.ref = ref
+    def __init__(self, *, flow_path: Path = Path("/flows/demo.yaml")) -> None:
+        self.flow_path = flow_path
 
     def get_run(self, run_id: str) -> Run:
         return Run(
             id=run_id,
-            source=self.source,
-            ref=self.ref,
+            flow_path=self.flow_path,
             snapshot={"start": "support_agent", "steps": []},
             status=RunStatus.RUNNING.value,
             current="support_agent",
@@ -273,13 +271,12 @@ class _FakeAgentConfigPort:
 class _FakeSkillRunner:
     def __init__(self, *, config_path: Path | None = None) -> None:
         self.config_path = config_path or Path("__missing__/agent.json")
-        self.calls: list[tuple[str, str, str]] = []
+        self.calls: list[tuple[str, str]] = []
 
     def resolve_file_path(
         self,
-        source: str,
-        ref: str,
+        flow_path: Path,
         file_ref: str,
     ) -> Path:
-        self.calls.append((source, ref, file_ref))
+        self.calls.append((str(flow_path), file_ref))
         return self.config_path

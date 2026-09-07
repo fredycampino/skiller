@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from skiller.domain.run.run_context_model import RunContext
@@ -24,8 +25,7 @@ def build_run_from_row(row: sqlite3.Row) -> Run:
 
     return Run(
         id=str(row["id"]),
-        source=row["source"],
-        ref=row["ref"],
+        flow_path=Path(str(row["flow_path"])),
         snapshot=snapshot,
         status=row["status"],
         current=(str(row["current"]) if row["current"] is not None else None),
@@ -53,9 +53,7 @@ def build_context(
         step_executions=RunContext.from_dict(
             {
                 "inputs": {},
-                "step_executions": (
-                    step_executions if isinstance(step_executions, dict) else {}
-                ),
+                "step_executions": (step_executions if isinstance(step_executions, dict) else {}),
             }
         ).step_executions,
         steering_queue=RunContext.from_dict(

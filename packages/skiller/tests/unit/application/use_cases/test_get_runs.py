@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.query.get_runs import GetRunsUseCase
@@ -26,8 +28,7 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
         [
             RunListItem(
                 id="f25d21cc-95ea-4dc1-9305-c18f4ddceaca",
-                source="internal",
-                ref="chat",
+                flow_path=Path("/flows/chat.yaml"),
                 status="WAITING",
                 current="ask_user",
                 created_at="2026-03-30 10:00:00",
@@ -36,8 +37,7 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
             ),
             RunListItem(
                 id="eeee1234-1111-2222-3333-444444444444",
-                source="internal",
-                ref="repo_checks",
+                flow_path=Path("/flows/repo_checks.yaml"),
                 status="SUCCEEDED",
                 current="summarize",
                 created_at="2026-03-30 09:00:00",
@@ -56,8 +56,7 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
     ]
     assert result[0].to_dict() == {
         "id": "f25d21cc-95ea-4dc1-9305-c18f4ddceaca",
-        "source": "internal",
-        "ref": "chat",
+        "flow_path": "/flows/chat.yaml",
         "status": "WAITING",
         "current": "ask_user",
         "created_at": "2026-03-30 10:00:00",
@@ -66,8 +65,7 @@ def test_get_runs_returns_minimal_payload_and_wait_detail() -> None:
     }
     assert result[1].to_dict() == {
         "id": "eeee1234-1111-2222-3333-444444444444",
-        "source": "internal",
-        "ref": "repo_checks",
+        "flow_path": "/flows/repo_checks.yaml",
         "status": "SUCCEEDED",
         "current": "summarize",
         "created_at": "2026-03-30 09:00:00",

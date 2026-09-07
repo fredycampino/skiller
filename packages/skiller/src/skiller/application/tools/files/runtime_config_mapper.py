@@ -1,7 +1,9 @@
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
 from skiller.application.tools.files.config import FilesToolRuntimeConfig
+from skiller.application.tools.path_template import resolve_tool_path_template
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 
@@ -49,7 +51,16 @@ def _path_list_value(
             raise ValueError(
                 f"Tool 'files' field '{name}' must be a list of non-empty strings"
             )
-        path = Path(item.strip()).expanduser()
+        value = resolve_tool_path_template(
+            item,
+            tool_name="files",
+            values={
+                "flow.dir": str(base_path.resolve(strict=False)),
+                "runtime.cwd": str(Path.cwd().resolve(strict=False)),
+                "runtime.venv": str(Path(sys.prefix).resolve(strict=False)),
+            },
+        )
+        path = Path(value).expanduser()
         if not path.is_absolute():
             path = base_path / path
         items.append(path.resolve(strict=False))

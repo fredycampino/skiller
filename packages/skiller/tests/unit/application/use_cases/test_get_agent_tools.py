@@ -43,8 +43,7 @@ def test_get_agent_tools_returns_effective_tools_for_first_run_agent(tmp_path: P
     assert result.status == GetAgentToolsStatus.OK
     assert result.run_id == "run-1"
     assert result.agent_id == "support_agent"
-    assert result.source == "internal"
-    assert result.ref == "demo"
+    assert result.flow_path == Path("/flows/demo.yaml")
     assert result.config_path == config_path
     assert result.tools is not None
     assert result.tools.shell.enabled is True
@@ -79,8 +78,7 @@ def test_get_agent_tools_returns_agent_not_found_when_run_has_no_agents() -> Non
 
     assert result.status == GetAgentToolsStatus.AGENT_NOT_FOUND
     assert result.error == "Run 'run-1' has no attached agents"
-    assert result.source == "internal"
-    assert result.ref == "demo"
+    assert result.flow_path == Path("/flows/demo.yaml")
     assert result.tools is None
 
 
@@ -132,8 +130,8 @@ class _FakeSkillRunner:
     def __init__(self, config_path: Path | None = None) -> None:
         self.config_path = config_path
 
-    def resolve_file_path(self, source: str, ref: str, file_ref: str):  # noqa: ANN001
-        _ = source, ref, file_ref
+    def resolve_file_path(self, flow_path: Path, file_ref: str):  # noqa: ANN001
+        _ = flow_path, file_ref
         if self.config_path is None:
             raise FileNotFoundError
         return self.config_path
@@ -190,8 +188,7 @@ def _agent_config() -> AgentConfig:
 def _build_run() -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot={"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         status="RUNNING",
         current="support_agent",

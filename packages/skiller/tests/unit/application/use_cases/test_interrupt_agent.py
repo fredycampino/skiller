@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.agent.interrupt_agent import (
@@ -35,8 +37,7 @@ class _FakeSteering:
 def _build_run(*, status: str = "RUNNING") -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot={"start": "agent", "steps": []},
         status=status,
         current="agent",

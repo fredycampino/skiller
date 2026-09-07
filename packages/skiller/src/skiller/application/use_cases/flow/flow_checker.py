@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from skiller.application.use_cases.flow.flow_check_model import (
     FlowCheckError,
     FlowCheckResult,
@@ -22,13 +24,8 @@ class FlowCheckerUseCase:
         self.end_action_checker = FlowEndActionChecker()
         self.template_checker = FlowTemplateChecker()
 
-    def execute(
-        self,
-        flow_ref: str,
-        *,
-        flow_source: str,
-    ) -> FlowCheckResult:
-        flow = self.flow_port.get_yaml_flow(source=flow_source, ref=flow_ref)
+    def execute(self, flow_path: Path) -> FlowCheckResult:
+        flow = self.flow_port.get_yaml_flow(flow_path)
         errors: list[FlowCheckError] = []
 
         shape = self.shape_checker.check(flow=flow, errors=errors)

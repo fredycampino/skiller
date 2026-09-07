@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from helpers.agent_config import FakeLLMProviderCatalogPort
 
@@ -181,8 +183,8 @@ class _FakeAgentConfig:
 
 
 class _FakeSkillRunner:
-    def resolve_file_path(self, source: str, ref: str, file_ref: str):  # noqa: ANN001
-        _ = source, ref, file_ref
+    def resolve_file_path(self, flow_path: Path, file_ref: str):  # noqa: ANN001
+        _ = flow_path, file_ref
         raise FileNotFoundError
 
 
@@ -220,8 +222,7 @@ def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
 def _build_run() -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot={"start": "support_agent", "steps": [{"agent": "support_agent"}]},
         status="RUNNING",
         current="support_agent",

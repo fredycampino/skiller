@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from skiller.application.use_cases.run.fail_run import FailRunUseCase
@@ -33,11 +35,11 @@ class _FakeStore:
             }
         )
 
+
 def test_fail_run_marks_failed() -> None:
     run = Run(
         id="run-1",
-        source="internal",
-        ref="demo",
+        flow_path=Path("/flows/demo.yaml"),
         snapshot={"start": "done", "steps": [{"notify": "done"}]},
         status=RunStatus.RUNNING.value,
         current="done",

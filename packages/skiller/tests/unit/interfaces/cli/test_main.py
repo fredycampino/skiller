@@ -18,7 +18,7 @@ class _FakeController:
     def __init__(self, *args: object, **kwargs: object) -> None:
         _ = (args, kwargs)
         self.initialized = False
-        self.create_run_calls: list[tuple[str, dict[str, str], str]] = []
+        self.create_run_calls: list[tuple[str, dict[str, str]]] = []
         self.start_worker_calls: list[str] = []
         self.run_worker_calls: list[str] = []
         self.resume_calls: list[str] = []
@@ -71,7 +71,7 @@ class _FakeController:
             {
                 "id": "run-1",
                 "status": "WAITING",
-                "ref": "unit_skill",
+                "flow_path": "unit_skill.yaml",
                 "current": "wait_signal",
             }
         ]
@@ -91,12 +91,10 @@ class _FakeController:
 
     def create_run(
         self,
-        skill_ref: str,
+        flow_reference: str,
         inputs: dict[str, str],
-        *,
-        skill_source: str = "internal",
     ) -> dict[str, object]:
-        self.create_run_calls.append((skill_ref, inputs, skill_source))
+        self.create_run_calls.append((flow_reference, inputs))
         return dict(self.run_result)
 
     def start_worker(self, run_id: str) -> dict[str, object]:
@@ -337,6 +335,7 @@ def fake_container() -> SimpleNamespace:
         input_wait_mapper=object(),
         channel_wait_mapper=object(),
         webhook_wait_mapper=object(),
+        runtime_config_service=object(),
         settings=SimpleNamespace(
             db_path="/tmp/test.db",
             webhooks_host="127.0.0.1",
@@ -387,6 +386,77 @@ def test_main_without_args_runs_tui(monkeypatch: pytest.MonkeyPatch) -> None:
     assert called["run_tui"] is True
 
 
+def test_main_with_at_reference_runs_tui_with_initial_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_tui(*, initial_run_args: tuple[str, ...]) -> str:
+        calls.append(initial_run_args)
+        return "session-key"
+
+    monkeypatch.setattr(cli_main, "_load_tui_runner", lambda: fake_run_tui)
+
+    exit_code = cli_main.main(
+        ["@pr", "--arg", "title=My pull request", "--arg", "base=main"]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        ("@pr", "--arg", "title=My pull request", "--arg", "base=main")
+    ]
+
+
+def test_config_prints_effective_runtime_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = SimpleNamespace(
+        version=1,
+        runtime=SimpleNamespace(db_path="./runtime.db", log_level="INFO"),
+        webhooks=SimpleNamespace(host="127.0.0.1", port=8001),
+        flow_paths=("/workspace/flows", "/workspace/apps/agents"),
+    )
+    container = SimpleNamespace()
+    controller = SimpleNamespace(config=lambda: config)
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: container)
+    monkeypatch.setattr(cli_main, "_build_runtime_controller", lambda _: controller)
+
+    exit_code = cli_main.main(["config"])
+
+    payload, stderr = _read_json(capsys)
+    assert exit_code == 0
+    assert stderr == ""
+    assert payload == {
+        "version": 1,
+        "runtime": {"db_path": "./runtime.db", "log_level": "INFO"},
+        "webhooks": {"host": "127.0.0.1", "port": 8001},
+        "flow_paths": ["/workspace/flows", "/workspace/apps/agents"],
+    }
+
+
+def test_config_returns_json_error_when_configuration_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail() -> None:
+        raise FileNotFoundError("Missing config")
+
+    container = SimpleNamespace()
+    controller = SimpleNamespace(config=fail)
+    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: container)
+    monkeypatch.setattr(cli_main, "_build_runtime_controller", lambda _: controller)
+
+    exit_code = cli_main.main(["config"])
+
+    payload, stderr = _read_json(capsys)
+    assert exit_code == 1
+    assert stderr == ""
+    assert payload == {
+        "error": {"code": "RUNTIME_CONFIG_ERROR", "message": "Missing config"}
+    }
+
+
 def test_version_prints_package_version(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -400,7 +470,19 @@ def test_version_prints_package_version(
     assert capsys.readouterr().out == "skiller 1.2.3\n"
 
 
-def test_run_internal_skill_dispatches_worker_and_watches_status(
+def test_format_watch_run_create_uses_flow_path() -> None:
+    message = cli_main._format_watch_event(
+        "run-1",
+        {
+            "type": "RUN_CREATE",
+            "payload": {"flow_path": "/flows/mono.yaml"},
+        },
+    )
+
+    assert message == '[1] RUN_CREATE flow_path="/flows/mono.yaml"'
+
+
+def test_run_flow_reference_dispatches_worker_and_watches_status(
     monkeypatch: pytest.MonkeyPatch,
     fake_container: SimpleNamespace,
     capsys: pytest.CaptureFixture[str],
@@ -420,7 +502,7 @@ def test_run_internal_skill_dispatches_worker_and_watches_status(
     data, stderr = _read_json(capsys)
     assert exit_code == 0
     assert controller.initialized is True
-    assert controller.create_run_calls == [(SKILL_NAME, {"message": "ok"}, "internal")]
+    assert controller.create_run_calls == [(f"@{SKILL_NAME}", {"message": "ok"})]
     assert worker_process_service.calls == [("start", "run-1")]
     assert data["run_id"] == "run-1"
     assert data["worker_pid"] == 101
@@ -449,7 +531,7 @@ def test_run_file_selection_forwards_path_without_loading_file(
 
     data, stderr = _read_json(capsys)
     assert exit_code == 0
-    assert controller.create_run_calls == [(SKILL_FILE, {"message": "ok"}, "file")]
+    assert controller.create_run_calls == [(SKILL_FILE, {"message": "ok"})]
     assert worker_process_service.calls == [("start", "run-1")]
     assert controller.status_calls == []
     assert controller.logs_calls == []
@@ -818,7 +900,7 @@ def test_run_without_skill_returns_json_argument_error(
     assert data == {
         "error": {
             "code": "RUN_ARGUMENT_INVALID",
-            "message": "Use either an internal skill name or --file PATH.",
+            "message": "Use either a flow reference or --file PATH.",
         }
     }
     assert stderr == ""
@@ -838,7 +920,7 @@ def test_run_with_skill_and_file_returns_json_argument_error(
     assert data == {
         "error": {
             "code": "RUN_ARGUMENT_INVALID",
-            "message": "Use either an internal skill name or --file PATH.",
+            "message": "Use either a flow reference or --file PATH.",
         }
     }
     assert stderr == ""

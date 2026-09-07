@@ -23,8 +23,7 @@ class RunCommandError:
 
 @dataclass(frozen=True)
 class RunCommandRequest:
-    skill_ref: str
-    skill_source: str
+    flow_reference: str
     inputs: dict[str, str]
 
 

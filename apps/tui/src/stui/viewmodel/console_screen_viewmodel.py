@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shlex
 from collections.abc import Callable
 
 from stui.port.event_models import LogEvent
@@ -28,11 +29,13 @@ class ConsoleScreenViewModel(LogEventsListener):
         self,
         *,
         session_key: str,
+        initial_run_args: tuple[str, ...],
         run_event_context: RunEventContext,
         use_cases: ConsoleScreenUseCases,
     ) -> None:
         self._run_event_context = run_event_context
         self._use_cases = use_cases
+        self._initial_run_args = initial_run_args
         self.state = ConsoleScreenState(session_key=session_key)
         self._on_state: Callable[[ConsoleScreenState], None] | None = None
         self._on_event: Callable[[InspectRunContextEvent], None] | None = None
@@ -48,12 +51,34 @@ class ConsoleScreenViewModel(LogEventsListener):
         start_result = await self._use_cases.start_console.execute(self, state=self.state)
         self.state = start_result.state
         resumed = False
-        if not start_result.started_auth:
+        started_initial_run = False
+        startup_failed = self.state.view_status.kind == ViewStatusKind.ERROR
+        if (
+            not start_result.started_auth
+            and not startup_failed
+            and self._initial_run_args
+        ):
+            raw_args = shlex.join(self._initial_run_args)
+            command = Command(
+                kind=CommandKind.RUN,
+                name="/run",
+                raw_text=f"/run {raw_args}",
+                params=self._initial_run_args,
+                args_text=raw_args,
+            )
+            run_result = await self._use_cases.run_command.execute(
+                self,
+                state=self.state,
+                command=command,
+            )
+            self.state = run_result.state
+            started_initial_run = True
+        elif not start_result.started_auth and not startup_failed:
             resume_result = self._use_cases.resume_console.execute(self, state=self.state)
             self.state = resume_result.state
             resumed = resume_result.resumed
         self._emit_state()
-        if start_result.started_auth or resumed:
+        if start_result.started_auth or started_initial_run or resumed:
             self._schedule_refresh_agent_context_stats()
 
     def notify(self, events: list[LogEvent]) -> None:

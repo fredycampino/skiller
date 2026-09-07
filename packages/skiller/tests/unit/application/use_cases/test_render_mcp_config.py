@@ -7,7 +7,7 @@ from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
     RenderMcpConfigUseCase,
 )
-from skiller.domain.flow.flow_reference import FlowReference
+from skiller.domain.flow.flow_run_reference import FlowRunReference
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import Run
@@ -30,10 +30,10 @@ class _FakeFlowRunner:
     def __init__(self, flow: object) -> None:
         self._flow = flow
         self.render_calls: list[dict[str, object]] = []
-        self.load_calls: list[tuple[str, str]] = []
+        self.load_calls: list[Path] = []
 
-    def load(self, source: str, ref: str):  # noqa: ANN202
-        self.load_calls.append((source, ref))
+    def load(self, flow_path: Path):  # noqa: ANN202
+        self.load_calls.append(flow_path)
         return self._flow
 
     def render(
@@ -41,7 +41,7 @@ class _FakeFlowRunner:
         step: dict[str, object],
         context: dict[str, object],
         *,
-        flow: FlowReference,
+        flow: FlowRunReference,
     ) -> dict[str, object]:
         self.render_calls.append(
             {
@@ -74,9 +74,9 @@ class _FakeFlowRunner:
 def _build_run(snapshot: dict[str, object] | None = None) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="local_mcp",
-        snapshot=snapshot or {
+        flow_path=Path("/flows/local_mcp.yaml"),
+        snapshot=snapshot
+        or {
             "mcp": [
                 {
                     "name": "local-mcp",
@@ -93,14 +93,12 @@ def _build_run(snapshot: dict[str, object] | None = None) -> Run:
     )
 
 
-def _build_run_with_inputs(
-    *, snapshot: dict[str, object] | None = None, **inputs: str
-) -> Run:
+def _build_run_with_inputs(*, snapshot: dict[str, object] | None = None, **inputs: str) -> Run:
     return Run(
         id="run-1",
-        source="internal",
-        ref="local_mcp",
-        snapshot=snapshot or {
+        flow_path=Path("/flows/local_mcp.yaml"),
+        snapshot=snapshot
+        or {
             "mcp": [
                 {
                     "name": "local-mcp",
@@ -217,7 +215,7 @@ def test_render_mcp_config_rejects_missing_declared_server() -> None:
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
     assert result.mcp_config is None
-    assert result.error == "MCP server 'local-mcp' not declared in flow 'local_mcp'"
+    assert result.error == ("MCP server 'local-mcp' not declared in flow '/flows/local_mcp.yaml'")
 
 
 def test_render_mcp_config_returns_rendered_http_config() -> None:
@@ -590,7 +588,9 @@ def test_render_mcp_config_rejects_non_list_mcp_block() -> None:
     )
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
-    assert result.error == "Invalid MCP configuration for flow 'local_mcp'. Expected a list."
+    assert result.error == (
+        "Invalid MCP configuration for flow '/flows/local_mcp.yaml'. Expected a list."
+    )
 
 
 def test_render_mcp_config_rejects_unresolved_template() -> None:
@@ -668,7 +668,6 @@ def test_render_mcp_config_rejects_missing_header_env() -> None:
 
     assert result.status == RenderMcpConfigStatus.INVALID_CONFIG
     assert (
-        result.error
-        == "MCP header references missing env variable "
+        result.error == "MCP header references missing env variable "
         "(server='github', header='Authorization', env='AGENT_GITHUB_MCP_TOKEN')"
     )

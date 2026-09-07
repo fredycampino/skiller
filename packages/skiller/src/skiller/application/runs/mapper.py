@@ -2,10 +2,10 @@ from typing import Any
 
 from skiller.application.runs.models import (
     ResumeRunApplicationResult,
+    RunRequest,
     RunResult,
     WorkerStartResult,
 )
-from skiller.application.use_cases.run.create_run import CreateRunInput
 from skiller.application.use_cases.run.delete_run import (
     DeleteRunResult,
     DeleteRunStatus,
@@ -15,23 +15,21 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneResult,
     MarkNotifyActionDoneStatus,
 )
-from skiller.domain.run.run_model import SkillSource
+from skiller.domain.flow.flow_reference import FlowReference
 
 
 class RunServiceMapper:
     def to_create_input(
         self,
-        skill_ref: str,
+        flow_reference: str,
         inputs: dict[str, Any],
-        *,
-        skill_source: str,
-    ) -> CreateRunInput:
-        sanitized_ref = skill_ref.strip()
-        parsed_source = self._parse_skill_source(skill_source)
-        return CreateRunInput(
-            skill_ref=sanitized_ref,
+    ) -> RunRequest:
+        sanitized_reference = flow_reference.strip()
+        if not sanitized_reference:
+            raise ValueError("flow reference is required")
+        return RunRequest(
+            reference=FlowReference(sanitized_reference),
             inputs=inputs,
-            skill_source=parsed_source.value,
         )
 
     def to_run_dict(self, result: RunResult) -> dict[str, str]:
@@ -96,9 +94,3 @@ class RunServiceMapper:
         if result.error is not None:
             payload["error"] = result.error
         return payload
-
-    def _parse_skill_source(self, skill_source: str) -> SkillSource:
-        try:
-            return SkillSource(skill_source.strip())
-        except ValueError as exc:
-            raise ValueError("skill_source is invalid") from exc

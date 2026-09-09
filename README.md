@@ -68,7 +68,7 @@ skiller
 
 ### Use CLI to run flows
 
-Run a packaged or configured flow reference:
+Run a packaged, local, or configured flow reference:
 
 ```bash
 skiller run @flows

@@ -194,6 +194,7 @@ def build_runtime_container(
     settings: Settings | None = None,
 ) -> RuntimeContainer:
     cfg = settings or get_settings()
+    runtime_cwd = Path.cwd().resolve(strict=False)
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
     store = SqliteRunStorePort(cfg.db_path)
     wait_datasource = SqliteWaitDatasource(cfg.db_path)
@@ -216,7 +217,7 @@ def build_runtime_container(
     )
     runtime_config_port = JsonRuntimeConfigPort(
         config_datasource=JsonSkillerConfigDatasource(
-            mapper=SkillerConfigMapper(runtime_cwd=Path.cwd()),
+            mapper=SkillerConfigMapper(runtime_cwd=runtime_cwd),
         ),
     )
     get_runtime_config_use_case = GetRuntimeConfigUseCase(
@@ -224,6 +225,7 @@ def build_runtime_container(
         packaged_flow_paths=FilesystemPackagedFlowPathsPort(),
         environment_config_path=get_config_file_environment_value(),
         default_config_path=Path.home() / ".skiller" / "settings" / "config.json",
+        runtime_cwd=runtime_cwd,
     )
     runtime_config_service = RuntimeConfigApplicationService(
         get_runtime_config_use_case=get_runtime_config_use_case,

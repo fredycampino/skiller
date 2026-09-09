@@ -39,7 +39,7 @@ skiller run ~/flows/reportes/diario
 skiller run ./flows/reportes/diario.yaml
 ```
 
-References beginning with `@` are searched in the configured `flow_paths` and in the packaged `apps/agents` directory. A simple reference tries `<root>/<reference>.yaml` first and then `<root>/<reference>/<reference>.yaml`. A hierarchical reference maps directly to `<root>/<reference>.yaml`.
+References beginning with `@` are searched first in the packaged `apps/agents` directory, then in the runtime current working directory, and finally in configured `flow_paths`. The first matching file is used. A simple reference tries `<root>/<reference>.yaml` first and then `<root>/<reference>/<reference>.yaml`. A hierarchical reference tries `<root>/<reference>.yaml` first and then `<root>/<reference>/<last-segment>.yaml`.
 
 References beginning with `~` are resolved from the user's home directory. Relative and absolute paths are used directly, with `.yaml` added when no supported extension is provided. The flow definition and any files referenced by it must remain available while the run executes.
 

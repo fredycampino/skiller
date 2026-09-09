@@ -5,7 +5,7 @@
 Pending design.
 
 This document describes the YAML flow shape used by:
-- packaged and configured flow references passed through `skiller run @<reference>`
+- packaged, local, and configured flow references passed through `skiller run @<reference>`
 - direct flow paths passed through `skiller run <path>`
 
 ## Root Shape

@@ -43,6 +43,7 @@ def test_get_runtime_config_uses_environment_path(tmp_path: Path) -> None:
         packaged_flow_paths=_FakePackagedFlowPathsPort(),
         environment_config_path=str(environment_path),
         default_config_path=default_path,
+        runtime_cwd=Path("/flows/environment"),
     )
 
     result = use_case.execute()
@@ -63,6 +64,7 @@ def test_get_runtime_config_uses_default_path_when_environment_path_is_empty(
         packaged_flow_paths=_FakePackagedFlowPathsPort(),
         environment_config_path=environment_config_path,
         default_config_path=default_path,
+        runtime_cwd=Path("/flows/default"),
     )
 
     result = use_case.execute()
@@ -81,6 +83,7 @@ def test_get_runtime_config_strips_environment_path(tmp_path: Path) -> None:
         packaged_flow_paths=_FakePackagedFlowPathsPort(),
         environment_config_path=f"  {environment_path}  ",
         default_config_path=tmp_path / "default.json",
+        runtime_cwd=Path("/flows/environment"),
     )
 
     result = use_case.execute()
@@ -97,6 +100,7 @@ def test_get_runtime_config_rejects_missing_environment_path(tmp_path: Path) -> 
         packaged_flow_paths=_FakePackagedFlowPathsPort(),
         environment_config_path=str(environment_path),
         default_config_path=tmp_path / "default.json",
+        runtime_cwd=tmp_path,
     )
 
     with pytest.raises(FileNotFoundError, match="Missing Skiller config"):
@@ -105,7 +109,7 @@ def test_get_runtime_config_rejects_missing_environment_path(tmp_path: Path) -> 
     assert runtime_config.config_paths == []
 
 
-def test_get_runtime_config_adds_packaged_flow_paths_without_duplicates() -> None:
+def test_get_runtime_config_adds_flow_paths_without_duplicates() -> None:
     default_path = Path("/settings/default.json")
     configured_path = Path("/flows/configured")
     packaged_path = Path("/apps/agents")
@@ -119,11 +123,41 @@ def test_get_runtime_config_adds_packaged_flow_paths_without_duplicates() -> Non
         ),
         environment_config_path=None,
         default_config_path=default_path,
+        runtime_cwd=configured_path,
     )
 
     result = use_case.execute()
 
-    assert result.flow_paths == (configured_path, packaged_path)
+    assert result.flow_paths == (packaged_path, configured_path)
+
+
+def test_get_runtime_config_orders_packaged_cwd_and_configured_flow_paths(
+    tmp_path: Path,
+) -> None:
+    default_path = tmp_path / "settings" / "default.json"
+    configured_path = tmp_path / "configured"
+    runtime_cwd = tmp_path / "workspace"
+    packaged_path = tmp_path / "packaged"
+    runtime_config = _FakeRuntimeConfigPort(
+        configs={default_path: _config(configured_path)},
+    )
+    use_case = GetRuntimeConfigUseCase(
+        runtime_config=runtime_config,
+        packaged_flow_paths=_FakePackagedFlowPathsPort(
+            (packaged_path, runtime_cwd, configured_path)
+        ),
+        environment_config_path=None,
+        default_config_path=default_path,
+        runtime_cwd=runtime_cwd,
+    )
+
+    result = use_case.execute()
+
+    assert result.flow_paths == (
+        packaged_path,
+        runtime_cwd.resolve(),
+        configured_path,
+    )
 
 
 def _config(flow_path: Path) -> SkillerConfig:

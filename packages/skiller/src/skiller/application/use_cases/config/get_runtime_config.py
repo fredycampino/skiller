@@ -12,11 +12,13 @@ class GetRuntimeConfigUseCase:
         packaged_flow_paths: PackagedFlowPathsPort,
         environment_config_path: str | None,
         default_config_path: Path,
+        runtime_cwd: Path,
     ) -> None:
         self.runtime_config = runtime_config
         self.packaged_flow_paths = packaged_flow_paths
         self.environment_config_path = environment_config_path
         self.default_config_path = default_config_path
+        self.runtime_cwd = runtime_cwd.resolve(strict=False)
 
     def execute(self) -> SkillerConfig:
         config_path = self.default_config_path.expanduser()
@@ -26,10 +28,11 @@ class GetRuntimeConfigUseCase:
                 raise FileNotFoundError(f"Missing Skiller config: {config_path}")
 
         config = self.runtime_config.get_config(config_path)
-        flow_paths = list(config.flow_paths)
-        for packaged_flow_path in self.packaged_flow_paths.get_paths():
-            if packaged_flow_path not in flow_paths:
-                flow_paths.append(packaged_flow_path)
+        default_flow_paths = (*self.packaged_flow_paths.get_paths(), self.runtime_cwd)
+        flow_paths: list[Path] = []
+        for flow_path in (*default_flow_paths, *config.flow_paths):
+            if flow_path not in flow_paths:
+                flow_paths.append(flow_path)
 
         return SkillerConfig(
             version=config.version,

@@ -146,9 +146,15 @@ Default:
 
 Ordered directories used to resolve flow references beginning with `@`.
 Relative paths are resolved from the directory containing `config.json`.
-Use `{{runtime.cwd}}` to reference the directory where Skiller was launched.
-The file is read for each new run, so changes to this list do not require
-rebuilding the runtime container.
+Use `{{runtime.cwd}}` to configure a path relative to the directory where
+Skiller was launched. The file is read for each new run, so changes to this
+list do not require rebuilding the runtime container.
+
+The effective search order is the packaged flow directories, the runtime current
+working directory, and then the configured `flow_paths`. Duplicate paths are
+omitted while preserving the first occurrence. This means `@mono` can resolve
+`./mono.yaml` or `./mono/mono.yaml` without adding the current directory to
+`config.json`.
 
 Examples:
 
@@ -161,7 +167,8 @@ skiller run ./flows/reportes/diario.yaml
 `.yaml` is appended when the reference has no extension. Only `.yaml` and
 `.yml` flow files are accepted.
 
-Default: an empty list.
+Configured default: an empty list. The runtime current working directory and
+packaged flow directories are still included in the effective configuration.
 
 ## Not In `config.json`
 

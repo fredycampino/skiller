@@ -6,7 +6,7 @@ dedicated command documents, and command status is listed in
 
 ## Start a Run
 
-Open STUI and start a packaged or configured flow:
+Open STUI and start a packaged, local, or configured flow:
 
 ```bash
 skiller @flows
@@ -27,7 +27,7 @@ skiller run ~/flows/my-flow.yaml --detach
 skiller run ./my-flow.yaml --detach
 ```
 
-Use a packaged or configured flow reference:
+Use a packaged, local, or configured flow reference:
 
 ```bash
 skiller run @flows

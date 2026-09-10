@@ -259,7 +259,7 @@ def test_worker_returns_run_not_found() -> None:
     assert service.resolve_end_action_use_case.calls == []
 
 
-def test_worker_returns_cancelled_without_end_action() -> None:
+def test_worker_records_cancelled_without_end_action() -> None:
     service, complete_run_use_case, fail_run_use_case = _build_service(
         render_results=[RenderCurrentStepResult(status=CurrentStepStatus.CANCELLED)],
     )
@@ -270,7 +270,18 @@ def test_worker_returns_cancelled_without_end_action() -> None:
     assert complete_run_use_case.calls == []
     assert fail_run_use_case.calls == []
     assert service.resolve_end_action_use_case.calls == []
-    assert service.append_runtime_event_use_case.calls == []
+    assert service.append_runtime_event_use_case.calls == [
+        {
+            "run_id": "run-1",
+            "event_type": RuntimeEventType.RUN_FINISHED,
+            "step_id": None,
+            "step_type": None,
+            "agent_sequence": None,
+            "payload": {
+                "status": RunExecutionStatus.CANCELLED.value,
+            },
+        }
+    ]
 
 
 def test_worker_executes_shell_step() -> None:

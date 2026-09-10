@@ -81,6 +81,8 @@ run_cli "cli_when.sh" ./cli_when.sh
 echo
 run_cli "cli_wait_input.sh" ./cli_wait_input.sh
 echo
+run_cli "cli_observe.sh" ./cli_observe.sh
+echo
 run_cli "cli_wait_webhook.sh" ./cli_wait_webhook.sh
 echo
 run_cli "cli_runs.sh" ./cli_runs.sh

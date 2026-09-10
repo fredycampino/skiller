@@ -17,6 +17,7 @@ Status values:
 | `skiller status` | Read one run status. | stable | [`commands/status.md`](commands/status.md) |
 | `skiller runs` | List recent runs. | stable | [`commands/runs.md`](commands/runs.md) |
 | `skiller logs` | Read raw runtime events for a run. | stable | [`commands/logs.md`](commands/logs.md) |
+| `skiller observe` | Persistently stream runtime events for a run. | stable | [`commands/observe.md`](commands/observe.md) |
 | `skiller action` | Update persisted runtime action state. | stable | [`commands/action.md`](commands/action.md) |
 | `skiller input` | Human input operations. | stable | [`commands/input.md`](commands/input.md) |
 | `skiller webhook` | Webhook ingress and registration operations. | stable | [`commands/webhook.md`](commands/webhook.md) |

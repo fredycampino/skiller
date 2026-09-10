@@ -15,8 +15,8 @@ from stui.adapter.default_notify_action_port import DefaultNotifyActionPort
 from stui.adapter.default_run_port import DefaultRunPort
 from stui.adapter.default_runs_port import DefaultRunsPort
 from stui.adapter.default_waiting_port import DefaultWaitingPort
-from stui.adapter.events.cli_log_event_adapter import CliLogEventAdapter
-from stui.adapter.events.logs_event_observer import LogsEventObserver
+from stui.adapter.events.cli_observe_adapter import CliObserveAdapter
+from stui.adapter.events.observe_event_observer import ObserveEventObserver
 from stui.adapter.file_session_store_adapter import (
     FileSessionStoreAdapter,
     default_session_store_path,
@@ -66,7 +66,6 @@ from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
 from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
-from stui.usecase.refresh_events_use_case import RefreshEventsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
@@ -140,10 +139,9 @@ def build_tui_container(
     )
     resolved_agent_port = agent_port or CliAgentAdapter(invoker=resolved_cli_invoker)
     resolved_events_port = events_port or DefaultEventsPort(
-        event_observer=LogsEventObserver(
-            logs=CliLogEventAdapter(invoker=resolved_cli_invoker),
+        event_observer=ObserveEventObserver(
+            source=CliObserveAdapter(invoker=resolved_cli_invoker),
         ),
-        run_adapter=resolved_cli_run_adapter,
     )
     resolved_runs_port = runs_port or DefaultRunsPort(
         command_adapter=CliRunsAdapter(invoker=resolved_cli_invoker),
@@ -191,7 +189,6 @@ def build_tui_container(
         event_state=EventStateUseCase(
             context=run_event_context,
             agent_port=resolved_agent_port,
-            events_port=resolved_events_port,
             session_store_port=resolved_session_store_port,
             transcript_mapper=EventTranscriptMapper(strings=strings),
         ),
@@ -207,7 +204,6 @@ def build_tui_container(
             agent_port=resolved_agent_port,
             context=run_event_context,
         ),
-        refresh_events=RefreshEventsUseCase(events_port=resolved_events_port),
         notify_action=ProjectNotifyActionUseCase(),
         transcript=ProjectTranscriptUseCase(),
         prompt_enter=PromptEnterUseCase(),

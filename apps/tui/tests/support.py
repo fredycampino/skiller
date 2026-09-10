@@ -12,7 +12,6 @@ from stui.port.agent_port import (
     AgentStatsResult,
     AgentStatsStatus,
 )
-from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.installation_state_port import InstallationState
 from stui.port.models_port import (
     AuthProvidersPortModelItem,
@@ -263,9 +262,7 @@ class FakeAgentPort:
 class FakeEventsPort:
     def __init__(self, *, current_run_id: str = "", current_listener: object | None = None) -> None:
         self.subscribe_calls: list[str] = []
-        self.subscribe_interval_calls: list[float] = []
         self.unsubscribe_call_count = 0
-        self.refresh_call_count = 0
         self.current_run_id = current_run_id
         self.current_listener = current_listener
 
@@ -274,23 +271,17 @@ class FakeEventsPort:
         *,
         run_id: str,
         listener: object,
-        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
         if self.current_listener is not None:
             self.unsubscribe()
         self.current_listener = listener
         self.current_run_id = run_id
         self.subscribe_calls.append(run_id)
-        self.subscribe_interval_calls.append(interval_seconds)
 
     def unsubscribe(self) -> None:
         self.unsubscribe_call_count += 1
         self.current_listener = None
         self.current_run_id = ""
-
-    async def refresh(self) -> None:
-        self.refresh_call_count += 1
-
 
 class FakeSessionStorePort:
     def __init__(self, session: StoredSession | None = None) -> None:

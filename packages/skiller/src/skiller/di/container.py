@@ -31,6 +31,9 @@ from skiller.application.agent.tools.tool_manager import ToolManager
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
 from skiller.application.config.service import RuntimeConfigApplicationService
+from skiller.application.observations.mapper import ObserveRunMapper
+from skiller.application.observations.models import ObserveRunSettings
+from skiller.application.observations.service import ObserveRunApplicationService
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.executor import RunExecutor
@@ -84,6 +87,7 @@ from skiller.application.use_cases.query.get_waiting_metadata import (
     GetWaitingMetadataUseCase,
 )
 from skiller.application.use_cases.query.list_webhooks import ListWebhooksUseCase
+from skiller.application.use_cases.query.observe_run import ObserveRunUseCase
 from skiller.application.use_cases.render.render_current_step import (
     RenderCurrentStepUseCase,
 )
@@ -111,6 +115,8 @@ from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUs
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.service import WaitApplicationService
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
+from skiller.application.waits.waiting_metadata_resolver import WaitingMetadataResolver
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
@@ -184,6 +190,8 @@ class RuntimeContainer:
     run_mapper: RunServiceMapper
     query_service: RunQueryService
     status_mapper: RunStatusMapper
+    observe_service: ObserveRunApplicationService
+    observe_mapper: ObserveRunMapper
     wait_service: WaitApplicationService
     input_wait_mapper: InputWaitMapper
     channel_wait_mapper: ChannelWaitMapper
@@ -452,14 +460,22 @@ def build_runtime_container(
         external_event_store=external_event_store,
     )
     resume_run_use_case = ResumeRunUseCase(store=store)
+    waiting_metadata_resolver = WaitingMetadataResolver(skill_runner)
     get_waiting_metadata_use_case = GetWaitingMetadataUseCase(
         store=store,
-        skill_runner=skill_runner,
+        resolver=waiting_metadata_resolver,
     )
     get_run_use_case = GetRunUseCase(store)
     get_run_status_use_case = GetRunStatusUseCase(store)
     get_run_logs_use_case = GetRunLogsUseCase(runtime_event_store)
     get_runs_use_case = GetRunsUseCase(run_query)
+    observe_settings = ObserveRunSettings()
+    observe_run_use_case = ObserveRunUseCase(
+        run_store=store,
+        event_store=runtime_event_store,
+        waiting_metadata_resolver=waiting_metadata_resolver,
+        settings=observe_settings,
+    )
     sync_snapshot_use_case = SyncSnapshotUseCase(
         store=store,
         runner=skill_runner,
@@ -491,11 +507,16 @@ def build_runtime_container(
         execute_wait_input_step_use_case=execute_wait_input_step_use_case,
         execute_wait_webhook_step_use_case=execute_wait_webhook_step_use_case,
     )
+    waiting_metadata_mapper = WaitingMetadataMapper()
     query_service = RunQueryService(
         get_run_status_use_case=get_run_status_use_case,
         get_run_logs_use_case=get_run_logs_use_case,
         get_runs_use_case=get_runs_use_case,
         get_waiting_metadata_use_case=get_waiting_metadata_use_case,
+        waiting_metadata_mapper=waiting_metadata_mapper,
+    )
+    observe_service = ObserveRunApplicationService(
+        observe_run_use_case=observe_run_use_case,
     )
     wait_service = WaitApplicationService(
         handle_input_use_case=handle_input_use_case,
@@ -524,6 +545,7 @@ def build_runtime_container(
     )
     run_mapper = RunServiceMapper()
     status_mapper = RunStatusMapper()
+    observe_mapper = ObserveRunMapper(observe_settings)
     input_wait_mapper = InputWaitMapper()
     channel_wait_mapper = ChannelWaitMapper()
     webhook_wait_mapper = WebhookWaitMapper()
@@ -547,6 +569,8 @@ def build_runtime_container(
         run_mapper=run_mapper,
         query_service=query_service,
         status_mapper=status_mapper,
+        observe_service=observe_service,
+        observe_mapper=observe_mapper,
         wait_service=wait_service,
         input_wait_mapper=input_wait_mapper,
         channel_wait_mapper=channel_wait_mapper,

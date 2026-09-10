@@ -1,6 +1,6 @@
 {
   "llm": {
-    "model": "kimi-k3",
-    "provider": "moonshot"
+    "model": "deepseek-v4-flash",
+    "provider": "deepseek"
   }
 }

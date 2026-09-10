@@ -13,7 +13,6 @@ from stui.port.event_models import (
     StepErrorPayload,
     WaitInputOutputValue,
 )
-from stui.port.event_port import EventsPort, LogEventsListener
 from stui.port.session_store_port import SessionStorePort
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunStatus
@@ -22,8 +21,6 @@ from stui.viewmodel.console_screen_state import (
     PromptMode,
     ViewStatusKind,
 )
-
-WEBHOOK_POLL_INTERVAL_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -35,13 +32,11 @@ class EventStateResult:
 class EventStateUseCase:
     context: RunEventContext
     agent_port: AgentPort
-    events_port: EventsPort
     session_store_port: SessionStorePort
     transcript_mapper: EventTranscriptMapper
 
     def execute(
         self,
-        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         events: list[LogEvent],
@@ -52,7 +47,6 @@ class EventStateUseCase:
         transcript_items = self.transcript_mapper.to_transcript(events)
         state.transcript.items = transcript_items
         self._project_event(
-            observer,
             state=state,
             event=_most_recent_event(events),
         )
@@ -60,7 +54,6 @@ class EventStateUseCase:
 
     def _project_event(
         self,
-        observer: LogEventsListener,
         *,
         state: ConsoleScreenState,
         event: LogEvent,
@@ -117,11 +110,6 @@ class EventStateUseCase:
                 text=state.prompt.text,
                 cursor_position=state.prompt.cursor_position,
                 mode=PromptMode.DEFAULT,
-            )
-            self.events_port.subscribe(
-                run_id=self.context.run_id,
-                listener=observer,
-                interval_seconds=WEBHOOK_POLL_INTERVAL_SECONDS,
             )
             return
 

@@ -1117,13 +1117,12 @@ def test_console_screen_viewmodel_selects_model_from_models_table() -> None:
         assert minimax_models["MiniMax-M2.5"].active is True
         assert viewmodel.state.models_table.visible is False
         assert viewmodel.state.prompt.mode == PromptMode.DEFAULT
-        assert events_port.refresh_call_count == 1
 
     with patched_to_thread(list_models_use_case_module, select_model_use_case_module):
         asyncio.run(run())
 
 
-def test_console_screen_viewmodel_refreshes_events_after_selecting_waiting_run() -> None:
+def test_console_screen_viewmodel_selects_waiting_run() -> None:
     async def run() -> None:
         events_port = FakeEventsPort()
         run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, message="unused"))
@@ -1142,7 +1141,7 @@ def test_console_screen_viewmodel_refreshes_events_after_selecting_waiting_run()
 
         viewmodel.state.runs_table.visible = True
         viewmodel.state.runs_table.command = "/runs"
-        await viewmodel.select_runs_table_row(
+        viewmodel.select_runs_table_row(
             prompt_text="/runs",
             run_id="run-123",
             run_name="chat",
@@ -1151,7 +1150,6 @@ def test_console_screen_viewmodel_refreshes_events_after_selecting_waiting_run()
         assert viewmodel.state.view_status.kind == ViewStatusKind.WAITING
         assert viewmodel._run_event_context.status == RunStatus.WAITING_INPUT  # noqa: SLF001
         assert events_port.subscribe_calls == ["run-123"]
-        assert events_port.refresh_call_count == 1
 
     asyncio.run(run())
 

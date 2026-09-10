@@ -33,7 +33,6 @@ from stui.usecase.refresh_agent_context_stats_use_case import (
     RefreshAgentContextStatsUseCase,
 )
 from stui.usecase.refresh_agent_metrics_use_case import RefreshAgentMetricsUseCase
-from stui.usecase.refresh_events_use_case import RefreshEventsUseCase
 from stui.usecase.resume_console_use_case import ResumeConsoleUseCase
 from stui.usecase.run_command_use_case import RunCommandUseCase
 from stui.usecase.select_model_use_case import SelectModelUseCase
@@ -68,7 +67,6 @@ class ConsoleScreenUseCases:
     project_agent_metrics: ProjectAgentMetricsUseCase
     refresh_agent_metrics: RefreshAgentMetricsUseCase
     refresh_agent_context_stats: RefreshAgentContextStatsUseCase
-    refresh_events: RefreshEventsUseCase
     notify_action: ProjectNotifyActionUseCase
     transcript: ProjectTranscriptUseCase
     run_command: RunCommandUseCase

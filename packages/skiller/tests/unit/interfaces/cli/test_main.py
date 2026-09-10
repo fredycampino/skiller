@@ -37,6 +37,11 @@ class _FakeController:
         self.register_webhook_calls: list[tuple[str, str, str, str]] = []
         self.logs_calls: list[dict[str, object]] = []
         self.status_calls: list[dict[str, object]] = []
+        self.observe_calls: list[dict[str, object]] = []
+        self.observe_stream: list[dict[str, object] | None] = [
+            {"kind": "start"},
+            {"kind": "stop"},
+        ]
         self.list_runs_calls: list[tuple[int, list[str]]] = []
         self.run_result: dict[str, object] = {"run_id": "run-1", "status": "CREATED"}
         self.start_worker_result: dict[str, object] = {
@@ -230,6 +235,24 @@ class _FakeController:
             return dict(self.status_results[0])
         return dict(self.status_results.pop(0))
 
+    def observe(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        tail: int | None = None,
+    ):  # noqa: ANN201
+        if tail is not None and (tail < 1 or tail > 1000):
+            raise ValueError("--tail must be between 1 and 1000")
+        self.observe_calls.append(
+            {
+                "run_id": run_id,
+                "after_sequence": after_sequence,
+                "tail": tail,
+            }
+        )
+        return iter(self.observe_stream)
+
     def list_runs(
         self,
         *,
@@ -331,6 +354,8 @@ def fake_container() -> SimpleNamespace:
         run_mapper=object(),
         query_service=object(),
         status_mapper=object(),
+        observe_service=object(),
+        observe_mapper=object(),
         wait_service=object(),
         input_wait_mapper=object(),
         channel_wait_mapper=object(),
@@ -1059,6 +1084,66 @@ def test_logs_help_describes_raw_events_and_cursor(
     assert "This is not the user-facing transcript" in captured.out
     assert "skiller logs <run_id> --after <sequence>" in captured.out
     assert "status.last_event_sequence" in captured.out
+
+
+def test_observe_command_builds_stream_and_delegates(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+    captured: dict[str, object] = {}
+
+    class _FakeObserveCommand:
+        def __init__(self, **dependencies: object) -> None:
+            captured["dependencies"] = dependencies
+
+        def execute(self, stream: object) -> int:
+            captured["stream"] = stream
+            return 0
+
+    monkeypatch.setattr(cli_main, "ObserveCommand", _FakeObserveCommand)
+
+    exit_code = cli_main.main(["observe", " run-123 ", "--after", "10", "--tail", "25"])
+
+    assert exit_code == 0
+    assert controller.initialized is True
+    assert controller.observe_calls == [{"run_id": " run-123 ", "after_sequence": 10, "tail": 25}]
+    assert list(captured["stream"]) == controller.observe_stream  # type: ignore[arg-type]
+    dependencies = captured["dependencies"]
+    assert set(dependencies) == {"writer", "cancellation"}  # type: ignore[arg-type]
+    assert capsys.readouterr() == ("", "")
+
+
+def test_observe_command_rejects_tail_before_runtime_initialization(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+
+    exit_code = cli_main.main(["observe", "run-123", "--tail", "0"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert controller.initialized is False
+    assert captured.out == ""
+    assert "--tail must be between" in captured.err
+
+
+def test_observe_help_describes_persistent_jsonl_stream(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli_main.main(["observe", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 0
+    assert "persistent JSONL stream" in captured.out
+    assert "--after" in captured.out
+    assert "--tail" in captured.out
 
 
 def test_status_command_prints_runtime_summary(

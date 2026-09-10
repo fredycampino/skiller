@@ -155,9 +155,8 @@ class _EventsPort:
         *,
         run_id: str,
         listener: object,
-        interval_seconds: float = 0.1,
     ) -> None:
-        _ = listener, interval_seconds
+        _ = listener
         self.subscribe_calls.append(run_id)
 
     def unsubscribe(self) -> None:

@@ -131,7 +131,7 @@ class RunExecutor:
                     return self.succeed(run_id)
 
                 if status == CurrentStepStatus.CANCELLED:
-                    return self.finish(run_id, RunExecutionStatus.CANCELLED)
+                    return self.cancel(run_id)
 
                 if status == CurrentStepStatus.WAITING:
                     return self.finish(run_id, RunExecutionStatus.WAITING)
@@ -206,6 +206,16 @@ class RunExecutor:
             )
         )
         return result
+
+    def cancel(self, run_id: str) -> RunExecutionResult:
+        self.append_runtime_event_use_case.execute(
+            run_id,
+            event_type=RuntimeEventType.RUN_FINISHED,
+            payload=RunFinishedPayload(
+                status=RunExecutionStatus.CANCELLED.value,
+            ),
+        )
+        return self.finish(run_id, RunExecutionStatus.CANCELLED)
 
     def fail(
         self,

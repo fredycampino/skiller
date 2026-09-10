@@ -1,0 +1,2 @@
+class ObserveRunError(RuntimeError):
+    pass

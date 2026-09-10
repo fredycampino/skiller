@@ -6,6 +6,7 @@ from skiller.application.use_cases.query.get_runs import GetRunsUseCase
 from skiller.application.use_cases.query.get_waiting_metadata import (
     GetWaitingMetadataUseCase,
 )
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
 from skiller.domain.run.run_status_runtime_model import RunStatusRuntime
 
 
@@ -16,11 +17,13 @@ class RunQueryService:
         get_run_logs_use_case: GetRunLogsUseCase,
         get_runs_use_case: GetRunsUseCase,
         get_waiting_metadata_use_case: GetWaitingMetadataUseCase,
+        waiting_metadata_mapper: WaitingMetadataMapper,
     ) -> None:
         self.get_run_status_use_case = get_run_status_use_case
         self.get_run_logs_use_case = get_run_logs_use_case
         self.get_runs_use_case = get_runs_use_case
         self.get_waiting_metadata_use_case = get_waiting_metadata_use_case
+        self.waiting_metadata_mapper = waiting_metadata_mapper
 
     def get_status(self, run_id: str) -> RunStatusRuntime | None:
         status = self.get_run_status_use_case.execute(run_id)
@@ -29,12 +32,7 @@ class RunQueryService:
 
         waiting_metadata = self.get_waiting_metadata_use_case.execute(run_id)
         last_event = self.get_run_logs_use_case.latest(run_id)
-
-        wait_type = "none"
-        prompt = ""
-        if waiting_metadata is not None:
-            wait_type = str(waiting_metadata.get("wait_type", "none")).strip() or "none"
-            prompt = str(waiting_metadata.get("prompt", "")).strip()
+        waiting_status = self.waiting_metadata_mapper.to_status(waiting_metadata)
 
         last_event_sequence = None
         last_event_type = None
@@ -45,8 +43,8 @@ class RunQueryService:
         return RunStatusRuntime(
             run_id=status.run_id,
             status=status.status,
-            wait_type=wait_type,
-            prompt=prompt,
+            wait_type=waiting_status.wait_type,
+            prompt=waiting_status.prompt,
             last_event_sequence=last_event_sequence,
             last_event_type=last_event_type,
         )

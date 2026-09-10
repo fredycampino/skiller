@@ -4,8 +4,6 @@ from typing import Protocol
 
 from stui.port.event_models import LogEvent
 
-DEFAULT_POLL_INTERVAL_SECONDS = 0.5
-
 
 class LogEventsListener(Protocol):
     def notify(self, events: list[LogEvent]) -> None: ...
@@ -19,20 +17,11 @@ class LogEventsObserver(Protocol):
         *,
         run_id: str,
         listener: LogEventsListener,
-        after_sequence: int,
-        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+        after_sequence: int | None,
+        tail: int,
     ) -> None: ...
 
     def unsubscribe(self) -> None: ...
-
-    async def refresh(
-        self,
-        *,
-        run_id: str,
-        listener: LogEventsListener,
-        after_sequence: int,
-    ) -> None: ...
-
 
 class EventsPort(Protocol):
     def subscribe(
@@ -40,9 +29,6 @@ class EventsPort(Protocol):
         *,
         run_id: str,
         listener: LogEventsListener,
-        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None: ...
 
     def unsubscribe(self) -> None: ...
-
-    async def refresh(self) -> None: ...

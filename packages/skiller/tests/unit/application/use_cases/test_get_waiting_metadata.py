@@ -4,6 +4,12 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.use_cases.query.get_waiting_metadata import GetWaitingMetadataUseCase
+from skiller.application.waits.waiting_metadata_resolver import (
+    ChannelWaitingMetadata,
+    InputWaitingMetadata,
+    WaitingMetadataResolver,
+    WebhookWaitingMetadata,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -52,13 +58,12 @@ def test_get_waiting_metadata_returns_webhook_data() -> None:
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-1" else None)
     skill_runner = _FakeSkillRunner()
 
-    result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-1")
+    result = GetWaitingMetadataUseCase(
+        store=store,
+        resolver=WaitingMetadataResolver(skill_runner),  # type: ignore[arg-type]
+    ).execute("run-1")
 
-    assert result == {
-        "wait_type": "webhook",
-        "webhook": "market-signal",
-        "key": "btc-usd",
-    }
+    assert result == WebhookWaitingMetadata(webhook="market-signal", key="btc-usd")
     assert skill_runner.render_calls[0]["flow"] is run
 
 
@@ -82,12 +87,12 @@ def test_get_waiting_metadata_returns_input_prompt() -> None:
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-2" else None)
     skill_runner = _FakeSkillRunner()
 
-    result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-2")
+    result = GetWaitingMetadataUseCase(
+        store=store,
+        resolver=WaitingMetadataResolver(skill_runner),  # type: ignore[arg-type]
+    ).execute("run-2")
 
-    assert result == {
-        "wait_type": "input",
-        "prompt": "Write a short summary",
-    }
+    assert result == InputWaitingMetadata(prompt="Write a short summary")
     assert skill_runner.render_calls[0]["flow"] is run
 
 
@@ -112,11 +117,10 @@ def test_get_waiting_metadata_returns_channel_data() -> None:
     store = SimpleNamespace(get_run=lambda run_id: run if run_id == "run-3" else None)
     skill_runner = _FakeSkillRunner()
 
-    result = GetWaitingMetadataUseCase(store=store, skill_runner=skill_runner).execute("run-3")
+    result = GetWaitingMetadataUseCase(
+        store=store,
+        resolver=WaitingMetadataResolver(skill_runner),  # type: ignore[arg-type]
+    ).execute("run-3")
 
-    assert result == {
-        "wait_type": "channel",
-        "channel": "whatsapp",
-        "key": "all",
-    }
+    assert result == ChannelWaitingMetadata(channel="whatsapp", key="all")
     assert skill_runner.render_calls[0]["flow"] is run

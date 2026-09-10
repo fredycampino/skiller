@@ -1,8 +1,11 @@
+from collections.abc import Iterator
 from typing import Any
 
 from skiller.application.agents.mapper import AgentServiceMapper
 from skiller.application.agents.service import AgentApplicationService
 from skiller.application.config.service import RuntimeConfigApplicationService
+from skiller.application.observations.mapper import ObserveRunMapper
+from skiller.application.observations.service import ObserveRunApplicationService
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.query_service import RunQueryService
 from skiller.application.runs.mapper import RunServiceMapper
@@ -25,6 +28,8 @@ class RuntimeController:
         run_mapper: RunServiceMapper,
         query_service: RunQueryService,
         status_mapper: RunStatusMapper,
+        observe_service: ObserveRunApplicationService,
+        observe_mapper: ObserveRunMapper,
         wait_service: WaitApplicationService,
         input_wait_mapper: InputWaitMapper,
         channel_wait_mapper: ChannelWaitMapper,
@@ -37,6 +42,8 @@ class RuntimeController:
         self.run_mapper = run_mapper
         self.query_service = query_service
         self.status_mapper = status_mapper
+        self.observe_service = observe_service
+        self.observe_mapper = observe_mapper
         self.wait_service = wait_service
         self.input_wait_mapper = input_wait_mapper
         self.channel_wait_mapper = channel_wait_mapper
@@ -210,6 +217,21 @@ class RuntimeController:
             after_sequence=after_sequence,
             limit=limit,
         )
+
+    def observe(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int | None = None,
+        tail: int | None = None,
+    ) -> Iterator[dict[str, Any] | None]:
+        request = self.observe_mapper.to_observe_input(
+            run_id,
+            after=after_sequence,
+            tail=tail,
+        )
+        results = self.observe_service.observe(request)
+        return map(self.observe_mapper.to_frame, results)
 
     def list_runs(
         self,

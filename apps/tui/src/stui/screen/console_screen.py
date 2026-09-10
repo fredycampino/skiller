@@ -339,7 +339,7 @@ class ConsoleScreen(App[str]):
             self._prompt_view().focus_prompt()
             return
         selected_run = runs_table.selected_run
-        await self.viewmodel.select_runs_table_row(
+        self.viewmodel.select_runs_table_row(
             prompt_text=self.state.runs_table.command,
             run_id=selected_run.run_id if selected_run is not None else "",
             run_name=selected_run.skill if selected_run is not None else "",

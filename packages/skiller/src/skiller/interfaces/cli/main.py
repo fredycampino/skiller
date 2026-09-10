@@ -6,12 +6,22 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from skiller.application.observations.errors import ObserveRunError
+from skiller.application.observations.models import MAX_OBSERVE_TAIL
 from skiller.application.runs.errors import WebhookWaitConflictError
 from skiller.di.container import build_runtime_container
 from skiller.domain.flow.flow_load_error import FlowLoadError, FlowNotFoundError
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
 from skiller.domain.run.runtime_query_error import RuntimeQueryError
+from skiller.interfaces.cli.observe import (
+    ObserveCancellation,
+    ObserveCommand,
+)
+from skiller.interfaces.cli.observe_output import (
+    JsonlFrameWriter,
+    ObserveOutputClosed,
+)
 from skiller.interfaces.cli.run_output import (
     RunCommandError,
     RunCommandFailure,
@@ -458,6 +468,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of events to return",
     )
 
+    observe_parser = sub.add_parser(
+        "observe",
+        help="Observe run events as a persistent JSONL stream",
+        description=(
+            "Observe persisted runtime events as a persistent JSONL stream "
+            "until the run reaches a terminal status."
+        ),
+    )
+    observe_parser.add_argument("run_id")
+    observe_parser.add_argument(
+        "--after",
+        type=int,
+        default=None,
+        help="Last event sequence already known by the consumer",
+    )
+    observe_parser.add_argument(
+        "--tail",
+        type=int,
+        default=None,
+        help=f"Maximum initial event history (default: 100, maximum: {MAX_OBSERVE_TAIL})",
+    )
+
     input_parser = sub.add_parser("input", help="Human input operations")
     input_sub = input_parser.add_subparsers(dest="input_command", required=True)
 
@@ -556,6 +588,8 @@ def _build_runtime_controller(container: Any) -> RuntimeController:
         run_mapper=container.run_mapper,
         query_service=container.query_service,
         status_mapper=container.status_mapper,
+        observe_service=container.observe_service,
+        observe_mapper=container.observe_mapper,
         wait_service=container.wait_service,
         input_wait_mapper=container.input_wait_mapper,
         channel_wait_mapper=container.channel_wait_mapper,
@@ -587,6 +621,37 @@ def _config_command(controller: RuntimeController) -> int:
 
     print(json.dumps(RuntimeConfigOutputMapper().to_dict(config), indent=2))
     return 0
+
+
+def _observe_command(args: argparse.Namespace) -> int:
+    try:
+        container = build_runtime_container()
+        controller = _build_runtime_controller(container)
+        stream = controller.observe(
+            args.run_id,
+            after_sequence=args.after,
+            tail=args.tail,
+        )
+        controller.initialize()
+    except (OSError, RuntimeBootstrapError, RuntimeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr, flush=True)
+        return 1
+
+    cancellation = ObserveCancellation()
+    command = ObserveCommand(
+        writer=JsonlFrameWriter(sys.stdout),
+        cancellation=cancellation,
+    )
+    cancellation.install()
+    try:
+        return command.execute(stream)
+    except ObserveOutputClosed:
+        return 0
+    except (ObserveRunError, RuntimeQueryError, OSError, TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr, flush=True)
+        return 1
+    finally:
+        cancellation.restore()
 
 
 def _run_failure(
@@ -760,6 +825,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         return _run_command(args)
+
+    if args.command == "observe":
+        return _observe_command(args)
 
     if args.command == "config":
         try:

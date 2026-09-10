@@ -1,0 +1,14 @@
+name: observe_cli_e2e
+description: "CLI e2e for persistent event observation"
+version: "0.1"
+start: ask_user
+
+inputs: {}
+
+steps:
+  - wait_input: ask_user
+    prompt: "Write a value"
+    next: finish
+
+  - notify: finish
+    message: '{{output_value("ask_user").payload.text}}'

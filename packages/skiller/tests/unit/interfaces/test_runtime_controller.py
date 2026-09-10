@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from skiller.application.agents.mapper import AgentServiceMapper
+from skiller.application.observations.mapper import ObserveRunMapper
+from skiller.application.observations.models import ObserveIdle, ObserveRunSettings
 from skiller.application.query_mapper import RunStatusMapper
 from skiller.application.runs.mapper import RunServiceMapper
 from skiller.application.runs.models import RunResult
@@ -162,12 +164,22 @@ class _FakeQueryService:
         )
 
 
+class _FakeObserveService:
+    def __init__(self) -> None:
+        self.request = None
+
+    def observe(self, request):  # noqa: ANN001, ANN201
+        self.request = request
+        return iter([ObserveIdle()])
+
+
 def _controller(
     wait_service: _FakeWaitService,
     run_service: _FakeRunService | None = None,
     query_service: _FakeQueryService | None = None,
     agent_service: _FakeAgentService | None = None,
     runtime_config_service: _FakeRuntimeConfigService | None = None,
+    observe_service: _FakeObserveService | None = None,
 ) -> RuntimeController:
     final_run_service = run_service or _FakeRunService()
     return RuntimeController(
@@ -177,6 +189,8 @@ def _controller(
         run_mapper=RunServiceMapper(),
         query_service=query_service or SimpleNamespace(),
         status_mapper=RunStatusMapper(),
+        observe_service=observe_service or _FakeObserveService(),
+        observe_mapper=ObserveRunMapper(ObserveRunSettings()),
         wait_service=wait_service,
         input_wait_mapper=InputWaitMapper(),
         channel_wait_mapper=ChannelWaitMapper(),
@@ -213,6 +227,18 @@ def test_controller_maps_status_result_to_public_dict() -> None:
         "last_event_sequence": 42,
         "last_event_type": "RUN_WAITING",
     }
+
+
+def test_controller_maps_observe_input_and_stream_results() -> None:
+    observe_service = _FakeObserveService()
+    controller = _controller(_FakeWaitService(), observe_service=observe_service)
+
+    stream = controller.observe(" run-1 ", after_sequence=10, tail=25)
+
+    assert list(stream) == [None]
+    assert observe_service.request.run_id == "run-1"
+    assert observe_service.request.after == 10
+    assert observe_service.request.tail == 25
 
 
 def test_controller_maps_create_run_to_typed_service_input() -> None:

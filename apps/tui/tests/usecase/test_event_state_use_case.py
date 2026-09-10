@@ -18,12 +18,8 @@ from stui.port.event_models import (
     WaitInputOutputValue,
     WaitWebhookOutputValue,
 )
-from stui.port.event_port import DEFAULT_POLL_INTERVAL_SECONDS
 from stui.port.run_port import CommandAck, CommandAckStatus
-from stui.usecase.event_state_use_case import (
-    WEBHOOK_POLL_INTERVAL_SECONDS,
-    EventStateUseCase,
-)
+from stui.usecase.event_state_use_case import EventStateUseCase
 from stui.usecase.event_transcript_mapper import EventTranscriptMapper
 from stui.usecase.run_event_context import RunEventContext, RunMode, RunStatus
 from stui.viewmodel.console_screen_state import (
@@ -44,38 +40,12 @@ class FakeAgentPort:
         return CommandAck(status=CommandAckStatus.ACCEPTED, run_id=run_id)
 
 
-class FakeEventsPort:
-    def __init__(self) -> None:
-        self.subscribe_calls: list[tuple[str, object, float]] = []
-
-    def subscribe(
-        self,
-        *,
-        run_id: str,
-        listener: object,
-        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
-    ) -> None:
-        self.subscribe_calls.append((run_id, listener, interval_seconds))
-
-    def unsubscribe(self) -> None:
-        pass
-
-
-class FakeObserver:
-    def notify(self, events: list[LogEvent]) -> None:
-        _ = events
-
-    def get_max_page(self) -> int:
-        return 100
-
-
 def test_event_state_maps_transcript_and_projects_most_recent_event() -> None:
     state = ConsoleScreenState()
     context = _context()
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -107,7 +77,6 @@ def test_event_state_waiting_input_sets_prompt_and_context() -> None:
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -123,16 +92,12 @@ def test_event_state_waiting_input_sets_prompt_and_context() -> None:
     assert context.status == RunStatus.WAITING_INPUT
 
 
-def test_event_state_waiting_webhook_resubscribes_with_slow_polling() -> None:
+def test_event_state_waiting_webhook_sets_waiting_status() -> None:
     state = ConsoleScreenState()
     context = _context()
-    context.run_id = "run-1"
-    events_port = FakeEventsPort()
-    observer = FakeObserver()
-    use_case = _use_case(context=context, events_port=events_port)
+    use_case = _use_case(context=context)
 
     use_case.execute(
-        observer,
         state=state,
         events=[
             _event(
@@ -146,9 +111,6 @@ def test_event_state_waiting_webhook_resubscribes_with_slow_polling() -> None:
     assert state.view_status.kind == ViewStatusKind.WAITING
     assert state.view_status.message == ""
     assert context.status == RunStatus.WAITING_WEBHOOK
-    assert events_port.subscribe_calls == [
-        ("run-1", observer, WEBHOOK_POLL_INTERVAL_SECONDS)
-    ]
 
 
 def test_event_state_waiting_without_step_type_defaults_to_webhook() -> None:
@@ -157,7 +119,6 @@ def test_event_state_waiting_without_step_type_defaults_to_webhook() -> None:
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -181,7 +142,6 @@ def test_event_state_step_error_sets_error_and_preserves_prompt_text() -> None:
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -204,7 +164,6 @@ def test_event_state_step_success_sets_running_status() -> None:
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -237,7 +196,6 @@ def test_event_state_projects_waiting_after_recoverable_agent_failure() -> None:
     use_case = _use_case(context=context)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -317,7 +275,7 @@ def test_event_state_projects_terminal_and_observer_status(
     context = _context()
     use_case = _use_case(context=context)
 
-    use_case.execute(FakeObserver(), state=state, events=[_event(event_type, payload=payload)])
+    use_case.execute(state=state, events=[_event(event_type, payload=payload)])
 
     assert state.view_status.kind == expected_view_status
     assert state.view_status.message == expected_message
@@ -331,7 +289,6 @@ def test_event_state_clears_stored_session_when_run_finishes() -> None:
     use_case = _use_case(context=context, session_store=session_store)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -352,7 +309,6 @@ def test_event_state_interrupts_running_run_on_observer_error() -> None:
     use_case = _use_case(context=context, agent_port=agent_port)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -374,7 +330,6 @@ def test_event_state_does_not_interrupt_waiting_run_on_observer_error() -> None:
     use_case = _use_case(context=context, agent_port=agent_port)
 
     use_case.execute(
-        FakeObserver(),
         state=state,
         events=[
             _event(
@@ -391,13 +346,11 @@ def _use_case(
     *,
     context: RunEventContext,
     agent_port: FakeAgentPort | None = None,
-    events_port: FakeEventsPort | None = None,
     session_store: FakeSessionStorePort | None = None,
 ) -> EventStateUseCase:
     return EventStateUseCase(
         context=context,
         agent_port=agent_port or FakeAgentPort(),
-        events_port=events_port or FakeEventsPort(),
         session_store_port=session_store or FakeSessionStorePort(),
         transcript_mapper=EventTranscriptMapper(),
     )

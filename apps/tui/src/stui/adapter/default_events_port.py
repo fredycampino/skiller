@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from stui.adapter.cli_run_adapter import CliRunAdapter
 from stui.port.event_models import LogEvent
 from stui.port.event_port import (
-    DEFAULT_POLL_INTERVAL_SECONDS,
     EventsPort,
     LogEventsListener,
     LogEventsObserver,
@@ -18,14 +16,13 @@ DEFAULT_MAX_EVENTS_WINDOW = 10
 class _ActiveSubscription:
     listener: LogEventsListener
     run_id: str
-    last_sequence: int
+    last_sequence: int | None
     events: list[LogEvent] = field(default_factory=list)
 
 
 @dataclass
 class DefaultEventsPort(EventsPort, LogEventsListener):
     event_observer: LogEventsObserver
-    run_adapter: CliRunAdapter
     _subscription: _ActiveSubscription | None = field(default=None, init=False, repr=False)
 
     def subscribe(
@@ -33,45 +30,33 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
         *,
         run_id: str,
         listener: LogEventsListener,
-        interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
         normalized_run_id = run_id.strip()
         if not normalized_run_id:
             raise RuntimeError("events port requires run_id")
-        after_sequence = self._resolve_after_sequence(
-            run_id=normalized_run_id,
-            listener=listener,
-        )
         subscription = self._subscription
-        if subscription is None or subscription.run_id != normalized_run_id:
-            self._subscription = _ActiveSubscription(
+        if subscription is not None and subscription.run_id == normalized_run_id:
+            subscription.listener = listener
+            after_sequence = subscription.last_sequence
+        else:
+            subscription = _ActiveSubscription(
                 listener=listener,
                 run_id=normalized_run_id,
-                last_sequence=after_sequence,
+                last_sequence=None,
             )
-        else:
-            subscription.listener = listener
+            self._subscription = subscription
+            after_sequence = None
+
         self.event_observer.subscribe(
             run_id=normalized_run_id,
             listener=self,
             after_sequence=after_sequence,
-            interval_seconds=interval_seconds,
+            tail=listener.get_max_page(),
         )
 
     def unsubscribe(self) -> None:
         self.event_observer.unsubscribe()
         self._subscription = None
-
-    async def refresh(self) -> None:
-        subscription = self._subscription
-        if subscription is None:
-            return
-
-        await self.event_observer.refresh(
-            run_id=subscription.run_id,
-            listener=self,
-            after_sequence=subscription.last_sequence,
-        )
 
     def notify(self, events: list[LogEvent]) -> None:
         subscription = self._subscription
@@ -81,10 +66,10 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
         subscription.events.extend(events)
         if events:
             received_last_sequence = max(event.sequence for event in events)
-            subscription.last_sequence = max(
-                subscription.last_sequence,
-                received_last_sequence,
-            )
+            if subscription.last_sequence is None:
+                subscription.last_sequence = received_last_sequence
+            else:
+                subscription.last_sequence = max(subscription.last_sequence, received_last_sequence)
         self._trim_window(subscription, max_events=subscription.listener.get_max_page())
         subscription.listener.notify(list(subscription.events))
 
@@ -99,17 +84,3 @@ class DefaultEventsPort(EventsPort, LogEventsListener):
         if overflow <= 0:
             return
         del subscription.events[:overflow]
-
-    def _resolve_after_sequence(
-        self,
-        *,
-        run_id: str,
-        listener: LogEventsListener,
-    ) -> int:
-        status = self.run_adapter.status(run_id)
-        if status is None:
-            raise RuntimeError(f"run '{run_id}' not found")
-        last_sequence = status.last_event_sequence
-        if last_sequence is None:
-            last_sequence = 0
-        return max(last_sequence - listener.get_max_page(), 0)

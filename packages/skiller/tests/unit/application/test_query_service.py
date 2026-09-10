@@ -1,6 +1,8 @@
 import pytest
 
 from skiller.application.query_service import RunQueryService
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
+from skiller.application.waits.waiting_metadata_resolver import InputWaitingMetadata
 from skiller.domain.event.event_model import (
     RuntimeEvent,
     RuntimeEventType,
@@ -23,7 +25,7 @@ class _FakeGetRunStatusUseCase:
 
 class _FakeGetWaitingMetadataUseCase:
     def execute(self, run_id: str):  # noqa: ANN201
-        return {"wait_type": "input", "prompt": f"prompt for {run_id}"}
+        return InputWaitingMetadata(prompt=f"prompt for {run_id}")
 
 
 class _FakeGetRunLogsUseCase:
@@ -84,6 +86,7 @@ def test_query_service_status_includes_last_event_cursor() -> None:
         get_run_logs_use_case=_FakeGetRunLogsUseCase(),
         get_runs_use_case=_UnusedUseCase(),
         get_waiting_metadata_use_case=_FakeGetWaitingMetadataUseCase(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
 
     status = service.get_status("run-1")
@@ -107,6 +110,7 @@ def test_query_service_logs_returns_public_json() -> None:
         get_run_logs_use_case=get_logs,
         get_runs_use_case=_UnusedUseCase(),
         get_waiting_metadata_use_case=_UnusedUseCase(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
 
     logs = service.get_logs("run-1", after_sequence=10, limit=50)

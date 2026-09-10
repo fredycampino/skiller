@@ -12,28 +12,34 @@ class CliInvoker:
     module_name: str = "skiller"
     python_executable: str = field(default_factory=lambda: sys.executable)
 
-    def run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        command = [
+    def command(self, *args: str) -> list[str]:
+        return [
             self.python_executable,
             "-m",
             self.module_name,
             *args,
         ]
+
+    def environment(self) -> dict[str, str]:
         environment = os.environ.copy()
         source_paths = _workspace_source_paths()
-        if source_paths:
-            current_pythonpath = environment.get("PYTHONPATH", "")
-            pythonpath_entries = [str(path) for path in source_paths]
-            if current_pythonpath:
-                pythonpath_entries.append(current_pythonpath)
-            environment["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+        if not source_paths:
+            return environment
 
+        current_pythonpath = environment.get("PYTHONPATH", "")
+        pythonpath_entries = [str(path) for path in source_paths]
+        if current_pythonpath:
+            pythonpath_entries.append(current_pythonpath)
+        environment["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+        return environment
+
+    def run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
-            command,
+            self.command(*args),
             text=True,
             capture_output=True,
             check=False,
-            env=environment,
+            env=self.environment(),
         )
 
 

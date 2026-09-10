@@ -4,6 +4,24 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.38 - 2026-09-10
+
+### Added
+- Add the `skiller observe <run_id>` command, which streams persisted runtime events for a run as JSON Lines (JSONL) until the run reaches a terminal status.
+- Add `--after` and `--tail` options to control the observation cursor and the bounded initial event history.
+- Emit a `wait` control frame for waiting runs, documenting input and webhook prompts.
+
+### Changed
+- Consume the new `observe` event stream in STUI instead of polling runtime events.
+- Remove the STUI logs event observer and refresh events use case in favor of the observe adapter.
+
+### Fixed
+- Prioritize packaged and runtime working-directory flow paths over user-configured flow paths.
+- Emit `RUN_FINISHED` when a run is cancelled so observers can close the stream.
+
+### Notes
+- Includes PRs #142 and #143.
+
 ## 0.1.0-beta.37 - 2026-09-07
 
 ### Added

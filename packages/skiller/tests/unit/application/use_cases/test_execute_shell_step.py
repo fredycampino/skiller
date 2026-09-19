@@ -589,3 +589,42 @@ PY
     assert result.status == StepExecutionStatus.COMPLETED
     config_text = (out_dir / "config.json").read_text(encoding="utf-8").strip()
     assert config_text == '{"secret": "auth-helper"}'
+
+
+def test_execute_shell_step_passes_structured_env_value_as_json(tmp_path: Path) -> None:
+    import sys
+
+    from skiller.infrastructure.tools.process.default_tool_process import (
+        DefaultToolProcessRunner,
+    )
+
+    flow_dir = tmp_path / "flows"
+    flow_dir.mkdir()
+    python_bin = sys.executable
+    command = f'"{python_bin}" -c "import os; print(os.environ[\'EVENT\'])"'
+    use_case = ExecuteShellStepUseCase(
+        store=_FakeStore(),
+        shell_tool=ShellProcessTool(shell="/bin/bash"),
+        process_runner=DefaultToolProcessRunner(),
+        agent_steering_store=_FakeAgentSteeringStore(),
+        flow_runner=_FakeFlowRunner(flow_dir),
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="inspect_event",
+            step_type=StepType.SHELL,
+            step={
+                "command": command,
+                "cwd": ".",
+                "env": {"EVENT": {"kind": "message", "id": 42}},
+            },
+            context=RunContext(inputs={}, step_executions={}),
+        )
+    )
+
+    assert result.status == StepExecutionStatus.COMPLETED
+    assert result.execution is not None
+    assert result.execution.output.stdout == '{"kind":"message","id":42}\n'

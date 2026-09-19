@@ -26,6 +26,11 @@ from skiller.application.use_cases.webhook.remove_webhook import (
     RemoveWebhookResult,
     RemoveWebhookUseCase,
 )
+from skiller.application.use_cases.webhook.update_webhook_secret import (
+    UpdateWebhookSecretInput,
+    UpdateWebhookSecretResult,
+    UpdateWebhookSecretUseCase,
+)
 
 
 class WaitApplicationService:
@@ -37,6 +42,7 @@ class WaitApplicationService:
         list_webhooks_use_case: ListWebhooksUseCase,
         register_webhook_use_case: RegisterWebhookUseCase,
         remove_webhook_use_case: RemoveWebhookUseCase,
+        update_webhook_secret_use_case: UpdateWebhookSecretUseCase,
     ) -> None:
         self.handle_input_use_case = handle_input_use_case
         self.handle_channel_use_case = handle_channel_use_case
@@ -44,6 +50,7 @@ class WaitApplicationService:
         self.list_webhooks_use_case = list_webhooks_use_case
         self.register_webhook_use_case = register_webhook_use_case
         self.remove_webhook_use_case = remove_webhook_use_case
+        self.update_webhook_secret_use_case = update_webhook_secret_use_case
 
     def handle_input(self, request: HandleInputInput) -> HandleInputResult:
         return self.handle_input_use_case.execute(request)
@@ -62,3 +69,8 @@ class WaitApplicationService:
 
     def remove_webhook(self, webhook: str) -> RemoveWebhookResult:
         return self.remove_webhook_use_case.execute(webhook)
+
+    def update_webhook_secret(
+        self, request: UpdateWebhookSecretInput
+    ) -> UpdateWebhookSecretResult:
+        return self.update_webhook_secret_use_case.execute(request)

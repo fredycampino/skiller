@@ -559,6 +559,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Header carrying the webhook token when --auth token is selected",
     )
 
+    secret_parser = webhook_sub.add_parser(
+        "secret",
+        help="Update a registered webhook secret from an environment variable",
+    )
+    secret_parser.add_argument("webhook", help="Webhook channel name")
+    secret_parser.add_argument(
+        "--secret-env",
+        required=True,
+        help="Name of the environment variable containing the new webhook secret",
+    )
+
     webhook_sub.add_parser("list", help="List registered webhook channels")
 
     remove_parser = webhook_sub.add_parser("remove", help="Remove a webhook channel registration")
@@ -1109,6 +1120,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "REGISTERED" else 1
+
+    if args.command == "webhook" and args.webhook_command == "secret":
+        result = controller.update_webhook_secret(args.webhook, args.secret_env)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "UPDATED" else 1
 
     if args.command == "webhook" and args.webhook_command == "list":
         result = controller.list_webhooks()

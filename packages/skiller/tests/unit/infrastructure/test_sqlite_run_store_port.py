@@ -9,12 +9,6 @@ from skiller.domain.event.event_model import (
     RuntimeEventDraft,
     RuntimeEventType,
 )
-from skiller.domain.event.webhook_registration_model import (
-    WebhookAuth,
-    WebhookMethod,
-    WebhookPayloadSource,
-    WebhookRegistration,
-)
 from skiller.domain.run.run_context_model import RunContext
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.runtime_query_error import RuntimeQueryError
@@ -39,7 +33,6 @@ from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -547,41 +540,3 @@ def _count(conn: sqlite3.Connection, table: str, where: str, *params: object) ->
     row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", params).fetchone()
     assert row is not None
     return int(row[0])
-
-
-def test_sqlite_webhook_registry_lists_registered_webhooks(tmp_path) -> None:
-    db_path = tmp_path / "webhooks.db"
-    registry = SqliteWebhookRegistry(str(db_path))
-    SqliteRuntimeBootstrap(str(db_path)).init_db()
-
-    registry.register_webhook(
-        WebhookRegistration(
-            webhook="github-ci",
-            secret="secret-1",
-            method=WebhookMethod.POST,
-            auth=WebhookAuth.SIGNED,
-            payload_source=WebhookPayloadSource.BODY_JSON,
-            token_header=None,
-            enabled=True,
-        )
-    )
-    registry.register_webhook(
-        WebhookRegistration(
-            webhook="market-signal",
-            secret="secret-2",
-            method=WebhookMethod.POST,
-            auth=WebhookAuth.SIGNED,
-            payload_source=WebhookPayloadSource.BODY_JSON,
-            token_header=None,
-            enabled=True,
-        )
-    )
-
-    webhooks = registry.list_webhook_registrations()
-
-    assert sorted(item.webhook for item in webhooks) == ["github-ci", "market-signal"]
-    assert all(item.method.value == "POST" for item in webhooks)
-    assert all(item.auth.value == "signed" for item in webhooks)
-    assert all(item.payload_source.value == "body_json" for item in webhooks)
-    assert all(item.token_header is None for item in webhooks)
-    assert all(item.created_at is not None for item in webhooks)

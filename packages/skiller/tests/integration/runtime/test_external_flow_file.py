@@ -78,6 +78,7 @@ from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.application.use_cases.webhook.update_webhook_secret import UpdateWebhookSecretUseCase
 from skiller.application.waits.service import WaitApplicationService
 from skiller.domain.action.action_model import PostAction
 from skiller.domain.event.event_model import (
@@ -87,6 +88,7 @@ from skiller.domain.event.event_model import (
 )
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
+from skiller.infrastructure.config.os_environment_secret_port import OsEnvironmentSecretPort
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
 )
@@ -98,7 +100,7 @@ from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
+from skiller.infrastructure.db.sqlite_webhook_registry_port import SqliteWebhookRegistryPort
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.flow_yaml_mapper import FlowYamlMapper
 from skiller.infrastructure.llm.defaults.null_llm_port import NullLLMPort
@@ -281,7 +283,7 @@ def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
     external_event_store = SqliteExternalEventStore(store.db_path)
     agent_steering_store = SqliteAgentSteeringStore(store.db_path)
     wait_store = SqliteWaitStorePort(SqliteWaitDatasource(store.db_path))
-    webhook_registry = SqliteWebhookRegistry(store.db_path)
+    webhook_registry = SqliteWebhookRegistryPort(store.db_path)
     return WaitApplicationService(
         handle_input_use_case=HandleInputUseCase(
             run_store=store,
@@ -300,6 +302,10 @@ def _build_waits(store: SqliteRunStorePort) -> WaitApplicationService:
         list_webhooks_use_case=ListWebhooksUseCase(registry=webhook_registry),
         register_webhook_use_case=RegisterWebhookUseCase(registry=webhook_registry),
         remove_webhook_use_case=RemoveWebhookUseCase(registry=webhook_registry),
+        update_webhook_secret_use_case=UpdateWebhookSecretUseCase(
+            registry=webhook_registry,
+            environment_secret=OsEnvironmentSecretPort(),
+        ),
     )
 
 
@@ -486,6 +492,59 @@ def test_external_notify_can_read_shell_output_value() -> None:
         assert run is not None
         notify_output = run.context.step_executions["summarize_output"].output.to_public_dict()
         assert notify_output["value"]["message"] == ("x" * 400) + "\n"
+
+
+def test_external_flow_routes_missing_optional_output_value_in_when_and_switch() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "test.db")
+        skill_path = Path(tmpdir) / "optional_output_value.yaml"
+        skill_path.write_text(
+            (
+                "name: optional_output_value\n"
+                "start: build_event\n"
+                "inputs: {}\n"
+                "steps:\n"
+                "  - assign: build_event\n"
+                "    values:\n"
+                "      payload:\n"
+                "        message:\n"
+                "          image:\n"
+                "            - file-id\n"
+                "    next: route_when\n"
+                "  - when: route_when\n"
+                "    value: '{{output_value(\"build_event\").assigned.payload.message.text?}}'\n"
+                "    branches:\n"
+                "      - eq: null\n"
+                "        then: route_switch\n"
+                "    default: unexpected\n"
+                "  - switch: route_switch\n"
+                "    value: '{{output_value(\"build_event\").assigned.payload.message.text?}}'\n"
+                "    cases:\n"
+                "      text: unexpected\n"
+                "    default: done\n"
+                "  - notify: done\n"
+                "    message: optional path handled\n"
+                "  - notify: unexpected\n"
+                "    message: unexpected route\n"
+            ),
+            encoding="utf-8",
+        )
+
+        store = SqliteRunStorePort(db_path)
+        SqliteRuntimeBootstrap(store.db_path).init_db()
+        runtime = _build_runtime(store)
+
+        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
+
+        run = store.get_run(run_result.run_id)
+        assert run_result.status.value == "SUCCEEDED"
+        assert run is not None
+        when_execution = run.context.step_executions["route_when"]
+        switch_execution = run.context.step_executions["route_switch"]
+        assert when_execution.evaluation["next_step_id"] == "route_switch"
+        assert switch_execution.input["value"] is None
+        assert switch_execution.evaluation["next_step_id"] == "done"
+        assert "unexpected" not in run.context.step_executions
 
 
 def test_external_flow_file_is_snapshotted_at_run_creation() -> None:

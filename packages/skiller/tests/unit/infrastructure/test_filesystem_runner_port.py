@@ -176,6 +176,99 @@ def test_render_step_preserves_type_for_full_template_value(tmp_path) -> None:  
     assert rendered["values"]["text"] == "severity=low"
 
 
+def test_render_step_resolves_optional_final_output_value_field(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+    context = {
+        "step_executions": {
+            "wait_event": {
+                "step_type": "wait_webhook",
+                "input": {},
+                "evaluation": {},
+                "output": {
+                    "text": "Event received.",
+                    "value": {
+                        "payload": {
+                            "message": {
+                                "text": "Hello",
+                            }
+                        }
+                    },
+                    "body_ref": None,
+                },
+            }
+        }
+    }
+
+    existing = runner.render(
+        {"value": '{{output_value("wait_event").payload.message.text?}}'},
+        context,
+        flow=flow,
+    )
+    missing = runner.render(
+        {"value": '{{output_value("wait_event").payload.message.image?}}'},
+        context,
+        flow=flow,
+    )
+    interpolated = runner.render(
+        {"message": 'text={{output_value("wait_event").payload.message.image?}}'},
+        context,
+        flow=flow,
+    )
+
+    assert existing == {"value": "Hello"}
+    assert missing == {"value": None}
+    assert interpolated == {"message": "text="}
+
+
+def test_render_step_keeps_strict_null_output_value_in_interpolated_text(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+
+    rendered = runner.render(
+        {"message": 'value={{output_value("step").field}}'},
+        {
+            "step_executions": {
+                "step": {
+                    "step_type": "assign",
+                    "input": {},
+                    "evaluation": {},
+                    "output": {
+                        "text": "Value assigned.",
+                        "value": {"field": None},
+                        "body_ref": None,
+                    },
+                }
+            }
+        },
+        flow=flow,
+    )
+
+    assert rendered == {"message": "value=None"}
+
+
+def test_render_step_keeps_intermediate_optional_output_value_path_strict(tmp_path) -> None:  # noqa: ANN001
+    runner, flow = _build_render_runner(tmp_path)
+
+    with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):
+        runner.render(
+            {"value": '{{output_value("wait_event").payload.unknown.text?}}'},
+            {
+                "step_executions": {
+                    "wait_event": {
+                        "step_type": "wait_webhook",
+                        "input": {},
+                        "evaluation": {},
+                        "output": {
+                            "text": "Event received.",
+                            "value": {"payload": {}},
+                            "body_ref": None,
+                        },
+                    }
+                }
+            },
+            flow=flow,
+        )
+
+
 def test_render_step_can_resolve_env_values(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -348,7 +441,9 @@ def test_render_step_can_resolve_output_value_from_persisted_output(tmp_path) ->
     assert rendered["stderr"] == "line-a\nline-b"
 
 
-def test_render_step_raises_clear_error_when_output_value_path_is_missing(tmp_path) -> None:  # noqa: ANN001
+def test_render_step_raises_clear_error_when_strict_output_value_path_is_missing(
+    tmp_path,
+) -> None:  # noqa: ANN001
     runner, flow = _build_render_runner(tmp_path)
 
     with pytest.raises(ValueError, match="OUTPUT_VALUE_PATH_MISSING"):

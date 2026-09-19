@@ -10,8 +10,14 @@ from skiller.application.use_cases.webhook.remove_webhook import (
     RemoveWebhookResult,
     RemoveWebhookStatus,
 )
+from skiller.application.use_cases.webhook.update_webhook_secret import (
+    UpdateWebhookSecretResult,
+    UpdateWebhookSecretStatus,
+)
 from skiller.application.waits.webhook_mapper import (
     WEBHOOK_CONFIG_ERROR,
+    WEBHOOK_REQUIRED_ERROR,
+    WEBHOOK_SECRET_ENV_NAME_REQUIRED_ERROR,
     WebhookWaitMapper,
 )
 from skiller.domain.event.webhook_registration_model import (
@@ -150,6 +156,33 @@ def test_mapper_serializes_list_and_remove_results() -> None:
         "status": "REMOVED",
         "removed": True,
     }
+
+
+def test_mapper_serializes_secret_update_without_revealing_the_secret() -> None:
+    mapper = WebhookWaitMapper()
+    request = mapper.to_update_secret_input(" telegram ", " TELEGRAM_WEBHOOK_SECRET ")
+    result = UpdateWebhookSecretResult(
+        status=UpdateWebhookSecretStatus.UPDATED,
+        webhook=request.webhook,
+    )
+
+    assert request.webhook == "telegram"
+    assert request.secret_env_name == "TELEGRAM_WEBHOOK_SECRET"
+    assert mapper.to_update_secret_dict(result) == {
+        "webhook": "telegram",
+        "status": "UPDATED",
+        "updated": True,
+    }
+
+
+def test_mapper_rejects_empty_secret_update_scalars() -> None:
+    mapper = WebhookWaitMapper()
+
+    with pytest.raises(ValueError, match=WEBHOOK_REQUIRED_ERROR):
+        mapper.to_update_secret_input(" ", "WEBHOOK_SECRET")
+
+    with pytest.raises(ValueError, match=WEBHOOK_SECRET_ENV_NAME_REQUIRED_ERROR):
+        mapper.to_update_secret_input("telegram", " ")
 
 
 def test_mapper_builds_token_authenticated_webhook_registration() -> None:

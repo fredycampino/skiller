@@ -313,7 +313,7 @@ idx_agent_context_entries_context(context_id, sequence)
 - `external_events.status` tracks whether an event is still pending or already consumed by a run.
 - external-event lookup is scoped by each wait use case.
 - matching is FIFO: oldest active wait, then oldest pending matching event.
-- `webhook_registrations` is owned by `SqliteWebhookRegistry`, not by `SqliteRunStorePort`.
+- `webhook_registrations` is owned by `SqliteWebhookRegistryPort`, not by `SqliteRunStorePort`.
 
 ## Run Deletion
 

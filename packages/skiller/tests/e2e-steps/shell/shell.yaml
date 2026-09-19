@@ -7,7 +7,10 @@ inputs:
   script_path: string
   output_path: string
   content: string
+  workspace_dir: string
 
 steps:
   - shell: run_script
+    allowed_paths:
+      - "{{inputs.workspace_dir}}"
     command: 'sh "{{inputs.script_path}}" "{{inputs.output_path}}" "{{inputs.content}}"'

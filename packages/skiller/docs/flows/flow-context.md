@@ -48,6 +48,20 @@ Examples:
 {{output_value("decide_exit").next_step_id}}
 ```
 
+Use `?` on the final field when that field is optional. A missing optional field
+resolves to `null` when the template is the complete value, or an empty string
+when it is interpolated into text. This text behavior applies only to `?`; all
+earlier path segments remain strict.
+
+```yaml
+- when: route_text
+  value: '{{output_value("wait_event").payload.message.text?}}'
+  branches:
+    - ne: null
+      then: process_text
+  default: wait_event
+```
+
 Prefer `output_value("<step_id>")` over direct access to
 `step_executions.<step_id>.output.value...`.
 

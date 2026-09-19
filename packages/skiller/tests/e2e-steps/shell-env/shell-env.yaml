@@ -1,0 +1,25 @@
+name: shell_env_json_e2e
+description: "E2E for JSON values in shell environment variables"
+version: "0.1"
+start: build_event
+
+inputs:
+  output_dir: string
+
+steps:
+  - assign: build_event
+    values:
+      update:
+        update_id: 42
+        message:
+          chat:
+            id: 1001
+          text: hello
+    next: write_event
+
+  - shell: write_event
+    allowed_paths:
+      - '{{inputs.output_dir}}'
+    command: 'printf "%s" "$SKILLER_E2E_EVENT" > "{{inputs.output_dir}}/event.json"'
+    env:
+      SKILLER_E2E_EVENT: '{{output_value("build_event").assigned.update}}'

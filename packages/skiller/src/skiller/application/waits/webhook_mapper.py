@@ -15,6 +15,11 @@ from skiller.application.use_cases.webhook.remove_webhook import (
     RemoveWebhookResult,
     RemoveWebhookStatus,
 )
+from skiller.application.use_cases.webhook.update_webhook_secret import (
+    UpdateWebhookSecretInput,
+    UpdateWebhookSecretResult,
+    UpdateWebhookSecretStatus,
+)
 from skiller.domain.event.webhook_registration_model import (
     WebhookAuth,
     WebhookMethod,
@@ -25,6 +30,8 @@ WEBHOOK_CONFIG_ERROR = "webhook method and payload source must be POST/body_json
 WEBHOOK_TOKEN_HEADER_ERROR = "webhook token authentication requires token_header"
 WEBHOOK_TOKEN_HEADER_UNSUPPORTED_ERROR = "token_header is only supported with token authentication"
 WEBHOOK_TOKEN_HEADER_INVALID_ERROR = "token_header must be a valid HTTP field name"
+WEBHOOK_REQUIRED_ERROR = "webhook is required"
+WEBHOOK_SECRET_ENV_NAME_REQUIRED_ERROR = "secret environment variable name is required"
 HTTP_FIELD_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
@@ -149,6 +156,43 @@ class WebhookWaitMapper:
         if result.error is not None:
             payload["error"] = result.error
         return payload
+
+    def to_update_secret_input(
+        self, webhook: str, secret_env_name: str
+    ) -> UpdateWebhookSecretInput:
+        normalized_webhook = webhook.strip()
+        normalized_secret_env_name = secret_env_name.strip()
+        if not normalized_webhook:
+            raise ValueError(WEBHOOK_REQUIRED_ERROR)
+        if not normalized_secret_env_name:
+            raise ValueError(WEBHOOK_SECRET_ENV_NAME_REQUIRED_ERROR)
+        return UpdateWebhookSecretInput(
+            webhook=normalized_webhook,
+            secret_env_name=normalized_secret_env_name,
+        )
+
+    def to_update_secret_dict(self, result: UpdateWebhookSecretResult) -> dict[str, Any]:
+        payload = {
+            "webhook": result.webhook,
+            "status": result.status.value,
+            "updated": result.status == UpdateWebhookSecretStatus.UPDATED,
+        }
+        if result.error is not None:
+            payload["error"] = result.error
+        return payload
+
+    def to_update_secret_error_dict(self, webhook: str, error: str) -> dict[str, Any]:
+        status = (
+            UpdateWebhookSecretStatus.INVALID_WEBHOOK
+            if error == WEBHOOK_REQUIRED_ERROR
+            else UpdateWebhookSecretStatus.INVALID_SECRET
+        )
+        return {
+            "webhook": webhook,
+            "status": status.value,
+            "updated": False,
+            "error": error,
+        }
 
     def _parse_method(self, method: str) -> WebhookMethod:
         try:

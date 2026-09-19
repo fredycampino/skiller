@@ -1,3 +1,4 @@
+import json
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -61,10 +62,12 @@ class ShellProcessTool(
                     },
                     "env": {
                         "type": "object",
-                        "additionalProperties": {"type": "string"},
+                        "additionalProperties": {
+                            "type": ["string", "number", "boolean", "object", "array", "null"],
+                        },
                         "description": (
                             "Optional environment variables for the command. "
-                            "Values must be strings."
+                            "Strings are passed unchanged; other JSON values are serialized."
                         ),
                     },
                     "timeout": {
@@ -96,7 +99,7 @@ class ShellProcessTool(
                 ShellToolRequest(
                     command=input.require_string("command"),
                     cwd=input.optional_string("cwd"),
-                    env=input.optional_string_map("env"),
+                    env=self._to_environment(input),
                     timeout=input.optional_number("timeout"),
                 )
             )
@@ -167,6 +170,43 @@ class ShellProcessTool(
                 return candidate
 
         raise RuntimeError("No executable shell found. Tried $SHELL, /bin/bash and /bin/sh")
+
+    def _to_environment(self, input: ToolInput) -> dict[str, str] | None:
+        raw_environment = input.args.get("env")
+        if raw_environment is None:
+            return None
+        if not isinstance(raw_environment, Mapping):
+            raise ValueError(f"Tool call '{input.tool_call_id}' requires object env")
+
+        environment: dict[str, str] = {}
+        for raw_name, raw_value in raw_environment.items():
+            if not isinstance(raw_name, str) or not raw_name.strip():
+                raise ValueError(
+                    f"Tool call '{input.tool_call_id}' requires non-empty string keys in env"
+                )
+            environment[raw_name] = self._to_environment_value(
+                tool_call_id=input.tool_call_id,
+                name=raw_name,
+                value=raw_value,
+            )
+        return environment
+
+    def _to_environment_value(
+        self,
+        *,
+        tool_call_id: str,
+        name: str,
+        value: object,
+    ) -> str:
+        if isinstance(value, str):
+            return value
+
+        try:
+            return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Tool call '{tool_call_id}' requires JSON-serializable value for env '{name}'"
+            ) from exc
 
     def _build_summary_text(self, data: dict[str, object]) -> str:
         ok = bool(data.get("ok"))

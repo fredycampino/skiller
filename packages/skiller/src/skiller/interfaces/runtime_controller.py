@@ -199,6 +199,14 @@ class RuntimeController:
         result = self.wait_service.remove_webhook(request)
         return self.webhook_wait_mapper.to_remove_dict(result)
 
+    def update_webhook_secret(self, webhook: str, secret_env_name: str) -> dict[str, Any]:
+        try:
+            request = self.webhook_wait_mapper.to_update_secret_input(webhook, secret_env_name)
+        except ValueError as exc:
+            return self.webhook_wait_mapper.to_update_secret_error_dict(webhook, str(exc))
+        result = self.wait_service.update_webhook_secret(request)
+        return self.webhook_wait_mapper.to_update_secret_dict(result)
+
     def status(self, run_id: str) -> dict[str, object] | None:
         result = self.query_service.get_status(run_id.strip())
         if result is None:

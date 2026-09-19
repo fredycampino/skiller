@@ -77,7 +77,7 @@ run_cli "cli_assign.sh" ./cli_assign.sh "dependency timeout"
 echo
 run_cli "cli_switch.sh" ./cli_switch.sh "retry"
 echo
-run_cli "cli_when.sh" ./cli_when.sh
+run_cli "e2e-steps/when/run.sh" ../e2e-steps/when/run.sh
 echo
 run_cli "cli_wait_input.sh" ./cli_wait_input.sh
 echo
@@ -91,4 +91,4 @@ run_cli "cli_server.sh" ./cli_server.sh
 echo
 run_cli "cli_mcp_stdio.sh" ./cli_mcp_stdio.sh "hola-e2e"
 echo
-run_cli "cli_shell.sh" ./cli_shell.sh "hola-shell-e2e"
+run_cli "e2e-steps/shell/run.sh" ../e2e-steps/shell/run.sh "hola-shell-e2e"

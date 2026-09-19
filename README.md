@@ -197,9 +197,10 @@ Run the main checks:
 ./.venv/bin/python -m build --no-isolation
 ```
 
-Manual CLI E2E flows live in `packages/skiller/tests/e2e/cli_*.sh`. Use them
-when you need to exercise the real CLI path without mixing those checks into the
-default `pytest` suite.
+Manual CLI E2E flows live in `packages/skiller/tests/e2e/cli_*.sh`. Step-specific
+flows live in `packages/skiller/tests/e2e-steps/<test>/run.sh`. Use them when you
+need to exercise the real CLI path without mixing those checks into the default
+`pytest` suite.
 
 ## License
 

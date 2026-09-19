@@ -3,9 +3,9 @@ set -euo pipefail
 
 content_text="${1:-hello-shell-e2e}"
 
-cd "$(dirname "$0")/../../../.."
+cd "$(dirname "$0")/../../../../.."
 
-tmpdir="$(mktemp -d ./.tmp-shell-e2e.XXXXXX)"
+tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
 script_path="${tmpdir}/script.sh"
@@ -31,10 +31,11 @@ fi
 
 run_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \
-    --file packages/skiller/tests/e2e/skills/shell_cli_e2e.yaml \
+    --file packages/skiller/tests/e2e-steps/shell/shell.yaml \
     --arg "script_path=${script_path}" \
     --arg "output_path=${output_file}" \
-    --arg "content=${content_text}"
+    --arg "content=${content_text}" \
+    --arg "workspace_dir=${tmpdir}"
 )"
 
 run_id="$(printf '%s\n' "${run_output}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"

@@ -112,6 +112,7 @@ from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.application.use_cases.webhook.register_webhook import RegisterWebhookUseCase
 from skiller.application.use_cases.webhook.remove_webhook import RemoveWebhookUseCase
+from skiller.application.use_cases.webhook.update_webhook_secret import UpdateWebhookSecretUseCase
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.service import WaitApplicationService
@@ -136,6 +137,7 @@ from skiller.infrastructure.config.json_runtime_config_port import JsonRuntimeCo
 from skiller.infrastructure.config.json_skiller_config_datasource import (
     JsonSkillerConfigDatasource,
 )
+from skiller.infrastructure.config.os_environment_secret_port import OsEnvironmentSecretPort
 from skiller.infrastructure.config.settings import (
     Settings,
     get_config_file_environment_value,
@@ -163,7 +165,7 @@ from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
 from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
+from skiller.infrastructure.db.sqlite_webhook_registry_port import SqliteWebhookRegistryPort
 from skiller.infrastructure.flow.filesystem_flow_port import FilesystemFlowPort
 from skiller.infrastructure.flow.filesystem_packaged_flow_paths_port import (
     FilesystemPackagedFlowPathsPort,
@@ -217,7 +219,7 @@ def build_runtime_container(
     run_agent_store = SqliteRunAgentStore(run_agent_datasource)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
     run_query = SqliteRunQueryStore(cfg.db_path)
-    webhook_registry = SqliteWebhookRegistry(cfg.db_path)
+    webhook_registry = SqliteWebhookRegistryPort(cfg.db_path)
     filesystem_runner_port = FilesystemRunnerPort()
     skill_runner: RunnerPort = filesystem_runner_port
     flow_port = FilesystemFlowPort(
@@ -319,6 +321,10 @@ def build_runtime_container(
     list_webhooks_use_case = ListWebhooksUseCase(registry=webhook_registry)
     register_webhook_use_case = RegisterWebhookUseCase(registry=webhook_registry)
     remove_webhook_use_case = RemoveWebhookUseCase(registry=webhook_registry)
+    update_webhook_secret_use_case = UpdateWebhookSecretUseCase(
+        registry=webhook_registry,
+        environment_secret=OsEnvironmentSecretPort(),
+    )
     interrupt_agent_use_case = InterruptAgentUseCase(
         store=store,
         steering=agent_steering_store,
@@ -525,6 +531,7 @@ def build_runtime_container(
         list_webhooks_use_case=list_webhooks_use_case,
         register_webhook_use_case=register_webhook_use_case,
         remove_webhook_use_case=remove_webhook_use_case,
+        update_webhook_secret_use_case=update_webhook_secret_use_case,
     )
     run_service = RunApplicationService(
         bootstrap_runtime_use_case=bootstrap_runtime_use_case,

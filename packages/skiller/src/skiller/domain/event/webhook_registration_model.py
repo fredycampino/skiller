@@ -19,6 +19,12 @@ class WebhookPayloadSource(StrEnum):
 
 
 @dataclass(frozen=True)
+class WebhookSecretUpdate:
+    webhook: str
+    secret: str
+
+
+@dataclass(frozen=True)
 class WebhookRegistration:
     webhook: str
     secret: str

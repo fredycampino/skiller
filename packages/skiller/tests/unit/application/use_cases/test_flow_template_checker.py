@@ -51,6 +51,60 @@ def test_flow_template_checker_reports_forward_output_value_reference() -> None:
     assert [item.code for item in errors] == ["FLOW_OUTPUT_VALUE_FORWARD_REFERENCE"]
 
 
+def test_flow_template_checker_accepts_optional_final_output_value_field() -> None:
+    errors = []
+
+    FlowTemplateChecker().check_steps(
+        steps=[
+            ParsedFlowStep(
+                index=0,
+                step_id="wait_event",
+                step_type="wait_webhook",
+                body={"webhook": "telegram", "key": "chat"},
+            ),
+            ParsedFlowStep(
+                index=1,
+                step_id="route_event",
+                step_type="when",
+                body={
+                    "value": '{{output_value("wait_event").payload.message.text?}}',
+                },
+            ),
+        ],
+        step_ids={"wait_event", "route_event"},
+        errors=errors,
+    )
+
+    assert errors == []
+
+
+def test_flow_template_checker_rejects_nonfinal_optional_output_value_field() -> None:
+    errors = []
+
+    FlowTemplateChecker().check_steps(
+        steps=[
+            ParsedFlowStep(
+                index=0,
+                step_id="wait_event",
+                step_type="wait_webhook",
+                body={"webhook": "telegram", "key": "chat"},
+            ),
+            ParsedFlowStep(
+                index=1,
+                step_id="route_event",
+                step_type="when",
+                body={
+                    "value": '{{output_value("wait_event").payload?.message.text}}',
+                },
+            ),
+        ],
+        step_ids={"wait_event", "route_event"},
+        errors=errors,
+    )
+
+    assert [item.code for item in errors] == ["FLOW_OUTPUT_VALUE_INVALID_SYNTAX"]
+
+
 def test_flow_template_checker_reports_unsupported_helper() -> None:
     errors = []
 

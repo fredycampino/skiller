@@ -10,13 +10,13 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 from skiller.domain.event.webhook_registration_model import WebhookRegistration
 from skiller.infrastructure.config.settings import get_settings
-from skiller.infrastructure.db.sqlite_webhook_registry import SqliteWebhookRegistry
+from skiller.infrastructure.db.sqlite_webhook_registry_port import SqliteWebhookRegistryPort
 from skiller.local.server import launcher
 
 
 def _load_registration(webhook: str) -> WebhookRegistration | None:
     settings = get_settings()
-    registry = SqliteWebhookRegistry(settings.db_path)
+    registry = SqliteWebhookRegistryPort(settings.db_path)
     return registry.get_webhook_registration(webhook)
 
 

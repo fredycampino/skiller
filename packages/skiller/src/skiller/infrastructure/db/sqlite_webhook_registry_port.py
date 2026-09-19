@@ -5,12 +5,13 @@ from skiller.domain.event.webhook_registration_model import (
     WebhookMethod,
     WebhookPayloadSource,
     WebhookRegistration,
+    WebhookSecretUpdate,
 )
 from skiller.domain.event.webhook_registry_port import WebhookRegistryPort
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
 
 
-class SqliteWebhookRegistry(SqliteConnectionSource, WebhookRegistryPort):
+class SqliteWebhookRegistryPort(SqliteConnectionSource, WebhookRegistryPort):
     def register_webhook(self, registration: WebhookRegistration) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -41,6 +42,14 @@ class SqliteWebhookRegistry(SqliteConnectionSource, WebhookRegistryPort):
                 (webhook,),
             ).fetchone()
         return _to_registration(row) if row is not None else None
+
+    def update_webhook_secret(self, update: WebhookSecretUpdate) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE webhook_registrations SET secret = ? WHERE webhook = ?",
+                (update.secret, update.webhook),
+            )
+        return cursor.rowcount > 0
 
     def list_webhook_registrations(self) -> list[WebhookRegistration]:
         with self._connect() as conn:

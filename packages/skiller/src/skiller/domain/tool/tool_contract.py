@@ -49,22 +49,6 @@ class ToolInput:
             raise ValueError(f"Tool call '{self.tool_call_id}' requires positive {name}")
         return value
 
-    def optional_string_map(self, name: str) -> dict[str, str] | None:
-        value = self.args.get(name)
-        if value is None:
-            return None
-        if not isinstance(value, Mapping):
-            raise ValueError(f"Tool call '{self.tool_call_id}' requires object {name}")
-
-        result: dict[str, str] = {}
-        for key, item in value.items():
-            if not isinstance(key, str) or not key.strip():
-                raise ValueError(
-                    f"Tool call '{self.tool_call_id}' requires non-empty string keys in {name}"
-                )
-            result[key] = str(item)
-        return result
-
 
 RequestT = TypeVar("RequestT", bound=ToolRequest)
 

@@ -35,6 +35,7 @@ class _FakeController:
             tuple[str, str, dict[str, object], str | None, str | None]
         ] = []
         self.register_webhook_calls: list[tuple[str, str, str, str]] = []
+        self.update_webhook_secret_calls: list[tuple[str, str]] = []
         self.logs_calls: list[dict[str, object]] = []
         self.status_calls: list[dict[str, object]] = []
         self.observe_calls: list[dict[str, object]] = []
@@ -326,6 +327,10 @@ class _FakeController:
 
     def remove_webhook(self, webhook: str) -> dict[str, object]:
         return {"webhook": webhook, "status": "REMOVED", "removed": True}
+
+    def update_webhook_secret(self, webhook: str, secret_env_name: str) -> dict[str, object]:
+        self.update_webhook_secret_calls.append((webhook, secret_env_name))
+        return {"webhook": webhook, "status": "UPDATED", "updated": True}
 
 
 class _FakeWorkerProcessService:
@@ -1498,6 +1503,32 @@ def test_webhook_register_forwards_ingress_options_and_prints_url(
     assert exit_code == 0
     assert controller.register_webhook_calls == [("example-auth", "GET", "none", "query", None)]
     assert data["webhook_url"] == "http://127.0.0.1:8001/webhooks/example-auth/{key}"
+
+
+def test_webhook_secret_forwards_the_environment_variable_name(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    _install_runtime(monkeypatch, fake_container, controller)
+    exit_code = cli_main.main(
+        [
+            "webhook",
+            "secret",
+            "telegram",
+            "--secret-env",
+            "SK_TELEGRAM_WEBHOOK_SECRET",
+        ]
+    )
+
+    data, captured = _read_json(capsys)
+    assert exit_code == 0
+    assert controller.update_webhook_secret_calls == [
+        ("telegram", "SK_TELEGRAM_WEBHOOK_SECRET")
+    ]
+    assert data == {"webhook": "telegram", "status": "UPDATED", "updated": True}
+    assert "SK_TELEGRAM_WEBHOOK_SECRET" not in captured
 
 
 @pytest.mark.parametrize(

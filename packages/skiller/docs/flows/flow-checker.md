@@ -82,6 +82,7 @@ Allowed helper:
 output_value("step_id")
 output_value("step_id").field
 output_value("step_id").nested.field
+output_value("step_id").nested.optional_field?
 ```
 
 Rules:
@@ -90,6 +91,8 @@ Rules:
 - the argument must be a string literal
 - the string literal is the referenced `step_id`
 - optional field access may follow after the helper call
+- `?` is allowed only on the final field and resolves a missing field to `null`
+  for a complete template or an empty string inside text
 
 Forbidden patterns:
 

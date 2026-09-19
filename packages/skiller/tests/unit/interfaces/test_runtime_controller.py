@@ -27,6 +27,10 @@ from skiller.application.use_cases.webhook.register_webhook import (
     RegisterWebhookResult,
     RegisterWebhookStatus,
 )
+from skiller.application.use_cases.webhook.update_webhook_secret import (
+    UpdateWebhookSecretResult,
+    UpdateWebhookSecretStatus,
+)
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
@@ -111,6 +115,7 @@ class _FakeWaitService:
     def __init__(self) -> None:
         self.register_request = None
         self.handle_request = None
+        self.update_secret_request = None
 
     def register_webhook(self, request):  # noqa: ANN001, ANN201
         self.register_request = request
@@ -130,6 +135,13 @@ class _FakeWaitService:
             accepted=True,
             duplicate=False,
             run_ids=["run-1"],
+        )
+
+    def update_webhook_secret(self, request):  # noqa: ANN001, ANN201
+        self.update_secret_request = request
+        return UpdateWebhookSecretResult(
+            status=UpdateWebhookSecretStatus.UPDATED,
+            webhook=request.webhook,
         )
 
 
@@ -358,6 +370,38 @@ def test_controller_rejects_invalid_register_webhook_params_before_service() -> 
         "webhook": "example-auth",
         "status": "INVALID_CONFIG",
         "error": "webhook method and payload source must be POST/body_json or GET/query",
+    }
+
+
+def test_controller_updates_webhook_secret_without_returning_it() -> None:
+    wait_service = _FakeWaitService()
+    controller = _controller(wait_service)
+
+    result = controller.update_webhook_secret(" telegram ", "TELEGRAM_WEBHOOK_SECRET")
+
+    assert wait_service.update_secret_request.webhook == "telegram"
+    assert wait_service.update_secret_request.secret_env_name == "TELEGRAM_WEBHOOK_SECRET"
+    assert result == {
+        "webhook": "telegram",
+        "status": "UPDATED",
+        "updated": True,
+    }
+
+
+def test_controller_rejects_empty_webhook_secret_update_scalars() -> None:
+    controller = _controller(_FakeWaitService())
+
+    assert controller.update_webhook_secret(" ", "WEBHOOK_SECRET") == {
+        "webhook": " ",
+        "status": "INVALID_WEBHOOK",
+        "updated": False,
+        "error": "webhook is required",
+    }
+    assert controller.update_webhook_secret("telegram", " ") == {
+        "webhook": "telegram",
+        "status": "INVALID_SECRET",
+        "updated": False,
+        "error": "secret environment variable name is required",
     }
 
 

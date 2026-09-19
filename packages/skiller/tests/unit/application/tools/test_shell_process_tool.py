@@ -10,12 +10,11 @@ from skiller.domain.tool.tool_process_model import ToolProcessOutput, ToolProces
 pytestmark = pytest.mark.unit
 
 _GIT_STATUS_OUTPUT = (
-    "M docs/README.md\n"
-    "M packages/skiller/src/skiller/application/agent/agent_runner.py\n"
+    "M docs/README.md\nM packages/skiller/src/skiller/application/agent/agent_runner.py\n"
 )
 
 
-def test_shell_process_tool_schema_defines_string_env_values() -> None:
+def test_shell_process_tool_schema_defines_json_env_values() -> None:
     tool = ShellProcessTool()
 
     schema = tool.schema().value
@@ -37,9 +36,12 @@ def test_shell_process_tool_schema_defines_string_env_values() -> None:
     }
     assert properties["env"] == {
         "type": "object",
-        "additionalProperties": {"type": "string"},
+        "additionalProperties": {
+            "type": ["string", "number", "boolean", "object", "array", "null"],
+        },
         "description": (
-            "Optional environment variables for the command. Values must be strings."
+            "Optional environment variables for the command. "
+            "Strings are passed unchanged; other JSON values are serialized."
         ),
     }
     assert properties["timeout"] == {
@@ -89,6 +91,59 @@ def test_shell_process_tool_builds_process_request(tmp_path: Path) -> None:
         cwd=str(workspace),
         env={"CI": "1"},
         timeout=30,
+    )
+
+
+def test_shell_process_tool_serializes_structured_env_values_as_json() -> None:
+    tool = ShellProcessTool()
+
+    result = tool.request(
+        ToolInput(
+            run_id="run-1",
+            step_id="inspect_event",
+            tool_call_id="call-1",
+            args={
+                "command": "env",
+                "env": {
+                    "EVENT": {"kind": "message", "id": 42},
+                    "RETRIES": 2,
+                    "ENABLED": True,
+                    "EMPTY": None,
+                    "INPUT_PATH": "/tmp/event.json",
+                },
+            },
+        )
+    )
+
+    assert result.ok is True
+    assert result.request is not None
+    assert result.request.env == {
+        "EVENT": '{"kind":"message","id":42}',
+        "RETRIES": "2",
+        "ENABLED": "true",
+        "EMPTY": "null",
+        "INPUT_PATH": "/tmp/event.json",
+    }
+
+
+def test_shell_process_tool_rejects_non_json_serializable_env_value() -> None:
+    tool = ShellProcessTool()
+
+    result = tool.request(
+        ToolInput(
+            run_id="run-1",
+            step_id="inspect_event",
+            tool_call_id="call-1",
+            args={
+                "command": "env",
+                "env": {"INPUT_PATH": Path("/tmp/event.json")},
+            },
+        )
+    )
+
+    assert result.ok is False
+    assert result.error == (
+        "Tool call 'call-1' requires JSON-serializable value for env 'INPUT_PATH'"
     )
 
 

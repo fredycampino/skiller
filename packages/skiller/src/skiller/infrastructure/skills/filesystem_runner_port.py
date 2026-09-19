@@ -13,7 +13,7 @@ from skiller.infrastructure.flow.flow_file_loader import load_existing_flow
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
 _FULL_TEMPLATE_RE = re.compile(r"^\s*{{\s*([^}]+?)\s*}}\s*$")
 _OUTPUT_VALUE_RE = re.compile(
-    r"""^output_value\(\s*(["'])([^"']+)\1\s*\)((?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)$"""
+    r"""^output_value\(\s*(["'])([^"']+)\1\s*\)((?:\.[a-zA-Z_][a-zA-Z0-9_]*)*(?:\.[a-zA-Z_][a-zA-Z0-9_]*\?)?)$"""
 )
 _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
 
@@ -93,9 +93,12 @@ class FilesystemRunnerPort(RunnerPort):
                 return value
 
         def replace(match: re.Match[str]) -> str:
-            resolved, value = self._resolve_expression(context, match.group(1).strip())
+            expression = match.group(1).strip()
+            resolved, value = self._resolve_expression(context, expression)
             if not resolved:
                 return match.group(0)
+            if value is None and expression.endswith("?"):
+                return ""
             return str(value)
 
         return _TEMPLATE_RE.sub(replace, template)
@@ -165,7 +168,15 @@ class FilesystemRunnerPort(RunnerPort):
             return value
 
         path = suffix.removeprefix(".")
-        return self._resolve_field_path(value=value, step_id=step_id, path=path)
+        optional_final_field = path.endswith("?")
+        if optional_final_field:
+            path = path.removesuffix("?")
+        return self._resolve_field_path(
+            value=value,
+            step_id=step_id,
+            path=path,
+            optional_final_field=optional_final_field,
+        )
 
     def _load_effective_output_value(self, *, output: dict[str, Any], step_id: str) -> Any:
         if "value" not in output:
@@ -175,9 +186,18 @@ class FilesystemRunnerPort(RunnerPort):
             )
         return output.get("value")
 
-    def _resolve_field_path(self, *, value: Any, step_id: str, path: str) -> Any:
+    def _resolve_field_path(
+        self,
+        *,
+        value: Any,
+        step_id: str,
+        path: str,
+        optional_final_field: bool,
+    ) -> Any:
         current = value
-        for part in path.split("."):
+        fields = path.split(".")
+        final_index = len(fields) - 1
+        for index, part in enumerate(fields):
             key = part.strip()
             if not key:
                 raise ValueError(
@@ -186,6 +206,8 @@ class FilesystemRunnerPort(RunnerPort):
                 )
             if isinstance(current, dict):
                 if key not in current:
+                    if optional_final_field and index == final_index:
+                        return None
                     raise ValueError(
                         "OUTPUT_VALUE_PATH_MISSING: requested field does not exist "
                         f"(step_id={step_id}, path={path})"

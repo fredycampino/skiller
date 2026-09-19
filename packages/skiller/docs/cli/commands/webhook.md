@@ -12,6 +12,7 @@ Receives webhook payloads and manages webhook registrations.
 | `skiller webhook register <webhook>` | Registers a local webhook channel and secret. | Registration details. |
 | `skiller webhook register <webhook> --method GET --auth none --payload-source query` | Registers a query-string webhook. | Registration details. |
 | `skiller webhook register <webhook> --auth token --token-header X-Webhook-Token` | Registers a fixed-token webhook. | Registration details. |
+| `skiller webhook secret <webhook> --secret-env <name>` | Updates a registered webhook secret from an environment variable. | Update result, without the secret. |
 | `skiller webhook list` | Lists local webhook registrations. | JSON array of registrations. |
 | `skiller webhook remove <webhook>` | Removes a local webhook registration. | Removal result. |
 
@@ -124,6 +125,17 @@ value in constant time. Do not store the secret in flow files or source control.
 
 `token_header` is required only for `--auth token`. The server returns `401` when the header is
 missing or its value does not match.
+
+### Update a webhook secret
+
+Use an environment variable to set or rotate the secret of an existing webhook:
+
+```bash
+skiller webhook secret provider-events --secret-env PROVIDER_WEBHOOK_SECRET
+```
+
+The command updates only the secret. It does not reveal the secret in its output, and it fails when
+the webhook is not registered or the named environment variable is missing or empty.
 
 ## List
 

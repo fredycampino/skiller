@@ -52,7 +52,10 @@
 - `command` is required.
 - runtime resolves the interpreter in this order: `$SHELL`, `/bin/bash`, `/bin/sh`.
 - `cwd` is optional and controls the working directory of the process.
-- `env` is optional and adds environment variables for the command.
+- `env` is optional and adds environment variables for the command. String values
+  are passed unchanged. Other JSON values are serialized as JSON, so a complete
+  template such as `EVENT: '{{output_value("wait_event").payload}}'` makes the
+  rendered object available as a JSON environment value. Paths must be strings.
 - `timeout` is optional and uses seconds.
 - `check` defaults to `true`.
 - if `check: true`, a non-zero exit code fails the step.

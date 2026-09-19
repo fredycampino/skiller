@@ -4,7 +4,7 @@ set -euo pipefail
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-cd "$(dirname "$0")/../../../.."
+cd "$(dirname "$0")/../../../../.."
 
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
@@ -15,5 +15,5 @@ if [[ ! -x "${runtime_python}" ]]; then
 fi
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \
-  --file packages/skiller/tests/e2e/skills/when_cli_e2e.yaml \
+  --file packages/skiller/tests/e2e-steps/when/when.yaml \
 | python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"run_id": payload["run_id"], "status": payload["status"]}, indent=2))'

@@ -9,7 +9,9 @@ from skiller.domain.action.action_model import EndActionTrigger
 from skiller.domain.flow.flow_raw_definition import FlowRawDefinition
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
-_OUTPUT_VALUE_CALL_RE = re.compile(r'^output_value\((.*)\)((?:\.[A-Za-z_][A-Za-z0-9_]*)*)$')
+_OUTPUT_VALUE_CALL_RE = re.compile(
+    r"^output_value\((.*)\)((?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\.[A-Za-z_][A-Za-z0-9_]*\?)?)$"
+)
 _STRING_LITERAL_RE = re.compile(r'^(["\'])([^"\']+)\1$')
 _UNSUPPORTED_HELPER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\(")
 

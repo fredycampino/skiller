@@ -1,12 +1,14 @@
 from typing import Protocol
 
-from skiller.domain.event.webhook_registration_model import WebhookRegistration
+from skiller.domain.event.webhook_registration_model import WebhookRegistration, WebhookSecretUpdate
 
 
 class WebhookRegistryPort(Protocol):
     def register_webhook(self, registration: WebhookRegistration) -> None: ...
 
     def get_webhook_registration(self, webhook: str) -> WebhookRegistration | None: ...
+
+    def update_webhook_secret(self, update: WebhookSecretUpdate) -> bool: ...
 
     def list_webhook_registrations(self) -> list[WebhookRegistration]: ...
 

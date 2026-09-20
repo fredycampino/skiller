@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from rich.console import RenderableType
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import (
     render_message_content,
     wrap_message_renderable,
@@ -14,7 +14,7 @@ from stui.viewmodel.console_screen_state import StepOutputItem
 
 
 @dataclass(frozen=True)
-class StepOutputView(TranscriptView):
+class StepOutputView(TranscriptItemView):
     item: StepOutputItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

@@ -15,14 +15,19 @@ Current path:
 
 ```text
 runtime event -> EventTranscriptMapper -> TranscriptItem
-TranscriptItem -> ProjectTranscriptUseCase -> TranscriptView -> Rich renderable
+TranscriptItem -> ProjectTranscriptUseCase -> TranscriptState
+TranscriptState -> TranscriptView -> RenderTranscript -> TranscriptItemView -> Rich renderable
 ```
+
+`TranscriptView` is the complete `RichLog`-based widget. `RenderTranscript` converts projected items into renderables, and each `TranscriptItemView` renders one item type.
+
+`TranscriptView` retains the last applied transcript snapshot and width. It skips reconstruction when neither changed, so prompt, autocomplete, status, table, or footer updates do not rebuild the transcript. A transcript change or width change still triggers a full reconstruction.
 
 The viewmodel can also append transcript items directly, for example user input,
 run acknowledgments, resume acknowledgments, intro/info messages, and dispatch errors.
 
 Rules:
-- one transcript item maps to one transcript view
+- each transcript item maps to one `TranscriptItemView`; `TranscriptView` owns the aggregate `RichLog` rendering
 - output views use a prefix column plus content column
 - transcript content must not expose raw runtime event names
 - transcript content must prefer user-facing text over transport payloads

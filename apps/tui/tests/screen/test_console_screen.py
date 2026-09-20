@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 
 from stui.port.runs_port import RunsPortItem
-from stui.screen.console_screen import (
-    _build_footer_right_text,
+from stui.screen.footer_context_view import _build_footer_usage_text, _format_agent_tokens
+from stui.screen.footer_view import _build_footer_session_text
+from stui.screen.runs_table_view import (
+    RunRowStatus,
     _format_run_updated_at,
     _resolve_run_row_status,
 )
-from stui.screen.footer_context_view import _build_footer_usage_text, _format_agent_tokens
-from stui.screen.runs_table_view import RunRowStatus
 from stui.viewmodel.console_screen_state import (
     AgentMetricsState,
     AgentStepUsage,
@@ -99,20 +99,31 @@ def test_build_footer_usage_text_falls_back_to_commands_hint() -> None:
     ) == "/ for commands"
 
 
-def test_build_footer_right_text_shows_run_id_and_compact_run_name() -> None:
+def test_build_footer_session_text_shows_run_id_and_compact_run_name() -> None:
     state = ConsoleScreenState(
         session_key="run-1234",
         run_name="apps/tui/tests/flows/notify/notify.yaml",
     )
 
     assert (
-        _build_footer_right_text(state=state, empty_icon="-")
+        _build_footer_session_text(
+            session_key=state.session_key,
+            run_name=state.run_name,
+            empty_icon="-",
+        )
         == "run-1234\n/notify.yaml"
     )
 
 
-def test_build_footer_right_text_shows_empty_icon_without_run() -> None:
-    assert _build_footer_right_text(state=ConsoleScreenState(), empty_icon="-") == "-"
+def test_build_footer_session_text_shows_empty_icon_without_run() -> None:
+    assert (
+        _build_footer_session_text(
+            session_key="main",
+            run_name=None,
+            empty_icon="-",
+        )
+        == "-"
+    )
 
 
 def _run_item(*, status: str, wait_type: str | None) -> RunsPortItem:

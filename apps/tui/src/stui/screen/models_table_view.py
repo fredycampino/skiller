@@ -10,6 +10,7 @@ from textual.widgets import DataTable, Static
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.models_port import MODEL_PROVIDER_SOURCE_USER
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme
+from stui.viewmodel.console_screen_state import ModelsTableState
 
 
 @dataclass(frozen=True)
@@ -62,10 +63,29 @@ class ModelsTableView(Vertical):
     def on_mount(self) -> None:
         self._render_tables()
 
+    def set_state(self, state: ModelsTableState) -> None:
+        self.display = state.visible
+        providers = tuple(
+            ModelsTableProviderRow(
+                name=provider.name,
+                source=provider.source,
+                models=tuple(
+                    ModelsTableModelRow(name=model.name, active=model.active)
+                    for model in provider.models
+                ),
+            )
+            for provider in state.rows
+        )
+        self._set_rows(providers)
+
     def set_rows(self, rows: list[ModelsTableProviderRow]) -> None:
+        self._set_rows(tuple(rows))
+
+    def _set_rows(self, rows: tuple[ModelsTableProviderRow, ...]) -> None:
         providers = ordered_providers(rows)
-        if providers != self._providers:
-            self._model_index_by_provider = {}
+        if providers == self._providers:
+            return
+        self._model_index_by_provider = {}
         self._providers = providers
         self._provider_index = self._initial_provider_index()
         self._model_index = self._stored_model_index(self.selected_provider)

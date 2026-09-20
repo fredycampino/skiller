@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 from rich.text import Text
@@ -9,6 +10,10 @@ from textual._context import NoActiveAppError
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, Static
+
+from stui.port.runs_port import RunsPortItem
+from stui.screen.run_name import format_run_name
+from stui.viewmodel.console_screen_state import RunsTableState
 
 
 class RunRowStatus(StrEnum):
@@ -72,8 +77,18 @@ class RunsTableView(Vertical):
     def on_resize(self, _: events.Resize) -> None:
         self._render_rows()
 
+    def set_state(self, state: RunsTableState) -> None:
+        self.display = state.visible
+        rows = tuple(_to_table_row(run) for run in state.rows)
+        if rows == self._rows:
+            return
+        self._set_rows(rows)
+
     def set_rows(self, rows: list[RunsTableRow]) -> None:
-        self._rows = tuple(rows)
+        self._set_rows(tuple(rows))
+
+    def _set_rows(self, rows: tuple[RunsTableRow, ...]) -> None:
+        self._rows = rows
         self._selected_index = self._first_loadable_index() or 0
         self._render_rows()
 
@@ -228,6 +243,53 @@ class RunsTableView(Vertical):
         return index
 
 
+def _to_table_row(run: RunsPortItem) -> RunsTableRow:
+    return RunsTableRow(
+        status=_resolve_run_row_status(run),
+        skill=run.flow_path,
+        updated_at=_format_run_updated_at(run.updated_at),
+        run_id=run.id,
+    )
+
+
+def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
+    normalized_status = run.status.strip().lower()
+    normalized_wait_type = str(run.wait_type or "").strip().lower()
+    if normalized_status == "waiting":
+        if normalized_wait_type == "input":
+            return RunRowStatus.WAITING_INPUT
+        if normalized_wait_type == "channel":
+            return RunRowStatus.WAITING_CHANNEL
+        return RunRowStatus.WAITING_WEBHOOK
+    if normalized_status == "failed":
+        return RunRowStatus.FAILED
+    if normalized_status == "succeeded":
+        return RunRowStatus.SUCCEEDED
+    if normalized_status == "cancelled":
+        return RunRowStatus.CANCELLED
+    if normalized_status == "created":
+        return RunRowStatus.CREATED
+    return RunRowStatus(normalized_status)
+
+
+def _format_run_updated_at(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        return "-"
+
+    parsers = (
+        lambda text: datetime.strptime(text, "%Y-%m-%d %H:%M:%S"),
+        lambda text: datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ"),
+        lambda text: datetime.fromisoformat(text.replace("Z", "+00:00")),
+    )
+    for parse in parsers:
+        try:
+            return parse(normalized).strftime("%m-%d %H:%M")
+        except ValueError:
+            continue
+    return "-"
+
+
 def format_run_row_status(row: RunsTableRow) -> str:
     if row.status == RunRowStatus.WAITING_INPUT:
         return "waiting-i"
@@ -236,12 +298,6 @@ def format_run_row_status(row: RunsTableRow) -> str:
     if row.status == RunRowStatus.WAITING_CHANNEL:
         return "waiting-c"
     return row.status.value
-
-
-def format_run_name(run_name: str) -> str:
-    if "/" not in run_name:
-        return run_name
-    return f"/{run_name.rsplit('/', maxsplit=1)[-1]}"
 
 
 def is_run_row_loadable(row: RunsTableRow) -> bool:

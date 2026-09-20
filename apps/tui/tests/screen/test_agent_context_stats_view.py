@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 from rich.text import Text
@@ -44,6 +46,25 @@ def test_agent_context_stats_view_renders_compact_muted_window_range() -> None:
             assert "Agent Context" not in rendered
             assert "truncate" not in rendered
             assert "limit" not in rendered
+
+    asyncio.run(run())
+
+
+def test_agent_context_stats_view_updates_only_when_render_input_changes() -> None:
+    async def run() -> None:
+        state = _context_state()
+        app = _AgentContextStatsHarness(state=state)
+        async with app.run_test(size=(34, 10)) as pilot:
+            await pilot.pause()
+            content = app.query_one("#agent-context-stats-content", Static)
+            view = app.query_one(AgentContextStatsView)
+
+            with patch.object(content, "update", wraps=content.update) as update:
+                view.set_state(state)
+                update.assert_not_called()
+
+                view.set_state(replace(state, end_sequence=1200))
+                update.assert_called_once()
 
     asyncio.run(run())
 

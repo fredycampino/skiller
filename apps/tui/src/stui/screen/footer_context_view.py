@@ -23,10 +23,11 @@ class FooterContextView(Static):
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
-        self._metrics = metrics
+        self._metrics = _metrics_snapshot(metrics)
         self._theme = theme
         self._fallback_text = fallback_text
         self._max_bar_width = max_bar_width
+        self._rendered_snapshot: tuple[AgentMetricsState | None, str, int] | None = None
 
     def compose(self) -> ComposeResult:
         yield from ()
@@ -40,7 +41,10 @@ class FooterContextView(Static):
         metrics: AgentMetricsState | None,
         fallback_text: str = "/ for commands",
     ) -> None:
-        self._metrics = metrics
+        metrics_snapshot = _metrics_snapshot(metrics)
+        if (metrics_snapshot, fallback_text) == (self._metrics, self._fallback_text):
+            return
+        self._metrics = metrics_snapshot
         self._fallback_text = fallback_text
         self._refresh()
 
@@ -53,6 +57,9 @@ class FooterContextView(Static):
         bar_width = self.size.width or DEFAULT_BAR_WIDTH
         if self._max_bar_width is not None:
             bar_width = min(bar_width, self._max_bar_width)
+        snapshot = (self._metrics, self._fallback_text, bar_width)
+        if snapshot == self._rendered_snapshot:
+            return
         self.update(
             _render_footer_context(
                 metrics=self._metrics,
@@ -64,6 +71,13 @@ class FooterContextView(Static):
                 bar_width=bar_width,
             )
         )
+        self._rendered_snapshot = snapshot
+
+
+def _metrics_snapshot(metrics: AgentMetricsState | None) -> AgentMetricsState | None:
+    if metrics is None:
+        return None
+    return AgentMetricsState(usage=metrics.usage, context=metrics.context)
 
 
 def _render_footer_context(

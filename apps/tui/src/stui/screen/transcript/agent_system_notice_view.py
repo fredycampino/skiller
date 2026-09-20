@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from rich.console import RenderableType
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import (
     prefixed_view,
     render_message_content,
@@ -15,7 +15,7 @@ from stui.viewmodel.console_screen_state import AgentSystemNoticeItem
 
 
 @dataclass(frozen=True)
-class AgentSystemNoticeView(TranscriptView):
+class AgentSystemNoticeView(TranscriptItemView):
     item: AgentSystemNoticeItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

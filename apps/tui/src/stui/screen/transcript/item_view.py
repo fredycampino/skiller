@@ -7,5 +7,5 @@ from rich.console import RenderableType
 from stui.screen.theme import TuiTheme
 
 
-class TranscriptView(Protocol):
+class TranscriptItemView(Protocol):
     def render(self, *, theme: TuiTheme) -> RenderableType: ...

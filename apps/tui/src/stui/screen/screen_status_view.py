@@ -20,10 +20,15 @@ class ScreenStatusView(Static):
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
-        self._state = state or ViewStatusState()
+        initial_state = state or ViewStatusState()
+        self._state = ViewStatusState(
+            kind=initial_state.kind,
+            message=initial_state.message,
+        )
         self._theme = theme
         self._frame_index = 0
         self._timer: Timer | None = None
+        self._rendered_state: tuple[ViewStatusKind, str] | None = None
 
     def on_mount(self) -> None:
         self._timer = self.set_interval(
@@ -32,15 +37,23 @@ class ScreenStatusView(Static):
             pause=True,
         )
         self._sync_timer()
-        self.update(self.render())
+        self._refresh()
 
-    def set_state(
-        self,
-        state: ViewStatusState,
-    ) -> None:
-        self._state = state
+    def set_state(self, state: ViewStatusState) -> None:
+        state_values = (state.kind, state.message)
+        current_values = (self._state.kind, self._state.message)
+        if state_values == current_values:
+            return
+        self._state = ViewStatusState(kind=state.kind, message=state.message)
         self._sync_timer()
+        self._refresh()
+
+    def _refresh(self) -> None:
+        rendered_state = (self._state.kind, self._state.message)
+        if rendered_state == self._rendered_state:
+            return
         self.update(self.render())
+        self._rendered_state = rendered_state
 
     def _tick(self) -> None:
         self._frame_index = (self._frame_index + 1) % len(self._theme.status_spinner_frames)

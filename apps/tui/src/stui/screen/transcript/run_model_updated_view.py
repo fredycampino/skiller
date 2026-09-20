@@ -6,7 +6,7 @@ from rich.console import RenderableType
 
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import (
     prefixed_view,
     render_message_content,
@@ -16,7 +16,7 @@ from stui.viewmodel.console_screen_state import OutputFormat, RunModelUpdatedIte
 
 
 @dataclass(frozen=True)
-class RunModelUpdatedView(TranscriptView):
+class RunModelUpdatedView(TranscriptItemView):
     item: RunModelUpdatedItem
     strings: TuiStrings = DEFAULT_TUI_STRINGS
 

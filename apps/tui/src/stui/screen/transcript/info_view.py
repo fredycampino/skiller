@@ -6,12 +6,12 @@ from rich.console import RenderableType
 from rich.text import Text
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.viewmodel.console_screen_state import InfoItem
 
 
 @dataclass(frozen=True)
-class InfoView(TranscriptView):
+class InfoView(TranscriptItemView):
     item: InfoItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

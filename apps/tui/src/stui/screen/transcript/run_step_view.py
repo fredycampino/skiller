@@ -6,7 +6,7 @@ from rich.console import RenderableType
 from rich.text import Text
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import agent_step_id_style, agent_step_tag_style
 from stui.viewmodel.console_screen_state import RunStepItem, TranscriptMode
 
@@ -18,7 +18,7 @@ _WAIT_STEP_TYPES = {
 
 
 @dataclass(frozen=True)
-class RunStepView(TranscriptView):
+class RunStepView(TranscriptItemView):
     item: RunStepItem
     mode: TranscriptMode
 

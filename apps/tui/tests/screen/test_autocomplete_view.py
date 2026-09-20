@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from rich.text import Text
 
@@ -41,6 +43,22 @@ def test_autocomplete_view_renders_mock_items() -> None:
         renderable.plain
         == "   runs  Show runs\n-> run   Run an agentic flow\n   quit  Exit the TUI"
     )
+
+
+def test_autocomplete_view_does_not_refresh_unchanged_state() -> None:
+    view = AutoCompleteView()
+    refresh = Mock()
+    view._refresh = refresh  # noqa: SLF001
+    state = CompletionState(
+        visible=True,
+        query="/ru",
+        items=(CompletionItem(label="runs", insert_text="/runs"),),
+    )
+
+    view.set_state(state, reserve_space=True)
+    view.set_state(state, reserve_space=True)
+
+    refresh.assert_called_once()
 
 
 def test_autocomplete_view_exposes_selected_item_from_state() -> None:

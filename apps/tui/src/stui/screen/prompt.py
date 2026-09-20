@@ -100,7 +100,7 @@ class PromptView(Horizontal):
     def focus_prompt(self) -> None:
         self.controller().focus()
 
-    def set_prompt_state(self, *, state: PromptState) -> None:
+    def set_state(self, state: PromptState) -> None:
         prompt = self.controller()
         if (
             prompt.text() == state.text

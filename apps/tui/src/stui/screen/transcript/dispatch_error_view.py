@@ -7,13 +7,13 @@ from rich.padding import Padding
 from rich.text import Text
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import strip_error_prefix
 from stui.viewmodel.console_screen_state import DispatchErrorItem
 
 
 @dataclass(frozen=True)
-class DispatchErrorView(TranscriptView):
+class DispatchErrorView(TranscriptItemView):
     item: DispatchErrorItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

@@ -37,7 +37,7 @@ from stui.screen.autocomplete_view import AutoCompleteView
 from stui.screen.console_screen import ConsoleScreen
 from stui.screen.models_table_view import ModelsTableView
 from stui.screen.screen_status_view import ScreenStatusView
-from stui.screen.transcript_log import TranscriptLog
+from stui.screen.transcript_view import TranscriptView
 from stui.usecase import (
     interrupt_agent_turn_use_case as interrupt_agent_turn_use_case_module,
 )
@@ -96,6 +96,43 @@ def test_console_screen_clears_prompt_after_local_submit() -> None:
             assert app.state.view_status.kind == ViewStatusKind.HIDDEN
             assert isinstance(app.state.transcript.items[0], UserInputItem)
             assert isinstance(app.state.transcript.items[1], InfoItem)
+
+    asyncio.run(run())
+
+
+def test_console_screen_does_not_rebuild_transcript_while_editing_prompt() -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+            runs_port=FakeRunsPort(),
+        )
+        viewmodel.state.transcript.items.append(UserInputItem(text="existing message"))
+        app = ConsoleScreen(viewmodel=viewmodel)
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            transcript = app.query_one("#transcript", TranscriptView)
+            clear_calls = 0
+            original_clear = transcript.clear
+
+            def record_clear() -> None:
+                nonlocal clear_calls
+                clear_calls += 1
+                original_clear()
+
+            transcript.clear = record_clear  # type: ignore[method-assign]
+
+            await pilot.press("h", "o", "l", "a", "backspace")
+            await pilot.pause()
+
+            assert clear_calls == 0
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert clear_calls == 1
 
     asyncio.run(run())
 
@@ -1114,7 +1151,7 @@ def test_console_screen_routes_scroll_keys_to_transcript_when_runs_table_is_hidd
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             calls: list[str] = []
 
             def record(name: str):
@@ -1173,7 +1210,7 @@ def test_console_screen_batches_transcript_replacement() -> None:
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
 
             assert len(batch_entries) >= 2
@@ -1215,7 +1252,7 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
             agent_index = rendered_lines.index("[agent] support_agent")
 
@@ -1260,7 +1297,7 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
             agent_index = rendered_lines.index("[agent] support_agent")
 
@@ -1299,7 +1336,7 @@ def test_console_screen_renders_notify_output_like_agent_message() -> None:
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
             notify_index = rendered_lines.index("[notify] show_message")
 
@@ -1329,7 +1366,7 @@ def test_console_screen_rerenders_transcript_after_resize() -> None:
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [strip.text.rstrip() for strip in transcript.lines]
 
             assert any("…" in line for line in rendered_lines)
@@ -1382,7 +1419,7 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
             await pilot.press("enter")
             await pilot.pause()
 
-            transcript = app.query_one("#transcript-log", TranscriptLog)
+            transcript = app.query_one("#transcript", TranscriptView)
             rendered_lines = [
                 strip.text.rstrip() for strip in transcript.lines if strip.text.rstrip()
             ]

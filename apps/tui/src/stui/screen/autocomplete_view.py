@@ -21,6 +21,7 @@ class AutoCompleteView(Static):
         super().__init__(id=id)
         self._theme = theme
         self._state: CompletionState | None = None
+        self._state_snapshot: tuple[CompletionState | None, bool] | None = None
         self.display = visible
 
     def on_mount(self) -> None:
@@ -32,7 +33,11 @@ class AutoCompleteView(Static):
         *,
         reserve_space: bool = False,
     ) -> None:
+        snapshot = (state, reserve_space)
+        if snapshot == self._state_snapshot:
+            return
         self._state = state
+        self._state_snapshot = snapshot
         active = self.is_visible()
         self.display = active or reserve_space
         self.styles.visibility = "visible" if active else "hidden"

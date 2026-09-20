@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
-from stui.screen.prompt import PromptTextArea, compact_pasted_prompt_text
+from stui.screen.prompt import PromptTextArea, PromptView, compact_pasted_prompt_text
+from stui.viewmodel.console_screen_state import PromptState
 
 pytestmark = pytest.mark.unit
+
+
+def test_prompt_view_writes_only_when_prompt_state_changes() -> None:
+    view = PromptView()
+    controller = Mock()
+    controller.text.return_value = "hello"
+    controller.cursor_position.return_value = 5
+    view.controller = Mock(return_value=controller)
+
+    view.set_state(PromptState(text="hello", cursor_position=5))
+    controller.set_text.assert_not_called()
+
+    view.set_state(PromptState(text="hello!", cursor_position=6))
+    controller.set_text.assert_called_once_with("hello!", cursor_position=6)
 
 
 def test_compact_pasted_prompt_text_keeps_single_line_text() -> None:

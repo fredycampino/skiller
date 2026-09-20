@@ -36,6 +36,7 @@ class ActionOpenUrlView(Vertical):
         self._theme = theme
         self._strings = strings
         self._opened = False
+        self._rendered_snapshot: tuple[NotifyActionState | None, bool] | None = None
         self.display = state is not None
 
     def compose(self) -> ComposeResult:
@@ -59,10 +60,13 @@ class ActionOpenUrlView(Vertical):
         self.call_after_refresh(self._refresh)
 
     def set_state(self, state: NotifyActionState | None) -> None:
-        if state != self._state:
-            self._opened = False
+        if state == self._state:
+            return
+        self._opened = False
         self._state = state
-        self.display = state is not None
+        visible = state is not None
+        if self.display != visible:
+            self.display = visible
         self._refresh()
 
     @on(Button.Pressed, "#notify-action-open-link")
@@ -89,6 +93,9 @@ class ActionOpenUrlView(Vertical):
     def _refresh(self) -> None:
         if not self.is_mounted:
             return
+        snapshot = (self._state, self._opened)
+        if snapshot == self._rendered_snapshot:
+            return
         message = self.query_one("#notify-action-message", Static)
         done = self.query_one("#notify-action-done", Button)
         open_link = self.query_one("#notify-action-open-link", Button)
@@ -100,6 +107,7 @@ class ActionOpenUrlView(Vertical):
             open_link.remove_class("opened")
             open_link.disabled = False
             open_link.display = False
+            self._rendered_snapshot = snapshot
             return
         message.update(Text(self._state.message, style=self._theme.color_text_primary))
         done.label = self._strings.notify_action_done_label
@@ -108,3 +116,4 @@ class ActionOpenUrlView(Vertical):
         open_link.set_class(self._opened, "opened")
         open_link.disabled = not self._state.action.url
         open_link.display = True
+        self._rendered_snapshot = snapshot

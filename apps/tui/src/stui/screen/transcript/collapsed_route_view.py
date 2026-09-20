@@ -6,12 +6,12 @@ from rich.console import RenderableType
 from rich.text import Text
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.viewmodel.console_screen_state import RunOutputItem, RunStepItem
 
 
 @dataclass(frozen=True)
-class CollapsedRouteView(TranscriptView):
+class CollapsedRouteView(TranscriptItemView):
     step: RunStepItem
     output: RunOutputItem
     target: str

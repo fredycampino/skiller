@@ -7,10 +7,13 @@ This document explains the architectural patterns used by the TUI. It does not d
 ## Core Patterns
 
 ### `State-driven UI`
-- the screen renders `ConsoleScreenState`
+- `ConsoleScreenState` is the source of truth for screen-visible behavior
+- `ConsoleScreen` distributes each state section to its View through `set_state(...)`
 - the UI does not render raw runtime payloads directly
-- transcript, prompt, autocomplete, status, session, and runs table are presentation state
+- transcript, prompt, autocomplete, status, session, tables, actions, and metrics are presentation state
 - rendering is a projection of state, not a direct reaction to raw transport payloads
+- a View may retain an immutable snapshot of its last applied representation to avoid redundant rendering
+- View snapshots are render caches, not business state or an alternative source of truth
 
 ### `ViewModel as Orchestrator`
 - the screen emits user intent
@@ -46,27 +49,28 @@ This document explains the architectural patterns used by the TUI. It does not d
 
 `ConsoleScreenState` is the central UI contract.
 
-It holds:
-- `transcript state`
-- `prompt state`
-- `view status state`
-- `autocompletion`
-- `runs table state`
-- `session_key`
+It holds presentation state for the transcript, prompt, autocomplete, status, session, tables, actions, and agent metrics.
 
-This keeps rendering decisions in one place and allows the screen to re-render from state instead of from runtime responses.
+This allows the screen to render from state instead of from runtime responses. `ConsoleScreen` coordinates the Views, while each View owns how and when its state section is applied to Textual widgets.
 
-The important architectural rule is not the exact field list.
+The important architectural rule is not the exact field list. Screen-visible behavior must be represented as explicit state, not as hidden widget-local logic.
 
-The important rule is that screen-visible behavior is represented as explicit state, not as hidden widget-local logic.
+A View may additionally own ephemeral visual state such as focus, selection, animation position, responsive layout, or its last rendered snapshot. This local state must not redefine application behavior and must remain derivable from the presentation state plus widget lifecycle.
 
 ## Layer Responsibilities
 
 ### `Screen`
-- owns Textual widgets and lifecycle
-- captures keyboard input and focus changes
+- composes Views and owns screen-level Textual lifecycle
+- captures keyboard input and coordinates cross-View focus and layout
 - forwards intent to the viewmodel
-- renders widgets from `ConsoleScreenState`
+- distributes sections of `ConsoleScreenState` to Views
+
+### `View`
+- owns its Textual widgets and local visual lifecycle
+- receives explicit presentation state through `set_state(...)`
+- decides how to render its state section
+- avoids redundant widget updates when the applied representation has not changed
+- owns local invalidation caused by resize, animation, focus, or selection
 
 ### `ViewModel`
 - orchestrates presentation behavior
@@ -167,6 +171,9 @@ If a pattern changes, this document must be updated.
 - use cases do not create infrastructure
 - adapters do not format UI
 - new UI behavior should be represented in `ConsoleScreenState`
+- `ConsoleScreen` should coordinate Views instead of owning their render caches
+- Views may skip redundant rendering, but must not become an independent source of application state
+- resize-sensitive Views own their visual invalidation
 - reducers should consume normalized events, not raw transport payloads
 - blocking infrastructure calls must be offloaded before they can affect UI responsiveness
 - code style contracts live in [`rules-code-style.md`](rules-code-style.md)

@@ -8,11 +8,11 @@ from rich.text import Text
 
 from stui.di.strings import TuiStrings
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 
 
 @dataclass(frozen=True)
-class IntroView(TranscriptView):
+class IntroView(TranscriptItemView):
     strings: TuiStrings
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

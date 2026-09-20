@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 from textual import on
@@ -76,6 +77,22 @@ def test_action_open_url_view_set_state_toggles_visibility() -> None:
             assert str(message.content) == ""
             assert done.display is False
             assert open_link.display is False
+
+    asyncio.run(run())
+
+
+def test_action_open_url_view_does_not_update_unchanged_state() -> None:
+    async def run() -> None:
+        state = _action_state()
+        app = _ActionOpenUrlHarness(state=state)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            view = app.query_one(ActionOpenUrlView)
+            message = app.query_one("#notify-action-message", Static)
+
+            with patch.object(message, "update", wraps=message.update) as update:
+                view.set_state(state)
+                update.assert_not_called()
 
     asyncio.run(run())
 

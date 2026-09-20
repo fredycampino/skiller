@@ -6,12 +6,12 @@ from rich.console import RenderableType
 from rich.text import Text
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.viewmodel.console_screen_state import RunResumeItem
 
 
 @dataclass(frozen=True)
-class RunResumeView(TranscriptView):
+class RunResumeView(TranscriptItemView):
     item: RunResumeItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

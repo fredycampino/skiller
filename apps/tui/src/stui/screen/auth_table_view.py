@@ -8,6 +8,7 @@ from textual.widgets import DataTable, Static
 
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
 from stui.port.models_port import MODEL_PROVIDER_SOURCE_USER
+from stui.viewmodel.console_screen_state import AuthTableState
 
 
 @dataclass(frozen=True)
@@ -48,8 +49,25 @@ class AuthTableView(Vertical):
     def on_mount(self) -> None:
         self._render_table()
 
+    def set_state(self, state: AuthTableState) -> None:
+        self.display = state.visible
+        providers = tuple(
+            AuthTableProviderRow(
+                name=provider.name,
+                adapter=provider.adapter,
+                source=provider.source,
+            )
+            for provider in state.rows
+        )
+        self._set_rows(providers)
+
     def set_rows(self, rows: list[AuthTableProviderRow]) -> None:
-        self._providers = tuple(rows)
+        self._set_rows(tuple(rows))
+
+    def _set_rows(self, providers: tuple[AuthTableProviderRow, ...]) -> None:
+        if providers == self._providers:
+            return
+        self._providers = providers
         self._provider_index = self._clamp_index(self._provider_index)
         self._render_table()
 

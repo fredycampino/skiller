@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import datetime
 
 from rich.console import Group
 from rich.text import Text
@@ -11,40 +10,27 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
-from textual.widgets import Button, DataTable, Static, TextArea
+from textual.widgets import Button, DataTable, TextArea
 
 from stui.app_version import format_app_version
 from stui.di.container import build_tui_container
 from stui.di.strings import DEFAULT_TUI_STRINGS, TuiStrings
-from stui.port.models_port import AuthProvidersPortProviderItem, ModelsPortProviderItem
-from stui.port.runs_port import RunsPortItem
 from stui.screen.action_open_url_view import ActionOpenUrlView
 from stui.screen.agent_context_stats_view import AgentContextStatsView
-from stui.screen.auth_table_view import AuthTableProviderRow, AuthTableView
+from stui.screen.auth_table_view import AuthTableView
 from stui.screen.autocomplete_view import AutoCompleteView
-from stui.screen.footer_context_view import FooterContextView
+from stui.screen.footer_view import FooterView
 from stui.screen.markdown import MarkdownView
-from stui.screen.models_table_view import (
-    ModelsTableModelRow,
-    ModelsTableProviderRow,
-    ModelsTableView,
-)
+from stui.screen.models_table_view import ModelsTableView
 from stui.screen.prompt import PromptController, PromptView
-from stui.screen.runs_table_view import (
-    RunRowStatus,
-    RunsTableRow,
-    RunsTableView,
-    format_run_name,
-)
+from stui.screen.runs_table_view import RunsTableView
 from stui.screen.screen_status_view import ScreenStatusView
 from stui.screen.theme import DEFAULT_TUI_THEME, TuiTheme, build_textual_css
 from stui.screen.transcript import RenderTranscript
-from stui.screen.transcript_log import TranscriptLog
+from stui.screen.transcript_view import TranscriptView
 from stui.viewmodel.console_screen_event import InspectRunContextEvent
 from stui.viewmodel.console_screen_state import ConsoleScreenState, PromptMode
 from stui.viewmodel.console_screen_viewmodel import ConsoleScreenViewModel
-
-_NARROW_FOOTER_WIDTH = 80
 
 
 class ConsoleScreen(App[str]):
@@ -76,15 +62,13 @@ class ConsoleScreen(App[str]):
         self.ui_strings = strings
         self.viewmodel = viewmodel
         self.state = ConsoleScreenState()
-        self._render_transcript = RenderTranscript(strings=strings)
-        self._last_runs_snapshot: tuple[RunsPortItem, ...] | None = None
-        self._last_models_snapshot: tuple[ModelsPortProviderItem, ...] | None = None
-        self._last_auth_snapshot: tuple[AuthProvidersPortProviderItem, ...] | None = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            TranscriptLog(
-                id="transcript-log",
+            TranscriptView(
+                renderer=RenderTranscript(strings=self.ui_strings),
+                theme=self.ui_theme,
+                id="transcript",
                 auto_scroll=False,
                 highlight=False,
                 markup=False,
@@ -138,38 +122,11 @@ class ConsoleScreen(App[str]):
             ),
             AutoCompleteView(id="autocomplete", theme=self.ui_theme, visible=False),
             PromptView(theme=self.ui_theme),
-            Container(
-                Horizontal(
-                    FooterContextView(
-                        metrics=self.state.agent_metrics,
-                        theme=self.ui_theme,
-                        max_bar_width=30,
-                        id="footer-wide-context",
-                    ),
-                    Static(
-                        _build_footer_right_text(
-                            state=self.state,
-                            empty_icon=self.ui_theme.session_empty_icon,
-                        ),
-                        id="footer-wide-session",
-                    ),
-                    id="footer-wide",
-                ),
-                Vertical(
-                    Static(
-                        _build_footer_right_text(
-                            state=self.state,
-                            empty_icon=self.ui_theme.session_empty_icon,
-                        ),
-                        id="footer-narrow-session",
-                    ),
-                    FooterContextView(
-                        metrics=self.state.agent_metrics,
-                        theme=self.ui_theme,
-                        id="footer-narrow-context",
-                    ),
-                    id="footer-narrow",
-                ),
+            FooterView(
+                session_key=self.state.session_key,
+                run_name=self.state.run_name,
+                metrics=self.state.agent_metrics,
+                theme=self.ui_theme,
                 id="footer",
             ),
             id="root",
@@ -210,7 +167,7 @@ class ConsoleScreen(App[str]):
             event.stop()
 
     def on_resize(self, _: events.Resize) -> None:
-        if self._transcript_log().size.width <= 0:
+        if self._transcript_view().size.width <= 0:
             return
         self.set_timer(0.05, self.viewmodel.screen_resized)
 
@@ -293,7 +250,7 @@ class ConsoleScreen(App[str]):
     def action_transcript_page_up(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_selection(-3):
             return
-        self._transcript_log().scroll_page_up(animate=False, force=True)
+        self._transcript_view().scroll_page_up(animate=False, force=True)
 
     def action_transcript_scroll_up(self) -> None:
         if self.viewmodel.move_completion(-1):
@@ -304,12 +261,12 @@ class ConsoleScreen(App[str]):
             return
         if self.state.runs_table.visible and self._runs_table().move_selection(-1):
             return
-        self._transcript_log().scroll_up(animate=False, force=True, immediate=True)
+        self._transcript_view().scroll_up(animate=False, force=True, immediate=True)
 
     def action_transcript_page_down(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_selection(3):
             return
-        self._transcript_log().scroll_page_down(animate=False, force=True)
+        self._transcript_view().scroll_page_down(animate=False, force=True)
 
     def action_transcript_scroll_down(self) -> None:
         if self.viewmodel.move_completion(1):
@@ -320,17 +277,17 @@ class ConsoleScreen(App[str]):
             return
         if self.state.runs_table.visible and self._runs_table().move_selection(1):
             return
-        self._transcript_log().scroll_down(animate=False, force=True, immediate=True)
+        self._transcript_view().scroll_down(animate=False, force=True, immediate=True)
 
     def action_transcript_home(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_to_start():
             return
-        self._transcript_log().scroll_home(animate=False, force=True, immediate=True)
+        self._transcript_view().scroll_home(animate=False, force=True, immediate=True)
 
     def action_transcript_end(self) -> None:
         if self.state.runs_table.visible and self._runs_table().move_to_end():
             return
-        self._transcript_log().scroll_end(animate=False, force=True, immediate=True)
+        self._transcript_view().scroll_end(animate=False, force=True, immediate=True)
 
     @on(DataTable.RowSelected, "#runs-table-data")
     async def on_runs_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -447,58 +404,6 @@ class ConsoleScreen(App[str]):
             return
         await self.viewmodel.select_auth_provider(provider=provider.name)
 
-    def _refresh_status(self, *, new_state: ConsoleScreenState) -> None:
-        try:
-            status = self.query_one("#status", ScreenStatusView)
-        except NoMatches:
-            return
-        status.set_state(new_state.view_status)
-
-    def _refresh_footer(self, *, new_state: ConsoleScreenState) -> None:
-        try:
-            footer_wide = self.query_one("#footer-wide", Horizontal)
-            footer_narrow = self.query_one("#footer-narrow", Vertical)
-            wide_context = self.query_one("#footer-wide-context", FooterContextView)
-            wide_session = self.query_one("#footer-wide-session", Static)
-            narrow_session = self.query_one("#footer-narrow-session", Static)
-            narrow_context = self.query_one("#footer-narrow-context", FooterContextView)
-        except NoMatches:
-            return
-
-        session_text = _build_footer_right_text(
-            state=new_state,
-            empty_icon=self.ui_theme.session_empty_icon,
-        )
-        wide_context.set_state(
-            metrics=new_state.agent_metrics,
-        )
-        wide_session.update(session_text)
-        narrow_session.update(session_text)
-        narrow_context.set_state(
-            metrics=new_state.agent_metrics,
-        )
-
-        is_narrow = self.size.width < _NARROW_FOOTER_WIDTH
-        footer_wide.display = not is_narrow
-        footer_narrow.display = is_narrow
-
-    def _refresh_notify_action(self, *, new_state: ConsoleScreenState) -> None:
-        try:
-            notify_action = self.query_one("#notify-action", ActionOpenUrlView)
-        except NoMatches:
-            return
-        notify_action.set_state(new_state.notify_action)
-
-    def _refresh_agent_context_stats(self, *, new_state: ConsoleScreenState) -> None:
-        try:
-            agent_context_stats = self.query_one(
-                "#agent-context-stats",
-                AgentContextStatsView,
-            )
-        except NoMatches:
-            return
-        agent_context_stats.set_state(new_state.agent_context_stats)
-
     def _prompt(self) -> PromptController:
         return self._prompt_view().controller()
 
@@ -508,11 +413,23 @@ class ConsoleScreen(App[str]):
     def _autocomplete_view(self) -> AutoCompleteView:
         return self.query_one("#autocomplete", AutoCompleteView)
 
-    def _transcript_log(self) -> TranscriptLog:
-        return self.query_one("#transcript-log", TranscriptLog)
+    def _transcript_view(self) -> TranscriptView:
+        return self.query_one("#transcript", TranscriptView)
+
+    def _status_view(self) -> ScreenStatusView:
+        return self.query_one("#status", ScreenStatusView)
+
+    def _notify_action_view(self) -> ActionOpenUrlView:
+        return self.query_one("#notify-action", ActionOpenUrlView)
+
+    def _agent_context_stats_view(self) -> AgentContextStatsView:
+        return self.query_one("#agent-context-stats", AgentContextStatsView)
+
+    def _footer_view(self) -> FooterView:
+        return self.query_one("#footer", FooterView)
 
     def _append_run_context_inspection(self, *, event: InspectRunContextEvent) -> None:
-        transcript = self._transcript_log()
+        transcript = self._transcript_view()
 
         if transcript.lines:
             transcript.write(Text(""))
@@ -545,109 +462,30 @@ class ConsoleScreen(App[str]):
         *,
         new_state: ConsoleScreenState,
     ) -> None:
-        self._refresh_transcript(new_state=new_state)
-        self._refresh_runs_table(new_state=new_state)
-        self._refresh_models_table(new_state=new_state)
-        self._refresh_auth_table(new_state=new_state)
-        self._refresh_table_visibility(new_state=new_state)
-        self._refresh_prompt(new_state=new_state)
-        self._refresh_status(new_state=new_state)
-        self._refresh_notify_action(new_state=new_state)
-        self._refresh_agent_context_stats(new_state=new_state)
-        self._refresh_autocomplete(new_state=new_state)
-        self._refresh_footer(new_state=new_state)
-
-    def _refresh_prompt(self, *, new_state: ConsoleScreenState) -> None:
-        self._prompt_view().set_prompt_state(state=new_state.prompt)
-
-    def _refresh_autocomplete(self, *, new_state: ConsoleScreenState) -> None:
-        autocomplete = self._autocomplete_view()
-        autocomplete.set_state(
+        self._transcript_view().set_state(new_state.transcript)
+        self._runs_table().set_state(new_state.runs_table)
+        self._models_table().set_state(new_state.models_table)
+        self._auth_table().set_state(new_state.auth_table)
+        self._prompt_view().set_state(new_state.prompt)
+        self._status_view().set_state(new_state.view_status)
+        self._notify_action_view().set_state(new_state.notify_action)
+        self._agent_context_stats_view().set_state(new_state.agent_context_stats)
+        self._autocomplete_view().set_state(
             new_state.autocompletion,
             reserve_space=new_state.prompt.text.startswith("/"),
         )
-
-    def _refresh_transcript(self, *, new_state: ConsoleScreenState) -> None:
-        transcript = self._transcript_log()
-        renderables = self._render_transcript.render(
-            items=new_state.transcript.items,
-            mode=new_state.transcript.mode,
-            theme=self.ui_theme,
-            prompt_placeholder="",
+        self._footer_view().set_state(
+            session_key=new_state.session_key,
+            run_name=new_state.run_name,
+            metrics=new_state.agent_metrics,
         )
-        with self.batch_update():
-            transcript.clear()
-            for index, renderable in enumerate(renderables):
-                transcript.write(
-                    renderable,
-                    expand=True,
-                    scroll_end=index == len(renderables) - 1,
-                )
+        self._refresh_cross_view_layout(new_state=new_state)
 
-    def _refresh_runs_table(self, *, new_state: ConsoleScreenState) -> None:
-        if (
-            self._last_runs_snapshot is not None
-            and new_state.runs_table.rows == self._last_runs_snapshot
-        ):
-            return
-        runs_table = self._runs_table()
-        runs_table.set_rows(
-            [
-                self._run_list_item_to_row(run)
-                for run in new_state.runs_table.rows
-            ]
-        )
-        self._last_runs_snapshot = new_state.runs_table.rows
-
-    def _refresh_models_table(self, *, new_state: ConsoleScreenState) -> None:
-        if (
-            self._last_models_snapshot is not None
-            and new_state.models_table.rows == self._last_models_snapshot
-        ):
-            return
-        models_table = self._models_table()
-        models_table.set_rows(
-            [
-                ModelsTableProviderRow(
-                    name=provider.name,
-                    source=provider.source,
-                    models=tuple(
-                        ModelsTableModelRow(name=model.name, active=model.active)
-                        for model in provider.models
-                    ),
-                )
-                for provider in new_state.models_table.rows
-            ]
-        )
-        self._last_models_snapshot = new_state.models_table.rows
-
-    def _refresh_auth_table(self, *, new_state: ConsoleScreenState) -> None:
-        if (
-            self._last_auth_snapshot is not None
-            and new_state.auth_table.rows == self._last_auth_snapshot
-        ):
-            return
-        auth_table = self._auth_table()
-        auth_table.set_rows(
-            [
-                AuthTableProviderRow(
-                    name=provider.name,
-                    adapter=provider.adapter,
-                    source=provider.source,
-                )
-                for provider in new_state.auth_table.rows
-            ]
-        )
-        self._last_auth_snapshot = new_state.auth_table.rows
-
-    def _refresh_table_visibility(self, *, new_state: ConsoleScreenState) -> None:
+    def _refresh_cross_view_layout(self, *, new_state: ConsoleScreenState) -> None:
         try:
             runs_table_area = self.query_one("#runs-table-area", Container)
-            runs_table = self.query_one("#runs-table", RunsTableView)
             models_table_area = self.query_one("#models-table-area", Container)
-            models_table = self.query_one("#models-table", ModelsTableView)
             auth_table_area = self.query_one("#auth-table-area", Container)
-            auth_table = self.query_one("#auth-table", AuthTableView)
             status_row = self.query_one("#status-row", Horizontal)
         except NoMatches:
             return
@@ -659,11 +497,8 @@ class ConsoleScreen(App[str]):
             PromptMode.AUTH_TABLE,
         }
         runs_table_area.display = new_state.runs_table.visible
-        runs_table.display = new_state.runs_table.visible
         models_table_area.display = new_state.models_table.visible
-        models_table.display = new_state.models_table.visible
         auth_table_area.display = new_state.auth_table.visible
-        auth_table.display = new_state.auth_table.visible
         status_row.display = not prompt_panel_visible
 
     def _runs_table(self) -> RunsTableView:
@@ -674,14 +509,6 @@ class ConsoleScreen(App[str]):
 
     def _auth_table(self) -> AuthTableView:
         return self.query_one("#auth-table", AuthTableView)
-
-    def _run_list_item_to_row(self, run: RunsPortItem) -> RunsTableRow:
-        return RunsTableRow(
-            status=_resolve_run_row_status(run),
-            skill=run.flow_path,
-            updated_at=_format_run_updated_at(run.updated_at),
-            run_id=run.id,
-        )
 
     def _on_state_changed(self, state: ConsoleScreenState) -> None:
         self._refresh_from_state(new_state=state)
@@ -721,55 +548,6 @@ def _resolve_runtime_strings(strings: TuiStrings) -> TuiStrings:
     if strings.intro_hint:
         return strings
     return replace(strings, intro_hint=format_app_version())
-
-
-def _resolve_run_row_status(run: RunsPortItem) -> RunRowStatus:
-    normalized_status = run.status.strip().lower()
-    normalized_wait_type = str(run.wait_type or "").strip().lower()
-    if normalized_status == "waiting":
-        if normalized_wait_type == "input":
-            return RunRowStatus.WAITING_INPUT
-        if normalized_wait_type == "channel":
-            return RunRowStatus.WAITING_CHANNEL
-        return RunRowStatus.WAITING_WEBHOOK
-    if normalized_status == "failed":
-        return RunRowStatus.FAILED
-    if normalized_status == "succeeded":
-        return RunRowStatus.SUCCEEDED
-    if normalized_status == "cancelled":
-        return RunRowStatus.CANCELLED
-    if normalized_status == "created":
-        return RunRowStatus.CREATED
-    return RunRowStatus(normalized_status)
-
-
-def _format_run_updated_at(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        return "-"
-
-    parsers = (
-        lambda text: datetime.strptime(text, "%Y-%m-%d %H:%M:%S"),
-        lambda text: datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ"),
-        lambda text: datetime.fromisoformat(text.replace("Z", "+00:00")),
-    )
-    for parse in parsers:
-        try:
-            return parse(normalized).strftime("%m-%d %H:%M")
-        except ValueError:
-            continue
-    return "-"
-
-
-def _build_footer_right_text(*, state: ConsoleScreenState, empty_icon: str) -> str:
-    run_id = state.session_key.strip()
-    if not run_id or run_id == "main":
-        return empty_icon
-
-    run_name = state.run_name
-    if not run_name:
-        return run_id
-    return f"{run_id}\n{format_run_name(run_name)}"
 
 
 def _is_local_dev_status_command(text: str) -> bool:

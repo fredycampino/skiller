@@ -15,10 +15,10 @@ from stui.screen.transcript.agent_step_final_output_view import AgentStepFinalOu
 from stui.screen.transcript.agent_system_notice_view import AgentSystemNoticeView
 from stui.screen.transcript.agent_tool_call_view import AgentToolCallView
 from stui.screen.transcript.agent_tool_result_view import AgentToolResultView
-from stui.screen.transcript.base import TranscriptView
 from stui.screen.transcript.dispatch_error_view import DispatchErrorView
 from stui.screen.transcript.info_view import InfoView
 from stui.screen.transcript.intro_view import IntroView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.run_ack_view import RunAckView
 from stui.screen.transcript.run_finished_view import RunFinishedView
 from stui.screen.transcript.run_model_updated_view import RunModelUpdatedView
@@ -103,13 +103,13 @@ class RenderTranscript:
     def _active_webhook_wait(
         self,
         *,
-        views: list[TranscriptView],
-    ) -> list[TranscriptView]:
+        views: list[TranscriptItemView],
+    ) -> list[TranscriptItemView]:
         if not views:
             return views
 
         latest_index = len(views) - 1
-        active_views: list[TranscriptView] = []
+        active_views: list[TranscriptItemView] = []
         for index, view in enumerate(views):
             if isinstance(view, RunWaitingWebhookView):
                 muted = index != latest_index
@@ -126,8 +126,8 @@ class RenderTranscript:
     def _active_step_output(
         self,
         *,
-        views: list[TranscriptView],
-    ) -> list[TranscriptView]:
+        views: list[TranscriptItemView],
+    ) -> list[TranscriptItemView]:
         if not views:
             return views
 
@@ -138,7 +138,7 @@ class RenderTranscript:
             views[latest_index],
             (StepOutputView, StepShellOutputView),
         )
-        active_views: list[TranscriptView] = []
+        active_views: list[TranscriptItemView] = []
         for index, view in enumerate(views):
             if isinstance(view, StepOutputView):
                 muted = not (latest_is_step_output and index == latest_index)
@@ -158,8 +158,8 @@ class RenderTranscript:
     def _active_notify(
         self,
         *,
-        views: list[TranscriptView],
-    ) -> list[TranscriptView]:
+        views: list[TranscriptItemView],
+    ) -> list[TranscriptItemView]:
         if not views:
             return views
 
@@ -167,7 +167,7 @@ class RenderTranscript:
         if latest_index is None:
             return views
         latest_is_notify = isinstance(views[latest_index], StepNotifyOutputView)
-        active_views: list[TranscriptView] = []
+        active_views: list[TranscriptItemView] = []
         for index, view in enumerate(views):
             if isinstance(view, StepNotifyOutputView):
                 muted = not (latest_is_notify and index == latest_index)
@@ -181,7 +181,7 @@ class RenderTranscript:
     def _active_output_index(
         self,
         *,
-        views: list[TranscriptView],
+        views: list[TranscriptItemView],
     ) -> int | None:
         if not views:
             return None
@@ -195,8 +195,8 @@ class RenderTranscript:
     def _active_tool(
         self,
         *,
-        views: list[TranscriptView],
-    ) -> list[TranscriptView]:
+        views: list[TranscriptItemView],
+    ) -> list[TranscriptItemView]:
         if not views:
             return views
         active_index = self._active_tool_index(views=views)
@@ -217,7 +217,7 @@ class RenderTranscript:
     def _active_tool_index(
         self,
         *,
-        views: list[TranscriptView],
+        views: list[TranscriptItemView],
     ) -> int | None:
         index = len(views) - 1
         while index >= 0:
@@ -234,8 +234,8 @@ class RenderTranscript:
         self,
         *,
         items: list[TranscriptItem],
-    ) -> list[TranscriptView]:
-        views: list[TranscriptView] = [IntroView(strings=self.strings)]
+    ) -> list[TranscriptItemView]:
+        views: list[TranscriptItemView] = [IntroView(strings=self.strings)]
         for item in items:
             views.append(self._to_chat_view(item=item))
         return views
@@ -244,7 +244,7 @@ class RenderTranscript:
         self,
         *,
         item: TranscriptItem,
-    ) -> TranscriptView:
+    ) -> TranscriptItemView:
         if isinstance(item, UserInputItem):
             return UserInputView(item=item)
         if isinstance(item, InfoItem):

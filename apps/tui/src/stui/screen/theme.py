@@ -79,7 +79,7 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             background: {theme.color_background};
         }}
 
-        #transcript-log {{
+        #transcript {{
             height: 1fr;
             width: 100%;
             overflow: scroll;

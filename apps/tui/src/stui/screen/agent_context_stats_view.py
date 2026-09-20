@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from math import ceil
 
 from rich.text import Text
@@ -30,9 +31,10 @@ class AgentContextStatsView(Vertical):
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
-        self._state = state
+        self._state = replace(state) if state is not None else None
         self._theme = theme
         self._strings = strings
+        self._rendered_snapshot: tuple[AgentContextStatsState | None, int] | None = None
         self.display = state is not None
 
     def compose(self) -> ComposeResult:
@@ -42,8 +44,12 @@ class AgentContextStatsView(Vertical):
         self.call_after_refresh(self._refresh)
 
     def set_state(self, state: AgentContextStatsState | None) -> None:
-        self._state = state
-        self.display = state is not None
+        if state == self._state:
+            return
+        self._state = replace(state) if state is not None else None
+        visible = state is not None
+        if self.display != visible:
+            self.display = visible
         self._refresh()
 
     def on_resize(self) -> None:
@@ -53,17 +59,22 @@ class AgentContextStatsView(Vertical):
         if not self.is_mounted:
             return
         content = self.query_one("#agent-context-stats-content", Static)
+        bar_width = content.size.width or DEFAULT_BAR_WIDTH
+        snapshot = (self._state, bar_width if self._state is not None else 0)
+        if snapshot == self._rendered_snapshot:
+            return
         if self._state is None:
             content.update("")
+            self._rendered_snapshot = snapshot
             return
         _ = self._strings
-        bar_width = content.size.width or DEFAULT_BAR_WIDTH
         rendered = _render_context_stats(
             self._state,
             theme=self._theme,
             bar_width=bar_width,
         )
         content.update(rendered)
+        self._rendered_snapshot = snapshot
 
 
 def _render_context_stats(

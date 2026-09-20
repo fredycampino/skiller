@@ -6,13 +6,13 @@ from rich.console import RenderableType
 from rich.padding import Padding
 
 from stui.screen.theme import TuiTheme
-from stui.screen.transcript.base import TranscriptView
+from stui.screen.transcript.item_view import TranscriptItemView
 from stui.screen.transcript.view_helpers import transcript_text
 from stui.viewmodel.console_screen_state import AgentToolResultItem
 
 
 @dataclass(frozen=True)
-class AgentToolResultView(TranscriptView):
+class AgentToolResultView(TranscriptItemView):
     item: AgentToolResultItem
 
     def render(self, *, theme: TuiTheme) -> RenderableType:

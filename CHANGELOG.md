@@ -4,6 +4,19 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.39 - 2026-09-20
+
+### Changed
+- Refactor STUI screen rendering into dedicated state-aware views and snapshot-based refreshes.
+- Keep transcript, footer, prompt, autocomplete, table, and action views stable when their state has not changed.
+- Update STUI architecture and transcript documentation to describe view ownership and rendering behavior.
+
+### Fixed
+- Avoid redundant TUI view reconstruction while editing prompts, keeping Enter/input interactions responsive.
+
+### Notes
+- Includes PR #146.
+
 ## 0.1.0-beta.38 - 2026-09-10
 
 ### Added

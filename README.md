@@ -6,48 +6,61 @@ Skiller runs agentic flows as durable executions with persistent state, safe res
 
 ## What It Does
 
-- Runs durable YAML flows that can include agents
-- Pauses and resumes flows from persisted waiting states
-- Provides CLI to observe and manage persisted runs
-- Includes a TUI for chatting with agents, launching flows, and managing runs
+Skiller turns a YAML flow into a durable execution. Define the work, start a run,
+resume it when new input arrives, and inspect every step along the way.
+
+1. **Define the flow.** Combine agents, tools, deterministic steps, and external
+   input in YAML. With an [LLM provider](packages/skiller/docs/agent/agent-config-llm.md)
+   and [tool policies](packages/skiller/docs/agent/agent-config-tools.md) configured,
+   this two-step flow runs an ongoing agent session:
 
 ```yaml
 name: mono
-description: "Terminal agent chat with shell and file access"
-version: "0.1"
 start: ask_user
-
-inputs: {}
 
 steps:
   - wait_input: ask_user
-    prompt: "Write a task or message. Type exit, quit, or bye to stop."
-    next: decide_exit
-
-  - switch: decide_exit
-    value: '{{output_value("ask_user").payload.text}}'
-    cases:
-      exit: done
-      quit: done
-      bye: done
-    default: mono_agent
+    prompt: "What should the agent do?"
+    next: mono_agent
 
   - agent: mono_agent
     system: |
-      You are a concise assistant for this flow.
-    instructions:
-      - "solve-task-style"
-      - "response-style"
+      Complete the user's task and report the result clearly.
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell
       - files
-    max_turns: 50
     next: ask_user
+```
 
-  - assign: done
-    values:
-      status: "closed"
+2. **Start a durable run.** Skiller persists its state, outputs, and runtime
+   events instead of keeping the execution only in memory.
+
+```bash
+skiller run ./mono.yaml
+```
+
+3. **Resume when input arrives.** Waiting state survives process restarts. Send
+   input later and continue the same run from the exact step where it paused.
+
+```bash
+skiller input receive <run_id> --text "Audit the dependencies" --wait
+```
+
+4. **Observe and manage the run.** Check its current state, stream new events,
+   or inspect the complete persisted history.
+
+```bash
+skiller status <run_id>
+skiller observe <run_id>
+skiller logs <run_id>
+```
+
+Prefer an interactive experience? Open the TUI to chat with agents, launch
+flows, and return to previous runs:
+
+```bash
+skiller
 ```
 
 ## Install
@@ -57,7 +70,9 @@ For regular CLI usage, install it with `pipx`:
 pipx install skiller
 ```
 
-## STUI for chat and launch runs
+## Usage
+
+### STUI: chat and launch runs
 
 Use `skiller` when you want an interactive terminal UI to chat, launch runs, and
 manage persisted runs.
@@ -66,7 +81,7 @@ manage persisted runs.
 skiller
 ```
 
-### Use CLI to run flows
+### CLI: run and manage flows
 
 Run a packaged, local, or configured flow reference:
 
@@ -123,49 +138,30 @@ Skiller persists:
 Waiting is persisted, not simulated in memory. A run can stop in `WAITING` and
 resume later from stored state.
 
-## How Mono Is Built
-
-`mono` is a regular YAML-defined agent with local runtime configuration beside it.
-The flow is intentionally small:
-
-- wait for terminal input with `wait_input`
-- stop on `exit`, `quit`, or `bye` with `switch`
-- send every other message to an `agent` step
-- let that agent use its configured `shell` and `files` tools
-- loop back to `wait_input`
-
-Minimal shape:
-
-```yaml
-name: mono
-start: ask_user
-
-steps:
-  - wait_input: ask_user
-    next: decide_exit
-
-  - switch: decide_exit
-    default: support_agent
-
-  - agent: support_agent
-    tools:
-      - shell
-      - files
-    next: ask_user
-```
-
-The full prompt and step definition live in
-[`apps/agents/mono/agent.yaml`](apps/agents/mono/agent.yaml).
-The provider, loop limits, shell allowlist, and file roots live in
-[`apps/agents/mono/agent.json`](apps/agents/mono/agent.json).
-
 ## Project Layout
 
 - `packages/skiller/src/skiller`: runtime and CLI code
-- `apps/agents/mono`: bundled terminal agent
+- `apps/agents`: bundled agents and authentication flows
 - `packages/skiller/docs`: runtime and CLI documentation
 - `packages/skiller/tests`: runtime, CLI, and integration tests
 - `apps/tui`: Textual UI app
+
+## Dependencies
+
+Runtime dependencies are grouped by the capability that uses them:
+
+| Area | Dependencies | Used for |
+| --- | --- | --- |
+| Core | `pydantic`, `PyYAML` | Configuration validation and YAML flow loading |
+| LLM providers | `openai`, `boto3` | OpenAI, Codex, and Amazon Bedrock adapters |
+| MCP | `fastmcp` | MCP client connections and tool execution |
+| Webhooks | `fastapi`, `uvicorn` | Local webhook server |
+| Terminal UI | `textual` | Interactive agent chat and run management |
+
+Development uses `pytest` for tests, `httpx` for HTTP test clients, and `ruff`
+for linting. Packages are built with `hatchling`. Direct dependency constraints
+live in [`pyproject.toml`](pyproject.toml); the resolved dependency graph lives in
+[`uv.lock`](uv.lock).
 
 ## Documentation
 

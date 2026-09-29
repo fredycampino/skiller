@@ -1,7 +1,9 @@
 import re
 import shlex
+from collections.abc import Mapping
 from pathlib import Path
 
+from skiller.application.tools.shell.command_expander import ShellCommandExpander
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 
 
@@ -34,6 +36,7 @@ class ShellCommandPolicy:
             if isinstance(command, str) and command.strip()
         }
         self.allow_env_prefix = config.allow_env_prefix
+        self._command_expander = ShellCommandExpander()
 
     def resolve_cwd(self, cwd: str | None) -> str:
         if cwd is None:
@@ -54,19 +57,32 @@ class ShellCommandPolicy:
             raise ValueError(f"shell cwd is not a directory: {resolved}")
         return str(resolved)
 
-    def validate_command(self, *, command: str, effective_cwd: str) -> None:
+    def validate_command(
+        self,
+        *,
+        command: str,
+        effective_cwd: str,
+        environment: Mapping[str, str],
+    ) -> None:
         normalized = command.strip()
         if not normalized:
             raise ValueError("shell command cannot be empty")
 
+        command_without_heredoc_bodies = self._command_expander.without_heredoc_bodies(
+            command=normalized
+        )
         for pattern in self._CRITICAL_COMMAND_PATTERNS:
-            if pattern.search(normalized):
+            if pattern.search(command_without_heredoc_bodies):
                 raise ValueError("shell command blocked by security policy")
 
-        self._validate_allowlist(command=normalized)
+        self._validate_allowlist(command=command_without_heredoc_bodies)
 
+        command_for_path_validation = self._command_expander.expand(
+            command=normalized,
+            environment=environment,
+        )
         working_directory = Path(effective_cwd)
-        for candidate in self._extract_path_candidates(normalized):
+        for candidate in self._extract_path_candidates(command_for_path_validation):
             if candidate == "/dev/null":
                 continue
             resolved = self._resolve_candidate_path(candidate, cwd=working_directory)
@@ -185,20 +201,14 @@ class ShellCommandPolicy:
             return [candidate]
         if candidate.startswith("./") or candidate.startswith("../"):
             return [candidate]
-        if candidate.startswith("~"):
-            return [candidate]
         return []
 
     def _resolve_candidate_path(self, candidate: str, *, cwd: Path) -> Path | None:
         if candidate.startswith("/"):
             return Path(candidate).resolve(strict=False)
 
-        expanded = Path(candidate).expanduser()
-        if expanded.is_absolute():
-            return expanded.resolve(strict=False)
-
         if candidate.startswith("./") or candidate.startswith("../"):
-            return (cwd / expanded).resolve(strict=False)
+            return (cwd / candidate).resolve(strict=False)
 
         return None
 

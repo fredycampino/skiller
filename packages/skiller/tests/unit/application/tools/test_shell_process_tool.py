@@ -262,3 +262,61 @@ def test_shell_process_tool_reports_success_without_stdout() -> None:
     )
 
     assert result.text == "Command completed successfully."
+
+
+@pytest.mark.parametrize("variable_reference", ("$TARGET_DIR", "${TARGET_DIR}"))
+def test_shell_process_tool_uses_request_env_to_validate_variable_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    variable_reference: str,
+) -> None:
+    workspace = tmp_path.joinpath("workspace")
+    workspace.mkdir()
+    outside = tmp_path.joinpath("outside")
+    outside.mkdir()
+    monkeypatch.setenv("TARGET_DIR", str(workspace))
+    tool = ShellProcessTool()
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(workspace,),
+    )
+
+    result = tool.policy(
+        config=config,
+        request=ShellToolRequest(
+            command=f"ls {variable_reference}/child",
+            env={"TARGET_DIR": str(outside)},
+        ),
+    )
+
+    assert result.ok is False
+    expected_path = outside.joinpath("child")
+    assert result.error == f"shell command path escapes allowed_paths: {expected_path}"
+
+
+def test_shell_process_tool_uses_request_home_to_validate_tilde_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside_home = tmp_path / "outside"
+    outside_home.mkdir()
+    monkeypatch.setenv("HOME", str(workspace))
+    tool = ShellProcessTool()
+    config = ShellToolRuntimeConfig(
+        definition=ShellProcessTool,
+        allowed_paths=(workspace,),
+    )
+
+    result = tool.policy(
+        config=config,
+        request=ShellToolRequest(
+            command="ls ~/child",
+            env={"HOME": str(outside_home)},
+        ),
+    )
+
+    assert result.ok is False
+    expected_path = outside_home / "child"
+    assert result.error == f"shell command path escapes allowed_paths: {expected_path}"

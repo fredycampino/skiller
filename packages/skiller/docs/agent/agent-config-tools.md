@@ -45,6 +45,21 @@ The runtime always allows:
 Do not add these paths unless needed for clarity. Configured paths are added to
 the defaults, and duplicates are removed.
 
+The command policy validates paths visible in the outer command. This includes
+literal paths and the supported environment expansions `$VAR`,
+`${VAR}`, `~`, and `~/path`. The expanded path must
+still be inside an allowed root. Expansions `~+`, `~-`, and
+`~user` are not supported. Heredoc bodies are accepted only when the delimiter is
+quoted or escaped, such as `<<'EOF'`, `<<"EOF"`, or `<<\EOF`; unquoted
+heredocs are rejected because Bash may execute substitutions in their bodies.
+
+This validation is not an operating-system sandbox. It does not inspect or
+restrict filesystem access performed internally by an allowed executable,
+script, or nested interpreter. Granting commands such as `sh`, `bash`, or
+`python` through `allowed_commands` delegates that behavior to those programs.
+Use an operating-system sandbox when access must be enforced for the complete
+process tree.
+
 `allowed_paths` accepts absolute paths, `~`, paths relative to the `agent.json`
 that defines `tools`, and these exact templates:
 

@@ -184,6 +184,56 @@ Expected last events:
 - `STEP_STARTED`
 - `RUN_WAITING`
 
+## Verify Tool Call Integrity
+
+Before handing the run back to a user, verify that every persisted agent `tool_call`
+has a matching `tool_result`. A missing result makes the next Codex request invalid:
+Codex rejects the conversation because a function call has no output.
+
+```sql
+SELECT
+  calls.context_id,
+  calls.sequence AS tool_call_sequence,
+  json_extract(calls.payload_json, '$.tool_call_id') AS tool_call_id,
+  json_extract(calls.payload_json, '$.tool') AS tool
+FROM agent_context_entries AS calls
+LEFT JOIN agent_context_entries AS results
+  ON results.context_id = calls.context_id
+  AND results.entry_type = 'tool_result'
+  AND json_extract(results.payload_json, '$.tool_call_id') =
+      json_extract(calls.payload_json, '$.tool_call_id')
+WHERE calls.run_id = '<run_id>'
+  AND calls.entry_type = 'tool_call'
+  AND results.id IS NULL;
+```
+
+Expected: no rows.
+
+### Repair a Missing Tool Result
+
+Never record a successful synthetic result. The original tool did not complete, so
+persist a `tool_result` with `status = 'FAILED'`, an empty `data` object, and an
+error explaining that the result was missing during recovery. Reuse the incomplete
+call's `turn_id`, `parent_sequence`, `tool_call_id`, and `tool` values.
+
+The repaired context must preserve this order:
+
+```
+tool_call -> tool_result -> later user or assistant entries
+```
+
+If later entries already exist, renumber or move them after the inserted result;
+appending a result after a later user message still violates the Codex tool-call
+protocol. Update `agent_context_state.updated_at` after changing context entries.
+
+Also append an `AGENT_TOOL_RESULT` event to `log_events` with the same failed
+result body. If the run is being restored to `WAITING`, append a new
+`STEP_STARTED` and `RUN_WAITING` tail afterwards so event-driven clients continue
+to see the run as waiting.
+
+Run the integrity query again after the repair. Do not resume or submit new input
+until it returns no rows.
+
 ## Important Limitation
 
 This does not erase the original failure.

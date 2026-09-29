@@ -66,6 +66,19 @@
 `allowed_paths` defines the directories where the command may work. The runtime
 validates the process `cwd` and any explicit paths used in `command`.
 
+Path validation covers paths visible in the outer command, including literal
+paths and the supported expansions `$VAR`, `${VAR}`,
+`~`, and `~/path`. The expanded path must remain inside an
+allowed root. Expansions `~+`, `~-`, and `~user` are
+not supported.
+Heredoc bodies are accepted only when the delimiter is quoted or escaped,
+such as `<<'EOF'`, `<<"EOF"`, or `<<\EOF`; unquoted
+heredocs are rejected because Bash may execute substitutions in their bodies.
+
+This check is not an operating-system sandbox. It does not inspect scripts or
+restrict paths opened internally by an executable or nested interpreter. A
+sandbox is required to enforce filesystem access for the complete process tree.
+
 The `shell` step does not load this configuration from `agent.json`. By
 default, the runtime allows:
 

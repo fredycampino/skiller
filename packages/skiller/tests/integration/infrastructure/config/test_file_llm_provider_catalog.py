@@ -102,13 +102,21 @@ def test_builtin_application_catalog_is_valid() -> None:
     codex = catalog.get("codex")
     assert codex.adapter == LLMAdapterType.CODEX
     assert [model.model for model in codex.models] == [
+        "gpt-6-astra",
+        "gpt-6.1-sol",
+        "gpt-6-luna",
         "gpt-5.6-luna",
         "gpt-5.4",
         "gpt-5.5",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
     ]
-    assert catalog.get("bedrock").adapter == LLMAdapterType.BEDROCK
+    bedrock = catalog.get("bedrock")
+    assert bedrock.adapter == LLMAdapterType.BEDROCK
+    assert [model.model for model in bedrock.models[:2]] == [
+        "us.anthropic.claude-opus-5-5",
+        "us.anthropic.claude-fable-5-1",
+    ]
 
 
 def test_file_port_applies_partial_user_override(tmp_path: Path) -> None:

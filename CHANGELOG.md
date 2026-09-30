@@ -4,6 +4,15 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.41 - 2026-09-30
+
+### Fixed
+- Resolve the `flows` agent file permissions against the runtime workspace when the packaged flow is installed outside the project.
+- Keep installed flow files read-only while allowing file writes inside the active workspace.
+
+### Notes
+- Includes PR #153.
+
 ## 0.1.0-beta.40 - 2026-09-30
 
 ### Added

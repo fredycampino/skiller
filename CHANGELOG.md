@@ -4,6 +4,22 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.40 - 2026-09-30
+
+### Added
+- Add new Codex and Amazon Bedrock models to the built-in provider catalog.
+- Add a tutorial for taking Textual screenshots of STUI screens.
+
+### Changed
+- Improve the README overview of Skiller concepts and capabilities.
+- Expand shell commands before policy validation while preserving executable and path restrictions.
+
+### Fixed
+- Reject disallowed paths introduced through shell variables, home-directory expansion, or command substitution.
+
+### Notes
+- Includes PRs #148, #149, #150, and #151.
+
 ## 0.1.0-beta.39 - 2026-09-20
 
 ### Changed

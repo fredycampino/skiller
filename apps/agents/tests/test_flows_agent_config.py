@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
+from skiller.application.tools.files import FilesAction, FilesTool, FilesToolRequest
 from skiller.infrastructure.config.agent_config_schema import (
     DEFAULT_AGENT_LOOP_MAX_TOOL_CALLS,
 )
@@ -67,14 +69,59 @@ def test_flows_files_config_allows_workspace_read_write() -> None:
 
     assert config["tools"]["files"] == {
         "read": [
-            "../../..",
+            "{{flow.dir}}",
+            "{{runtime.cwd}}",
             "~/.skiller/settings/",
         ],
         "write": [
-            "../../..",
+            "{{runtime.cwd}}",
         ],
         "all": [],
     }
+
+
+def test_flows_files_config_resolves_workspace_when_flow_is_installed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = Path("apps/agents/flows/agent.json")
+    agent_config = json.loads(config_path.read_text(encoding="utf-8"))
+    installed_flow_dir = tmp_path / "venv" / "site-packages" / "apps" / "agents" / "flows"
+    workspace = tmp_path / "workspace"
+    installed_flow_dir.mkdir(parents=True)
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    tool = FilesTool()
+    files_config = tool.to_runtime_config(
+        agent_config["tools"]["files"],
+        base_path=installed_flow_dir,
+    )
+
+    assert files_config.read[:2] == (installed_flow_dir, workspace)
+    assert files_config.write == (workspace,)
+
+    workspace_write = tool.policy(
+        config=files_config,
+        request=FilesToolRequest(
+            action=FilesAction.WRITE,
+            path="todo/issue.md",
+            write_text="issue",
+        ),
+    )
+    installed_write = tool.policy(
+        config=files_config,
+        request=FilesToolRequest(
+            action=FilesAction.WRITE,
+            path=str(installed_flow_dir / "agent.json"),
+            write_text="changed",
+        ),
+    )
+
+    assert workspace_write.ok is True
+    assert workspace_write.request is not None
+    assert workspace_write.request.effective_path == str(workspace / "todo" / "issue.md")
+    assert installed_write.ok is False
 
 
 def test_flows_agent_has_explicit_exit_route() -> None:

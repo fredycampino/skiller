@@ -144,6 +144,18 @@
       "parallel_tool_calls": true,
       "models": [
         {
+          "model": "gpt-6-astra",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-6.1-sol",
+          "context_window_tokens": 1050000
+        },
+        {
+          "model": "gpt-6-luna",
+          "context_window_tokens": 1050000
+        },
+        {
           "model": "gpt-5.6-luna",
           "context_window_tokens": 1050000
         },
@@ -171,6 +183,14 @@
       "profile": "default",
       "timeout_seconds": 45,
       "models": [
+        {
+          "model": "us.anthropic.claude-opus-5-5",
+          "context_window_tokens": 1000000
+        },
+        {
+          "model": "us.anthropic.claude-fable-5-1",
+          "context_window_tokens": 1000000
+        },
         {
           "model": "us.anthropic.claude-opus-4-6-v1",
           "context_window_tokens": 1000000

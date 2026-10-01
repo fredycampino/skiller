@@ -79,6 +79,18 @@ This check is not an operating-system sandbox. It does not inspect scripts or
 restrict paths opened internally by an executable or nested interpreter. A
 sandbox is required to enforce filesystem access for the complete process tree.
 
+Heredoc recognition respects comments, quoted text, and line continuations;
+only actual literal bodies are excluded from validation. Active dollar-quoted
+heredoc delimiters (`$'EOF'` and `$"EOF"`), including concatenations, are
+unsupported and rejected before any body is excluded. Backslash escapes inside
+double-quoted delimiters are likewise rejected in both allowlist modes. Escapes
+outside quotes and literal backslashes inside single quotes remain supported.
+
+The agent shell tool additionally supports a restricted command allowlist
+(see [Agent Tool Configuration](../agent/agent-config-tools.md)). Its new
+syntax and tool-call environment restrictions do not enable an allowlist for
+this declarative step.
+
 The `shell` step does not load this configuration from `agent.json`. By
 default, the runtime allows:
 

@@ -114,6 +114,10 @@ class ShellProcessTool(
     ) -> ToolPolicyResult[ShellToolRequest]:
         if not isinstance(config, ShellToolRuntimeConfig):
             return ToolPolicyResult.blocked("Tool 'shell' requires shell runtime config")
+        if config.allowlist_enabled and request.env:
+            return ToolPolicyResult.blocked(
+                "shell request env is not supported while allowed_commands enforcement is enabled"
+            )
         command_policy = ShellCommandPolicy(config=config)
         effective_environment = dict(os.environ)
         effective_environment.update(request.env or {})

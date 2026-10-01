@@ -10,28 +10,85 @@ class ShellCommandExpander:
     _WORD_BOUNDARIES = frozenset(";|&()<>")
 
     def without_heredoc_bodies(self, *, command: str) -> str:
-        lines = command.splitlines(keepends=True)
         sanitized: list[str] = []
         pending_delimiters: list[tuple[str, bool]] = []
+        quote: str | None = None
+        word_start = True
+        index = 0
 
-        for line in lines:
-            if pending_delimiters:
-                delimiter, strip_tabs = pending_delimiters[0]
-                candidate = line.rstrip("\r\n")
-                if strip_tabs:
-                    candidate = candidate.lstrip("\t")
-                sanitized.append(self._line_ending(line))
-                if candidate == delimiter:
-                    pending_delimiters.pop(0)
+        while index < len(command):
+            character = command[index]
+            if character == "\\" and quote != "'":
+                escaped = command[index : index + 2]
+                sanitized.append(escaped)
+                index += len(escaped)
+                if escaped != "\\\n":
+                    word_start = False
                 continue
-
-            sanitized.append(line)
-            pending_delimiters.extend(self._find_heredoc_delimiters(line=line))
+            if quote is not None:
+                sanitized.append(character)
+                if character == quote:
+                    quote = None
+                index += 1
+                continue
+            if character in {"'", '"'}:
+                quote = character
+                word_start = False
+                sanitized.append(character)
+                index += 1
+                continue
+            if character == "#" and word_start:
+                end = command.find("\n", index)
+                index = len(command) if end == -1 else end
+                continue
+            if command.startswith("<<<", index):
+                sanitized.append("<<<")
+                index += 3
+                word_start = True
+                continue
+            if command.startswith("<<", index):
+                start = index
+                index += 2
+                strip_tabs = command[index : index + 1] == "-"
+                if strip_tabs:
+                    index += 1
+                while command[index : index + 1] in {" ", "\t"}:
+                    index += 1
+                raw, index, quoted = self._read_heredoc_delimiter(line=command, start=index)
+                delimiter = self._remove_shell_quotes(raw_delimiter=raw)
+                if not quoted:
+                    raise ValueError(
+                        "shell command uses unsupported unquoted heredoc delimiter: "
+                        f"{delimiter}. Quote the delimiter to make the body literal."
+                    )
+                pending_delimiters.append((delimiter, strip_tabs))
+                sanitized.append(command[start:index])
+                word_start = False
+                continue
+            sanitized.append(character)
+            index += 1
+            word_start = character.isspace() or character in self._WORD_BOUNDARIES
+            if character != "\n" or not pending_delimiters:
+                continue
+            for delimiter, strip_tabs in pending_delimiters:
+                while True:
+                    if index >= len(command):
+                        raise ValueError(f"shell command has unterminated heredoc: {delimiter}")
+                    end = command.find("\n", index)
+                    end = len(command) if end == -1 else end + 1
+                    line = command[index:end]
+                    index = end
+                    candidate = line.removesuffix("\n")
+                    if strip_tabs:
+                        candidate = candidate.lstrip("\t")
+                    sanitized.append(self._line_ending(line))
+                    if candidate == delimiter:
+                        break
+            pending_delimiters.clear()
 
         if pending_delimiters:
             delimiter, _ = pending_delimiters[0]
             raise ValueError(f"shell command has unterminated heredoc: {delimiter}")
-
         return "".join(sanitized)
 
     def expand(self, *, command: str, environment: Mapping[str, str]) -> str:
@@ -45,49 +102,6 @@ class ShellCommandExpander:
             environment=environment,
         )
 
-    def _find_heredoc_delimiters(self, *, line: str) -> list[tuple[str, bool]]:
-        delimiters: list[tuple[str, bool]] = []
-        quote: str | None = None
-        index = 0
-
-        while index < len(line):
-            character = line[index]
-            if character == "\\":
-                index += 2
-                continue
-            if character in {"'", '"'}:
-                if quote is None:
-                    quote = character
-                elif quote == character:
-                    quote = None
-                index += 1
-                continue
-            if quote is not None or not line.startswith("<<", index):
-                index += 1
-                continue
-            if line.startswith("<<<", index):
-                index += 3
-                continue
-
-            index += 2
-            strip_tabs = index < len(line) and line[index] == "-"
-            if strip_tabs:
-                index += 1
-            while index < len(line) and line[index] in {" ", "\t"}:
-                index += 1
-            raw_delimiter, index, delimiter_quoted = self._read_heredoc_delimiter(
-                line=line, start=index
-            )
-            delimiter = self._remove_shell_quotes(raw_delimiter=raw_delimiter)
-            if not delimiter_quoted:
-                raise ValueError(
-                    "shell command uses unsupported unquoted heredoc delimiter: "
-                    f"{delimiter}. Quote the delimiter to make the body literal."
-                )
-            delimiters.append((delimiter, strip_tabs))
-
-        return delimiters
-
     def _read_heredoc_delimiter(self, *, line: str, start: int) -> tuple[str, int, bool]:
         delimiter: list[str] = []
         quote: str | None = None
@@ -98,6 +112,18 @@ class ShellCommandExpander:
             character = line[index]
             if quote is None and (character.isspace() or character in ";|&<>"):
                 break
+            if quote is None and character == "$":
+                next_index = index + 1
+                while line.startswith("\\\n", next_index):
+                    next_index += 2
+                if line[next_index : next_index + 1] in {"'", '"'}:
+                    raise ValueError(
+                        "shell command uses unsupported dollar-quoted heredoc delimiter"
+                    )
+            if character == "\\" and quote == '"':
+                raise ValueError(
+                    "shell command uses unsupported escape in double-quoted heredoc delimiter"
+                )
             delimiter.append(character)
             if character == "\\" and quote != "'":
                 delimiter_quoted = True

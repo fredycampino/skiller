@@ -3,12 +3,13 @@ import shlex
 from collections.abc import Mapping
 from pathlib import Path
 
+from skiller.application.tools.shell.command_analyzer import ShellCommandAnalyzer
 from skiller.application.tools.shell.command_expander import ShellCommandExpander
 from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 
 
 class ShellCommandPolicy:
-    _SEGMENT_OPERATORS: set[str] = {"&&", "||", ";", "|"}
+    _SEGMENT_OPERATORS: set[str] = {"&&", "||", ";", "|", "\n"}
     _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
     _CRITICAL_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.compile(r"(^|[\s;&|])sudo(\s|$)", re.IGNORECASE),
@@ -102,12 +103,11 @@ class ShellCommandPolicy:
         if not self.allowed_commands:
             raise ValueError("shell command blocked by allowlist policy: empty allowed_commands")
 
-        for segment in self._split_command_segments(command):
-            executable = self._extract_executable(segment)
-            if executable is None:
-                raise ValueError(
-                    "shell command blocked by allowlist policy: executable could not be resolved"
-                )
+        analysis = ShellCommandAnalyzer().analyze(command)
+        for segment in analysis.segments:
+            if segment.has_env_prefix and not self.allow_env_prefix:
+                raise ValueError("shell command environment prefixes are not allowed")
+            executable = Path(segment.executable).name
             if executable not in self.allowed_commands:
                 allowed = ", ".join(sorted(self.allowed_commands))
                 raise ValueError(
@@ -117,7 +117,8 @@ class ShellCommandPolicy:
                 )
 
     def _split_command_segments(self, command: str) -> list[list[str]]:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&")
+        lexer = shlex.shlex(command, posix=True, punctuation_chars="|;&<>\n")
+        lexer.whitespace = " \t\r"
         lexer.whitespace_split = True
         lexer.commenters = ""
         try:
@@ -131,7 +132,9 @@ class ShellCommandPolicy:
         segments: list[list[str]] = []
         current: list[str] = []
         for token in tokens:
-            if token in self._SEGMENT_OPERATORS:
+            if token in self._SEGMENT_OPERATORS or (
+                "\n" in token and all(character in "\n;|&" for character in token)
+            ):
                 if current:
                     segments.append(current)
                     current = []
@@ -144,20 +147,6 @@ class ShellCommandPolicy:
                 "shell command blocked by allowlist policy: command does not contain segments"
             )
         return segments
-
-    def _extract_executable(self, tokens: list[str]) -> str | None:
-        index = 0
-        if self.allow_env_prefix:
-            while index < len(tokens) and self._ENV_ASSIGNMENT_RE.match(tokens[index]):
-                index += 1
-
-        if index >= len(tokens):
-            return None
-
-        raw = tokens[index].strip()
-        if not raw:
-            return None
-        return Path(raw).name
 
     def _extract_path_candidates(self, command: str) -> list[str]:
         segments = self._split_command_segments(command)

@@ -35,6 +35,42 @@ optionally the executable names available to the agent `shell` tool.
 | `allow_env_prefix` | `true` | Allows commands to start with assignments such as `MODE=test`. |
 | `allowed_commands` | `[]` | Lists executable names allowed when the allowlist is enabled. |
 
+### Restricted command syntax
+
+With `allowlist_enabled: true`, each outer command separated by a newline, `;`,
+`|`, `&&`, or `||` is checked. Executables must be literal: quoted literal
+concatenation is accepted, but variables, tilde, globbing and other active
+expansions in executable names are rejected.
+
+Command/process substitutions, background `&`, `|&`, `&>`, `&>>`, groups,
+subshells, functions, control flow, and active reserved prefixes such as `time`,
+`!`, and `coproc` are unsupported. Literal mentions inside quotes or quoted
+heredoc bodies do not execute commands and are not treated as substitutions.
+Heredoc recognition respects comments and continued command lines. Active
+Bash dollar-quoted heredoc delimiters (`$'EOF'` and `$"EOF"`), including
+concatenated forms, are rejected before excluding any body in both modes.
+Backslash escapes inside double-quoted heredoc delimiters are also rejected
+before excluding any body. Ordinary delimiters, escapes outside quotes, and
+literal backslashes inside single quotes remain supported.
+
+Redirections before the executable are rejected. Supported file redirections
+follow the executable; use `>./output 2>&1` instead of `&>./output`.
+Descriptor duplication/closing requires a literal descriptor or `-`.
+
+Nonempty tool-call `env` is rejected in this mode: variables such as `BASH_ENV`
+can execute startup code before the validated command. The worker environment
+and its shell configuration remain trusted. `allow_env_prefix` is a separate,
+explicit delegation of the permitted program's environment, not authorization
+for tool-call `env`.
+
+With the allowlist disabled, these new syntax and environment restrictions do
+not apply; existing path, critical-command and heredoc checks still apply.
+This is bounded hardening against known outer-shell bypasses, not a complete
+shell security model or a network sandbox. Allowed interpreters and command
+launchers still delegate their internal behavior. The syntax targets Bash and
+POSIX `/bin/sh`; operators configuring another `$SHELL` must ensure compatible
+semantics. The runtime does not change shell selection.
+
 ### Allowed paths
 
 The runtime always allows:

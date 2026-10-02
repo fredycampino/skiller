@@ -17,6 +17,9 @@ class BedrockMapper:
         payload: dict[str, object] = {
             "modelId": request.model.value,
             "messages": messages,
+            # Thinking is off so no reasoningContent is streamed (Opus 5 / Sonnet 5 think by
+            # default). Models that reject "disabled" (Opus 5.5, Fable 5.x) are not supported.
+            "additionalModelRequestFields": {"thinking": {"type": "disabled"}},
         }
         if request.model.max_output_tokens is not None:
             payload["inferenceConfig"] = {"maxTokens": request.model.max_output_tokens}

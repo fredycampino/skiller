@@ -184,7 +184,7 @@
       "timeout_seconds": 45,
       "models": [
         {
-          "model": "us.anthropic.claude-opus-5-5",
+          "model": "us.anthropic.claude-opus-5",
           "context_window_tokens": 1000000
         },
         {

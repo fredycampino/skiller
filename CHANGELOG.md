@@ -4,6 +4,24 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.42 - 2026-10-04
+
+### Added
+- Add a concise DDGS search and Markdown extraction guide to the Flows agent instructions.
+- Add `tools.shell.expand_paths` to configure path expansion during static validation.
+
+### Changed
+- Disable static path expansion for declarative shell steps while preserving the original script and other policy checks.
+- Disable thinking for the affected Bedrock configuration and replace Opus 5.5 with Opus 5 in the provider catalog.
+
+### Fixed
+- Avoid blocking shell steps because script-local variables are mistaken for empty environment variables.
+- Distinguish dynamic path references from literal dollar signs, escaped references, and single-quoted paths when path expansion is disabled.
+
+### Notes
+- Dynamic paths are not statically resolved when `expand_paths` is disabled; this validation is not filesystem sandboxing.
+- Includes PRs #155 and #156.
+
 ## 0.1.0-beta.41 - 2026-09-30
 
 ### Fixed

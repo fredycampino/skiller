@@ -114,7 +114,7 @@ def test_builtin_application_catalog_is_valid() -> None:
     bedrock = catalog.get("bedrock")
     assert bedrock.adapter == LLMAdapterType.BEDROCK
     assert [model.model for model in bedrock.models[:2]] == [
-        "us.anthropic.claude-opus-5-5",
+        "us.anthropic.claude-opus-5",
         "us.anthropic.claude-fable-5-1",
     ]
 

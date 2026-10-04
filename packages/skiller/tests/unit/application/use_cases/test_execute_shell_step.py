@@ -443,6 +443,25 @@ def _build_run() -> object:
     )
 
 
+def test_execute_shell_step_preserves_local_variable_script() -> None:
+    process_runner = _FakeProcessRunner()
+    use_case = _build_use_case(process_runner=process_runner)
+    command = 'settings_dir="$HOME/.skiller/settings"\nconfig_file="$settings_dir/providers.json"'
+    current_step = CurrentStep(
+        run_id="run-1",
+        step_index=0,
+        step_id="backup_provider_config",
+        step_type=StepType.SHELL,
+        step={"command": command},
+        context=RunContext(inputs={}, step_executions={}),
+    )
+
+    result = use_case.execute(current_step)
+
+    assert result.status == StepExecutionStatus.COMPLETED
+    assert process_runner.requests[0].command[-1] == command
+
+
 def test_execute_shell_step_defaults_allowed_paths_with_flow_dir(tmp_path: Path) -> None:
     flow_dir = tmp_path / "flows" / "auths"
     flow_dir.mkdir(parents=True)

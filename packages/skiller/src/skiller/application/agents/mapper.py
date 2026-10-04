@@ -195,6 +195,7 @@ class AgentServiceMapper:
                     "allowed_paths": [str(path) for path in result.tools.shell.allowed_paths],
                     "allowlist_enabled": result.tools.shell.allowlist_enabled,
                     "allow_env_prefix": result.tools.shell.allow_env_prefix,
+                    "expand_paths": result.tools.shell.expand_paths,
                     "allowed_commands": list(result.tools.shell.allowed_commands),
                 },
                 "files": {

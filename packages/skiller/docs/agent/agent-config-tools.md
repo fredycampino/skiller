@@ -33,6 +33,7 @@ optionally the executable names available to the agent `shell` tool.
 | `allowed_paths` | `[]` | Adds filesystem roots available to `cwd` and explicit command paths. |
 | `allowlist_enabled` | `false` | Requires every executable to be listed in `allowed_commands`. |
 | `allow_env_prefix` | `true` | Allows commands to start with assignments such as `MODE=test`. |
+| `expand_paths` | `true` | Expands environment variables and `~` for command path validation only. Setting `false` leaves dynamic paths unresolved and reduces static checks; the executed command is unchanged. Declarative shell steps set this to `false`. |
 | `allowed_commands` | `[]` | Lists executable names allowed when the allowlist is enabled. |
 
 ### Allowed paths

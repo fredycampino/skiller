@@ -19,6 +19,7 @@ class ShellToolRuntimeConfigMapper:
             "allowed_paths",
             "allowlist_enabled",
             "allow_env_prefix",
+            "expand_paths",
             "allowed_commands",
         }
         unknown_fields = sorted(set(raw) - supported_fields)
@@ -34,6 +35,7 @@ class ShellToolRuntimeConfigMapper:
         allowed_paths = list(dict.fromkeys(allowed_paths))
         allowlist_enabled = _bool_value(raw, "allowlist_enabled", False)
         allow_env_prefix = _bool_value(raw, "allow_env_prefix", True)
+        expand_paths = _bool_value(raw, "expand_paths", True)
         allowed_commands = _string_list_value(raw, "allowed_commands")
 
         return ShellToolRuntimeConfig(
@@ -41,6 +43,7 @@ class ShellToolRuntimeConfigMapper:
             allowed_paths=tuple(allowed_paths),
             allowlist_enabled=allowlist_enabled,
             allow_env_prefix=allow_env_prefix,
+            expand_paths=expand_paths,
             allowed_commands=tuple(allowed_commands),
         )
 

@@ -11,4 +11,5 @@ class ShellToolRuntimeConfig(ToolRuntimeConfig):
     allowed_paths: tuple[Path, ...] = ()
     allowlist_enabled: bool = False
     allow_env_prefix: bool = True
+    expand_paths: bool = True
     allowed_commands: tuple[str, ...] = ()

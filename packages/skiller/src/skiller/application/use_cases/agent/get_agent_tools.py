@@ -23,6 +23,7 @@ class ShellToolsConfigItem:
     allowed_paths: tuple[Path, ...] = ()
     allowlist_enabled: bool = False
     allow_env_prefix: bool = True
+    expand_paths: bool = True
     allowed_commands: tuple[str, ...] = ()
 
 
@@ -127,6 +128,7 @@ def _build_shell_config(config: object | None) -> ShellToolsConfigItem:
         allowed_paths=config.allowed_paths,
         allowlist_enabled=config.allowlist_enabled,
         allow_env_prefix=config.allow_env_prefix,
+        expand_paths=config.expand_paths,
         allowed_commands=config.allowed_commands,
     )
 

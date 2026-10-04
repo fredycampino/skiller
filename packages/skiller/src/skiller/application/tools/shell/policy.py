@@ -10,6 +10,7 @@ from skiller.application.tools.shell.config import ShellToolRuntimeConfig
 class ShellCommandPolicy:
     _SEGMENT_OPERATORS: set[str] = {"&&", "||", ";", "|"}
     _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+    _EXPANSION_START_RE = re.compile(r"\$[A-Za-z_0-9@*#?$!{(\-]")
     _CRITICAL_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.compile(r"(^|[\s;&|])sudo(\s|$)", re.IGNORECASE),
         re.compile(r"(^|[\s;&|])su(\s|$)", re.IGNORECASE),
@@ -36,6 +37,7 @@ class ShellCommandPolicy:
             if isinstance(command, str) and command.strip()
         }
         self.allow_env_prefix = config.allow_env_prefix
+        self.expand_paths = config.expand_paths
         self._command_expander = ShellCommandExpander()
 
     def resolve_cwd(self, cwd: str | None) -> str:
@@ -77,10 +79,16 @@ class ShellCommandPolicy:
 
         self._validate_allowlist(command=command_without_heredoc_bodies)
 
-        command_for_path_validation = self._command_expander.expand(
-            command=normalized,
-            environment=environment,
-        )
+        command_for_path_validation = command_without_heredoc_bodies
+        if self.expand_paths:
+            command_for_path_validation = self._command_expander.expand(
+                command=normalized,
+                environment=environment,
+            )
+        else:
+            command_for_path_validation = self._without_dynamic_path_words(
+                command_for_path_validation
+            )
         working_directory = Path(effective_cwd)
         for candidate in self._extract_path_candidates(command_for_path_validation):
             if candidate == "/dev/null":
@@ -89,6 +97,40 @@ class ShellCommandPolicy:
             if resolved is None:
                 continue
             self._ensure_path_allowed(resolved, label="command path")
+
+    def _without_dynamic_path_words(self, command: str) -> str:
+        """Mask unresolved words for path checks, preserving literal quote context."""
+        words: list[str] = []
+        start = 0
+        index = 0
+        quote: str | None = None
+        dynamic = False
+        while index < len(command):
+            character = command[index]
+            if character == "\\" and quote != "'":
+                next_character = command[index + 1 : index + 2]
+                if quote != '"' or next_character in {"$", "`", '"', "\\", "\n"}:
+                    index += 2
+                    continue
+            if character in {"'", '"'}:
+                if quote is None:
+                    quote = character
+                elif quote == character:
+                    quote = None
+                index += 1
+                continue
+            if quote != "'" and (
+                character == "`" or self._EXPANSION_START_RE.match(command, index)
+            ):
+                dynamic = True
+            if quote is None and (character.isspace() or character in ";|&<>"):
+                word = "__unresolved_path__" if dynamic else command[start:index]
+                words.extend((word, character))
+                start = index + 1
+                dynamic = False
+            index += 1
+        words.append("__unresolved_path__" if dynamic else command[start:])
+        return "".join(words)
 
     def _resolve_allowed_roots(self, allowed_paths: tuple[Path, ...]) -> tuple[Path, ...]:
         if allowed_paths:

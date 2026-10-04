@@ -32,6 +32,7 @@ steps:
       - "code-style"
       - "skiller-permissions"
       - "skiller-user"
+      - "ddgs-use"
 
     task: '{{output_value("ask_user").payload.text}}'
     tools:

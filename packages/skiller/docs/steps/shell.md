@@ -66,11 +66,13 @@
 `allowed_paths` defines the directories where the command may work. The runtime
 validates the process `cwd` and any explicit paths used in `command`.
 
-Path validation covers paths visible in the outer command, including literal
-paths and the supported expansions `$VAR`, `${VAR}`,
-`~`, and `~/path`. The expanded path must remain inside an
-allowed root. Expansions `~+`, `~-`, and `~user` are
-not supported.
+The declarative step sets the shell runtime configuration `expand_paths` to
+`false`. Path validation checks literal paths without expanding `$VAR`, `${VAR}`
+or `~`. Dynamic paths are not resolved or reliably checked by this static
+validation. This avoids misinterpreting script-local variables as empty environment
+values. The shell still receives the original script and expands it normally.
+The agent shell tool keeps `expand_paths: true` by default; this step does not
+inherit its configuration.
 Heredoc bodies are accepted only when the delimiter is quoted or escaped,
 such as `<<'EOF'`, `<<"EOF"`, or `<<\EOF`; unquoted
 heredocs are rejected because Bash may execute substitutions in their bodies.

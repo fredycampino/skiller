@@ -141,6 +141,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
             return ShellToolRuntimeConfig(
                 definition=ShellProcessTool,
                 allowed_paths=tuple(allowed_paths),
+                expand_paths=False,
             )
 
         for raw_path in raw_allowed_paths:
@@ -156,6 +157,7 @@ class ExecuteShellStepUseCase(ToolProcessInterruptSignal):
         return ShellToolRuntimeConfig(
             definition=ShellProcessTool,
             allowed_paths=tuple(allowed_paths),
+            expand_paths=False,
         )
 
     def _execute_shell_process(

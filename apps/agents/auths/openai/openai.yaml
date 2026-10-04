@@ -16,8 +16,9 @@ on_success:
     params: "run_id={{inputs.continue_id}}"
     auto: true
 
-on_error:
-  cleanup: true
+# Keep failed runs for debugging.
+# on_error:
+#   cleanup: true
 
 steps:
   - shell: check_provider_config

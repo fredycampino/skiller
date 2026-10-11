@@ -76,7 +76,6 @@ def test_start_console_use_case_skips_when_runtime_db_exists() -> None:
         use_case = _use_case(
             installation_state=InstallationState(
                 runtime_db_exists=True,
-                agent_config_exists=False,
             ),
             run_port=run_port,
         )
@@ -86,38 +85,6 @@ def test_start_console_use_case_skips_when_runtime_db_exists() -> None:
         assert result.state is state
         assert result.started_auth is False
         assert run_port.called_with == []
-
-    asyncio.run(run())
-
-
-def test_start_console_use_case_runs_auth_when_only_agent_config_exists(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_to_thread(monkeypatch)
-
-    async def run() -> None:
-        state = ConsoleScreenState(session_key="main")
-        events_port = FakeEventsPort()
-        observer = FakeObserver()
-        context = _run_context()
-        run_port = FakeRunPort(_dispatch())
-        use_case = _use_case(
-            installation_state=InstallationState(
-                runtime_db_exists=False,
-                agent_config_exists=True,
-            ),
-            run_port=run_port,
-            events_port=events_port,
-            context=context,
-        )
-
-        result = await use_case.execute(observer, state=state)
-
-        assert result.state is state
-        assert result.started_auth is True
-        assert run_port.called_with == ["auths/auth"]
-        assert events_port.subscribe_calls == ["run-1234"]
-        assert context.run_id == "run-1234"
 
     asyncio.run(run())
 
@@ -136,7 +103,6 @@ def test_start_console_use_case_runs_auth_for_first_install(
         use_case = _use_case(
             installation_state=InstallationState(
                 runtime_db_exists=False,
-                agent_config_exists=False,
             ),
             run_port=run_port,
             events_port=events_port,
@@ -176,7 +142,6 @@ def test_start_console_use_case_records_auth_dispatch_error(
         use_case = _use_case(
             installation_state=InstallationState(
                 runtime_db_exists=False,
-                agent_config_exists=False,
             ),
             run_port=FakeRunPort(_dispatch_error()),
             context=context,

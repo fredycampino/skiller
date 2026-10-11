@@ -1301,7 +1301,6 @@ def test_console_screen_viewmodel_ignores_initial_arguments_without_runtime_db()
             installation_state_port=FakeInstallationStatePort(
                 InstallationState(
                     runtime_db_exists=False,
-                    agent_config_exists=False,
                 )
             ),
         )
@@ -1337,7 +1336,6 @@ def test_console_screen_viewmodel_ignores_initial_arguments_when_auth_fails() ->
             installation_state_port=FakeInstallationStatePort(
                 InstallationState(
                     runtime_db_exists=False,
-                    agent_config_exists=False,
                 )
             ),
         )

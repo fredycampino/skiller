@@ -308,7 +308,6 @@ class FakeInstallationStatePort:
     ) -> None:
         self.state = state or InstallationState(
             runtime_db_exists=True,
-            agent_config_exists=True,
         )
 
     def read(self) -> InstallationState:

@@ -22,7 +22,6 @@ def test_default_installation_state_port_reads_missing_default_paths(
     state = port.read()
 
     assert state.runtime_db_exists is False
-    assert state.agent_config_exists is False
 
 
 def test_default_installation_state_port_detects_default_runtime_db(
@@ -40,26 +39,36 @@ def test_default_installation_state_port_detects_default_runtime_db(
     state = port.read()
 
     assert state.runtime_db_exists is True
-    assert state.agent_config_exists is False
 
 
-def test_default_installation_state_port_detects_global_agent_config(
+@pytest.mark.parametrize("runtime_db_exists", [False, True])
+def test_default_installation_state_port_ignores_agent_profiles(
     tmp_path: Path,
+    runtime_db_exists: bool,
 ) -> None:
     home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
     settings_dir = home / ".skiller" / "settings"
     settings_dir.mkdir(parents=True)
+    workspace.mkdir()
     (settings_dir / "agent.json").write_text("{}", encoding="utf-8")
+    (workspace / "agent.json").write_text("{}", encoding="utf-8")
+    external_profile = tmp_path / "profile.json"
+    external_profile.write_text("{}", encoding="utf-8")
+    (workspace / ".env.development").write_text(
+        f"AGENT_AGENT_CONFIG_FILE={external_profile}\n", encoding="utf-8"
+    )
+    if runtime_db_exists:
+        (workspace / "runtime.db").write_text("", encoding="utf-8")
     port = DefaultInstallationStatePort(
         home=home,
-        cwd=tmp_path / "workspace",
-        environment={},
+        cwd=workspace,
+        environment={"AGENT_AGENT_CONFIG_FILE": str(external_profile)},
     )
 
     state = port.read()
 
-    assert state.runtime_db_exists is False
-    assert state.agent_config_exists is True
+    assert state.runtime_db_exists is runtime_db_exists
 
 
 def test_default_installation_state_port_reads_configured_db_path(
@@ -85,7 +94,6 @@ def test_default_installation_state_port_reads_configured_db_path(
     state = port.read()
 
     assert state.runtime_db_exists is True
-    assert state.agent_config_exists is False
 
 
 def test_default_installation_state_port_reads_runtime_config_from_environment(

@@ -17,10 +17,8 @@ class DefaultInstallationStatePort:
 
     def read(self) -> InstallationState:
         db_path = self._runtime_db_path()
-        agent_config_path = self._agent_config_path()
         return InstallationState(
             runtime_db_exists=db_path.exists(),
-            agent_config_exists=agent_config_path.exists(),
         )
 
     def _runtime_db_path(self) -> Path:
@@ -37,20 +35,6 @@ class DefaultInstallationStatePort:
             return self._resolve_path(str(configured_db_path).strip())
 
         return self.cwd / "runtime.db"
-
-    def _agent_config_path(self) -> Path:
-        env_file = self._read_development_env()
-        explicit_agent_path = self.environment.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if not explicit_agent_path:
-            explicit_agent_path = env_file.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if explicit_agent_path:
-            return self._resolve_path(explicit_agent_path)
-
-        local_agent_path = self.cwd / "agent.json"
-        if local_agent_path.exists():
-            return local_agent_path
-
-        return self.home / ".skiller" / "settings" / "agent.json"
 
     def _read_runtime_config(self, *, env_file: dict[str, str]) -> dict[str, object]:
         explicit_config_path = self.environment.get("AGENT_RUNTIME_CONFIG_FILE", "").strip()

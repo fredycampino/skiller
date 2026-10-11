@@ -4,6 +4,8 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.43 - 2026-10-12
+
 ### Added
 - Add explicit per-agent profile selection through the YAML step's `config.file`. The selected JSON profile overrides global configuration by root section and replaces, rather than combines with, the conventional local profile.
 - Support literal paths, absolute paths, `~`, `$NAME`, `${NAME}`, and variable concatenations in `config.file`, `system.file`, and file-based `instructions`. Relative paths resolve from the directory containing the flow YAML; external files are supported.
@@ -29,7 +31,8 @@ All notable changes to this project should be summarized here before a version i
 
 ### Notes
 - These permission checks are not operating-system filesystem sandboxing. Retain the shell path expansion controls introduced in beta.42.
-- The TUI installation-state check still needs a separate update to remove its legacy interpretation of `AGENT_AGENT_CONFIG_FILE`.
+- Remove obsolete agent profile discovery and `AGENT_AGENT_CONFIG_FILE` handling from STUI installation-state checks. Startup remains database-driven: a missing runtime database starts onboarding; an existing database skips automatic onboarding.
+- Includes PRs #158 and #159.
 
 ## 0.1.0-beta.42 - 2026-10-04
 

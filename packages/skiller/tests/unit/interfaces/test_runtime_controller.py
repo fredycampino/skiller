@@ -34,7 +34,7 @@ from skiller.application.use_cases.webhook.update_webhook_secret import (
 from skiller.application.waits.channel_mapper import ChannelWaitMapper
 from skiller.application.waits.input_mapper import InputWaitMapper
 from skiller.application.waits.webhook_mapper import WebhookWaitMapper
-from skiller.domain.agent.config.port import AgentConfigProviderSource
+from skiller.domain.agent.config.agent_config_port import AgentConfigProviderSource
 from skiller.domain.config.skiller_config import RuntimeConfig, SkillerConfig, WebhooksConfig
 from skiller.domain.event.event_model import RuntimeEventType
 from skiller.domain.event.webhook_registration_model import (

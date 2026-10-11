@@ -1,6 +1,0 @@
-{
-  "llm": {
-    "provider": "minimax",
-    "model": "MiniMax-M2.7"
-  }
-}

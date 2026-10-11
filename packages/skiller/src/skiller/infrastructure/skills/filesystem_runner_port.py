@@ -5,9 +5,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from skiller.domain.agent.instruction_reference import is_packaged_instruction
 from skiller.domain.flow.flow_run_reference import FlowRunReference
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.template_resolution_error import UnresolvedTemplateError
+from skiller.infrastructure.config.file_reference_resolver import resolve_runtime_file_reference
 from skiller.infrastructure.flow.flow_file_loader import load_existing_flow
 
 _TEMPLATE_RE = re.compile(r"{{\s*([^}]+?)\s*}}")
@@ -27,6 +29,17 @@ class FilesystemRunnerPort(RunnerPort):
             yaml_path=flow_path,
             json_path=Path("__missing__.json"),
         )
+
+    def read_instruction(self, flow_path: Path, reference: str) -> str:
+        if not is_packaged_instruction(reference):
+            file_path = resolve_runtime_file_reference(reference, base_dir=flow_path.parent)
+            return file_path.read_text(encoding="utf-8")
+        file_path = _find_packaged_instruction_dir() / f"{reference}.md"
+        return file_path.read_text(encoding="utf-8")
+
+    def read_system_file(self, flow_path: Path, file_ref: str) -> str:
+        file_path = resolve_runtime_file_reference(file_ref, base_dir=flow_path.parent)
+        return file_path.read_text(encoding="utf-8")
 
     def read_file(
         self,
@@ -245,3 +258,14 @@ def _resolve_file_path(*, base_path: Path, file_ref: str) -> Path:
     except ValueError as exc:
         raise ValueError(f"Flow file reference escapes flow directory: {file_ref}") from exc
     return resolved_path
+
+
+def _find_packaged_instruction_dir() -> Path:
+    for instructions_dir in _packaged_instruction_dir_candidates(Path(__file__).resolve()):
+        if instructions_dir.is_dir():
+            return instructions_dir
+    raise FileNotFoundError("Packaged instruction directory was not found")
+
+
+def _packaged_instruction_dir_candidates(module_path: Path) -> tuple[Path, ...]:
+    return tuple(parent / "apps" / "instructions" for parent in module_path.parents)

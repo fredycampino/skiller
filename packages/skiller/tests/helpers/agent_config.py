@@ -32,11 +32,17 @@ class FakeAgentConfigPort:
         self.config_paths: list[Path | None] = []
         self.validation_config_paths: list[Path | None] = []
 
-    def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path: Path | None = None) -> AgentConfig:
         self.config_paths.append(config_path)
         return self.config
 
-    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
+    def validate_config(
+        self, *, flow_dir: Path, config_path: Path | None = None
+    ) -> AgentConfigValidation:
         self.validation_config_paths.append(config_path)
         return self.validation
 

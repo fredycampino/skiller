@@ -25,7 +25,6 @@ def test_list_agent_models_uses_catalog_and_marks_agent_selection() -> None:
         run_store=_FakeRunStore(_run()),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=_FakeCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     )
 
     result = use_case.execute("run-1")
@@ -42,7 +41,6 @@ def test_list_agent_models_returns_run_not_found() -> None:
         run_store=_FakeRunStore(None),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=_FakeCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("missing")
 
     assert result.status == ListAgentModelsStatus.RUN_NOT_FOUND
@@ -59,7 +57,11 @@ class _FakeRunStore:
 
 
 class _FakeAgentConfig:
-    def get_config(self, *, config_path: Path | None = None):  # noqa: ANN201
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path: Path | None = None):  # noqa: ANN201
         _ = config_path
         return agent_config()
 
@@ -88,12 +90,6 @@ class _FakeCatalogPort:
             options={},
         )
         return LLMProviderCatalog(providers=(provider,))
-
-
-class _FakeSkillRunner:
-    def resolve_file_path(self, flow_path: Path, file_ref: str) -> Path:
-        _ = flow_path, file_ref
-        raise FileNotFoundError
 
 
 def _run() -> Run:

@@ -29,7 +29,7 @@ class ShellCommandPolicy:
         *,
         config: ShellToolRuntimeConfig,
     ) -> None:
-        self.allowed_roots = self._resolve_allowed_roots(config.allowed_paths)
+        self.allowed_roots = config.allowed_paths
         self.allowlist_enabled = config.allowlist_enabled
         self.allowed_commands = {
             command.strip()
@@ -41,16 +41,10 @@ class ShellCommandPolicy:
         self._command_expander = ShellCommandExpander()
 
     def resolve_cwd(self, cwd: str | None) -> str:
-        if cwd is None:
-            return str(self.allowed_roots[0])
-
-        raw = cwd.strip()
-        if not raw:
-            return str(self.allowed_roots[0])
-
-        requested = Path(raw).expanduser()
+        raw = cwd.strip() if cwd is not None else ""
+        requested = Path(raw).expanduser() if raw else Path.cwd()
         if not requested.is_absolute():
-            requested = self.allowed_roots[0] / requested
+            requested = Path.cwd() / requested
         resolved = requested.resolve(strict=False)
         self._ensure_path_allowed(resolved, label="cwd")
         if not resolved.exists():
@@ -132,10 +126,7 @@ class ShellCommandPolicy:
         words.append("__unresolved_path__" if dynamic else command[start:])
         return "".join(words)
 
-    def _resolve_allowed_roots(self, allowed_paths: tuple[Path, ...]) -> tuple[Path, ...]:
-        if allowed_paths:
-            return allowed_paths
-        return (Path.cwd().resolve(strict=False),)
+
 
     def _validate_allowlist(self, *, command: str) -> None:
         if not self.allowlist_enabled:

@@ -1,16 +1,15 @@
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 
+from skiller.domain.agent.config.agent_config_port import AgentConfigPort
+from skiller.domain.agent.config.file_selection import snapshot_agent_config_file
 from skiller.domain.agent.config.model import AgentConfig
-from skiller.domain.agent.config.port import AgentConfigPort
 from skiller.domain.agent.llm.provider_catalog import (
     LLMProviderCatalogSource,
     LLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPort
 from skiller.domain.run.run_store_port import RunStorePort
-from skiller.domain.step.runner_port import RunnerPort
 
 
 class ListAgentModelsStatus(str, Enum):
@@ -46,12 +45,10 @@ class ListAgentModelsUseCase:
         run_store: RunStorePort,
         agent_config: AgentConfigPort,
         llm_provider_catalog: LLMProviderCatalogPort,
-        skill_runner: RunnerPort,
     ) -> None:
         self.run_store = run_store
         self.agent_config = agent_config
         self.llm_provider_catalog = llm_provider_catalog
-        self.skill_runner = skill_runner
 
     def execute(self, run_id: str) -> ListAgentModelsResult:
         if not run_id:
@@ -65,8 +62,13 @@ class ListAgentModelsUseCase:
                 error=f"Run '{run_id}' not found",
             )
 
-        config_path = self._resolve_agent_config_path(run.flow_path)
-        config = self.agent_config.get_config(config_path=config_path)
+        config_path = self.agent_config.resolve_config_path(
+            flow_dir=run.flow_path.parent,
+            file_reference=snapshot_agent_config_file(run.snapshot),
+        )
+        config = self.agent_config.get_config(
+            flow_dir=run.flow_path.parent, config_path=config_path
+        )
         catalog = self.llm_provider_catalog.get_catalog()
         providers = tuple(
             self._provider_item(
@@ -102,16 +104,3 @@ class ListAgentModelsUseCase:
             source=source,
             models=models,
         )
-
-    def _resolve_agent_config_path(self, flow_path: Path) -> Path | None:
-        try:
-            config_path = self.skill_runner.resolve_file_path(
-                flow_path,
-                "agent.json",
-            )
-        except (FileNotFoundError, ValueError):
-            return None
-
-        if config_path.exists():
-            return config_path
-        return None

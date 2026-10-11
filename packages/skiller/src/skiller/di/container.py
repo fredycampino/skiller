@@ -132,7 +132,7 @@ from skiller.infrastructure.config.file_llm_provider_catalog_mapper import (
 from skiller.infrastructure.config.file_llm_provider_catalog_port import (
     FileLLMProviderCatalogPort,
 )
-from skiller.infrastructure.config.json_agent_config import JsonAgentConfig
+from skiller.infrastructure.config.json_agent_config_port import JsonAgentConfigPort
 from skiller.infrastructure.config.json_runtime_config_port import JsonRuntimeConfigPort
 from skiller.infrastructure.config.json_skiller_config_datasource import (
     JsonSkillerConfigDatasource,
@@ -251,7 +251,7 @@ def build_runtime_container(
         notify_tool,
         files_tool,
     )
-    agent_config = JsonAgentConfig(
+    agent_config = JsonAgentConfigPort(
         config_path_global=Path.home() / ".skiller" / "settings" / "agent.json",
         config_mapper=AgentConfigMapper(
             env=os.environ,
@@ -355,7 +355,6 @@ def build_runtime_container(
         context_stats=agent_context_store,
         agent_config=agent_config,
         llm_provider_catalog=llm_provider_catalog,
-        skill_runner=skill_runner,
     )
     list_agent_context_use_case = ListAgentContextUseCase(
         run_store=store,
@@ -364,13 +363,11 @@ def build_runtime_container(
         agent_context_state=agent_context_state,
         agent_config=agent_config,
         llm_provider_catalog=llm_provider_catalog,
-        skill_runner=skill_runner,
     )
     list_agent_models_use_case = ListAgentModelsUseCase(
         run_store=store,
         agent_config=agent_config,
         llm_provider_catalog=llm_provider_catalog,
-        skill_runner=skill_runner,
     )
     list_llm_providers_use_case = ListLLMProvidersUseCase(
         llm_provider_catalog=llm_provider_catalog,
@@ -379,14 +376,12 @@ def build_runtime_container(
         run_store=store,
         run_agent_store=run_agent_store,
         agent_config=agent_config,
-        skill_runner=skill_runner,
     )
     select_agent_model_use_case = SelectAgentModelUseCase(
         run_store=store,
         agent_config=agent_config,
         llm_provider_catalog=llm_provider_catalog,
         runtime_events=runtime_event_store,
-        skill_runner=skill_runner,
     )
     agent_event_publisher = AgentEventPublisher(
         runtime_event_store,
@@ -423,7 +418,6 @@ def build_runtime_container(
             agent_config=agent_config,
             llm_provider_catalog=llm_provider_catalog,
             run_store=store,
-            skill_runner=skill_runner,
             tool_manager=tool_manager,
         ),
         execution_mapper=AgentStepExecutionMapper(),

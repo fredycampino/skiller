@@ -1,22 +1,22 @@
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 
-from skiller.domain.agent.config.model import AgentConfig
-from skiller.domain.agent.config.port import (
+from skiller.domain.agent.config.agent_config_port import (
     AgentConfigPort,
     AgentConfigProviderSource,
     AgentConfigProviderSourceItem,
 )
+from skiller.domain.agent.config.model import AgentConfig
 from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
 )
+from skiller.domain.shared.file_reference import resolve_file_reference
 from skiller.infrastructure.config.agent_config_mapper import AgentConfigMapper
 
 
-class JsonAgentConfig(AgentConfigPort):
+class JsonAgentConfigPort(AgentConfigPort):
     def __init__(
         self,
         *,
@@ -28,16 +28,31 @@ class JsonAgentConfig(AgentConfigPort):
         self.config_mapper = config_mapper
         self.env = env
 
-    def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
-        loaded_config = self._load_config(config_path=config_path)
+    def resolve_config_path(
+        self, *, flow_dir: Path, file_reference: str | None
+    ) -> Path | None:
+        if file_reference is None:
+            conventional_path = flow_dir / "agent.json"
+            return conventional_path if conventional_path.exists() else None
+        path = resolve_file_reference(
+            file_reference, environment=self.env, base_dir=flow_dir, home_dir=Path.home()
+        )
+        if not path.is_file():
+            raise FileNotFoundError(f"Missing agent config file: {path}")
+        return path
+
+    def get_config(self, *, flow_dir: Path, config_path: Path | None = None) -> AgentConfig:
+        payload = self._load_config(config_path=config_path)
         return self.config_mapper.from_json(
-            loaded_config.payload,
-            tools_base_path=loaded_config.tools_base_path,
+            payload,
+            tools_base_path=flow_dir,
         )
 
-    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
+    def validate_config(
+        self, *, flow_dir: Path, config_path: Path | None = None
+    ) -> AgentConfigValidation:
         try:
-            self.get_config(config_path=config_path)
+            self.get_config(flow_dir=flow_dir, config_path=config_path)
         except FileNotFoundError as exc:
             return AgentConfigValidation.invalid(
                 error=AgentConfigValidationErrorCode.CONFIG_NOT_FOUND,
@@ -65,13 +80,6 @@ class JsonAgentConfig(AgentConfigPort):
         *,
         config_path: Path | None = None,
     ) -> tuple[AgentConfigProviderSourceItem, ...]:
-        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if explicit_path:
-            return _provider_sources(
-                payload=_load_json_object(Path(explicit_path).expanduser()),
-                source=AgentConfigProviderSource.ENV,
-            )
-
         global_config_path = self.config_path_global.expanduser()
         global_payload = (
             _load_json_object(global_config_path) if global_config_path.exists() else {}
@@ -111,7 +119,7 @@ class JsonAgentConfig(AgentConfigPort):
         _set_llm_selection(payload, provider=provider, model=model)
         _write_json_object(write_path, payload)
 
-    def _load_config(self, *, config_path: Path | None = None) -> "_LoadedAgentConfig":
+    def _load_config(self, *, config_path: Path | None = None) -> dict[str, object]:
         global_config_path = self.config_path_global.expanduser()
         override_config_path = self._resolve_override_config_path(config_path=config_path)
         if not global_config_path.exists() and override_config_path is None:
@@ -120,53 +128,26 @@ class JsonAgentConfig(AgentConfigPort):
             )
 
         payload: dict[str, object] = {}
-        tools_base_path = global_config_path.parent
         if global_config_path.exists():
             payload = _load_json_object(global_config_path)
-            tools_base_path = global_config_path.parent
         if override_config_path is not None:
             override = _load_json_object(override_config_path)
-            if isinstance(override.get("tools"), dict):
-                tools_base_path = override_config_path.parent
-            return _LoadedAgentConfig(
-                payload=_override_config(payload, override),
-                tools_base_path=tools_base_path,
-            )
-        return _LoadedAgentConfig(
-            payload=payload,
-            tools_base_path=tools_base_path,
-        )
+            return _override_config(payload, override)
+        return payload
 
     def _resolve_config_path(self, *, config_path: Path | None = None) -> Path:
-        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if explicit_path:
-            return Path(explicit_path).expanduser()
-
         if config_path is not None:
-            expanded_config_path = config_path.expanduser()
-            if expanded_config_path.exists():
-                return expanded_config_path
+            return config_path.expanduser()
 
         return self.config_path_global.expanduser()
 
     def _resolve_override_config_path(self, *, config_path: Path | None = None) -> Path | None:
-        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if explicit_path:
-            return Path(explicit_path).expanduser()
-
         if config_path is None:
             return None
 
-        expanded_config_path = config_path.expanduser()
-        if expanded_config_path.exists():
-            return expanded_config_path
-        return None
+        return config_path.expanduser()
 
     def _resolve_model_write_path(self, *, config_path: Path | None = None) -> Path:
-        explicit_path = self.env.get("AGENT_AGENT_CONFIG_FILE", "").strip()
-        if explicit_path:
-            return Path(explicit_path).expanduser()
-
         override_path = self._resolve_override_config_path(config_path=config_path)
         if override_path is not None and _has_llm_selection(override_path):
             return override_path
@@ -201,12 +182,6 @@ def _display_path(path: Path) -> str:
         return f"~/{relative}"
     except ValueError:
         return str(expanded)
-
-
-@dataclass(frozen=True)
-class _LoadedAgentConfig:
-    payload: dict[str, object]
-    tools_base_path: Path
 
 
 def _load_json_object(path: Path) -> dict[str, object]:

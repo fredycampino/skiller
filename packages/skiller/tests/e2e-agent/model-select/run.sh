@@ -6,6 +6,7 @@ tmpdir="$(mktemp -d)"
 cd "$(dirname "$0")/../../../../.."
 
 export HOME="${tmpdir}/home"
+export MODEL_SELECT_PROFILE="${tmpdir}/flow/profile.json"
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
 export AGENT_WEBHOOKS_HOST="127.0.0.1"
 export AGENT_WEBHOOKS_PORT="${SKILLER_TEST_WEBHOOK_PORT:-18084}"
@@ -47,7 +48,7 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
 }
 JSON
 
-cat >"${tmpdir}/flow/agent.json" <<'JSON'
+cat >"${MODEL_SELECT_PROFILE}" <<'JSON'
 {
   "llm": {
     "provider": "minimax",
@@ -67,6 +68,12 @@ inputs: {}
 steps:
   - notify: show_message
     message: "model select smoke ok"
+
+  - agent: configured_agent
+    config:
+      file: "$MODEL_SELECT_PROFILE"
+    system: "Test profile selection."
+    task: "Not executed by this scenario."
 YAML
 
 run_output="$(
@@ -130,7 +137,7 @@ after_output="$(
 )"
 
 GLOBAL_CONFIG="${HOME}/.skiller/settings/agent.json" \
-LOCAL_CONFIG="${tmpdir}/flow/agent.json" \
+LOCAL_CONFIG="${MODEL_SELECT_PROFILE}" \
 AFTER_OUTPUT="${after_output}" \
 python3 - <<'PY'
 import json

@@ -131,16 +131,6 @@ class _FakeStore:
         )
 
 
-class _FakeSkillRunner:
-    def resolve_file_path(
-        self,
-        flow_path: Path,
-        file_ref: str,
-    ) -> Path:
-        _ = (flow_path, file_ref)
-        return Path("__missing__/agent.json")
-
-
 class _FakeAgentContextStore:
     def __init__(self, entries: list[AgentContextEntry] | None = None) -> None:
         self.entries = list(entries or [])
@@ -616,7 +606,6 @@ def _build_use_case(
             agent_config=resolved_agent_config,
             llm_provider_catalog=FakeLLMProviderCatalogPort(),
             run_store=store,
-            skill_runner=_FakeSkillRunner(),
             tool_manager=resolved_tool_manager,
         ),
         execution_mapper=AgentStepExecutionMapper(),

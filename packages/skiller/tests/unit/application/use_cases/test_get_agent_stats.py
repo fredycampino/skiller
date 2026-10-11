@@ -35,7 +35,6 @@ def test_get_agent_stats_uses_attached_agent_context_id() -> None:
         context_stats=context_stats,
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     )
 
     result = use_case.execute("run-1", "support_agent")
@@ -58,7 +57,6 @@ def test_get_agent_stats_caps_capacity_by_model_context_window() -> None:
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=120000)),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == GetAgentStatsStatus.OK
@@ -74,7 +72,6 @@ def test_get_agent_stats_uses_configured_capacity_when_smaller_than_model() -> N
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(_agent_config(window_width_tokens=60000)),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == GetAgentStatsStatus.OK
@@ -90,7 +87,6 @@ def test_get_agent_stats_returns_not_found_statuses() -> None:
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = GetAgentStatsUseCase(
         run_store=_FakeRunStore(_build_run()),
@@ -98,7 +94,6 @@ def test_get_agent_stats_returns_not_found_statuses() -> None:
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert missing_run.status == GetAgentStatsStatus.RUN_NOT_FOUND
@@ -114,7 +109,6 @@ def test_get_agent_stats_returns_context_not_ready() -> None:
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == GetAgentStatsStatus.AGENT_CONTEXT_NOT_READY
@@ -128,7 +122,6 @@ def test_get_agent_stats_rejects_invalid_programmer_input() -> None:
         context_stats=_FakeContextStats(),
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     )
 
     with pytest.raises(RuntimeError, match="requires run_id and agent_id"):
@@ -177,15 +170,13 @@ class _FakeAgentConfig:
     def __init__(self, config: AgentConfig | None = None) -> None:
         self.config = config or _agent_config()
 
-    def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path=None) -> AgentConfig:  # noqa: ANN001
         _ = config_path
         return self.config
-
-
-class _FakeSkillRunner:
-    def resolve_file_path(self, flow_path: Path, file_ref: str):  # noqa: ANN001
-        _ = flow_path, file_ref
-        raise FileNotFoundError
 
 
 def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:

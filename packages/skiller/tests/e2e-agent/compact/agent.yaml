@@ -20,7 +20,9 @@ steps:
   - agent: answer
     system:
       file: "./system.md"
-    task: '{{output_value("ask_user").payload.text}}'
+    task: |
+      Workspace directory: {{flow.dir}}/workspace
+      {{output_value("ask_user").payload.text}}
     tools:
       - files
       - shell

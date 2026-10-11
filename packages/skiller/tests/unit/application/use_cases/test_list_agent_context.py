@@ -56,7 +56,6 @@ def test_list_agent_context_uses_compact_window_and_returns_metadata_without_pay
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(_agent_config()),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     )
 
     result = use_case.execute("run-1", "support_agent")
@@ -104,7 +103,6 @@ def test_list_agent_context_uses_raw_window_when_no_compaction_state() -> None:
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(_agent_config()),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert result.status == ListAgentContextStatus.OK
@@ -134,7 +132,6 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("missing-run", "support_agent")
     missing_agent = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
@@ -143,7 +140,6 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
     no_context = ListAgentContextUseCase(
         run_store=_FakeRunStore(_build_run()),
@@ -152,7 +148,6 @@ def test_list_agent_context_returns_not_found_statuses() -> None:
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1", "support_agent")
 
     assert missing_run.status == ListAgentContextStatus.RUN_NOT_FOUND
@@ -173,7 +168,6 @@ def test_list_agent_context_rejects_invalid_programmer_input() -> None:
         agent_context_state=state_store,
         agent_config=_FakeAgentConfig(),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
-        skill_runner=_FakeSkillRunner(),
     )
 
     with pytest.raises(RuntimeError, match="requires run_id and agent_id"):
@@ -242,15 +236,13 @@ class _FakeAgentConfig:
     def __init__(self, config: AgentConfig | None = None) -> None:
         self.config = config or _agent_config()
 
-    def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path=None) -> AgentConfig:  # noqa: ANN001
         _ = config_path
         return self.config
-
-
-class _FakeSkillRunner:
-    def resolve_file_path(self, flow_path: Path, file_ref: str):  # noqa: ANN001
-        _ = flow_path, file_ref
-        raise FileNotFoundError
 
 
 def _user_entry(sequence: int, text: str, *, compact: int) -> AgentContextEntry:

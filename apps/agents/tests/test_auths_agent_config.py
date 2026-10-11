@@ -1,8 +1,12 @@
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 import yaml
 
 
@@ -92,78 +96,98 @@ def test_codex_auth_temp_files_are_stored_outside_secrets(tmp_path, monkeypatch)
     assert state_dir != credentials_file.parent
 
 
-def test_minimax_auth_writes_config_before_validation_and_restores_on_failure() -> None:
-    agent_path = Path("apps/agents/auths/minimax/minimax.yaml")
-    agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
-    steps = _steps_by_name(agent)
-
-    assert steps["route_minimax_config"]["cases"]["ready"] == "backup_minimax_config"
-    assert steps["route_api_key_shape"]["cases"]["valid"] == "write_minimax_secret"
-    assert steps["write_minimax_secret"]["next"] == "backup_minimax_config"
-    assert steps["backup_minimax_config"]["next"] == "write_minimax_config"
-    assert steps["write_minimax_config"]["next"] == "verify_minimax"
-    assert steps["route_minimax_validation"]["cases"]["final"] == "commit_minimax_config"
-    assert steps["route_minimax_validation"]["default"] == "restore_failed_minimax_config"
-    assert steps["commit_minimax_config"]["next"] == "done"
-    assert steps["restore_failed_minimax_config"]["next"] == "validation_error"
-
-
-def test_minimax_auth_ready_check_uses_existing_secret_without_requiring_config() -> None:
-    command = _steps_by_name(
-        yaml.safe_load(
-            Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
-        )
-    )["check_minimax_config"]["command"]
-
-    assert 'if [ -s "$secret_file" ]; then' in command
-    assert 'if [ -s "$config_file" ] && [ -s "$secret_file" ]; then' not in command
-
-
-def test_minimax_auth_updates_user_provider_catalog() -> None:
+def test_openai_auth_selects_temporary_profile_outside_installation() -> None:
     agent = yaml.safe_load(
-        Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
+        Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8")
     )
     steps = _steps_by_name(agent)
-    write_command = steps["write_minimax_config"]["command"]
 
-    assert 'config_file="$settings_dir/providers.json"' in write_command
-    assert 'llm["default_provider"]' not in write_command
-    assert 'context["window_width_tokens"]' not in write_command
-    assert 'provider.pop("model", None)' in write_command
-    assert 'provider["api_key_file"] = secret_file' in write_command
-
-
-def test_minimax_auth_commits_global_agent_selection() -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/minimax/minimax.yaml").read_text(encoding="utf-8")
-    )
-    steps = _steps_by_name(agent)
-    commit_command = steps["commit_minimax_config"]["command"]
-
-    assert 'config_file="$settings_dir/agent.json"' in commit_command
-    assert 'llm["provider"] = provider.strip()' in commit_command
-    assert 'llm["model"] = model.strip()' in commit_command
-    assert 'local_config_file="{{flow.dir}}/agent.json"' in commit_command
+    assert steps["prepare_verify_config"]["next"] == "verify_provider"
+    assert steps["prepare_verify_config"]["allowed_paths"] == ["~/.skiller"]
+    assert steps["verify_provider"]["config"] == {
+        "file": "~/.skiller/settings/agent.tmp.json"
+    }
+    assert steps["route_provider_validation"]["cases"]["final"] == "commit_provider_config"
+    assert steps["route_provider_validation"]["default"] == "restore_failed_provider_config"
+    for step in steps.values():
+        assert "{{flow.dir}}/agent.json" not in step.get("command", "")
 
 
-def test_minimax_auth_helper_reads_api_key_path_from_user_provider_catalog(
+@pytest.mark.parametrize("validation_succeeded", [True, False])
+def test_openai_auth_temporary_profile_lifecycle(
     tmp_path: Path,
-    monkeypatch,
+    validation_succeeded: bool,
 ) -> None:
-    module = _load_minimax_auth_module()
-    settings_dir = tmp_path / ".skiller" / "settings"
-    providers_path = settings_dir / "providers.json"
-    secret_path = tmp_path / ".skiller" / "secrets" / "minimax.key"
-    providers_path.parent.mkdir(parents=True)
-    providers_path.write_text(
-        '{"providers": {"minimax": {"api_key_file": "'
-        + str(secret_path)
-        + '"}}}\n',
+    agent = yaml.safe_load(
+        Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8")
+    )
+    steps = _steps_by_name(agent)
+    home = tmp_path / "home"
+    settings = home / ".skiller" / "settings"
+    settings.mkdir(parents=True)
+    global_config = settings / "agent.json"
+    original_config = {"llm": {"provider": "other", "model": "old"}, "context": {}}
+    global_config.write_text(json.dumps(original_config), encoding="utf-8")
+    providers_file = settings / "providers.json"
+    providers_file.write_text('{"providers": {}}', encoding="utf-8")
+    backup_file = settings / "providers.json.minimax-auth.bak"
+    backup_file.write_text('{"providers": {"previous": {}}}', encoding="utf-8")
+    secret_file = home / ".skiller" / "secrets" / "minimax_api_key"
+    secret_file.parent.mkdir()
+    secret_file.write_text("test-placeholder", encoding="utf-8")
+    flow_dir = tmp_path / "installed-flow"
+    flow_dir.mkdir()
+    helper = flow_dir / "openai_auth.py"
+    helper.write_text(
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "if sys.argv[1] == 'default-model':\n"
+        "    print('test-model')\n"
+        "elif sys.argv[1] == 'api-key-file':\n"
+        "    print(Path(os.environ['HOME']) / '.skiller/secrets/minimax_api_key')\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(module.Path, "home", staticmethod(lambda: tmp_path))
+    installation_before = helper.read_bytes()
+    environment = dict(os.environ, HOME=str(home))
+    final_step = (
+        "commit_provider_config"
+        if validation_succeeded
+        else "restore_failed_provider_config"
+    )
+    for step_name in ("prepare_verify_config", final_step):
+        command = steps[step_name]["command"]
+        command = command.replace("{{runtime.python}}", sys.executable)
+        command = command.replace("{{flow.dir}}", str(flow_dir))
+        command = command.replace("{{inputs.provider}}", "minimax")
+        subprocess.run(
+            ["bash", "-c", command],
+            env=environment,
+            cwd=flow_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if step_name == "prepare_verify_config":
+            assert json.loads((settings / "agent.tmp.json").read_text(encoding="utf-8")) == {
+                "llm": {"provider": "minimax", "model": "test-model"}
+            }
 
-    assert module.default_api_key_file() == secret_path
+    assert not (settings / "agent.tmp.json").exists()
+    assert not backup_file.exists()
+    assert not (settings / "providers.json.minimax-auth.missing").exists()
+    assert list(flow_dir.iterdir()) == [helper]
+    assert helper.read_bytes() == installation_before
+    expected_config = original_config
+    if validation_succeeded:
+        expected_config = {"llm": {"provider": "minimax", "model": "test-model"}, "context": {}}
+        assert secret_file.exists()
+    else:
+        assert not secret_file.exists()
+        assert json.loads(providers_file.read_text(encoding="utf-8")) == {
+            "providers": {"previous": {}}
+        }
+    assert json.loads(global_config.read_text(encoding="utf-8")) == expected_config
 
 
 def test_moonshot_auth_updates_user_provider_catalog_and_global_selection() -> None:
@@ -426,7 +450,7 @@ def test_lmstudio_auth_uses_lm_api_token_for_model_catalog(monkeypatch) -> None:
 
 
 def test_auth_provider_flows_emit_load_session_post_action() -> None:
-    for flow in ("codex", "minimax", "moonshot", "bedrock", "lmstudio"):
+    for flow in ("codex", "moonshot", "bedrock", "lmstudio"):
         flow_path = Path(f"apps/agents/auths/{flow}/{flow}.yaml")
         agent = yaml.safe_load(
             flow_path.read_text(encoding="utf-8")
@@ -455,7 +479,6 @@ def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
     assert agent["inputs"] == {"continue_id": "string"}
     for step_name in (
         "start_codex",
-        "start_minimax",
         "start_bedrock",
         "start_lmstudio",
         "start_moonshot",
@@ -464,6 +487,12 @@ def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
             "--arg continue_id={{inputs.continue_id}}"
         )
         assert steps[step_name]["action"]["arg"].startswith("auths/")
+
+    assert steps["route_provider"]["cases"]["2"] == "start_minimax"
+    assert steps["start_minimax"]["action"]["arg"] == "auths/openai"
+    assert steps["start_minimax"]["action"]["params"] == (
+        "--arg provider=minimax --arg continue_id={{inputs.continue_id}}"
+    )
 
 
 def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -485,16 +514,6 @@ def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:
 def _load_codex_auth_module() -> ModuleType:
     module_path = Path("apps/agents/auths/codex/codex_auth.py")
     spec = importlib.util.spec_from_file_location("codex_auth", module_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _load_minimax_auth_module() -> ModuleType:
-    module_path = Path("apps/agents/auths/minimax/minimax_auth.py")
-    spec = importlib.util.spec_from_file_location("minimax_auth", module_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)

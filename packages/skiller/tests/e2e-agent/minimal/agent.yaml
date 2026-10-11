@@ -8,6 +8,8 @@ inputs:
 
 steps:
   - agent: answer_date
+    config:
+      file: "$MINIMAL_AGENT_PROFILE"
     system: |
       You are a deterministic formatting agent.
       Return only the requested value.

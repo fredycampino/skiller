@@ -44,9 +44,7 @@ class _FakeCommandTool(ToolDefinition[ShellToolRequest]):
         return ToolSchema(value={})
 
     def request(self, input: ToolInput) -> ToolRequestResult[ShellToolRequest]:
-        return ToolRequestResult.valid(
-            ShellToolRequest(command=input.require_string("command"))
-        )
+        return ToolRequestResult.valid(ShellToolRequest(command=input.require_string("command")))
 
     def run(
         self,
@@ -95,9 +93,7 @@ class _FakeNotifyTool(ToolDefinition[NotifyToolRequest]):
         return ToolSchema(value={})
 
     def request(self, input: ToolInput) -> ToolRequestResult[NotifyToolRequest]:
-        return ToolRequestResult.valid(
-            NotifyToolRequest(message=input.require_string("message"))
-        )
+        return ToolRequestResult.valid(NotifyToolRequest(message=input.require_string("message")))
 
     def run(
         self,
@@ -155,7 +151,7 @@ def test_router_prepares_process_tool_without_run_method() -> None:
         _request(
             runtime_config=ShellToolRuntimeConfig(
                 definition=ShellProcessTool,
-                allowed_paths=(Path("/workspace"),),
+                allowed_paths=(Path.cwd(),),
             ),
         )
     )
@@ -165,7 +161,7 @@ def test_router_prepares_process_tool_without_run_method() -> None:
     assert result.prepared.tool is shell_tool
     assert result.prepared.request == ShellToolRequest(
         command="pwd",
-        effective_cwd="/workspace",
+        effective_cwd=str(Path.cwd()),
     )
 
 
@@ -213,7 +209,7 @@ def test_router_prepare_rejects_policy_blocked_tool() -> None:
             args={"command": "cat /etc/passwd"},
             runtime_config=ShellToolRuntimeConfig(
                 definition=ShellProcessTool,
-                allowed_paths=(Path("/workspace"),),
+                allowed_paths=(Path.cwd(),),
             ),
         )
     )

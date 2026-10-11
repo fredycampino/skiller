@@ -707,6 +707,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
             items=(
                 ShellToolRuntimeConfig(
                     definition=ShellProcessTool,
+                    allowed_paths=(Path.cwd(),),
                 ),
             ),
         ),

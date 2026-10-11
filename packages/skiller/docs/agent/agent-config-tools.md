@@ -33,18 +33,17 @@ optionally the executable names available to the agent `shell` tool.
 | `allowed_paths` | `[]` | Adds filesystem roots available to `cwd` and explicit command paths. |
 | `allowlist_enabled` | `false` | Requires every executable to be listed in `allowed_commands`. |
 | `allow_env_prefix` | `true` | Allows commands to start with assignments such as `MODE=test`. |
-| `expand_paths` | `true` | Expands environment variables and `~` for command path validation only. Setting `false` leaves dynamic paths unresolved and reduces static checks; the executed command is unchanged. Declarative shell steps set this to `false`. |
 | `allowed_commands` | `[]` | Lists executable names allowed when the allowlist is enabled. |
 
 ### Allowed paths
 
-The runtime always allows:
+The runtime automatically allows only the active Python executable path
+(`{{runtime.python}}`). It does not automatically allow the runtime working
+directory, the flow directory, or the whole Python environment. This path
+exception does not add Python to `allowed_commands`; with the allowlist enabled,
+its executable name must still be explicitly allowed.
 
-- `{{runtime.cwd}}`: directory where Skiller was started;
-- `{{runtime.python}}`: active Python executable.
-
-Do not add these paths unless needed for clarity. Configured paths are added to
-the defaults, and duplicates are removed.
+Configured paths are added to the executable path, and duplicates are removed.
 
 The command policy validates paths visible in the outer command. This includes
 literal paths and the supported environment expansions `$VAR`,
@@ -61,10 +60,9 @@ script, or nested interpreter. Granting commands such as `sh`, `bash`, or
 Use an operating-system sandbox when access must be enforced for the complete
 process tree.
 
-`allowed_paths` accepts absolute paths, `~`, paths relative to the `agent.json`
-that defines `tools`, and these exact templates:
+`allowed_paths` accepts absolute paths, `~`, paths relative to the flow directory, and these exact templates:
 
-- `{{flow.dir}}`: directory of that `agent.json`;
+- `{{flow.dir}}`: directory containing the current flow YAML;
 - `{{runtime.cwd}}`: directory where Skiller was started;
 - `{{runtime.python}}`: active Python executable;
 - `{{runtime.venv}}`: active Python environment root.
@@ -103,10 +101,9 @@ Defaults:
 `tools.files.all` grants both read and write access. `tools.files.read` only
 grants read access. `tools.files.write` grants write and edit access.
 
-Path entries accept absolute paths, `~`, paths relative to the `agent.json` that
-defines `tools`, and these exact templates:
+Path entries accept absolute paths, `~`, paths relative to the flow directory, and these exact templates:
 
-- `{{flow.dir}}`: directory of that `agent.json`;
+- `{{flow.dir}}`: directory containing the current flow YAML;
 - `{{runtime.cwd}}`: directory where Skiller was started;
 - `{{runtime.venv}}`: active Python environment root.
 
@@ -116,16 +113,25 @@ are configured, files actions are blocked.
 ## Path Resolution
 
 Tool path entries are expanded and resolved when `agent.json` is loaded.
-Relative entries are resolved against the directory of the `agent.json` file
-that defines the `tools` section.
+Relative entries resolve against the directory containing the current flow YAML.
+`.` and `{{flow.dir}}` identify the same directory, whether `tools` comes from
+the global config, a local config, or an external profile. A config that defines
+`tools` replaces the whole global `tools` section, without changing this base.
 
-- global `~/.skiller/settings/agent.json`: `.` is `~/.skiller/settings`
-- explicit `AGENT_AGENT_CONFIG_FILE`: `.` is its directory
-- local flow `<flow-directory>/agent.json`: `.` is `<flow-directory>`
+Templates do not grant permissions by themselves: paths must appear explicitly
+in the corresponding tool permission lists, except for shell's Python executable
+exception described above.
 
-If a local or explicit config defines `tools`, it replaces the whole global
-`tools` section. Replacement paths therefore resolve against the local or
-explicit file. Use absolute paths for stable shared global config.
+Tool call paths have execution semantics, distinct from configuration entries:
+
+- `files.path` relative paths resolve against the current runtime working directory.
+- Missing or blank `shell.cwd` uses the runtime working directory; relative `cwd`
+  resolves against that directory, independently of the order of `allowed_paths`.
+- The resolved shell working directory must be explicitly allowed and must exist.
+  An empty permission list never falls back to allowing the working directory.
+- Shell command paths resolve against the effective command working directory.
+
+These rules describe agent tools, not the separate YAML `shell` step policy.
 
 ## Validation
 

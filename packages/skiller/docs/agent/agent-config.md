@@ -16,7 +16,7 @@ The user-level file is the base configuration:
 
 The runtime applies at most one override file. The precedence is:
 
-1. the file selected by `AGENT_AGENT_CONFIG_FILE`, when set;
+1. the file explicitly selected by the agent step's `config.file`, when declared;
 2. otherwise, the `agent.json` next to the current flow, when present;
 3. otherwise, only the user-level file.
 
@@ -25,6 +25,17 @@ example, a local `llm` section replaces the complete user-level `llm` section
 and must contain both required fields.
 
 `agent.json` is not discovered from the process current working directory.
+Explicit references accept `$NAME`, `${NAME}`, and concatenations such as
+`${PROFILE_DIR}/reviewer.json`. Variables come from the Runtime process environment
+and must be present and non-empty. Expansion is performed once, without shell
+execution or recursive expansion. `~` uses the Runtime home directory; relative
+paths resolve from the current flow directory. Templates (`{{...}}`) are invalid.
+An explicit missing or invalid profile fails instead of falling back to local or
+global configuration. The selected file may be changed when permissions allow it;
+the reference is resolved again for subsequent operations, including resume.
+
+Changing the model writes to the selected profile when it contains `llm`, otherwise
+to the global file. A write failure never redirects the operation to another file.
 
 ## Root contract
 
@@ -234,7 +245,12 @@ values, LLM context, or persisted agent context entries. See
 
 `tools` contains runtime configuration for registered configurable tools. Tool
 names and fields are validated, and relative paths are resolved against the
-directory containing the effective `agent.json` section.
+directory containing the current flow YAML (`{{flow.dir}}`), regardless of
+whether the `tools` section comes from global, local, or external configuration.
+Neither the flow directory nor `{{runtime.cwd}}` is automatically permitted;
+permissions must be configured explicitly. Shell retains only the automatic
+path permission for the runtime Python executable, without adding its command
+to the executable allowlist.
 
 See [`agent-config-tools.md`](./agent-config-tools.md) for the complete contract.
 

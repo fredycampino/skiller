@@ -71,6 +71,7 @@ def test_flows_files_config_allows_workspace_read_write() -> None:
         "read": [
             "{{flow.dir}}",
             "{{runtime.cwd}}",
+            "{{runtime.venv}}",
             "~/.skiller/settings/",
         ],
         "write": [

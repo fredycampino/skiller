@@ -83,7 +83,9 @@ assert set(payload) == {"run_id", "status", "ok", "providers"}, payload
 
 providers = payload["providers"]
 provider_names = [provider["name"] for provider in providers]
-assert provider_names == ["minimax", "moonshot", "lmstudio", "codex", "bedrock"], provider_names
+assert provider_names == [
+    "minimax", "moonshot", "deepseek", "openrouter", "lmstudio", "codex", "bedrock"
+], provider_names
 assert "null" not in provider_names
 assert "fake" not in provider_names
 

@@ -28,9 +28,8 @@ class ShellToolRuntimeConfigMapper:
             raise ValueError(f"Tool 'shell' has unsupported config fields: {unknown_values}")
 
         configured_paths = _path_list_value(raw, "allowed_paths", base_path=base_path)
-        runtime_cwd = Path.cwd().resolve(strict=False)
         runtime_python = Path(sys.executable).resolve(strict=False)
-        allowed_paths = [runtime_cwd, runtime_python]
+        allowed_paths = [runtime_python]
         allowed_paths.extend(configured_paths)
         allowed_paths = list(dict.fromkeys(allowed_paths))
         allowlist_enabled = _bool_value(raw, "allowlist_enabled", False)
@@ -67,9 +66,7 @@ def _string_list_value(raw: Mapping[str, object], name: str) -> list[str]:
     items: list[str] = []
     for item in value:
         if not isinstance(item, str) or not item.strip():
-            raise ValueError(
-                f"Tool 'shell' field '{name}' must be a list of non-empty strings"
-            )
+            raise ValueError(f"Tool 'shell' field '{name}' must be a list of non-empty strings")
         items.append(item.strip())
     return items
 
@@ -80,10 +77,7 @@ def _path_list_value(
     *,
     base_path: Path,
 ) -> tuple[Path, ...]:
-    return tuple(
-        _path_value(item, base_path=base_path)
-        for item in _string_list_value(raw, name)
-    )
+    return tuple(_path_value(item, base_path=base_path) for item in _string_list_value(raw, name))
 
 
 def _path_value(raw: str, *, base_path: Path) -> Path:

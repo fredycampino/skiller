@@ -222,13 +222,15 @@ steps:
     next: prepare_verify_config
 
   - shell: prepare_verify_config
+    allowed_paths:
+      - "~/.skiller"
     command: |
       set -eu
 
       provider='{{inputs.provider}}'
       model="$({{runtime.python}} "{{flow.dir}}/openai_auth.py" default-model "$provider")"
 
-      PROVIDER="$provider" MODEL="$model" CONFIG_FILE="{{flow.dir}}/agent.json" {{runtime.python}} - <<'PY'
+      PROVIDER="$provider" MODEL="$model" CONFIG_FILE="$HOME/.skiller/settings/agent.tmp.json" {{runtime.python}} - <<'PY'
       import json
       import os
       from pathlib import Path
@@ -255,6 +257,8 @@ steps:
     next: verify_provider
 
   - agent: verify_provider
+    config:
+      file: "~/.skiller/settings/agent.tmp.json"
     system: |
       You are a configuration check agent.
       Reply with one short sentence.
@@ -277,7 +281,7 @@ steps:
 
       settings_dir="$HOME/.skiller/settings"
       config_file="$settings_dir/agent.json"
-      local_config_file="{{flow.dir}}/agent.json"
+      local_config_file="$settings_dir/agent.tmp.json"
 
       CONFIG_FILE="$config_file" LOCAL_CONFIG_FILE="$local_config_file" {{runtime.python}} - <<'PY'
       import json
@@ -319,6 +323,7 @@ steps:
 
       rm -f "$HOME/.skiller/settings/providers.json.{{inputs.provider}}-auth.bak"
       rm -f "$HOME/.skiller/settings/providers.json.{{inputs.provider}}-auth.missing"
+      rm -f "$HOME/.skiller/settings/agent.tmp.json"
       printf '%s\n' "Global agent selection updated."
       printf '%s' committed
     cwd: .
@@ -345,7 +350,7 @@ steps:
         rm -f "$config_file"
       fi
 
-      rm -f "$backup_file" "$missing_file" "$secret_file"
+      rm -f "$backup_file" "$missing_file" "$secret_file" "$settings_dir/agent.tmp.json"
       printf '%s' restored
     cwd: .
     timeout: 15

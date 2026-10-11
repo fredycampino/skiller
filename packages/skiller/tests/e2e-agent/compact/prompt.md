@@ -10,6 +10,8 @@ Run from the repository root.
 - Agent config: `packages/skiller/tests/e2e-agent/compact/agent.json`
 - Helper script: `packages/skiller/tests/e2e-agent/compact/scripts/compact_e2e.py`
 - Workspace: `packages/skiller/tests/e2e-agent/compact/workspace`
+- Shell calls must explicitly set `cwd` to the absolute workspace directory supplied
+  by the agent task. The repository root is not implicitly allowed.
 - Report: `packages/skiller/tests/e2e-agent/compact/reports/compact-context-e2e-results.md`
 
 Runtime files stay under `workspace/`. The final report is written under
@@ -60,7 +62,6 @@ export RUNTIME_PYTHON=./.venv/bin/python
 export COMPACT_DIR=packages/skiller/tests/e2e-agent/compact
 export COMPACT_SCRIPT="$COMPACT_DIR/scripts/compact_e2e.py"
 export AGENT_DB_PATH="$PWD/$COMPACT_DIR/workspace/compact-manual-runtime.db"
-export AGENT_AGENT_CONFIG_FILE="$PWD/$COMPACT_DIR/agent.json"
 export REPORT_PATH="$PWD/$COMPACT_DIR/reports/compact-context-e2e-results.md"
 export STATUS_PATH="$PWD/$COMPACT_DIR/reports/compact-context-e2e-status.json"
 export REQUEST_LOG_DIR="$(dirname "$AGENT_DB_PATH")/llm-requests/lmstudio"

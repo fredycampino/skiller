@@ -21,23 +21,24 @@ Build and open a shell:
 scripts/qa/android-sim/run.sh
 ```
 
-Run the MiniMax auth flow directly:
+Run MiniMax setup through the generic OpenAI-compatible auth flow:
 
 ```bash
-scripts/qa/android-sim/run.sh skiller run auths/minimax --logs
+scripts/qa/android-sim/run.sh skiller run auths/openai --arg provider=minimax --logs
 ```
 
 Use Podman or another Docker-compatible CLI:
 
 ```bash
-SKILLER_CONTAINER_ENGINE=podman scripts/qa/android-sim/run.sh skiller run auths/minimax --logs
+SKILLER_CONTAINER_ENGINE=podman scripts/qa/android-sim/run.sh skiller run auths/openai --arg provider=minimax --logs
 ```
 
-The current failure mode is:
+Historical failure reproduced with the older package versions above:
 
 ```text
 python3: can't open file '/home/droid/packages/skiller/agents/auths/minimax_auth.py'
 ```
 
-After the auth helper path is fixed, the MiniMax auth flow should reach the
-`ask_api_key` waiting step instead.
+When testing a version with the generic OpenAI-compatible auth flow, setup should
+reach the `ask_api_key` waiting step instead. Older package versions may only
+provide the former `auths/minimax` flow.

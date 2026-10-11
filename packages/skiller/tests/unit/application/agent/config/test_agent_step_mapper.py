@@ -18,6 +18,7 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
             step={
                 "system": "Be useful.",
                 "task": "Help user",
+                "config": {"file": "${PROFILE_DIR}/reviewer.json"},
                 "max_turns": 3,
                 "max_tool_calls": 2,
                 "tools": ["notify", "shell"],
@@ -27,6 +28,7 @@ def test_agent_step_mapper_maps_valid_agent_step() -> None:
         )
     )
 
+    assert step.config_file == "${PROFILE_DIR}/reviewer.json"
     assert step.id == "support_agent"
     assert step.system == "Be useful."
     assert step.task == "Help user"

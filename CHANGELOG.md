@@ -4,6 +4,33 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+### Added
+- Add explicit per-agent profile selection through the YAML step's `config.file`. The selected JSON profile overrides global configuration by root section and replaces, rather than combines with, the conventional local profile.
+- Support literal paths, absolute paths, `~`, `$NAME`, `${NAME}`, and variable concatenations in `config.file`, `system.file`, and file-based `instructions`. Relative paths resolve from the directory containing the flow YAML; external files are supported.
+- Validate agent profile, system file, and instruction reference syntax in the flow checker without requiring environment variables or accessing files.
+
+### Changed
+- Resolve relative tool permission paths and `{{flow.dir}}` against the actual flow directory, independently of where the profile or inherited global configuration is stored.
+- Require explicit shell path permissions for the flow directory and Runtime working directory. Empty path permissions no longer fall back to the working directory, and `shell.cwd` is resolved independently of the order of `allowed_paths`.
+- Preserve only the automatic shell path permission for the Runtime Python executable, not the entire venv; Python is not automatically authorized in `allowed_commands`.
+- Keep `instructions` as an ordered list of strings: slugs select packaged instructions, while all other references use the shared file path resolver. Classification occurs before environment expansion, with no fallback between packaged and file sources.
+- Expand file-reference environment variables once from the Runtime environment, without shell execution, recursive expansion, or `{{...}}` templates. Explicit missing or invalid references fail instead of falling back; loaded system and instruction contents remain plain UTF-8 text.
+- Prefer explicit `config.file` in bundled authoring instructions. Conventional flow-local `agent.json` discovery remains supported but is planned for deprecation; global `~/.skiller/settings/agent.json` remains supported.
+
+### Fixed
+- Apply the agent's selected profile consistently to execution, tools, context, statistics, and model operations. Model changes write to the selected profile when it contains `llm`, otherwise to global configuration; write failures never redirect to a different file.
+- Allow the packaged Flows agent to read the Runtime venv explicitly while retaining workspace-only file writes.
+- Align agent E2E scenarios with explicit workspace permissions and the current provider catalog, and remove an obsolete Codex continuation E2E test.
+- Route MiniMax onboarding through the generic OpenAI-compatible authentication flow and remove the redundant provider-specific flow.
+- Generate authentication validation profiles in `~/.skiller/settings/agent.tmp.json`, selected explicitly through `config.file`, instead of writing into the installed flow directory. Remove the temporary profile after successful commit or failed validation rollback; concurrent authentication runs are not supported.
+
+### Removed
+- Remove the Runtime process-wide `AGENT_AGENT_CONFIG_FILE` override in favor of per-step `config.file`, without a compatibility alias or migration mechanism.
+
+### Notes
+- These permission checks are not operating-system filesystem sandboxing. Retain the shell path expansion controls introduced in beta.42.
+- The TUI installation-state check still needs a separate update to remove its legacy interpretation of `AGENT_AGENT_CONFIG_FILE`.
+
 ## 0.1.0-beta.42 - 2026-10-04
 
 ### Added

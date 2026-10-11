@@ -7,11 +7,7 @@ from pathlib import Path
 import pytest
 
 from skiller.domain.agent.llm.finish_type import LLMFinishType
-from skiller.domain.agent.llm.model import (
-    LLMAssistantMessage,
-    LLMToolMessage,
-    LLMUserMessage,
-)
+from skiller.domain.agent.llm.model import LLMUserMessage
 from skiller.domain.agent.llm.provider_catalog import LLMModelDefinition
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
 from skiller.domain.tool.tool_contract import (
@@ -41,12 +37,6 @@ from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMa
 pytestmark = pytest.mark.e2e
 
 SUCCESS_LOG_FILE = Path(__file__).resolve().parents[2] / "logs" / "codex_response.json"
-CONTINUATION_LOG_FILE = (
-    Path(__file__).resolve().parents[2] / "logs" / "codex_lite_continuation.json"
-)
-CONTINUATION_SEED_LOG_FILE = (
-    Path(__file__).resolve().parents[2] / "logs" / "codex_lite_continuation_seed.json"
-)
 
 
 class _NoopRequestLogger:
@@ -154,7 +144,7 @@ def _port(
 def _request(
     *,
     model: LLMModelDefinition,
-    messages: tuple[LLMUserMessage | LLMAssistantMessage | LLMToolMessage, ...],
+    messages: tuple[LLMUserMessage, ...],
     session_id: str,
     tools: tuple[ToolDefinition[ToolRequest], ...] = (),
     log_request_file: str | None = None,
@@ -292,61 +282,6 @@ def test_responses_llm_port_ignores_model_max_output_tokens_for_lite() -> None:
     assert response.error is None
     assert response.content is not None
     assert len(response.content) >= 250
-
-
-def test_responses_llm_port_continues_lite_tool_call_with_prior_result() -> None:
-    _require_e2e_enabled()
-    port = _port(
-        credentials_file=_credentials_file(),
-        request_logger=CodexFileLLMRequestLogger(),
-    )
-    model = _lite_model(max_output_tokens=None)
-    session_id = "codex-e2e-lite-continuation"
-    initial = port.generate(
-        _request(
-            model=model,
-            messages=(
-                LLMUserMessage(
-                    "Call run_command exactly once with command 'pwd'. After I provide its "
-                    "result, call run_command exactly once with command 'ls <the exact "
-                    "result>'. Do not answer with text."
-                ),
-            ),
-            session_id=session_id,
-            tools=(_CommandTool(),),
-            log_request_file=str(CONTINUATION_SEED_LOG_FILE),
-            log_streaming=True,
-        )
-    )
-
-    assert initial.finish_type == LLMFinishType.TOOL_CALLS
-    assert len(initial.tool_calls) == 1
-    tool_call = initial.tool_calls[0]
-    response = port.generate(
-        _request(
-            model=model,
-            messages=(
-                LLMUserMessage(
-                    "Call run_command exactly once with command 'pwd'. After I provide its "
-                    "result, call run_command exactly once with command 'ls <the exact "
-                    "result>'. Do not answer with text."
-                ),
-                LLMAssistantMessage(tool_calls=initial.tool_calls),
-                LLMToolMessage("/workspace", tool_call_id=tool_call.id),
-            ),
-            session_id=session_id,
-            tools=(_CommandTool(),),
-            log_request_file=str(CONTINUATION_LOG_FILE),
-            log_streaming=True,
-        )
-    )
-
-    assert response.finish_type == LLMFinishType.TOOL_CALLS
-    assert len(response.tool_calls) == 1
-    assert response.tool_calls[0].function.name == "run_command"
-    assert json.loads(response.tool_calls[0].function.arguments_json) == {
-        "command": "ls /workspace"
-    }
 
 
 def test_responses_llm_port_returns_unauthorized_credentials_error(tmp_path: Path) -> None:

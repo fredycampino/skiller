@@ -140,7 +140,6 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             agent_config=FakeAgentConfigPort(),
             llm_provider_catalog=FakeLLMProviderCatalogPort(),
             run_store=store,
-            skill_runner=skill_runner,
             tool_manager=agent_tool_manager,
         ),
         execution_mapper=AgentStepExecutionMapper(),

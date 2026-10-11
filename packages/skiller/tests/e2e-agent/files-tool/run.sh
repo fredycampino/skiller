@@ -25,7 +25,6 @@ mkdir -p "${workspace}"
 expected_content="files e2e content"
 
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_AGENT_CONFIG_FILE="packages/skiller/tests/e2e-agent/files-tool/agent.json"
 
 run_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \

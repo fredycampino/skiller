@@ -9,7 +9,9 @@ from skiller.application.tools.shell.process_tool import ShellProcessTool
 pytestmark = pytest.mark.unit
 
 
-def test_shell_command_policy_resolves_relative_cwd_inside_allowed_path(tmp_path) -> None:
+def test_shell_command_policy_resolves_relative_cwd_inside_allowed_path(
+    tmp_path, monkeypatch
+) -> None:
     allowed = tmp_path / "workspace"
     child = allowed / "child"
     child.mkdir(parents=True)
@@ -21,6 +23,7 @@ def test_shell_command_policy_resolves_relative_cwd_inside_allowed_path(tmp_path
         )
     )
 
+    monkeypatch.chdir(allowed)
     assert policy.resolve_cwd("child") == str(child)
 
 
@@ -69,7 +72,7 @@ def test_shell_command_policy_rejects_nonexistent_cwd_inside_allowed_path(tmp_pa
     )
 
     with pytest.raises(ValueError, match=f"shell cwd does not exist: {missing}"):
-        policy.resolve_cwd("missing")
+        policy.resolve_cwd(str(missing))
 
 
 def test_shell_command_policy_rejects_file_cwd_inside_allowed_path(tmp_path) -> None:
@@ -85,7 +88,7 @@ def test_shell_command_policy_rejects_file_cwd_inside_allowed_path(tmp_path) -> 
     )
 
     with pytest.raises(ValueError, match=f"shell cwd is not a directory: {file_path}"):
-        policy.resolve_cwd("file.txt")
+        policy.resolve_cwd(str(file_path))
 
 
 def test_shell_command_policy_validates_each_allowlisted_segment() -> None:
@@ -531,3 +534,28 @@ def test_shell_command_policy_rejects_unquoted_heredoc() -> None:
             effective_cwd="/workspace",
             environment={"HOME": "/outside"},
         )
+
+
+@pytest.mark.parametrize("cwd", [None, "", "."])
+def test_shell_cwd_requires_explicit_permission(tmp_path, monkeypatch, cwd) -> None:
+    monkeypatch.chdir(tmp_path)
+    policy = ShellCommandPolicy(
+        config=ShellToolRuntimeConfig(definition=ShellProcessTool, allowed_paths=())
+    )
+    with pytest.raises(ValueError, match="shell cwd escapes allowed_paths"):
+        policy.resolve_cwd(cwd)
+
+
+def test_shell_cwd_does_not_depend_on_permission_order(tmp_path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    other = tmp_path / "other"
+    child = workspace / "child"
+    child.mkdir(parents=True)
+    other.mkdir()
+    monkeypatch.chdir(workspace)
+    for roots in ((other, workspace), (workspace, other)):
+        policy = ShellCommandPolicy(
+            config=ShellToolRuntimeConfig(definition=ShellProcessTool, allowed_paths=roots)
+        )
+        assert policy.resolve_cwd(None) == str(workspace)
+        assert policy.resolve_cwd("child") == str(child)

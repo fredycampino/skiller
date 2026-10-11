@@ -300,26 +300,26 @@ def test_render_step_can_resolve_env_values(
 
 def test_render_step_can_resolve_internal_flow_directory(tmp_path) -> None:  # noqa: ANN001
     agents_dir = tmp_path / "agents"
-    agent_dir = agents_dir / "auths" / "minimax"
+    agent_dir = agents_dir / "auths" / "openai"
     agent_dir.mkdir(parents=True)
     (agent_dir / "agent.yaml").write_text(
-        "name: auths/minimax\nstart: check_minimax_config\nsteps: []\n",
+        "name: auths/openai\nstart: check_provider_config\nsteps: []\n",
         encoding="utf-8",
     )
     runner = FilesystemRunnerPort()
 
     rendered = runner.render(
         {
-            "command": 'python3 "{{flow.dir}}/minimax_auth.py" api-key-file',
+            "command": 'python3 "{{flow.dir}}/openai_auth.py" api-key-file minimax',
         },
         {"inputs": {}, "step_executions": {}},
         flow=_FlowReference(
-            id="run-minimax",
+            id="run-openai",
             flow_path=agent_dir / "agent.yaml",
         ),
     )
 
-    assert rendered["command"] == f'python3 "{agent_dir}/minimax_auth.py" api-key-file'
+    assert rendered["command"] == f'python3 "{agent_dir}/openai_auth.py" api-key-file minimax'
 
 
 def test_render_step_can_resolve_flow_run_id(tmp_path) -> None:  # noqa: ANN001
@@ -493,3 +493,97 @@ def test_render_step_rejects_direct_output_value_access(tmp_path) -> None:  # no
             },
             flow=flow,
         )
+
+
+@pytest.mark.parametrize("reference_kind", ["absolute", "relative", "environment", "home"])
+def test_system_file_allows_external_prompt(tmp_path, monkeypatch, reference_kind) -> None:
+    flow_dir = tmp_path / "flows"
+    flow_dir.mkdir()
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("External {{inputs.task}} prompt", encoding="utf-8")
+    monkeypatch.setenv("PROMPT_DIR", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    reference = {
+        "absolute": str(prompt),
+        "relative": "../prompt.md",
+        "environment": "${PROMPT_DIR}/prompt.md",
+        "home": "~/prompt.md",
+    }[reference_kind]
+    assert FilesystemRunnerPort().read_system_file(flow_dir / "agent.yaml", reference) == (
+        "External {{inputs.task}} prompt"
+    )
+
+
+def test_system_file_missing_variable_fails(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("ABSENT_PROMPT", raising=False)
+    with pytest.raises(ValueError, match="Missing or empty environment variable"):
+        FilesystemRunnerPort().read_system_file(tmp_path / "agent.yaml", "$ABSENT_PROMPT")
+
+
+def test_system_file_missing_file_fails(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        FilesystemRunnerPort().read_system_file(tmp_path / "agent.yaml", "missing.md")
+
+
+def test_system_file_invalid_encoding_fails(tmp_path) -> None:
+    prompt = tmp_path / "prompt.md"
+    prompt.write_bytes(b"\xff")
+    with pytest.raises(UnicodeDecodeError):
+        FilesystemRunnerPort().read_system_file(tmp_path / "agent.yaml", "prompt.md")
+
+
+def test_packaged_instruction_candidates_include_wheel_layout() -> None:
+    from skiller.infrastructure.skills.filesystem_runner_port import (
+        _packaged_instruction_dir_candidates,
+    )
+
+    module = Path(
+        "/venv/lib/python3.11/site-packages/skiller/infrastructure/skills/filesystem_runner_port.py"
+    )
+    assert Path("/venv/lib/python3.11/site-packages/apps/instructions") in (
+        _packaged_instruction_dir_candidates(module)
+    )
+
+
+def test_read_packaged_instructions() -> None:
+    runner = FilesystemRunnerPort()
+    assert runner.read_instruction(Path("/flows/a.yaml"), "response-style").startswith(
+        "## Response Style"
+    )
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "./rules.md",
+        "rules.md",
+        "../rules.md",
+        "${INSTRUCTIONS_DIR}/${PROFILE_NAME}.md",
+        "$INSTRUCTION_FILE",
+    ],
+)
+def test_read_instruction_paths(tmp_path, monkeypatch, reference) -> None:
+    flow_dir = tmp_path / "flows"
+    flow_dir.mkdir()
+    for directory in (tmp_path, flow_dir):
+        (directory / "rules.md").write_text("Rules {{inputs.task}}", encoding="utf-8")
+    monkeypatch.setenv("INSTRUCTIONS_DIR", str(tmp_path))
+    monkeypatch.setenv("PROFILE_NAME", "rules")
+    monkeypatch.setenv("INSTRUCTION_FILE", str(tmp_path / "rules.md"))
+    assert FilesystemRunnerPort().read_instruction(flow_dir / "a.yaml", reference) == (
+        "Rules {{inputs.task}}"
+    )
+
+
+def test_env_result_slug_remains_a_file_reference(tmp_path, monkeypatch) -> None:
+    (tmp_path / "response-style").write_text("Local rules", encoding="utf-8")
+    monkeypatch.setenv("INSTRUCTION_FILE", "response-style")
+    assert FilesystemRunnerPort().read_instruction(tmp_path / "a.yaml", "$INSTRUCTION_FILE") == (
+        "Local rules"
+    )
+
+
+def test_missing_packaged_instruction_does_not_fall_back_to_local_file(tmp_path) -> None:
+    (tmp_path / "not-a-packaged-instruction").write_text("Local", encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        FilesystemRunnerPort().read_instruction(tmp_path / "a.yaml", "not-a-packaged-instruction")

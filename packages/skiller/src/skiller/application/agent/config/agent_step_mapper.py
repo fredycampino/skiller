@@ -1,5 +1,6 @@
 from typing import Any
 
+from skiller.domain.agent.config.file_selection import agent_config_file
 from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep
 from skiller.domain.step.step_type import StepType
@@ -17,6 +18,7 @@ class AgentStepMapper:
 
         return AgentStep(
             id=current_step.step_id,
+            config_file=agent_config_file(current_step.step),
             system=self._join_system_parts(system, instructions),
             task=self._required_string(current_step, "task"),
             max_turns=self._optional_positive_int(current_step, "max_turns"),

@@ -15,6 +15,8 @@ fi
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
+cp packages/skiller/tests/e2e-agent/minimal/agent.json "${tmpdir}/profile.json"
+export MINIMAL_AGENT_PROFILE="${tmpdir}/profile.json"
 export AGENT_DB_PATH="${tmpdir}/runtime.db"
 
 run_output="$(

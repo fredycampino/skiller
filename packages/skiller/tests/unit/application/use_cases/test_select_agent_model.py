@@ -84,7 +84,6 @@ def _use_case(
         agent_config=agent_config or _FakeAgentConfig(),
         llm_provider_catalog=_FakeCatalogPort(),
         runtime_events=events or _FakeRuntimeEventStore(),
-        skill_runner=_FakeSkillRunner(),
     )
 
 
@@ -100,6 +99,9 @@ class _FakeRunStore:
 class _FakeAgentConfig:
     def __init__(self) -> None:
         self.selections: list[tuple[str, str, Path | None]] = []
+
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        return None
 
     def set_model(
         self,
@@ -157,12 +159,6 @@ class _FakeCatalogPort:
             options={},
         )
         return LLMProviderCatalog(providers=(provider,))
-
-
-class _FakeSkillRunner:
-    def resolve_file_path(self, flow_path: Path, file_ref: str) -> Path:
-        _ = flow_path, file_ref
-        raise FileNotFoundError
 
 
 def _run() -> Run:

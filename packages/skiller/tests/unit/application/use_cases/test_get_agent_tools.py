@@ -31,11 +31,12 @@ def test_get_agent_tools_returns_effective_tools_for_first_run_agent(tmp_path: P
     config_path = tmp_path / "agent.json"
     config_path.write_text("{}", encoding="utf-8")
     agent_config = _FakeAgentConfig(_agent_config())
+    run = _build_run()
+    run.flow_path = tmp_path / "demo.yaml"
     use_case = GetAgentToolsUseCase(
-        run_store=_FakeRunStore(_build_run()),
+        run_store=_FakeRunStore(run),
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "context-1")),
         agent_config=agent_config,
-        skill_runner=_FakeSkillRunner(config_path=config_path),
     )
 
     result = use_case.execute("run-1")
@@ -43,7 +44,7 @@ def test_get_agent_tools_returns_effective_tools_for_first_run_agent(tmp_path: P
     assert result.status == GetAgentToolsStatus.OK
     assert result.run_id == "run-1"
     assert result.agent_id == "support_agent"
-    assert result.flow_path == Path("/flows/demo.yaml")
+    assert result.flow_path == tmp_path / "demo.yaml"
     assert result.config_path == config_path
     assert result.tools is not None
     assert result.tools.shell.enabled is True
@@ -60,7 +61,6 @@ def test_get_agent_tools_returns_run_not_found() -> None:
         run_store=_FakeRunStore(None),
         run_agent_store=_FakeRunAgentStore(RunAgent("support_agent", "context-1")),
         agent_config=_FakeAgentConfig(_agent_config()),
-        skill_runner=_FakeSkillRunner(),
     ).execute("missing-run")
 
     assert result.status == GetAgentToolsStatus.RUN_NOT_FOUND
@@ -73,7 +73,6 @@ def test_get_agent_tools_returns_agent_not_found_when_run_has_no_agents() -> Non
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(None),
         agent_config=_FakeAgentConfig(_agent_config()),
-        skill_runner=_FakeSkillRunner(),
     ).execute("run-1")
 
     assert result.status == GetAgentToolsStatus.AGENT_NOT_FOUND
@@ -87,7 +86,6 @@ def test_get_agent_tools_rejects_invalid_programmer_input() -> None:
         run_store=_FakeRunStore(_build_run()),
         run_agent_store=_FakeRunAgentStore(None),
         agent_config=_FakeAgentConfig(_agent_config()),
-        skill_runner=_FakeSkillRunner(),
     )
 
     with pytest.raises(RuntimeError, match="requires run_id"):
@@ -121,20 +119,13 @@ class _FakeAgentConfig:
         self.config = config
         self.config_paths: list[Path | None] = []
 
-    def get_config(self, *, config_path=None) -> AgentConfig:  # noqa: ANN001
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path=None) -> AgentConfig:  # noqa: ANN001
         self.config_paths.append(config_path)
         return self.config
-
-
-class _FakeSkillRunner:
-    def __init__(self, config_path: Path | None = None) -> None:
-        self.config_path = config_path
-
-    def resolve_file_path(self, flow_path: Path, file_ref: str):  # noqa: ANN001
-        _ = flow_path, file_ref
-        if self.config_path is None:
-            raise FileNotFoundError
-        return self.config_path
 
 
 def _agent_config() -> AgentConfig:

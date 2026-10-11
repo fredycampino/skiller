@@ -15,6 +15,10 @@ class RunnerPort(Protocol):
         flow: FlowRunReference,
     ) -> dict[str, Any]: ...
 
+    def read_instruction(self, flow_path: Path, reference: str) -> str: ...
+
+    def read_system_file(self, flow_path: Path, file_ref: str) -> str: ...
+
     def read_file(
         self,
         flow_path: Path,

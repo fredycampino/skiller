@@ -1,16 +1,14 @@
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from skiller.domain.agent.instruction_reference import parse_instruction_references
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep, CurrentStepStatus
 from skiller.domain.step.run_step_model import find_run_step
 from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.step.step_type import StepType
-
-_PACKAGED_INSTRUCTION_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 @dataclass(frozen=True)
@@ -56,14 +54,26 @@ class RenderCurrentStepUseCase:
         except ValueError:
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_SKILL)
 
+        render_body = dict(parsed_step.body)
+        if parsed_step.step_type == StepType.AGENT:
+            render_body.pop("config", None)
+            render_body.pop("instructions", None)
+            if isinstance(parsed_step.body.get("system"), dict):
+                render_body.pop("system", None)
         step = self.skill_runner.render(
-            parsed_step.body,
+            render_body,
             run.context.to_dict(),
             flow=run,
         )
         if not isinstance(step, dict):
             return RenderCurrentStepResult(status=CurrentStepStatus.INVALID_STEP)
         if parsed_step.step_type == StepType.AGENT:
+            if "instructions" in parsed_step.body:
+                step["instructions"] = parsed_step.body["instructions"]
+            if "config" in parsed_step.body:
+                step["config"] = parsed_step.body["config"]
+            if isinstance(parsed_step.body.get("system"), dict):
+                step["system"] = parsed_step.body["system"]
             step = self._resolve_agent_system_file(
                 flow_path=run.flow_path,
                 step=step,
@@ -93,15 +103,17 @@ class RenderCurrentStepUseCase:
         step: dict[str, Any],
     ) -> dict[str, Any]:
         raw_system = step.get("system")
-        if not isinstance(raw_system, dict) or "file" not in raw_system:
+        if not isinstance(raw_system, dict):
             return step
 
+        if set(raw_system) != {"file"}:
+            raise ValueError("Agent step system must contain exactly 'file'")
         file_ref = raw_system.get("file")
         if not isinstance(file_ref, str) or not file_ref.strip():
             raise ValueError("Agent step system.file must be a non-empty string")
 
         resolved_step = dict(step)
-        resolved_step["system"] = self.skill_runner.read_file(
+        resolved_step["system"] = self.skill_runner.read_system_file(
             flow_path,
             file_ref,
         )
@@ -113,51 +125,13 @@ class RenderCurrentStepUseCase:
         flow_path: Path,
         step: dict[str, Any],
     ) -> dict[str, Any]:
-        raw_instructions = step.get("instructions")
-        if raw_instructions is None:
+        if "instructions" not in step:
             return step
-        if not isinstance(raw_instructions, list):
-            raise ValueError("Agent step instructions must be a list")
-
-        resolved_instructions: list[str] = []
-        for instruction_ref in raw_instructions:
-            if not isinstance(instruction_ref, str) or not instruction_ref.strip():
-                raise ValueError("Agent step instructions must contain non-empty strings")
-            resolved_instructions.append(
-                self._read_instruction(
-                    flow_path=flow_path,
-                    instruction_ref=instruction_ref.strip(),
-                )
-            )
-
+        references = parse_instruction_references(step["instructions"])
+        resolved_instructions = [
+            self.skill_runner.read_instruction(flow_path, reference)
+            for reference in references
+        ]
         resolved_step = dict(step)
         resolved_step["instructions"] = resolved_instructions
         return resolved_step
-
-    def _read_instruction(
-        self,
-        *,
-        flow_path: Path,
-        instruction_ref: str,
-    ) -> str:
-        if instruction_ref.startswith("./") or instruction_ref.startswith("../"):
-            return self.skill_runner.read_file(flow_path, instruction_ref)
-        if not _PACKAGED_INSTRUCTION_PATTERN.fullmatch(instruction_ref):
-            raise ValueError("Agent step instruction package names must be slugs")
-
-        instruction_path = _find_packaged_instruction_dir() / f"{instruction_ref}.md"
-        if not instruction_path.is_file():
-            raise ValueError(f"Agent step instruction '{instruction_ref}' was not found")
-        return instruction_path.read_text(encoding="utf-8")
-
-
-def _find_packaged_instruction_dir() -> Path:
-    for instructions_dir in _packaged_instruction_dir_candidates(Path(__file__).resolve()):
-        if instructions_dir.is_dir():
-            return instructions_dir
-
-    raise ValueError("Packaged instruction directory was not found")
-
-
-def _packaged_instruction_dir_candidates(module_path: Path) -> tuple[Path, ...]:
-    return tuple(parent / "apps" / "instructions" for parent in module_path.parents)

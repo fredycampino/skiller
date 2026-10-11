@@ -1,9 +1,9 @@
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 from skiller.application.agent.tools.tool_manager import ToolManager
+from skiller.domain.agent.config.agent_config_port import AgentConfigPort
+from skiller.domain.agent.config.file_selection import snapshot_agent_config_file
 from skiller.domain.agent.config.model import AgentConfig
-from skiller.domain.agent.config.port import AgentConfigPort
 from skiller.domain.agent.config.validation import (
     AgentConfigValidation,
     AgentConfigValidationErrorCode,
@@ -17,7 +17,6 @@ from skiller.domain.agent.llm.provider_catalog_port import LLMProviderCatalogPor
 from skiller.domain.run.run_store_port import RunStorePort
 from skiller.domain.step.current_step_model import CurrentStep
 from skiller.domain.step.run_step_model import AgentStep
-from skiller.domain.step.runner_port import RunnerPort
 from skiller.domain.tool.tool_contract import ToolDefinition
 
 AGENT_RUNTIME_SYSTEM = (
@@ -67,13 +66,11 @@ class AgentStepConfigReader:
         agent_config: AgentConfigPort,
         llm_provider_catalog: LLMProviderCatalogPort,
         run_store: RunStorePort,
-        skill_runner: RunnerPort,
         tool_manager: ToolManager,
     ) -> None:
         self.agent_config = agent_config
         self.llm_provider_catalog = llm_provider_catalog
         self.run_store = run_store
-        self.skill_runner = skill_runner
         self.tool_manager = tool_manager
 
     def read(
@@ -82,8 +79,16 @@ class AgentStepConfigReader:
         step: AgentStep,
         current_step: CurrentStep,
     ) -> AgentRunnerConfig:
-        config_path = self._resolve_agent_config_path(current_step)
-        config = self.agent_config.get_config(config_path=config_path)
+        run = self.run_store.get_run(current_step.run_id)
+        if run is None:
+            raise ValueError(f"Run '{current_step.run_id}' not found")
+        config_path = self.agent_config.resolve_config_path(
+            flow_dir=run.flow_path.parent,
+            file_reference=step.config_file,
+        )
+        config = self.agent_config.get_config(
+            flow_dir=run.flow_path.parent, config_path=config_path
+        )
         catalog = self.llm_provider_catalog.get_catalog()
         provider_definition = catalog.get(config.llm.provider)
         catalog.get_model(
@@ -130,13 +135,32 @@ class AgentStepConfigReader:
         return "\n".join(lines)
 
     def validate_agent_config(self, *, current_step: CurrentStep) -> AgentConfigValidation:
-        config_path = self._resolve_agent_config_path(current_step)
-        validation = self.agent_config.validate_config(config_path=config_path)
+        run = self.run_store.get_run(current_step.run_id)
+        if run is None:
+            raise ValueError(f"Run '{current_step.run_id}' not found")
+        try:
+            config_path = self.agent_config.resolve_config_path(
+                flow_dir=run.flow_path.parent,
+                file_reference=snapshot_agent_config_file(run.snapshot),
+            )
+            validation = self.agent_config.validate_config(
+                flow_dir=run.flow_path.parent, config_path=config_path
+            )
+        except FileNotFoundError as exc:
+            return AgentConfigValidation.invalid(
+                error=AgentConfigValidationErrorCode.CONFIG_NOT_FOUND, message=str(exc)
+            )
+        except ValueError as exc:
+            return AgentConfigValidation.invalid(
+                error=AgentConfigValidationErrorCode.INVALID_SCHEMA, message=str(exc)
+            )
         if not validation.ok:
             return validation
 
         try:
-            config = self.agent_config.get_config(config_path=config_path)
+            config = self.agent_config.get_config(
+                flow_dir=run.flow_path.parent, config_path=config_path
+            )
             catalog = self.llm_provider_catalog.get_catalog()
             catalog.get_model(
                 provider_name=config.llm.provider,
@@ -152,23 +176,6 @@ class AgentStepConfigReader:
             return AgentConfigValidation.invalid(error=error, message=message)
 
         return AgentConfigValidation.valid()
-
-    def _resolve_agent_config_path(self, current_step: CurrentStep) -> Path | None:
-        run = self.run_store.get_run(current_step.run_id)
-        if run is None:
-            raise ValueError(f"Run '{current_step.run_id}' not found")
-
-        try:
-            config_path = self.skill_runner.resolve_file_path(
-                run.flow_path,
-                "agent.json",
-            )
-        except (FileNotFoundError, ValueError):
-            return None
-
-        if config_path.exists():
-            return config_path
-        return None
 
     def _apply_step_overrides(
         self,

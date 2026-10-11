@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,7 @@ def test_shell_process_tool_rejects_command_outside_allowed_paths() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(Path("/workspace"),),
+        allowed_paths=(Path.cwd(),),
     )
 
     result = tool.policy(
@@ -167,7 +168,7 @@ def test_shell_process_tool_rejects_cwd_outside_allowed_paths() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(Path("/workspace"),),
+        allowed_paths=(Path.cwd(),),
     )
 
     result = tool.policy(
@@ -183,7 +184,7 @@ def test_shell_process_tool_rejects_command_outside_allowlist() -> None:
     tool = ShellProcessTool(shell="/bin/bash")
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool,
-        allowed_paths=(Path("/workspace"),),
+        allowed_paths=(Path.cwd(),),
         allowlist_enabled=True,
         allowed_commands=("git",),
     )
@@ -285,6 +286,7 @@ def test_shell_process_tool_uses_request_env_to_validate_variable_path(
         config=config,
         request=ShellToolRequest(
             command=f"ls {variable_reference}/child",
+            cwd=str(workspace),
             env={"TARGET_DIR": str(outside)},
         ),
     )
@@ -313,6 +315,7 @@ def test_shell_process_tool_uses_request_home_to_validate_tilde_path(
         config=config,
         request=ShellToolRequest(
             command="ls ~/child",
+            cwd=str(workspace),
             env={"HOME": str(outside_home)},
         ),
     )
@@ -320,3 +323,29 @@ def test_shell_process_tool_uses_request_home_to_validate_tilde_path(
     assert result.ok is False
     expected_path = outside_home / "child"
     assert result.error == f"shell command path escapes allowed_paths: {expected_path}"
+
+
+def test_shell_default_permissions_only_include_python(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    flow_dir = tmp_path / "flow"
+    tool = ShellProcessTool()
+    config = tool.to_runtime_config(
+        {"allowlist_enabled": True, "allowed_commands": ["git"]}, base_path=flow_dir
+    )
+    python = Path(sys.executable).resolve()
+    assert config.allowed_paths == (python,)
+    assert config.allowed_commands == ("git",)
+    result = tool.policy(config=config, request=ShellToolRequest(command="git status"))
+    assert result.ok is False
+
+    config = tool.to_runtime_config(
+        {
+            "allowed_paths": ["{{runtime.cwd}}"],
+            "allowlist_enabled": True,
+            "allowed_commands": ["git"],
+        },
+        base_path=flow_dir,
+    )
+    result = tool.policy(config=config, request=ShellToolRequest(command=f"{python} --version"))
+    assert result.ok is False
+    assert "not in the shell allowlist" in result.error

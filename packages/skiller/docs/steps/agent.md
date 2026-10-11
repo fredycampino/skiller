@@ -48,7 +48,7 @@ System prompt with reusable instructions:
   next: ask_user
 ```
 
-Legacy system prompt from a file:
+System prompt from a file:
 
 ```yaml
 - agent: ci_agent
@@ -64,19 +64,43 @@ Legacy system prompt from a file:
 
 - `system` (required): step-specific instruction merged with a short runtime base system supplied by Skiller on every turn.
   - string block: inline step-specific system prompt
-  - `{file: "./system.md"}`: legacy form that loads the prompt from a UTF-8 file next to the flow file
+  - `{file: "./system.md"}`: loads the prompt from a UTF-8 file using the same path expansion as `config.file`
 - `instructions` (optional): ordered reusable instruction sources appended after `system`.
   - `"solve-task-style"`: packaged instruction shipped with Skiller
-  - `"./repo-rules.md"`: local UTF-8 file relative to the flow file
+  - any non-slug string: a UTF-8 file reference with the same path expansion as
+    `config.file` and `system.file`, for example `rules.md`, `../shared/rules.md`,
+    `/etc/skiller/rules.md`, or `${INSTRUCTIONS_DIR}/${PROFILE_NAME}.md`
+  - references are classified before environment expansion, then loaded in order;
+    file contents are not template-rendered
 - `task` (required): user request for this run; templates are allowed.
+- `config` (optional): an object containing exactly `file`, a non-empty file reference.
+  Use `config: {file: "./reviewer.json"}` or
+  `config: {file: "${PROFILE_DIR}/reviewer.json"}`. Relative paths start at the flow
+  directory. Absolute paths and `~` are supported. Environment expansion reads the
+  Runtime environment, not inputs or templates; missing/empty variables are errors.
+  The checker validates syntax without reading variables or files. When omitted,
+  the conventional `agent.json` next to the YAML is used if present, then global.
 - `tools` (optional): allowlist of tool names for this step.
 - `max_turns` (optional): max LLM decision turns for this step; if omitted, the runtime uses `loop.max_turns` from `agent.json`.
 - `next` (optional): next step after the agent step completes normally.
 
-Local instruction files and legacy `system.file` must be relative paths inside
-the flow directory. Absolute paths and paths escaping the flow directory are
-rejected. Packaged instruction names must be slugs such as `solve-task-style` or
-`response-style`.
+`system.file` accepts literal paths, `$NAME`, `${NAME}`, and concatenations such
+as `${PROMPT_DIR}/system.md`. Absolute paths, `~`, and paths outside the flow
+directory are supported. Relative paths start at the flow directory. Variables
+must exist and be non-empty; expansion is once only, without shell execution or
+`{{...}}` templates. Missing, unreadable, or invalid UTF-8 files fail without
+fallback. File content is loaded as prompt text, not rendered as a template.
+The checker validates reference syntax without accessing environment or files.
+
+Instruction slugs match `[a-z][a-z0-9_-]*` and load `apps/instructions/<slug>.md`.
+Every other reference uses the shared path resolver; external paths are allowed.
+Use `./response-style` to load a local file whose name is also a slug. An environment
+reference whose value is a slug remains a file reference. There is no fallback
+between packaged and file sources. `instructions` must be a list of non-empty
+strings; omission or an empty list adds nothing, while explicit null is invalid.
+References do not support `{{...}}`. Missing/empty variables, missing/unreadable
+files, and invalid UTF-8 fail. The checker validates syntax without accessing
+variables or files.
 
 Runtime-only limits:
 

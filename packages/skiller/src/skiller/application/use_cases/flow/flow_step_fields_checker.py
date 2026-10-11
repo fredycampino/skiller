@@ -5,6 +5,9 @@ from skiller.application.use_cases.flow.flow_check_model import (
 from skiller.application.use_cases.flow.flow_notify_action_checker import (
     FlowNotifyActionChecker,
 )
+from skiller.domain.agent.config.file_selection import agent_config_file
+from skiller.domain.agent.instruction_reference import parse_instruction_references
+from skiller.domain.shared.file_reference import validate_file_reference
 from skiller.domain.step.step_execution_model import NotifyOutputFormat
 from skiller.domain.step.step_type import StepType
 
@@ -95,6 +98,28 @@ class FlowStepFieldsChecker:
 
         if step.step_type == StepType.AGENT.value:
             self._check_agent_fields(step=step, errors=errors)
+            try:
+                agent_config_file(step.body)
+            except ValueError as exc:
+                errors.append(FlowCheckError(code="FLOW_AGENT_CONFIG_INVALID", message=str(exc)))
+            if "instructions" in step.body:
+                try:
+                    parse_instruction_references(step.body["instructions"])
+                except ValueError as exc:
+                    errors.append(
+                        FlowCheckError(code="FLOW_AGENT_INSTRUCTIONS_INVALID", message=str(exc))
+                    )
+            system = step.body.get("system")
+            if isinstance(system, dict):
+                try:
+                    if set(system) != {"file"} or not isinstance(system["file"], str):
+                        raise ValueError("Agent system must contain exactly a string 'file'")
+                    validate_file_reference(system["file"])
+                except ValueError as exc:
+                    errors.append(
+                        FlowCheckError(code="FLOW_AGENT_SYSTEM_INVALID", message=str(exc))
+                    )
+
 
         if step.step_type == StepType.SEND.value:
             self._check_send_fields(step=step, errors=errors)

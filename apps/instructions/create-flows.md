@@ -28,9 +28,85 @@ Declare values needed when the flow starts as `inputs`. Read prior outputs with 
 
 Use `<path-docs>/flows/flow-context.md` for template namespaces and output shapes. Common values are `{{flow.dir}}`, `{{flow.run_id}}`, and `{{runtime.python}}`.
 
+### Select Agent Configuration Explicitly
+
+For each new or updated `agent` step, prefer an explicit profile:
+
+```yaml
+- agent: reviewer
+  config:
+    file: "./profiles/reviewer.json"
+  system: "Review the requested changes."
+  task: "{{inputs.task}}"
+```
+
+`config` must contain exactly `file`, a non-empty string. References accept
+absolute paths, `~`, relative paths, `$PROFILE_FILE`, and concatenations such as
+`${PROFILE_DIR}/reviewer.json`. Variables come from the Runtime environment;
+missing or empty variables are errors. Expansion happens once, without shell
+execution. Relative results start at the directory containing the flow YAML.
+Do not use templates such as `{{flow.dir}}`, `{{env.PROFILE_FILE}}`, or
+`{{inputs.profile}}` in `config.file`. An explicit missing or invalid profile
+fails without falling back to another file.
+
+The selected profile overrides global configuration by root section, without
+recursive merging, and replaces the conventional local profile. Implicit
+`agent.json` discovery beside the YAML still works but is planned for
+deprecation; do not rely on it for new flows. This does not deprecate the global
+`~/.skiller/settings/agent.json`. Read `<path-docs>/agent/agent-config.md` and
+`skiller-permissions` before configuring tools or changing model settings.
+
+### Load A System Prompt From A File
+
+`system` can remain inline or load a UTF-8 file with the same reference syntax as
+`config.file`:
+
+```yaml
+system:
+  file: "${PROMPT_DIR}/reviewer.md"
+```
+
+Absolute paths, `~`, and external files are supported; relative paths start at
+the flow YAML directory. Missing/empty variables and file read errors fail
+without fallback. Do not use `{{...}}` templates in `system.file`; file contents
+are loaded as text without template expansion. `instructions` uses the same path rules for non-slug references, including
+external files.
+
+### Add Reusable Instructions
+
+Keep `instructions` as an ordered list of strings. A slug matching
+`[a-z][a-z0-9_-]*` loads `apps/instructions/<slug>.md`. Every other value is a file
+reference using the same expansion as `config.file` and `system.file`:
+
+```yaml
+instructions:
+  - "response-style"
+  - "rules.md"
+  - "../shared/security.md"
+  - "${INSTRUCTIONS_DIR}/${PROFILE_NAME}.md"
+```
+
+Classification happens before variable expansion. Use `./response-style` for a
+local file whose name is a slug. No fallback occurs between packaged and file
+sources. Do not use `{{...}}` in references; loaded contents are plain UTF-8 text
+appended after `system` in the declared order. Missing/empty variables and read
+errors fail. Omit the field or use `[]` for no instructions, not null.
+
 ### Use Flow-Local Helpers
 
-Reference files beside the YAML with `{{flow.dir}}`. Run Python helpers with `{{runtime.python}}`, not `python` or `python3` from `PATH`.
+In template-enabled fields, reference files beside the YAML with `{{flow.dir}}`.
+Run Python helpers with `{{runtime.python}}`, not `python` or `python3` from
+`PATH`. For the agent shell tool, the helper paths and effective `cwd` must be
+explicitly permitted, and the executable must be authorized when the command
+allowlist is enabled. The automatic Runtime Python path permission does not
+permit its command or the entire venv. A flow `shell` step and the agent's
+`shell` tool are different contracts; read their respective documentation.
+
+Relative tool permission paths start at the flow directory, not the selected
+profile directory. Neither `{{flow.dir}}` nor `{{runtime.cwd}}` grants automatic
+access. Tool-call paths have execution semantics: `files.path` starts at the
+Runtime working directory; command paths start at shell's effective `cwd`.
+Moving a profile must not change the base of its configured permission paths.
 
 ### Define User-Facing Messages And Actions
 

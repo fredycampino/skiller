@@ -49,6 +49,7 @@
       "read": [
         "{{flow.dir}}",
         "{{runtime.cwd}}",
+        "{{runtime.venv}}",
         "~/.skiller/settings/"
       ],
       "write": [

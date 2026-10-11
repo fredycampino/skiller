@@ -38,13 +38,13 @@ def test_agent_step_config_reader_reads_valid_step() -> None:
         ),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=_FakeToolManager(definitions=(notify_tool, shell_tool)),
     )
 
     config = reader.read(
         current_step=_current_step(),
         step=AgentStep(
+            config_file=None,
             id="support_agent",
             system="Be useful.",
             task="Help user",
@@ -75,13 +75,13 @@ def test_agent_step_config_reader_reads_base_limits_without_tools() -> None:
         ),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
     )
 
     config = reader.read(
         current_step=_current_step(),
         step=AgentStep(
+            config_file=None,
             id="support_agent",
             system="Be useful.",
             task="Help user",
@@ -106,13 +106,13 @@ def test_agent_step_config_reader_applies_step_overrides_without_mutating_base_c
         agent_config=FakeAgentConfigPort(base_config),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
     )
 
     config = reader.read(
         current_step=_current_step(),
         step=AgentStep(
+            config_file=None,
             id="support_agent",
             system="Be useful.",
             task="Help user",
@@ -141,7 +141,6 @@ def test_agent_step_config_reader_validates_agent_config_through_port() -> None:
         agent_config=agent_cfg,
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
     )
 
@@ -155,18 +154,17 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
     config_path = tmp_path / "agent.json"
     config_path.write_text("{}", encoding="utf-8")
     agent_cfg = FakeAgentConfigPort()
-    skill_runner = _FakeSkillRunner(config_path=config_path)
     reader = AgentStepConfigReader(
         agent_config=agent_cfg,
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(flow_path=tmp_path / "mono.yaml"),
-        skill_runner=skill_runner,
         tool_manager=ToolManager(tools=[]),
     )
 
     reader.read(
         current_step=_current_step(),
         step=AgentStep(
+            config_file=None,
             id="support_agent",
             system="Be useful.",
             task="Help user",
@@ -175,7 +173,6 @@ def test_agent_step_config_reader_uses_agent_json_next_to_skill_yaml(tmp_path) -
     )
 
     assert agent_cfg.config_paths == [config_path]
-    assert skill_runner.calls == [(str(tmp_path / "mono.yaml"), "agent.json")]
 
 
 def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
@@ -185,7 +182,6 @@ def test_agent_step_config_reader_builds_tools_section_with_params() -> None:
         ),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=_FakeToolManager(definitions=(NotifyTool(), ShellProcessTool())),
     )
 
@@ -206,7 +202,6 @@ def test_agent_step_config_reader_builds_tools_section_empty_when_no_tools() -> 
         ),
         llm_provider_catalog=FakeLLMProviderCatalogPort(),
         run_store=_FakeRunStore(),
-        skill_runner=_FakeSkillRunner(),
         tool_manager=ToolManager(tools=[]),
     )
 
@@ -257,26 +252,18 @@ class _FakeAgentConfigPort:
         self.validate_calls = 0
         self.config_paths: list[Path] = []
 
-    def get_config(self, *, config_path: Path | None = None) -> object:  # noqa: ANN201
+    def resolve_config_path(self, *, flow_dir: Path, file_reference: str | None) -> Path | None:
+        path = flow_dir / "agent.json"
+        return path if path.exists() else None
+
+    def get_config(self, *, flow_dir: Path, config_path: Path | None = None) -> object:  # noqa: ANN201
         if config_path is not None:
             self.config_paths.append(config_path)
         raise AssertionError("get_config should not be called")
 
-    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
+    def validate_config(
+        self, *, flow_dir: Path, config_path: Path | None = None
+    ) -> AgentConfigValidation:
         _ = config_path
         self.validate_calls += 1
         return self._validation
-
-
-class _FakeSkillRunner:
-    def __init__(self, *, config_path: Path | None = None) -> None:
-        self.config_path = config_path or Path("__missing__/agent.json")
-        self.calls: list[tuple[str, str]] = []
-
-    def resolve_file_path(
-        self,
-        flow_path: Path,
-        file_ref: str,
-    ) -> Path:
-        self.calls.append((str(flow_path), file_ref))
-        return self.config_path

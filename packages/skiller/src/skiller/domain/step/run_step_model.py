@@ -19,6 +19,7 @@ class AgentStep:
     system: str
     task: str
     tools: tuple[str, ...]
+    config_file: str | None
     max_turns: int | None = None
     max_tool_calls: int | None = None
     next: str | None = None

@@ -26,7 +26,6 @@ pytestmark = pytest.mark.integration
         "@auths/bedrock",
         "@auths/codex",
         "@auths/lmstudio",
-        "@auths/minimax",
         "@auths/moonshot",
         "@auths/openai",
     ],

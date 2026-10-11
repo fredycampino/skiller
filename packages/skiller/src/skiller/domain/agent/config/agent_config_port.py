@@ -10,7 +10,6 @@ from skiller.domain.agent.config.validation import AgentConfigValidation
 class AgentConfigProviderSource(str, Enum):
     GLOBAL = "global"
     LOCAL = "local"
-    ENV = "env"
     NONE = "none"
 
 
@@ -21,10 +20,16 @@ class AgentConfigProviderSourceItem:
 
 
 class AgentConfigPort(Protocol):
-    def get_config(self, *, config_path: Path | None = None) -> AgentConfig:
+    def resolve_config_path(
+        self, *, flow_dir: Path, file_reference: str | None
+    ) -> Path | None: ...
+
+    def get_config(self, *, flow_dir: Path, config_path: Path | None = None) -> AgentConfig:
         raise NotImplementedError
 
-    def validate_config(self, *, config_path: Path | None = None) -> AgentConfigValidation:
+    def validate_config(
+        self, *, flow_dir: Path, config_path: Path | None = None
+    ) -> AgentConfigValidation:
         raise NotImplementedError
 
     def list_provider_sources(

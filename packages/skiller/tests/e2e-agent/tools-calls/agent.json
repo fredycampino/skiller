@@ -2,5 +2,16 @@
   "llm": {
     "provider": "minimax",
     "model": "MiniMax-M2.5"
+  },
+  "tools": {
+    "shell": {
+      "allowed_paths": [
+        "{{runtime.cwd}}"
+      ],
+      "allowlist_enabled": true,
+      "allowed_commands": [
+        "pwd"
+      ]
+    }
   }
 }

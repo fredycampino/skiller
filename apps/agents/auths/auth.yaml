@@ -59,8 +59,8 @@ steps:
     action:
       type: run
       label: Start MiniMax setup
-      arg: auths/minimax
-      params: "--arg continue_id={{inputs.continue_id}}"
+      arg: auths/openai
+      params: "--arg provider=minimax --arg continue_id={{inputs.continue_id}}"
       auto: true
 
   - notify: start_bedrock

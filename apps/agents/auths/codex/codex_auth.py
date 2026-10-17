@@ -26,7 +26,7 @@ CALLBACK_HOST = "localhost"
 CALLBACK_PORT = 1455
 SCOPE = "openid profile email offline_access"
 CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
-DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
 USER_AGENT = "skiller-openai-auth/0.1"
 CODEX_USER_AGENT = "pi (skiller)"
@@ -74,6 +74,8 @@ def main() -> int:
     wait_parser = subparsers.add_parser("wait-callback", help="Wait for local callback.")
     wait_parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
 
+    subparsers.add_parser("prepare-verify-config", help="Prepare temporary agent selection.")
+
     subparsers.add_parser("exchange-token", help="Exchange code and save credentials.")
 
     status_parser = subparsers.add_parser("status", help="Show credential status.")
@@ -109,6 +111,11 @@ def main() -> int:
             exchange_token(credentials_file=credentials_file)
         elif args.command == "status":
             show_status(credentials_file=credentials_file, require=args.require)
+        elif args.command == "prepare-verify-config":
+            model = os.environ.get("SKILLER_OPENAI_CODEX_MODEL", "").strip() or DEFAULT_MODEL
+            config_file = Path.home() / ".skiller" / "settings" / "agent.tmp.json"
+            write_json(config_file, {"llm": {"provider": "codex", "model": model}})
+            print(model, end="")
         elif args.command == "verify":
             verify_credentials(credentials_file=credentials_file, model=args.model)
         else:
@@ -302,6 +309,7 @@ def show_status(*, credentials_file: Path, require: bool) -> None:
     if credentials_file.exists():
         credentials = read_json(credentials_file)
         required_str(credentials, "access_token")
+        required_str(credentials, "account_id")
         print("OpenAI Codex credentials are saved.")
         print(f"Credentials file: {credentials_file}")
         return
@@ -434,6 +442,8 @@ def post_codex_stream(
                 event_payload = parse_json_object(line.removeprefix("data: ").strip())
                 if event_payload is None:
                     continue
+                if event_payload.get("type") in {"error", "response.failed"}:
+                    raise AuthError(f"credential verification failed: {json.dumps(event_payload)}")
                 if event_payload.get("type") == "response.output_text.delta":
                     delta = event_payload.get("delta")
                     if isinstance(delta, str):

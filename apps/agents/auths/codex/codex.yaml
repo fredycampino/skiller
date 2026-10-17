@@ -5,6 +5,7 @@ start: check_codex_credentials
 
 inputs:
   continue_id: string
+  model: string
 
 on_success:
   cleanup: true
@@ -25,7 +26,7 @@ steps:
     command: |
       set -eu
 
-      if verify_output="$({{runtime.python}} "{{flow.dir}}/codex_auth.py" verify --model "gpt-5.5" 2>&1)"; then
+      if verify_output="$({{runtime.python}} "{{flow.dir}}/codex_auth.py" status --require 2>&1)"; then
         printf '%s' ready
         exit 0
       fi
@@ -118,13 +119,25 @@ steps:
     cwd: .
     timeout: 15
     check: true
+    next: prepare_verify_config
+
+  - shell: prepare_verify_config
+    allowed_paths:
+      - "~/.skiller"
+    env:
+      SKILLER_OPENAI_CODEX_MODEL: '{{inputs.model?}}'
+    command: |-
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" prepare-verify-config
+    cwd: .
+    timeout: 15
+    check: true
     next: verify_credentials
 
   - shell: verify_credentials
     allowed_paths:
       - "~/.skiller"
     command: |-
-      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" verify --model "gpt-5.5"
+      "{{runtime.python}}" "{{flow.dir}}/codex_auth.py" verify --model "{{output_value('prepare_verify_config').stdout}}"
     cwd: .
     timeout: 120
     check: true
@@ -206,6 +219,8 @@ steps:
     next: verify_codex
 
   - agent: verify_codex
+    config:
+      file: "~/.skiller/settings/agent.tmp.json"
     system: |
       You are a configuration check agent.
       Reply with one short sentence.
@@ -228,7 +243,7 @@ steps:
 
       settings_dir="$HOME/.skiller/settings"
       config_file="$settings_dir/agent.json"
-      local_config_file="{{flow.dir}}/agent.json"
+      local_config_file="$settings_dir/agent.tmp.json"
 
       CONFIG_FILE="$config_file" LOCAL_CONFIG_FILE="$local_config_file" {{runtime.python}} - <<'PY'
       import json

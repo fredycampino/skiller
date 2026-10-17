@@ -17,7 +17,11 @@ def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
 
     assert steps["route_codex_credentials"]["cases"]["ready"] == "require_credentials"
     assert steps["exchange_authorization_code"]["next"] == "require_credentials"
-    assert steps["require_credentials"]["next"] == "verify_credentials"
+    assert steps["require_credentials"]["next"] == "prepare_verify_config"
+    assert steps["prepare_verify_config"]["next"] == "verify_credentials"
+    assert steps["verify_codex"]["config"] == {
+        "file": "~/.skiller/settings/agent.tmp.json"
+    }
     assert steps["verify_credentials"]["next"] == "backup_codex_config"
     assert steps["backup_codex_config"]["next"] == "write_codex_config"
     assert steps["write_codex_config"]["next"] == "verify_codex"
@@ -56,7 +60,7 @@ def test_codex_auth_updates_user_provider_catalog_and_global_selection() -> None
     assert 'config_file="$settings_dir/agent.json"' in commit_command
     assert 'llm["provider"] = provider.strip()' in commit_command
     assert 'llm["model"] = model.strip()' in commit_command
-    assert 'local_config_file="{{flow.dir}}/agent.json"' in commit_command
+    assert 'local_config_file="$settings_dir/agent.tmp.json"' in commit_command
     assert 'verify_codex' in steps
 
 
@@ -456,7 +460,10 @@ def test_auth_provider_flows_emit_load_session_post_action() -> None:
             flow_path.read_text(encoding="utf-8")
         )
 
-        assert agent["inputs"] == {"continue_id": "string"}
+        expected_inputs = {"continue_id": "string"}
+        if flow == "codex":
+            expected_inputs["model"] = "string"
+        assert agent["inputs"] == expected_inputs
         assert agent["on_success"] == {
             "cleanup": True,
             "action": {

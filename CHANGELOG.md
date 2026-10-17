@@ -4,6 +4,16 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.44 - 2026-10-18
+
+### Fixed
+- Stop treating Codex model-access, network, and service verification failures as missing credentials. Check saved credentials locally before starting OAuth and preserve remote verification diagnostics, including streaming API errors.
+- Add a `model` input to `auths/codex`, defaulting to `gpt-5.6-luna`. Use the selected model for the credential probe, temporary agent validation profile, and global selection committed after successful validation.
+- Avoid trailing newlines in the model passed to the Codex verification API.
+
+### Notes
+- Includes PR #161.
+
 ## 0.1.0-beta.43 - 2026-10-12
 
 ### Added

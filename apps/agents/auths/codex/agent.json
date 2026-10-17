@@ -1,6 +1,0 @@
-{
-  "llm": {
-    "provider": "codex",
-    "model": "gpt-5.5"
-  }
-}

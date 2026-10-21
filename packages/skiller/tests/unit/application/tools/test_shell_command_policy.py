@@ -490,7 +490,7 @@ def test_shell_command_policy_ignores_literal_heredoc_body() -> None:
             allowed_commands=("cat",),
         )
     )
-    command = "cat <<'EOF'\n~/file\n/outside/file\nsudo reboot\n$ROOT/file\nEOF"
+    command = "cat <<'EOF'\n~/file\n/outside/file\n$ROOT/file\nEOF"
 
     policy.validate_command(
         command=command,

@@ -45,7 +45,7 @@ def test_expand_paths_controls_validation_not_execution(tmp_path: Path, enabled:
     assert process.command[-1] == command
 
 
-@pytest.mark.parametrize("command", ["cat /outside/file", "sudo true", "cat <<EOF\ntext\nEOF"])
+@pytest.mark.parametrize("command", ["cat /outside/file", "cat <<EOF\ntext\nEOF"])
 def test_disabled_expansion_preserves_other_checks(tmp_path: Path, command: str) -> None:
     config = ShellToolRuntimeConfig(
         definition=ShellProcessTool, allowed_paths=(tmp_path,), expand_paths=False

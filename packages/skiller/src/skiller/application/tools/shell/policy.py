@@ -11,18 +11,6 @@ class ShellCommandPolicy:
     _SEGMENT_OPERATORS: set[str] = {"&&", "||", ";", "|"}
     _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
     _EXPANSION_START_RE = re.compile(r"\$[A-Za-z_0-9@*#?$!{(\-]")
-    _CRITICAL_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
-        re.compile(r"(^|[\s;&|])sudo(\s|$)", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])su(\s|$)", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])shutdown(\s|$)", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])(reboot|halt|poweroff)(\s|$)", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])mkfs(\.[a-z0-9_+-]+)?(\s|$)", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])dd(\s|$)", re.IGNORECASE),
-        re.compile(r"rm\s+-rf\s+/(?:\s|$)", re.IGNORECASE),
-        re.compile(r"--no-preserve-root", re.IGNORECASE),
-        re.compile(r"(^|[\s;&|])kill\s+-9\s+-1(\s|$)", re.IGNORECASE),
-        re.compile(r":\(\)\s*\{\s*:\|:\s*&\s*\};:", re.IGNORECASE),
-    )
 
     def __init__(
         self,
@@ -67,10 +55,6 @@ class ShellCommandPolicy:
         command_without_heredoc_bodies = self._command_expander.without_heredoc_bodies(
             command=normalized
         )
-        for pattern in self._CRITICAL_COMMAND_PATTERNS:
-            if pattern.search(command_without_heredoc_bodies):
-                raise ValueError("shell command blocked by security policy")
-
         self._validate_allowlist(command=command_without_heredoc_bodies)
 
         command_for_path_validation = command_without_heredoc_bodies

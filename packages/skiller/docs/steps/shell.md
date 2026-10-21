@@ -78,8 +78,13 @@ such as `<<'EOF'`, `<<"EOF"`, or `<<\EOF`; unquoted
 heredocs are rejected because Bash may execute substitutions in their bodies.
 
 This check is not an operating-system sandbox. It does not inspect scripts or
-restrict paths opened internally by an executable or nested interpreter. A
-sandbox is required to enforce filesystem access for the complete process tree.
+restrict paths opened internally by an executable or nested interpreter. There
+is no built-in denylist of dangerous commands. Commands run with the
+operating-system permissions of the Skiller process and can modify or delete
+files accessible to that user, even without administrator privileges. Run
+Skiller as an unprivileged user; use an operating-system sandbox with restricted
+filesystem access and resource limits to enforce isolation for the complete
+process tree.
 
 The `shell` step does not load this configuration from `agent.json`. By
 default, the runtime allows:

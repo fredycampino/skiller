@@ -18,6 +18,7 @@ class AgentLoopConfig:
 class AgentLLMSelection:
     provider: str
     model: str
+    effort: int | None
 
     def __post_init__(self) -> None:
         if not self.provider:

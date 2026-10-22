@@ -9,6 +9,12 @@ from skiller.domain.agent.llm.model import (
 )
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
+from skiller.infrastructure.llm.bedrock.converse_response_model import (
+    ConverseContentBlock,
+    ConverseReasoningTextContentBlock,
+    ConverseRedactedReasoningContentBlock,
+    ConverseTextContentBlock,
+)
 
 
 class BedrockMapper:
@@ -17,10 +23,9 @@ class BedrockMapper:
         payload: dict[str, object] = {
             "modelId": request.model.value,
             "messages": messages,
-            # Thinking is off so no reasoningContent is streamed (Opus 5 / Sonnet 5 think by
-            # default). Models that reject "disabled" (Opus 5.5, Fable 5.x) are not supported.
-            "additionalModelRequestFields": {"thinking": {"type": "disabled"}},
         }
+        if "anthropic" in request.model.value.split("."):
+            payload["additionalModelRequestFields"] = _anthropic_thinking_fields(request)
         if request.model.max_output_tokens is not None:
             payload["inferenceConfig"] = {"maxTokens": request.model.max_output_tokens}
         if system:
@@ -81,8 +86,12 @@ def _messages_to_payload(
             continue
         payload_messages.append({"role": role, "content": [{"text": message.content}]})
     flush_tool_results()
-    if len(payload_messages) > 1:
-        content = payload_messages[-2]["content"]
+    cache_index = len(payload_messages) - 2
+    if messages and isinstance(messages[-1], LLMToolMessage):
+        # Keep the latest assistant/tool-result exchange outside the stable prefix.
+        cache_index -= 1
+    if cache_index >= 0:
+        content = payload_messages[cache_index]["content"]
         if isinstance(content, list):
             content.append({"cachePoint": {"type": "default"}})
     return system, payload_messages
@@ -108,3 +117,54 @@ def _tool_definition_to_payload(tool: ToolDefinition) -> dict[str, object]:
             },
         }
     }
+
+
+def response_content_to_payload(
+    blocks: tuple[ConverseContentBlock, ...],
+) -> list[dict[str, object]]:
+    content: list[dict[str, object]] = []
+    for block in blocks:
+        if isinstance(block, ConverseReasoningTextContentBlock):
+            content.append(
+                {
+                    "reasoningContent": {
+                        "reasoningText": {
+                            "text": block.text,
+                            "signature": block.signature,
+                        }
+                    }
+                }
+            )
+        elif isinstance(block, ConverseRedactedReasoningContentBlock):
+            content.append({"reasoningContent": {"redactedContent": block.data}})
+        elif isinstance(block, ConverseTextContentBlock):
+            content.append({"text": block.text})
+        else:
+            content.append(
+                {
+                    "toolUse": {
+                        "toolUseId": block.tool_use_id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                }
+            )
+    return content
+
+
+def _anthropic_thinking_fields(request: BedrockLLMRequest) -> dict[str, object]:
+    model = request.model.value.split("anthropic.", 1)[1]
+    adaptive_only = model in {
+        "claude-opus-5-5",
+        "claude-fable-5",
+        "claude-fable-5-1",
+    }
+    if request.effort is None:
+        if adaptive_only:
+            return {"thinking": {"type": "adaptive"}, "output_config": {"effort": "medium"}}
+        return {"thinking": {"type": "disabled"}}
+
+    effort = ("low", "medium", "high", "xhigh", "max")[request.effort - 1]
+    if effort == "xhigh" and model in {"claude-opus-4-6-v1", "claude-sonnet-4-6"}:
+        effort = "high"
+    return {"thinking": {"type": "adaptive"}, "output_config": {"effort": effort}}

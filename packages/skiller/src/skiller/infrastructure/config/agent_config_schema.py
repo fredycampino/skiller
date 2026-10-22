@@ -18,6 +18,7 @@ class LLMConfigModel(BaseModel):
 
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
+    effort: int | None = Field(default=None, strict=True, ge=1, le=5)
 
     @field_validator("provider", "model")
     @classmethod

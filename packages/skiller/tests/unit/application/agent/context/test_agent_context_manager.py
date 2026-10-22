@@ -24,7 +24,6 @@ pytestmark = pytest.mark.unit
 NOTIFY_TOOL_DEFINITION = NotifyTool()
 
 
-
 def test_agent_context_manager_build_context_recovers_initial_raw_window() -> None:
     entry = AgentContextEntry(
         id="entry-1",
@@ -38,9 +37,7 @@ def test_agent_context_manager_build_context_recovers_initial_raw_window() -> No
         created_at="2026-05-16T00:00:00Z",
     )
     store = _FakeAgentContextStore(
-        raw_windows=[
-            AgentContextWindowEntries(entries=[entry], estimated_tokens=40_000)
-        ],
+        raw_windows=[AgentContextWindowEntries(entries=[entry], estimated_tokens=40_000)],
     )
     state_store = _FakeAgentContextState()
     manager = AgentContextManager(
@@ -55,6 +52,13 @@ def test_agent_context_manager_build_context_recovers_initial_raw_window() -> No
         context_id="ctx-1",
     )
     config = agent_runner_config(log_request_file=None)
+    config = replace(
+        config,
+        config=replace(
+            config.config,
+            llm=replace(config.config.llm, effort=4),
+        ),
+    )
 
     result = manager.build_context(context=context, config=config)
 
@@ -77,6 +81,7 @@ def test_agent_context_manager_build_context_recovers_initial_raw_window() -> No
     assert result.window_width_tokens == 100_000
     assert result.estimated_tokens == 40_000
     assert result.llm_request.messages[1].content == "Raw task"
+    assert result.llm_request.effort == 4
 
 
 def test_agent_context_manager_includes_resolved_system_in_compaction_condition() -> None:
@@ -228,7 +233,7 @@ def test_agent_context_manager_build_context_compacts_and_recovers_new_window() 
             context_id="ctx-1",
             start_sequence=3,
             compacted_sequence=7,
-        )
+        ),
     ]
     assert store.raw_calls == [
         AgentContextWindowQuery(
@@ -275,9 +280,7 @@ def test_agent_context_manager_build_context_recovers_persisted_window_below_tri
         compaction_id=1,
     )
     store = _FakeAgentContextStore(
-        raw_windows=[
-            AgentContextWindowEntries(entries=[raw_entry], estimated_tokens=30_000)
-        ],
+        raw_windows=[AgentContextWindowEntries(entries=[raw_entry], estimated_tokens=30_000)],
         compacted_windows=[
             AgentContextWindowEntries(entries=[compacted_entry], estimated_tokens=20_000)
         ],
@@ -336,9 +339,7 @@ def test_agent_context_manager_build_context_stops_when_state_persistence_fails(
         compaction_id=1,
     )
     store = _FakeAgentContextStore(
-        raw_windows=[
-            AgentContextWindowEntries(entries=[entry], estimated_tokens=80_000)
-        ],
+        raw_windows=[AgentContextWindowEntries(entries=[entry], estimated_tokens=80_000)],
         selected_state=compacted_state,
     )
     state_store = _FakeAgentContextState(save_error=RuntimeError("state write failed"))

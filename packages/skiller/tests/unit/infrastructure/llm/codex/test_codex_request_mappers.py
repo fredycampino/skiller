@@ -85,6 +85,7 @@ def test_generic_responses_mapper_omits_model_output_limit() -> None:
             LLMUserMessage("hello"),
         ),
         model=_model("gpt-5.5", 1_050_000, max_output_tokens=2_048),
+        effort=5,
         parallel_tool_calls=True,
         session_id="session-1",
         tools=(_ShellTool(),),

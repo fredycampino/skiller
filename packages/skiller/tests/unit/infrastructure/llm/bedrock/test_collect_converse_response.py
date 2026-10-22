@@ -289,7 +289,7 @@ def test_collect_allows_missing_finish_reason(message_stop: dict[str, object]) -
         pytest.param(
             [
                 {"messageStart": {"role": "assistant"}},
-                {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"reasoningContent": {}}}},
+                {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"unsupported": {}}}},
             ],
             "unsupported delta type",
             id="unsupported-delta",
@@ -300,3 +300,75 @@ def test_collect_allows_missing_finish_reason(message_stop: dict[str, object]) -
 def test_collect_rejects_incomplete_or_invalid_stream(stream: list[object], message: str) -> None:
     with pytest.raises(CollectConverseResponseError, match=message):
         CollectConverseResponse().collect(stream)
+
+
+@pytest.mark.parametrize("redacted", [False, True])
+def test_collect_preserves_reasoning_and_consumes_metadata(redacted: bool) -> None:
+    from skiller.infrastructure.llm.bedrock.converse_response_model import (
+        ConverseReasoningTextContentBlock,
+        ConverseRedactedReasoningContentBlock,
+    )
+
+    deltas = (
+        [{"redactedContent": b"\x00"}, {"redactedContent": b"\xff"}]
+        if redacted
+        else [
+            {"text": " first "},
+            {"text": "second"},
+            {"signature": "sig"},
+            {"signature": "nature"},
+        ]
+    )
+    stream = [{"messageStart": {"role": "assistant"}}]
+    stream.extend(
+        {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"reasoningContent": delta}}}
+        for delta in deltas
+    )
+    stream.extend(
+        [
+            {"contentBlockStop": {"contentBlockIndex": 0}},
+            {"contentBlockDelta": {"contentBlockIndex": 1, "delta": {"text": "Answer"}}},
+            {"contentBlockStop": {"contentBlockIndex": 1}},
+            {"messageStop": {"stopReason": "end_turn"}},
+            {
+                "metadata": {
+                    "usage": {
+                        "inputTokens": 10,
+                        "outputTokens": 5,
+                        "totalTokens": 15,
+                        "cacheReadInputTokens": 100,
+                    },
+                    "metrics": {"latencyMs": 20},
+                }
+            },
+        ]
+    )
+    response = CollectConverseResponse().collect(stream, log_streaming=True)
+    expected = (
+        ConverseRedactedReasoningContentBlock(b"\x00\xff")
+        if redacted
+        else ConverseReasoningTextContentBlock(" first second", "signature")
+    )
+    assert response.content == (expected, ConverseTextContentBlock("Answer"))
+    assert response.stream == tuple(stream)
+    assert response.usage.cache_read_input_tokens == 100
+
+
+@pytest.mark.parametrize(
+    "reasoning",
+    [
+        {},
+        {"text": 1},
+        {"signature": b"invalid"},
+        {"redactedContent": "invalid"},
+        {"text": "text", "signature": "signature"},
+    ],
+)
+def test_collect_rejects_malformed_reasoning_and_retains_failed_event(reasoning) -> None:
+    stream = [
+        {"messageStart": {"role": "assistant"}},
+        {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"reasoningContent": reasoning}}},
+    ]
+    with pytest.raises(CollectConverseResponseError, match="Invalid reasoning") as exc:
+        CollectConverseResponse().collect(stream, log_streaming=True)
+    assert exc.value.stream == tuple(stream)

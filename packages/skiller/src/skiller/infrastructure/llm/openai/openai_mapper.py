@@ -35,6 +35,10 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
             "model": request.model.value,
             "messages": [_message_to_payload(message) for message in request.messages],
         }
+        if request.effort is not None:
+            payload["reasoning_effort"] = ("low", "medium", "high", "xhigh", "max")[
+                max(1, min(request.effort, 5)) - 1
+            ]
         if request.tools:
             payload["tools"] = [_tool_definition_to_payload(tool) for tool in request.tools]
         payload["tool_choice"] = _tool_choice_value(request.tool_choice)

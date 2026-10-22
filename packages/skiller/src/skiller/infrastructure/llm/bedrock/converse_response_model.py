@@ -18,7 +18,23 @@ class ConverseToolUseContentBlock:
     input: JsonValue
 
 
-ConverseContentBlock = ConverseTextContentBlock | ConverseToolUseContentBlock
+@dataclass(frozen=True)
+class ConverseReasoningTextContentBlock:
+    text: str
+    signature: str
+
+
+@dataclass(frozen=True)
+class ConverseRedactedReasoningContentBlock:
+    data: bytes
+
+
+ConverseContentBlock = (
+    ConverseTextContentBlock
+    | ConverseToolUseContentBlock
+    | ConverseReasoningTextContentBlock
+    | ConverseRedactedReasoningContentBlock
+)
 
 
 @dataclass(frozen=True)

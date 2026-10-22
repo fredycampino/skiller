@@ -96,8 +96,8 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
 
 
 model = LLMModelDefinition(
-    model=os.environ.get("AGENT_MINIMAX_MODEL", "MiniMax-M2.7"),
-    context_window_tokens=204800,
+    model=os.environ.get("AGENT_MINIMAX_MODEL", "MiniMax-M3.1-Flash"),
+    context_window_tokens=1000000,
     max_output_tokens=4096,
 )
 provider = OpenAILLMProviderDefinition(

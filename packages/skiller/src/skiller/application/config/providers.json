@@ -15,12 +15,8 @@
       },
       "models": [
         {
-          "model": "MiniMax-M2.7",
-          "context_window_tokens": 204800
-        },
-        {
-          "model": "MiniMax-M2.5",
-          "context_window_tokens": 204800
+          "model": "MiniMax-M3.1-Flash",
+          "context_window_tokens": 1000000
         },
         {
           "model": "MiniMax-M3",
@@ -42,10 +38,6 @@
         {
           "model": "kimi-k3",
           "context_window_tokens": 1000000
-        },
-        {
-          "model": "kimi-k2.7-code",
-          "context_window_tokens": 262144
         }
       ]
     },
@@ -184,6 +176,10 @@
       "timeout_seconds": 45,
       "models": [
         {
+          "model": "us.anthropic.claude-opus-5-5",
+          "context_window_tokens": 1000000
+        },
+        {
           "model": "us.anthropic.claude-opus-5",
           "context_window_tokens": 1000000
         },
@@ -204,14 +200,6 @@
           "context_window_tokens": 1000000
         },
         {
-          "model": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-          "context_window_tokens": 200000
-        },
-        {
-          "model": "us.anthropic.claude-opus-4-1-20250805-v1:0",
-          "context_window_tokens": 200000
-        },
-        {
           "model": "us.anthropic.claude-sonnet-5",
           "context_window_tokens": 1000000
         },
@@ -220,12 +208,8 @@
           "context_window_tokens": 1000000
         },
         {
-          "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-          "context_window_tokens": 200000
-        },
-        {
-          "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-          "context_window_tokens": 200000
+          "model": "us.anthropic.claude-haiku-5-5",
+          "context_window_tokens": 1000000
         },
         {
           "model": "us.anthropic.claude-fable-5",

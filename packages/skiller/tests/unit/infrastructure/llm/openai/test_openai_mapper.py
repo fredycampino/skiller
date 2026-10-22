@@ -68,6 +68,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
             LLMUserMessage("hello", name="tester"),
         ),
         model=_model("kimi-k3", 256_000, max_output_tokens=128),
+        effort=5,
         tools=(_ShellTool(),),
         tool_choice=LLMToolChoiceMode.REQUIRED,
         response_format=LLMResponseFormat(
@@ -85,6 +86,7 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
 
     assert kwargs == {
         "model": "kimi-k3",
+        "reasoning_effort": "max",
         "messages": [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "hello", "name": "tester"},
@@ -113,6 +115,52 @@ def test_to_openai_kwargs_maps_typed_request_to_sdk_kwargs() -> None:
         "top_p": 0.9,
         "parallel_tool_calls": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("effort", "expected"),
+    [
+        (-10, "low"),
+        (0, "low"),
+        (1, "low"),
+        (2, "medium"),
+        (3, "high"),
+        (4, "xhigh"),
+        (5, "max"),
+        (6, "max"),
+        (100, "max"),
+    ],
+)
+def test_openai_mapper_maps_reasoning_effort(effort: int, expected: str) -> None:
+    request = OpenAILLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=_model("compatible-model", 256_000),
+        effort=effort,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        temperature=1,
+        top_p=1,
+        parallel_tool_calls=True,
+    )
+
+    kwargs = OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()).to_kwargs(request)
+
+    assert kwargs["reasoning_effort"] == expected
+
+
+def test_openai_mapper_omits_unconfigured_reasoning_effort() -> None:
+    request = OpenAILLMRequest(
+        messages=(LLMUserMessage("hello"),),
+        model=_model("compatible-model", 256_000),
+        effort=None,
+        tool_choice=LLMToolChoiceMode.AUTO,
+        temperature=1,
+        top_p=1,
+        parallel_tool_calls=True,
+    )
+
+    kwargs = OpenAIMapper(usage_mapper=DefaultLLMUsageMapper()).to_kwargs(request)
+
+    assert "reasoning_effort" not in kwargs
 
 
 def test_openai_mapper_adds_extra_body() -> None:

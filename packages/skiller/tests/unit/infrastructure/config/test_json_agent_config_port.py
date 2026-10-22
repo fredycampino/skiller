@@ -22,7 +22,7 @@ def test_json_agent_config_reads_strict_llm_selection(tmp_path: Path) -> None:
 
     config = _config_port(config_path).get_config(flow_dir=tmp_path)
 
-    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3", effort=None)
     assert config.context.window_width_tokens is None
     assert config.debug.log_streaming is False
     assert config.debug.log_request_file == "~/.skiller/logs/request/minimax/request.json"
@@ -53,7 +53,7 @@ def test_json_agent_config_ignores_legacy_default_provider(tmp_path: Path) -> No
 
     config = _config_port(config_path).get_config(flow_dir=tmp_path)
 
-    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3", effort=None)
 
 
 def test_json_agent_config_ignores_legacy_provider_contract(tmp_path: Path) -> None:
@@ -77,7 +77,7 @@ def test_json_agent_config_ignores_legacy_provider_contract(tmp_path: Path) -> N
 
     config = _config_port(config_path).get_config(flow_dir=tmp_path)
 
-    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3")
+    assert config.llm == AgentLLMSelection(provider="minimax", model="MiniMax-M3", effort=None)
 
 
 def test_json_agent_config_rejects_missing_model(tmp_path: Path) -> None:
@@ -98,7 +98,7 @@ def test_json_agent_config_uses_local_file_as_root_override(tmp_path: Path) -> N
 
     config = _config_port(global_path).get_config(flow_dir=tmp_path, config_path=local_path)
 
-    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.5")
+    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.5", effort=None)
 
 
 def test_json_agent_config_explicit_file_has_highest_priority(tmp_path: Path) -> None:
@@ -112,7 +112,7 @@ def test_json_agent_config_explicit_file_has_highest_priority(tmp_path: Path) ->
         env={},
     ).get_config(flow_dir=tmp_path, config_path=env_path)
 
-    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.4")
+    assert config.llm == AgentLLMSelection(provider="codex", model="gpt-5.4", effort=None)
 
 
 def test_json_agent_config_lists_selection_source(tmp_path: Path) -> None:
@@ -275,3 +275,20 @@ def test_missing_selected_file_after_resolution_does_not_fall_back(tmp_path) -> 
     assert port.validate_config(flow_dir=tmp_path, config_path=selected).ok is False
     with pytest.raises(FileNotFoundError):
         port.set_model(provider="codex", model="gpt-5.5", config_path=selected)
+
+
+@pytest.mark.parametrize("effort", [1, 2, 3, 4, 5, None])
+def test_json_agent_config_preserves_effort(tmp_path: Path, effort: int | None) -> None:
+    path = tmp_path / "agent.json"
+    _write(path, {"llm": {"provider": "bedrock", "model": "test", "effort": effort}})
+    config = _config_port(path).get_config(flow_dir=tmp_path)
+    assert config.llm.effort == effort
+
+
+@pytest.mark.parametrize("effort", [0, 6, -1, True, False, 2.5, "3"])
+def test_json_agent_config_rejects_invalid_effort(tmp_path: Path, effort: object) -> None:
+    with pytest.raises(ValueError, match="effort"):
+        AgentConfigMapper(env={}).from_json(
+            {"llm": {"provider": "bedrock", "model": "test", "effort": effort}},
+            tools_base_path=tmp_path,
+        )

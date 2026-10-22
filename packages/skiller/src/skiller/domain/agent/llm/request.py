@@ -16,6 +16,7 @@ from skiller.domain.tool.tool_contract import ToolDefinition
 class LLMRequest:
     messages: tuple[LLMMessage, ...]
     model: LLMModelLike
+    effort: int | None = field(default=None, kw_only=True)
     tools: tuple[ToolDefinition, ...] = field(default=(), kw_only=True)
     response_format: LLMResponseFormat | None = field(default=None, kw_only=True)
     log_request_file: str | None = field(default=None, kw_only=True)

@@ -103,7 +103,7 @@ def agent_config(
     tools: ToolRuntimeConfigs | None = None,
 ) -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMSelection(provider="fake", model="model1"),
+        llm=AgentLLMSelection(provider="fake", model="model1", effort=None),
         loop=AgentLoopConfig(
             max_turns=max_turns,
             max_tool_calls=max_tool_calls,

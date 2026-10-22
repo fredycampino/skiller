@@ -134,6 +134,7 @@ def test_agent_prompt_builder_builds_messages() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert request.model == _model()
@@ -215,6 +216,7 @@ def test_agent_prompt_builder_merges_assistant_content_with_tool_call() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert request.messages == (
@@ -307,6 +309,7 @@ def test_agent_prompt_builder_preserves_multiple_tool_calls_in_one_turn() -> Non
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert request.messages == (
@@ -354,6 +357,7 @@ def test_agent_prompt_builder_returns_single_system_message() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert request.messages == (LLMSystemMessage("Be useful."),)
@@ -363,7 +367,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
     builder = AgentPromptBuilder()
     provider = _provider(
         name="minimax",
-        model=_model("MiniMax-M2.7", 204_800, max_output_tokens=4096),
+        model=_model("MiniMax-M3.1-Flash", 204_800, max_output_tokens=4096),
         temperature=1,
     )
 
@@ -377,6 +381,7 @@ def test_agent_prompt_builder_adds_minimax_generation_fields() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert isinstance(request, OpenAILLMRequest)
@@ -403,6 +408,7 @@ def test_agent_prompt_builder_adds_lmstudio_generation_fields() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert isinstance(request, OpenAILLMRequest)
@@ -433,6 +439,7 @@ def test_agent_prompt_builder_returns_codex_request() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=True,
+        effort=None,
     )
 
     assert isinstance(request, CodexLLMRequest)
@@ -470,6 +477,7 @@ def test_agent_prompt_builder_returns_bedrock_request() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert isinstance(request, BedrockLLMRequest)
@@ -492,6 +500,44 @@ def test_agent_prompt_builder_adds_tools_to_request() -> None:
         log_request_file=None,
         log_override_file=True,
         log_streaming=False,
+        effort=None,
     )
 
     assert request.tools == (tool,)
+
+
+@pytest.mark.parametrize("adapter", ["openai", "bedrock", "codex"])
+def test_agent_prompt_builder_preserves_effort_for_all_adapters(adapter: str) -> None:
+    model = _model()
+    if adapter == "bedrock":
+        provider = BedrockLLMProviderDefinition(
+            name="bedrock",
+            timeout_seconds=30,
+            models=(model,),
+            enabled=True,
+            profile="default",
+        )
+    elif adapter == "codex":
+        provider = CodexLLMProviderDefinition(
+            name="codex",
+            timeout_seconds=30,
+            models=(model,),
+            enabled=True,
+            credentials_file="unused.json",
+            parallel_tool_calls=True,
+        )
+    else:
+        provider = _provider(model=model)
+    request = AgentPromptBuilder().build_request(
+        provider=provider,
+        model=model,
+        system="Review",
+        entries=[],
+        tools=(),
+        context_id="context",
+        log_request_file=None,
+        log_override_file=True,
+        log_streaming=False,
+        effort=4,
+    )
+    assert request.effort == 4

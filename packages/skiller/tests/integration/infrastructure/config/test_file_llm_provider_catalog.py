@@ -35,7 +35,7 @@ def test_file_datasource_reads_provider_catalog(tmp_path: Path) -> None:
                     "tool_choice": "auto",
                     "models": [
                         {
-                            "model": "MiniMax-M2.5",
+                            "model": "MiniMax-M3",
                             "context_window_tokens": 204_800,
                             "max_output_tokens": 4096,
                         }
@@ -80,7 +80,20 @@ def test_builtin_application_catalog_is_valid() -> None:
 
     catalog = port.get_catalog()
 
-    assert catalog.get("minimax").adapter == LLMAdapterType.OPENAI
+    minimax = catalog.get("minimax")
+    assert minimax.adapter == LLMAdapterType.OPENAI
+    assert [model.model for model in minimax.models] == [
+        "MiniMax-M3.1-Flash",
+        "MiniMax-M3",
+    ]
+    for scenario in ("minimal", "files-tool", "tools-calls"):
+        profile_path = package_path / "tests/e2e-agent" / scenario / "agent.json"
+        selection = json.loads(profile_path.read_text())["llm"]
+        model = catalog.get_model(
+            provider_name=selection["provider"],
+            model_name=selection["model"],
+        )
+        assert model.model == selection["model"]
     assert catalog.get("moonshot").adapter == LLMAdapterType.OPENAI
     deepseek = catalog.get("deepseek")
     assert deepseek.adapter == LLMAdapterType.OPENAI
@@ -113,7 +126,8 @@ def test_builtin_application_catalog_is_valid() -> None:
     ]
     bedrock = catalog.get("bedrock")
     assert bedrock.adapter == LLMAdapterType.BEDROCK
-    assert [model.model for model in bedrock.models[:2]] == [
+    assert [model.model for model in bedrock.models[:3]] == [
+        "us.anthropic.claude-opus-5-5",
         "us.anthropic.claude-opus-5",
         "us.anthropic.claude-fable-5-1",
     ]

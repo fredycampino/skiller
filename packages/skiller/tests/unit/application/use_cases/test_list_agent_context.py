@@ -300,7 +300,7 @@ def _assistant_entry(
 
 def _agent_config() -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMSelection(provider="fake", model="model1"),
+        llm=AgentLLMSelection(provider="fake", model="model1", effort=None),
         loop=AgentLoopConfig(max_turns=2, max_tool_calls=3),
         context=AgentContextConfig(
             window_width_tokens=100000,

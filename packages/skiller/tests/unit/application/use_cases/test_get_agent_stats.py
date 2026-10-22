@@ -181,7 +181,7 @@ class _FakeAgentConfig:
 
 def _agent_config(*, window_width_tokens: int = 100000) -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMSelection(provider="fake", model="model1"),
+        llm=AgentLLMSelection(provider="fake", model="model1", effort=None),
         loop=AgentLoopConfig(
             max_turns=2,
             max_tool_calls=3,

@@ -28,7 +28,7 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
 {
   "llm": {
     "provider": "minimax",
-    "model": "MiniMax-M2.7"
+    "model": "MiniMax-M3.1-Flash"
   },
   "context": {
     "window_width_tokens": 1050000
@@ -41,7 +41,7 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
     },
     "minimax": {
       "api_key": "test-minimax-key",
-      "model": "MiniMax-M2.7",
+      "model": "MiniMax-M3.1-Flash",
       "timeout_seconds": 30
     }
   }
@@ -52,7 +52,7 @@ cat >"${MODEL_SELECT_PROFILE}" <<'JSON'
 {
   "llm": {
     "provider": "minimax",
-    "model": "MiniMax-M2.7"
+    "model": "MiniMax-M3.1-Flash"
   }
 }
 JSON
@@ -106,14 +106,14 @@ minimax_models = {model["name"]: model for model in providers["minimax"]["models
 
 assert payload["status"] == "OK", payload
 assert providers["minimax"]["source"] == "default", providers["minimax"]
-assert minimax_models["MiniMax-M2.7"]["active"] is True, providers["minimax"]
-assert minimax_models["MiniMax-M2.5"]["active"] is False, providers["minimax"]
+assert minimax_models["MiniMax-M3.1-Flash"]["active"] is True, providers["minimax"]
+assert minimax_models["MiniMax-M3"]["active"] is False, providers["minimax"]
 PY
 
 select_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller agent model "${run_id}" \
     --provider minimax \
-    --model MiniMax-M2.5
+    --model MiniMax-M3
 )"
 
 RUN_ID="${run_id}" SELECT_OUTPUT="${select_output}" python3 - <<'PY'
@@ -126,7 +126,7 @@ run_id = os.environ["RUN_ID"]
 assert payload == {
     "run_id": run_id,
     "provider": "minimax",
-    "model": "MiniMax-M2.5",
+    "model": "MiniMax-M3",
     "status": "OK",
     "ok": True,
 }, payload
@@ -155,12 +155,12 @@ providers = {provider["name"]: provider for provider in payload["providers"]}
 codex_models = {model["name"]: model for model in providers["codex"]["models"]}
 minimax_models = {model["name"]: model for model in providers["minimax"]["models"]}
 
-assert minimax_models["MiniMax-M2.5"]["active"] is True, providers["minimax"]
-assert minimax_models["MiniMax-M2.7"]["active"] is False, providers["minimax"]
+assert minimax_models["MiniMax-M3"]["active"] is True, providers["minimax"]
+assert minimax_models["MiniMax-M3.1-Flash"]["active"] is False, providers["minimax"]
 
-assert local_payload == {"llm": {"provider": "minimax", "model": "MiniMax-M2.5"}}, local_payload
+assert local_payload == {"llm": {"provider": "minimax", "model": "MiniMax-M3"}}, local_payload
 assert global_payload["llm"]["provider"] == "minimax", global_payload
-assert global_payload["llm"]["model"] == "MiniMax-M2.7", global_payload
+assert global_payload["llm"]["model"] == "MiniMax-M3.1-Flash", global_payload
 assert "providers" not in local_payload, local_payload
 
 serialized = json.dumps(payload)

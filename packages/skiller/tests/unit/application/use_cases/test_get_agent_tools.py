@@ -130,7 +130,7 @@ class _FakeAgentConfig:
 
 def _agent_config() -> AgentConfig:
     return AgentConfig(
-        llm=AgentLLMSelection(provider="null", model="null1"),
+        llm=AgentLLMSelection(provider="null", model="null1", effort=None),
         loop=AgentLoopConfig(
             max_turns=2,
             max_tool_calls=3,

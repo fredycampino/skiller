@@ -81,18 +81,35 @@ are rejected.
 
 ## LLM selection
 
-The `llm` section selects one provider and one of its supported models:
+The `llm` section selects one provider and one of its supported models.
 
 ```json
 {
   "llm": {
     "provider": "minimax",
-    "model": "MiniMax-M3"
+    "model": "MiniMax-M3.1-Flash",
+    "effort": 3
   }
 }
 ```
 
-Both fields are required, must be non-empty strings, and are resolved against
+`effort` is optional and accepts integers from 1 to 5:
+
+| `effort` | Reasoning level |
+| --- | --- |
+| `1` | `low` |
+| `2` | `medium` |
+| `3` | `high` |
+| `4` | `xhigh` |
+| `5` | `max` |
+
+Chat Completions sends the corresponding `reasoning_effort`; when omitted, it
+sends no effort parameter. Bedrock Anthropic applies its own normalization and
+disable rules. Adapters without effort support ignore the field. See
+[Chat Completions reasoning](./completions-reasoning.md) and
+[Bedrock thinking](./bedrock-thinking.md).
+
+`provider` and `model` are required, must be non-empty strings, and are resolved against
 the effective provider catalog. Loading fails when the provider does not exist
 or the selected model is not declared by that provider.
 

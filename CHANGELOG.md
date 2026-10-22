@@ -4,6 +4,23 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.45 - 2026-10-22
+
+### Added
+- Add optional `llm.effort` levels 1–5, mapped to reasoning effort in Chat Completions and to model-compatible adaptive thinking settings for Anthropic on Bedrock.
+- Capture Bedrock reasoning text, signatures, and redacted blocks from Converse streams without exposing them as public response text.
+
+### Changed
+- Preserve the latest Bedrock assistant tool response in memory for continuation, keeping its reasoning blocks intact and outside the stable cached prefix. Continuation state does not survive process restarts.
+- Refresh the provider catalog: add MiniMax M3.1 Flash, Claude Opus 5.5, and Haiku 5.5; retire MiniMax M2.5/M2.7, Kimi K2.7 Code, and Claude models older than 4.6. Existing selections of retired models must be updated.
+- Migrate MiniMax E2E scenarios to M3 and M3.1 Flash and document reasoning configuration and tool permissions.
+
+### Fixed
+- Remove the shell command denylist while retaining configured command and path permission checks.
+
+### Notes
+- Includes PRs #163 and #164.
+
 ## 0.1.0-beta.44 - 2026-10-18
 
 ### Fixed

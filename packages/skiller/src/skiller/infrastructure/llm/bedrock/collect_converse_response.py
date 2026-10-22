@@ -8,6 +8,8 @@ from skiller.infrastructure.llm.bedrock.converse_response_model import (
     ConverseCacheDetailModel,
     ConverseContentBlock,
     ConverseMetricsModel,
+    ConverseReasoningTextContentBlock,
+    ConverseRedactedReasoningContentBlock,
     ConverseResponseModel,
     ConverseTextContentBlock,
     ConverseToolUseContentBlock,
@@ -28,6 +30,8 @@ class _ContentBlock:
     tool_use_id: str | None = None
     name: str | None = None
     input_chunks: list[str] = field(default_factory=list)
+    signature_chunks: list[str] = field(default_factory=list)
+    redacted_chunks: list[bytes] = field(default_factory=list)
     stopped: bool = False
 
 
@@ -155,6 +159,30 @@ class CollectConverseResponse:
                     raise CollectConverseResponseError(
                         f"Bedrock stream received a delta after closing content block index {index}"
                     )
+                if "reasoningContent" in delta:
+                    reasoning = delta["reasoningContent"]
+                    if not isinstance(reasoning, Mapping) or len(reasoning) != 1:
+                        raise CollectConverseResponseError("Invalid reasoning delta")
+                    key = next(iter(reasoning))
+                    value = reasoning[key]
+                    if key not in {"text", "signature", "redactedContent"}:
+                        raise CollectConverseResponseError("Unsupported reasoning delta field")
+                    kind = "redacted_reasoning" if key == "redactedContent" else "reasoning"
+                    expected_type = bytes if key == "redactedContent" else str
+                    if not isinstance(value, expected_type):
+                        raise CollectConverseResponseError("Invalid reasoning delta value")
+                    if block is None:
+                        block = _ContentBlock(kind=kind)
+                        blocks[index] = block
+                    if block.kind != kind:
+                        raise CollectConverseResponseError("Reasoning block changed content type")
+                    if key == "text":
+                        block.text_chunks.append(value)
+                    elif key == "signature":
+                        block.signature_chunks.append(value)
+                    else:
+                        block.redacted_chunks.append(value)
+                    continue
                 if "text" in delta:
                     text = delta["text"]
                     if not isinstance(text, str):
@@ -251,6 +279,21 @@ class CollectConverseResponse:
             block = blocks[index]
             if block.kind == "text":
                 content.append(ConverseTextContentBlock(text="".join(block.text_chunks)))
+                continue
+            if block.kind == "reasoning":
+                content.append(
+                    ConverseReasoningTextContentBlock(
+                        text="".join(block.text_chunks),
+                        signature="".join(block.signature_chunks),
+                    )
+                )
+                continue
+            if block.kind == "redacted_reasoning":
+                content.append(
+                    ConverseRedactedReasoningContentBlock(
+                        data=b"".join(block.redacted_chunks),
+                    )
+                )
                 continue
             raw_input = "".join(block.input_chunks)
             try:

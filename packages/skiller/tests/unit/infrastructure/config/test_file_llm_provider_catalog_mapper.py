@@ -77,8 +77,8 @@ def test_mapper_builds_bedrock_domain_provider() -> None:
                     "enabled": True,
                     "profile": " default ",
                     "timeout_seconds": 45,
-                        "max_output_tokens": 4096,
-                        "models": [_model("bedrock-model", 200_000, max_output_tokens=512)],
+                    "max_output_tokens": 4096,
+                    "models": [_model("bedrock-model", 200_000, max_output_tokens=512)],
                 }
             }
         }
@@ -294,7 +294,7 @@ def test_mapper_ignores_legacy_provider_max_output_tokens_override() -> None:
 def test_mapper_rejects_zero_model_max_output_tokens() -> None:
     mapper = FileLLMProviderCatalogMapper()
     entry = _openai_entry()
-    entry["models"] = [_model("MiniMax-M2.7", 204_800, max_output_tokens=0)]
+    entry["models"] = [_model("MiniMax-M3.1-Flash", 204_800, max_output_tokens=0)]
 
     with pytest.raises(ValueError, match="Invalid LLM provider catalog"):
         mapper.to_provider_configs({"providers": {"minimax": entry}})
@@ -385,7 +385,7 @@ def _openai_entry() -> dict[str, object]:
         "top_p": 1,
         "parallel_tool_calls": True,
         "tool_choice": "auto",
-        "models": [_model("MiniMax-M2.7", 204_800)],
+        "models": [_model("MiniMax-M3.1-Flash", 204_800)],
     }
 
 

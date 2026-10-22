@@ -67,7 +67,7 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
         temperature=1.0,
         models=(
             LLMModelDefinition(
-                model="MiniMax-M2.5", context_window_tokens=204_800, max_output_tokens=None
+                model="MiniMax-M3", context_window_tokens=204_800, max_output_tokens=None
             ),
         ),
         api_key_env="PROVIDER_API_KEY",
@@ -84,7 +84,7 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
                         "timeout_seconds": 60,
                         "models": (
                             {
-                                "model": "MiniMax-M2.7",
+                                "model": "MiniMax-M3.1-Flash",
                                 "context_window_tokens": 204_800,
                             },
                         ),
@@ -123,7 +123,7 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
     provider = mapper.configs[0]
     assert provider.timeout_seconds == 90
     assert provider.temperature == 0.5
-    assert [model.model for model in provider.models] == ["MiniMax-M2.7"]
+    assert [model.model for model in provider.models] == ["MiniMax-M3.1-Flash"]
     assert provider.api_key_source is not None
     assert provider.api_key_source.value == "/run/secrets/minimax"
     assert catalog.source_for("minimax").value == "env"
@@ -190,7 +190,7 @@ def _openai_provider(
     temperature: float = 1.0,
     models: tuple[LLMModelDefinition, ...] = (
         LLMModelDefinition(
-            model="MiniMax-M2.5", context_window_tokens=204_800, max_output_tokens=None
+            model="MiniMax-M3", context_window_tokens=204_800, max_output_tokens=None
         ),
     ),
     api_key_env: str | None = "PROVIDER_API_KEY",

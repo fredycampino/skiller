@@ -58,6 +58,7 @@ class AgentConfigMapper:
         llm = AgentLLMSelection(
             provider=config.llm.provider,
             model=config.llm.model,
+            effort=config.llm.effort,
         )
 
         compaction = AgentContextCompactionConfig(
@@ -105,9 +106,7 @@ def _strip_legacy_provider_configuration(
     llm_payload = config_payload.get("llm")
     if isinstance(llm_payload, dict):
         config_payload["llm"] = {
-            key: value
-            for key, value in llm_payload.items()
-            if key != "default_provider"
+            key: value for key, value in llm_payload.items() if key != "default_provider"
         }
     return config_payload
 

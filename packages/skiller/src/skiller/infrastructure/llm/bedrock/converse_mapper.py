@@ -7,6 +7,8 @@ from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMResponse, LLMToolCall, LLMToolCallFunction
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
 from skiller.infrastructure.llm.bedrock.converse_response_model import (
+    ConverseReasoningTextContentBlock,
+    ConverseRedactedReasoningContentBlock,
     ConverseResponseModel,
     ConverseTextContentBlock,
 )
@@ -30,6 +32,10 @@ class ConverseMapper:
         tool_calls: list[LLMToolCall] = []
         malformed_error_code: str | None = None
         for block in response.content:
+            if isinstance(
+                block, (ConverseReasoningTextContentBlock, ConverseRedactedReasoningContentBlock)
+            ):
+                continue
             if isinstance(block, ConverseTextContentBlock):
                 content.append(block.text)
                 continue

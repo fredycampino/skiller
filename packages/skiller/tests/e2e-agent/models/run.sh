@@ -27,7 +27,7 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
 {
   "llm": {
     "provider": "minimax",
-    "model": "MiniMax-M2.5"
+    "model": "MiniMax-M3"
   },
   "context": {
     "window_width_tokens": 1050000
@@ -40,7 +40,7 @@ cat >"${HOME}/.skiller/settings/agent.json" <<'JSON'
     },
     "minimax": {
       "api_key": "test-minimax-key",
-      "model": "MiniMax-M2.7",
+      "model": "MiniMax-M3.1-Flash",
       "timeout_seconds": 30
     },
     "bedrock": {
@@ -106,8 +106,8 @@ minimax_models = {model["name"]: model for model in minimax["models"]}
 bedrock_models = {model["name"]: model for model in bedrock["models"]}
 moonshot_models = {model["name"]: model for model in moonshot["models"]}
 
-assert minimax_models["MiniMax-M2.5"]["active"] is True, minimax
-assert minimax_models["MiniMax-M2.7"]["active"] is False, minimax
+assert minimax_models["MiniMax-M3"]["active"] is True, minimax
+assert minimax_models["MiniMax-M3.1-Flash"]["active"] is False, minimax
 assert minimax_models["MiniMax-M3"]["active"] is False, minimax
 assert bedrock_models["us.anthropic.claude-sonnet-4-6"]["active"] is False, bedrock
 assert moonshot_models["kimi-k3"]["active"] is False, moonshot

@@ -1,7 +1,7 @@
 {
   "llm": {
     "provider": "minimax",
-    "model": "MiniMax-M2.5"
+    "model": "MiniMax-M3"
   },
   "tools": {
     "shell": {

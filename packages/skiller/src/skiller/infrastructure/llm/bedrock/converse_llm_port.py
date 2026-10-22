@@ -7,6 +7,7 @@ from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
 from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.infrastructure.llm.bedrock.bedrock_tool_continuation import BedrockToolContinuation
 from skiller.infrastructure.llm.bedrock.collect_converse_response import (
     CollectConverseResponse,
     CollectConverseResponseError,
@@ -47,9 +48,11 @@ class ConverseLLMPort(LLMPort[BedrockLLMRequest]):
         self.response_mapper = response_mapper
         self.collector = collector
         self.client = self._build_client()
+        self.tool_continuation = BedrockToolContinuation()
 
     def generate(self, request: BedrockLLMRequest) -> LLMResponse:
         kwargs = self.request_mapper.to_kwargs(request)
+        self.tool_continuation.restore(request, kwargs)
         log_file = request.log_request_file
         capture_stream = request.log_streaming and log_file is not None
         if log_file is not None:
@@ -93,7 +96,12 @@ class ConverseLLMPort(LLMPort[BedrockLLMRequest]):
 
         if log_file is not None:
             self.request_logger.log_response(response=response)
-        return self.response_mapper.to_response(response, request=request)
+        mapped_response = self.response_mapper.to_response(response, request=request)
+        if mapped_response.finish_type in (LLMFinishType.STOP, LLMFinishType.TOOL_CALLS):
+            self.tool_continuation.complete(request)
+        if mapped_response.finish_type == LLMFinishType.TOOL_CALLS:
+            self.tool_continuation.record(request.model.value, response.content)
+        return mapped_response
 
     def _build_client(self) -> object:
         session_class = _load_boto3_session_class()

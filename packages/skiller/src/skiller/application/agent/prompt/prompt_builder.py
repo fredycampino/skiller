@@ -43,12 +43,14 @@ class AgentPromptBuilder:
         log_request_file: str | None,
         log_override_file: bool,
         log_streaming: bool,
+        effort: int | None,
     ) -> LLMRequest:
         messages = tuple(self._build_messages(system=system, entries=entries))
         if isinstance(provider, OpenAILLMProviderDefinition):
             return OpenAILLMRequest(
                 messages=messages,
                 model=model,
+                effort=effort,
                 tool_choice=provider.tool_choice,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 temperature=provider.temperature,
@@ -62,6 +64,7 @@ class AgentPromptBuilder:
             return CodexLLMRequest(
                 messages=messages,
                 model=model,
+                effort=effort,
                 parallel_tool_calls=provider.parallel_tool_calls,
                 session_id=context_id,
                 tools=tools,
@@ -73,6 +76,7 @@ class AgentPromptBuilder:
             return BedrockLLMRequest(
                 messages=messages,
                 model=model,
+                effort=effort,
                 tools=tools,
                 log_request_file=log_request_file,
                 log_override_file=log_override_file,

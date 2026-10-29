@@ -1,0 +1,14 @@
+{
+  "tools": {
+    "shell": {
+      "allowed_commands": [],
+      "allowed_paths": [],
+      "allowlist_enabled": true
+    },
+    "files": {
+      "read": [],
+      "write": [],
+      "all": []
+    }
+  }
+}

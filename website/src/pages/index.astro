@@ -33,7 +33,7 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
           execution from persistent state.
         </p>
         <div class="actions">
-          <a class="button primary" href="#get-started">Get started</a>
+          <a class="button primary" href="/docs/getting-started/installation/">Get started</a>
           <a class="button secondary" href={githubUrl}>View on GitHub</a>
         </div>
       </section>
@@ -68,6 +68,9 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
             Run agents as explicit workflow steps with configured models, tools, instructions,
             limits, persistent context, and observable events.
           </p>
+          <div class="actions">
+            <a class="button secondary" href="/docs/demos/custom-agent/">Create your first agent</a>
+          </div>
         </div>
       </section>
 
@@ -108,7 +111,7 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
 <span class="syntax-keyword">from</span> pathlib <span class="syntax-keyword">import</span> Path
 
 
-<span class="syntax-keyword">def</span> <span class="syntax-function">test_sdist_excludes_website_and_examples</span>() -&gt; <span class="syntax-type">None</span>:
+<span class="syntax-keyword">def</span> <span class="syntax-function">test_sdist_excludes_website</span>() -&gt; <span class="syntax-type">None</span>:
     pyproject = tomllib.loads(
         Path(<span class="syntax-string">"pyproject.toml"</span>).read_text(encoding=<span class="syntax-string">"utf-8"</span>)
     )
@@ -116,7 +119,6 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
     included_paths = pyproject[<span class="syntax-string">"tool"</span>][<span class="syntax-string">"hatch"</span>][<span class="syntax-string">"build"</span>][<span class="syntax-string">"targets"</span>][<span class="syntax-string">"sdist"</span>][<span class="syntax-string">"include"</span>]
 
     <span class="syntax-keyword">assert</span> <span class="syntax-string">"/website"</span> <span class="syntax-keyword">not in</span> included_paths
-    <span class="syntax-keyword">assert</span> <span class="syntax-string">"/examples"</span> <span class="syntax-keyword">not in</span> included_paths
     <span class="syntax-keyword">assert</span> <span class="syntax-string">"/.github"</span> <span class="syntax-keyword">not in</span> included_paths
     <span class="syntax-keyword">assert</span> <span class="syntax-string">"/.env.development"</span> <span class="syntax-keyword">not in</span> included_paths</code></pre>
                 </div>
@@ -137,31 +139,24 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
         </div>
       </section>
 
-      <section class="feature workflow" aria-labelledby="workflow-title">
+      <section class="feature providers" aria-labelledby="providers-title">
         <div class="section-copy">
-          <p class="eyebrow">Workflows as code</p>
-          <h2 id="workflow-title">Simple, explicit YAML.</h2>
-          <p>Combine deterministic steps, agents, tools, and human input in one readable flow.</p>
-        </div>
-        <div class="code-window" aria-label="Example YAML workflow">
-          <div class="code-header">
-            <span>agent.yaml</span>
-            <span>YAML</span>
+          <p class="eyebrow">Multiple LLM providers</p>
+          <h2 id="providers-title">Your agents, your choice of models.</h2>
+          <p>Connect your preferred LLM providers and choose the right model for each agent.</p>
+          <div class="actions">
+            <a class="button secondary" href="/docs/getting-started/add-an-llm-provider/">Connect a provider</a>
           </div>
-          <pre><code><span class="key">name:</span> support
-<span class="key">start:</span> ask
-
-<span class="key">steps:</span>
-  - <span class="key">wait_input:</span> ask
-    <span class="key">prompt:</span> What should I do?
-    <span class="key">next:</span> answer
-
-  - <span class="key">agent:</span> answer
-    <span class="key">system:</span> Be concise and helpful.
-    <span class="key">task:</span> '&#123;&#123;output_value("ask").payload.text&#125;&#125;'
-    <span class="key">tools:</span> [shell, files]
-    <span class="key">next:</span> ask</code></pre>
         </div>
+        <ul class="provider-logos" aria-label="Supported LLM providers">
+          <li><img src="/images/providers/openai.svg" alt="" width="48" height="48" loading="lazy" /><span>OpenAI · Codex</span></li>
+          <li><img src="/images/providers/bedrock.svg" alt="" width="48" height="48" loading="lazy" /><span>Amazon Bedrock</span></li>
+          <li><img src="/images/providers/deepseek.svg" alt="" width="48" height="48" loading="lazy" /><span>DeepSeek</span></li>
+          <li><img src="/images/providers/minimax.svg" alt="" width="48" height="48" loading="lazy" /><span>MiniMax</span></li>
+          <li><img src="/images/providers/moonshot.svg" alt="" width="48" height="48" loading="lazy" /><span>Moonshot</span></li>
+          <li><img src="/images/providers/openrouter.svg" alt="" width="48" height="48" loading="lazy" /><span>OpenRouter</span></li>
+          <li><img src="/images/providers/lmstudio.svg" alt="" width="48" height="48" loading="lazy" /><span>LM Studio</span></li>
+        </ul>
       </section>
 
       <section class="feature run-anywhere" aria-labelledby="run-anywhere-title">
@@ -169,6 +164,9 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
           <p class="eyebrow">Run anywhere</p>
           <h2 id="run-anywhere-title">Run workflows wherever the work happens.</h2>
           <p>Use the same YAML definition from your desktop, the CLI, CI, or a server.</p>
+          <div class="actions">
+            <a class="button secondary" href="/docs/demos/agent-webhook/">Trigger an agent with a webhook</a>
+          </div>
         </div>
         <div class="runtime-panel" aria-label="Supported execution environments">
           <div class="runtime-source">
@@ -210,7 +208,7 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
           <code>pipx install skiller</code>
         </div>
         <div class="actions">
-          <a class="button primary" href={githubUrl}>Explore the repository</a>
+          <a class="button primary" href="/docs/getting-started/installation/">Explore the documentation</a>
         </div>
       </section>
     </main>

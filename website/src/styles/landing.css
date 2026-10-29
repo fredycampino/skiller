@@ -138,7 +138,7 @@
     margin: 24px 0 0;
     color: var(--muted);
   }
-  .stui-frame, .code-window, .harness-visual {
+  .stui-frame, .harness-visual {
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -389,4 +389,34 @@
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
+  }
+
+  .provider-logos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px 16px;
+    margin: 0;
+    padding: 24px 0;
+    list-style: none;
+  }
+
+  .provider-logos li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .provider-logos img {
+    display: block;
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+  }
+
+  @media (max-width: 480px) {
+    .provider-logos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }

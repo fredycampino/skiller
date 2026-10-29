@@ -16,6 +16,8 @@ mcp:
     transport: streamable-http
     url: "https://api.githubcopilot.com/mcp/"
     headers:
+      Mcp-Param-owner: "{{inputs.owner}}"
+      Mcp-Param-repo: "{{inputs.repo}}"
       Authorization:
         file: "~/.skiller/secrets/github_mcp_token"
         prefix: "Bearer "

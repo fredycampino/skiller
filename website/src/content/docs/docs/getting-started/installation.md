@@ -1,32 +1,33 @@
 ---
 title: Installation
-description: Install skiller and verify the CLI.
+description: Install Skiller with pipx or in a virtual environment.
+prev: false
 ---
 
-skiller requires Python 3.11 or newer. For regular CLI usage, install it in an isolated environment with `pipx`:
+Requires Python 3.11+.
+
+## Install with pipx
+
+Install Skiller in an isolated environment with [pipx](https://pipx.pypa.io/stable/installation/).
 
 ```bash
 pipx install skiller
 ```
 
-Verify the installation:
+## Install in a .venv
+
+Create and activate a virtual environment, then install Skiller.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install skiller
+```
+
+On Windows, create the environment with `py -m venv .venv` and activate it with `.venv\Scripts\activate` (Command Prompt) or `.venv\Scripts\Activate.ps1` (PowerShell).
+
+## Verify installation
 
 ```bash
 skiller --version
-skiller --help
 ```
-
-## Development checkout
-
-When working from the repository, use the project virtual environment:
-
-```bash
-uv sync
-./.venv/bin/skiller --help
-```
-
-Commands in the demos use `skiller`. Replace it with `./.venv/bin/skiller` when you are running directly from a checkout without an activated environment.
-
-## Next
-
-Run the [Hello workflow](/docs/demos/hello-workflow/). It requires no provider credentials or external services.

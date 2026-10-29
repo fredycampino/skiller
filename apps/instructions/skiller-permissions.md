@@ -10,7 +10,7 @@ For new or updated flows, declare `config.file` on the `agent` step:
 ```yaml
 - agent: reviewer
   config:
-    file: "./profiles/reviewer.json"
+    file: "~/.skiller/profiles/agent.reviewer.json"
   system: "Review the requested changes."
   task: "{{inputs.task}}"
 ```

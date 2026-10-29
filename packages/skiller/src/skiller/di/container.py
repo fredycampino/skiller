@@ -133,6 +133,9 @@ from skiller.infrastructure.config.file_llm_provider_catalog_port import (
     FileLLMProviderCatalogPort,
 )
 from skiller.infrastructure.config.json_agent_config_port import JsonAgentConfigPort
+from skiller.infrastructure.config.json_runtime_config_initializer import (
+    JsonRuntimeConfigInitializer,
+)
 from skiller.infrastructure.config.json_runtime_config_port import JsonRuntimeConfigPort
 from skiller.infrastructure.config.json_skiller_config_datasource import (
     JsonSkillerConfigDatasource,
@@ -203,6 +206,10 @@ class RuntimeContainer:
 def build_runtime_container(
     settings: Settings | None = None,
 ) -> RuntimeContainer:
+    packaged_flow_paths = FilesystemPackagedFlowPathsPort()
+    JsonRuntimeConfigInitializer(
+        flows_profile_template=packaged_flow_paths.get_paths()[0] / "flows" / "agent.flows.json",
+    ).initialize(initialize_database_config=settings is None)
     cfg = settings or get_settings()
     runtime_cwd = Path.cwd().resolve(strict=False)
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)

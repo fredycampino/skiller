@@ -16,7 +16,7 @@ if [[ ! -x "${runtime_python}" ]]; then
 fi
 
 PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \
-  --file skills/stdio_mcp_test.yaml \
+  --file packages/skiller/tests/integration/runtime/fixtures/flows/stdio_mcp_test.yaml \
   --arg "file_path=${output_file}" \
   --arg "content=${content_text}" \
 | python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({"run_id": payload["run_id"], "status": payload["status"]}, indent=2))'

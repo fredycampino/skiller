@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from skiller.application.use_cases.render.render_mcp_config import (
     RenderMcpConfigStatus,
@@ -671,3 +672,38 @@ def test_render_mcp_config_rejects_missing_header_env() -> None:
         result.error == "MCP header references missing env variable "
         "(server='github', header='Authorization', env='AGENT_GITHUB_MCP_TOKEN')"
     )
+
+
+def test_packaged_pr_renders_repository_headers_and_authorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    token_file = tmp_path / ".skiller/secrets/github_mcp_token"
+    token_file.parent.mkdir(parents=True)
+    token_file.write_text("test-token\n", encoding="utf-8")
+    flow_path = Path(__file__).resolve().parents[6] / "apps/agents/pr/pr.yaml"
+    flow = yaml.safe_load(flow_path.read_text(encoding="utf-8"))
+    run = _build_run(flow)
+    run.context.inputs.update(owner="example-owner", repo="example-repo")
+    use_case = RenderMcpConfigUseCase(
+        store=_FakeStore(run), flow_runner=_FakeFlowRunner(flow)
+    )
+
+    result = use_case.execute(
+        CurrentStep(
+            run_id="run-1",
+            step_index=0,
+            step_id="create_pr",
+            step_type=StepType.MCP,
+            step=flow["steps"][0],
+            context=run.context,
+        )
+    )
+
+    assert result.status == RenderMcpConfigStatus.RENDERED
+    assert result.mcp_config is not None
+    assert result.mcp_config.headers == {
+        "Mcp-Param-owner": "example-owner",
+        "Mcp-Param-repo": "example-repo",
+        "Authorization": "Bearer test-token",
+    }

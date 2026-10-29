@@ -5,6 +5,9 @@ export default defineConfig({
   site: 'https://skiller.run',
   base: '/',
   output: 'static',
+  redirects: {
+    '/docs/': '/docs/getting-started/installation/',
+  },
   integrations: [
     starlight({
       title: 'skiller.run',
@@ -19,28 +22,20 @@ export default defineConfig({
       customCss: ['./src/styles/starlight.css'],
       sidebar: [
         {
-          label: 'Demos',
-          items: [{ autogenerate: { directory: 'docs/demos' } }],
-        },
-        {
           label: 'Getting started',
-          items: [{ autogenerate: { directory: 'docs/getting-started' } }],
+          items: [
+            { label: 'Installation', slug: 'docs/getting-started/installation' },
+            { label: 'Add an LLM provider', slug: 'docs/getting-started/add-an-llm-provider' },
+            { label: 'Your first agent', slug: 'docs/getting-started/your-first-agent' },
+          ],
         },
         {
-          label: 'Concepts',
-          items: [{ autogenerate: { directory: 'docs/concepts' } }],
-        },
-        {
-          label: 'Guides',
-          items: [{ autogenerate: { directory: 'docs/guides' } }],
-        },
-        {
-          label: 'Reference',
-          items: [{ autogenerate: { directory: 'docs/reference' } }],
-        },
-        {
-          label: 'Development',
-          items: [{ autogenerate: { directory: 'docs/development' } }],
+          label: 'Demos',
+          items: [
+            { label: 'Create a custom agent', slug: 'docs/demos/custom-agent' },
+            { label: 'Automate a pull request', slug: 'docs/demos/automate-a-pull-request' },
+            { label: 'Trigger an agent with a webhook', slug: 'docs/demos/agent-webhook' },
+          ],
         },
       ],
     }),

@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from skiller.domain.run.runtime_bootstrap_port import (
@@ -63,7 +64,7 @@ def _set_db_version(conn: sqlite3.Connection, version: int) -> None:
 def _should_reset_db(db_path: Path) -> bool:
     if not db_path.exists():
         return False
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         current_version = _db_version(conn)
         if current_version == SQLITE_RUNTIME_DB_VERSION:
             return False

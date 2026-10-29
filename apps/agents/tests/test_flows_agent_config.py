@@ -25,8 +25,8 @@ def test_flows_agent_uses_shell_and_files() -> None:
     assert agent_step["next"] == "ask_user"
 
 
-def test_flows_local_agent_config_is_restricted() -> None:
-    config_path = Path("apps/agents/flows/agent.json")
+def test_flows_profile_template_is_restricted() -> None:
+    config_path = Path("apps/agents/flows/agent.flows.json")
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert config["loop"] == {
@@ -39,6 +39,7 @@ def test_flows_local_agent_config_is_restricted() -> None:
         "{{flow.dir}}",
         "{{runtime.cwd}}",
         "{{runtime.venv}}",
+        "~/.skiller/profiles/",
     ]
     assert shell_config["allowlist_enabled"] is True
     assert shell_config["allow_env_prefix"] is True
@@ -64,7 +65,7 @@ def test_flows_local_agent_config_is_restricted() -> None:
 
 
 def test_flows_files_config_allows_workspace_read_write() -> None:
-    config_path = Path("apps/agents/flows/agent.json")
+    config_path = Path("apps/agents/flows/agent.flows.json")
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert config["tools"]["files"] == {
@@ -73,9 +74,11 @@ def test_flows_files_config_allows_workspace_read_write() -> None:
             "{{runtime.cwd}}",
             "{{runtime.venv}}",
             "~/.skiller/settings/",
+            "~/.skiller/profiles/",
         ],
         "write": [
             "{{runtime.cwd}}",
+            "~/.skiller/profiles/",
         ],
         "all": [],
     }
@@ -85,7 +88,7 @@ def test_flows_files_config_resolves_workspace_when_flow_is_installed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config_path = Path("apps/agents/flows/agent.json")
+    config_path = Path("apps/agents/flows/agent.flows.json")
     agent_config = json.loads(config_path.read_text(encoding="utf-8"))
     installed_flow_dir = tmp_path / "venv" / "site-packages" / "apps" / "agents" / "flows"
     workspace = tmp_path / "workspace"
@@ -100,7 +103,7 @@ def test_flows_files_config_resolves_workspace_when_flow_is_installed(
     )
 
     assert files_config.read[:2] == (installed_flow_dir, workspace)
-    assert files_config.write == (workspace,)
+    assert files_config.write == (workspace, Path("~/.skiller/profiles/").expanduser().resolve())
 
     workspace_write = tool.policy(
         config=files_config,
@@ -125,19 +128,10 @@ def test_flows_files_config_resolves_workspace_when_flow_is_installed(
     assert installed_write.ok is False
 
 
-def test_flows_agent_has_explicit_exit_route() -> None:
-    agent_path = Path("apps/agents/flows/flows.yaml")
-    agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
-
-    wait_step = next(step for step in agent["steps"] if step.get("wait_input") == "ask_user")
-    switch_step = next(step for step in agent["steps"] if step.get("switch") == "decide_exit")
-    done_step = next(step for step in agent["steps"] if step.get("notify") == "done")
-
-    assert wait_step["next"] == "decide_exit"
-    assert switch_step["cases"] == {
-        "exit": "done",
-        "quit": "done",
-        "bye": "done",
-    }
-    assert switch_step["default"] == "flows_agent"
-    assert done_step["message"] == "Flows agent closed."
+def test_flows_agent_waits_for_the_next_task() -> None:
+    agent = yaml.safe_load(Path("apps/agents/flows/flows.yaml").read_text(encoding="utf-8"))
+    wait_step = next(step for step in agent["steps"] if "wait_input" in step)
+    agent_step = next(step for step in agent["steps"] if "agent" in step)
+    assert wait_step["next"] == "flows_agent"
+    assert agent_step["next"] == "ask_user"
+    assert agent_step["config"] == {"file": "~/.skiller/settings/agent.flows.json"}

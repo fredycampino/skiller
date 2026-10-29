@@ -234,7 +234,9 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             channel_sender=channel_sender,
         ),
         get_runtime_config_use_case=SimpleNamespace(
-            execute=lambda: SimpleNamespace(flow_paths=(Path("skills"),)),
+            execute=lambda: SimpleNamespace(
+                flow_paths=(Path(__file__).parent / "fixtures" / "flows",),
+            ),
         ),
         resolve_flow_use_case=ResolveFlowUseCase(home_path=Path.home()),
         resume_run_use_case=ResumeRunUseCase(store=store),

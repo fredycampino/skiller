@@ -4,6 +4,21 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+### Added
+- Add a guided first-agent tutorial to Flows and website demos for custom agents, scoped GitHub MCP pull request automation, and webhook-triggered agents.
+- Add a webhook agent E2E guide and an Ubuntu 26.04 / Python 3.14 first-install E2E that installs the wheel with pipx, injects MiniMax credentials at runtime, and verifies agent execution and shared storage across directories.
+
+### Changed
+- Refresh website onboarding, navigation, screenshots, provider logos, and landing-page documentation links; remove obsolete documentation and examples.
+- Keep Flows in a continuous task loop and initialize its editable profile at `~/.skiller/settings/agent.flows.json` without replacing existing profiles.
+- Default Runtime storage to `~/.skiller/runtime/global.db`, persist the path when no `AGENT_DB_PATH` override is defined, and preserve existing configuration. Existing databases are not moved or merged.
+- Remove obsolete root-level skills and manual test prompts; relocate active flow fixtures into integration tests.
+
+### Fixed
+- Close SQLite connections deterministically after operations and initialization checks, preventing file-descriptor exhaustion during observation.
+- Send the GitHub MCP repository parameter headers required to create pull requests through `@pr`.
+- Publish initialized configuration files atomically and resolve the default `Settings()` database path under the user home.
+
 ## 0.1.0-beta.45 - 2026-10-22
 
 ### Added

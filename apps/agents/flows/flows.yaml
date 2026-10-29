@@ -12,22 +12,17 @@ steps:
 
   - wait_input: ask_user
     prompt: "Write a task"
-    next: decide_exit
-
-  - switch: decide_exit
-    value: '{{output_value("ask_user").payload.text}}'
-    cases:
-      exit: done
-      quit: done
-      bye: done
-    default: flows_agent
+    next: flows_agent
 
   - agent: flows_agent
+    config:
+      file: "~/.skiller/settings/agent.flows.json"
     system:
       file: "./system.md"
     instructions:
       - "solve-task-style"
       - "create-flows"
+      - "assistant-first-agent"
       - "response-style"
       - "code-style"
       - "skiller-permissions"
@@ -40,6 +35,3 @@ steps:
       - files
     max_turns: 50
     next: ask_user
-
-  - notify: done
-    message: "Flows agent closed."

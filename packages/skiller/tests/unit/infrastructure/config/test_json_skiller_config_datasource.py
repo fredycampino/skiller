@@ -67,7 +67,7 @@ def test_json_skiller_config_datasource_uses_defaults_when_sections_are_missing(
     assert config == SkillerConfig(
         version=1,
         runtime=RuntimeConfig(
-            db_path="./runtime.db",
+            db_path="~/.skiller/runtime/global.db",
             log_level="INFO",
         ),
         webhooks=WebhooksConfig(
@@ -195,7 +195,7 @@ def test_json_skiller_config_datasource_uses_defaults_for_missing_file(
 
     config = _datasource().get_config(config_path)
 
-    assert config.runtime.db_path == "./runtime.db"
+    assert config.runtime.db_path == "~/.skiller/runtime/global.db"
     assert config.webhooks.port == 8001
     assert config.flow_paths == ()
 

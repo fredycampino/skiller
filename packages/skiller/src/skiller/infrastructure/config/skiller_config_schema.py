@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class RuntimeConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    db_path: str = "./runtime.db"
+    db_path: str = "~/.skiller/runtime/global.db"
     log_level: str = "INFO"
 
     @field_validator("db_path", "log_level")

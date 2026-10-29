@@ -1,0 +1,19 @@
+name: agent-wh
+description: "An agent that receives tasks through a webhook"
+version: "0.1"
+start: wait_task
+
+steps:
+  - wait_webhook: wait_task
+    webhook: agent-wh
+    key: inbox
+    next: respond
+
+  - agent: respond
+    config:
+      file: "./agent-wh.agent.json"
+    system:
+      file: "./system.md"
+    task: '{{output_value("wait_task").payload.message}}'
+    tools: []
+    next: wait_task

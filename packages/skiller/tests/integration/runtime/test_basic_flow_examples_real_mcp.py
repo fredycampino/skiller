@@ -69,6 +69,7 @@ from skiller.application.use_cases.run.resolve_end_action_config import (
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
+from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
@@ -256,7 +257,9 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
             channel_sender=channel_sender,
         ),
         get_runtime_config_use_case=SimpleNamespace(
-            execute=lambda: SimpleNamespace(flow_paths=(Path("skills"),)),
+            execute=lambda: SimpleNamespace(
+                flow_paths=(Path(__file__).parent / "fixtures" / "flows",),
+            ),
         ),
         resolve_flow_use_case=ResolveFlowUseCase(home_path=Path.home()),
         resume_run_use_case=ResumeRunUseCase(store=store),
@@ -340,10 +343,11 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
         mcp_event = next(
             event
             for event in events
-            if event.type == "STEP_SUCCESS" and event.payload["step_type"] == "mcp"
+            if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
         )
-        assert mcp_event.payload["output"]["value"]["data"]["ok"] is True
-        assert mcp_event.payload["output"]["value"]["data"]["tool"] == "files_action"
+        assert isinstance(mcp_event.payload, StepSuccessPayload)
+        assert mcp_event.payload.output["value"]["data"]["ok"] is True
+        assert mcp_event.payload.output["value"]["data"]["tool"] == "mcp.local-mcp.files_action"
 
 
 def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
@@ -368,7 +372,8 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
         mcp_event = next(
             event
             for event in events
-            if event.type == "STEP_SUCCESS" and event.payload["step_type"] == "mcp"
+            if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
         )
-        assert mcp_event.payload["output"]["value"]["data"]["ok"] is True
-        assert mcp_event.payload["output"]["value"]["data"]["tool"] == "ping"
+        assert isinstance(mcp_event.payload, StepSuccessPayload)
+        assert mcp_event.payload.output["value"]["data"]["ok"] is True
+        assert mcp_event.payload.output["value"]["data"]["tool"] == "mcp.test-mcp.ping"

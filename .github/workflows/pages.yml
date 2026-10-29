@@ -4,14 +4,12 @@ on:
   pull_request:
     paths:
       - "website/**"
-      - "examples/**"
       - ".github/workflows/pages.yml"
   push:
     branches:
       - main
     paths:
       - "website/**"
-      - "examples/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

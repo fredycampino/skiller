@@ -4,6 +4,8 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.46 - 2026-10-30
+
 ### Added
 - Add a guided first-agent tutorial to Flows and website demos for custom agents, scoped GitHub MCP pull request automation, and webhook-triggered agents.
 - Add a webhook agent E2E guide and an Ubuntu 26.04 / Python 3.14 first-install E2E that installs the wheel with pipx, injects MiniMax credentials at runtime, and verifies agent execution and shared storage across directories.
@@ -18,6 +20,9 @@ All notable changes to this project should be summarized here before a version i
 - Close SQLite connections deterministically after operations and initialization checks, preventing file-descriptor exhaustion during observation.
 - Send the GitHub MCP repository parameter headers required to create pull requests through `@pr`.
 - Publish initialized configuration files atomically and resolve the default `Settings()` database path under the user home.
+
+### Notes
+- Includes PR #166.
 
 ## 0.1.0-beta.45 - 2026-10-22
 

@@ -10,7 +10,7 @@ Skiller turns a YAML flow into a durable execution. Define the work, start a run
 resume it when new input arrives, and inspect every step along the way.
 
 1. **Define the flow.** Combine agents, tools, deterministic steps, and external
-   input in YAML. With an [LLM provider](packages/skiller/docs/agent/agent-config-llm.md)
+   input in YAML. With an [LLM provider](https://skiller.run/docs/configuration/llm-providers/)
    and [tool policies](packages/skiller/docs/agent/agent-config-tools.md) configured,
    this two-step flow runs an ongoing agent session:
 

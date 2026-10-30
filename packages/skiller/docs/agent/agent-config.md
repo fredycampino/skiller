@@ -1,10 +1,12 @@
-# Agent Configuration
+# Agent Configuration Internals
 
-This document describes the current `agent.json` contract. The file selects an
-LLM provider and model and configures agent runtime behavior. Provider
-definitions, credentials, endpoints, and supported model lists do not belong in
-`agent.json`; they are defined by the provider catalog documented in
-[`agent-config-llm.md`](./agent-config-llm.md).
+The canonical user-facing reference for sections, fields, defaults, and examples
+is [Global agent configuration](https://skiller.run/docs/configuration/global-agent/).
+Provider configuration is documented in
+[LLM providers](https://skiller.run/docs/configuration/llm-providers/).
+
+This document retains profile resolution and implementation details. User-facing
+profile documentation has not yet been moved to the website.
 
 ## File resolution
 
@@ -37,226 +39,27 @@ the reference is resolved again for subsequent operations, including resume.
 Changing the model writes to the selected profile when it contains `llm`, otherwise
 to the global file. A write failure never redirects the operation to another file.
 
-## Root contract
+## Validation and legacy input handling
 
-`llm` is required. All other root sections are optional and use the defaults
-described below. Unknown root fields and unknown fields inside known sections
-are rejected.
+`JsonAgentConfigPort` loads the global configuration and applies the selected
+profile by root section. `AgentConfigMapper` normalizes legacy input before
+validating the resulting configuration with `AgentConfigModel`.
 
-```json
-{
-  "llm": {
-    "provider": "minimax",
-    "model": "MiniMax-M3"
-  },
-  "debug": {
-    "log_request": false,
-    "log_streaming": false,
-    "log_request_file": "~/.skiller/logs/request/minimax/request.json",
-    "log_override_file": true
-  },
-  "loop": {
-    "max_turns": 30,
-    "max_tool_calls": 10
-  },
-  "context": {
-    "window_width_tokens": 100000,
-    "compaction": {
-      "compaction_trigger_ratio": 0.8,
-      "compaction_target_ratio": 0.5,
-      "keep_last_blocks": 5
-    }
-  },
-  "event_output": {
-    "truncate": {
-      "enabled": true,
-      "max_text_chars": 600,
-      "max_json_chars": 4000,
-      "max_array_items": 20
-    }
-  },
-  "tools": {}
-}
-```
+The mapper discards the legacy root `providers` section and
+`llm.default_provider`. Neither supplies a provider/model selection. This is
+implementation compatibility behavior, not a supported configuration example.
 
-## LLM selection
+Loading fails for missing effective files, invalid JSON, missing required LLM
+selection, other unknown fields, or invalid section values. Provider and model
+availability is checked separately against the effective catalog.
 
-The `llm` section selects one provider and one of its supported models.
+## Execution limits
 
-```json
-{
-  "llm": {
-    "provider": "minimax",
-    "model": "MiniMax-M3.1-Flash",
-    "effort": 3
-  }
-}
-```
-
-`effort` is optional and accepts integers from 1 to 5:
-
-| `effort` | Reasoning level |
-| --- | --- |
-| `1` | `low` |
-| `2` | `medium` |
-| `3` | `high` |
-| `4` | `xhigh` |
-| `5` | `max` |
-
-Chat Completions sends the corresponding `reasoning_effort`; when omitted, it
-sends no effort parameter. Bedrock Anthropic applies its own normalization and
-disable rules. Adapters without effort support ignore the field. See
-[Chat Completions reasoning](./completions-reasoning.md) and
-[Bedrock thinking](./bedrock-thinking.md).
-
-`provider` and `model` are required, must be non-empty strings, and are resolved against
-the effective provider catalog. Loading fails when the provider does not exist
-or the selected model is not declared by that provider.
-
-`llm.default_provider` is a tolerated legacy field. It is ignored and does not
-replace either required field. This allows transitional files to retain the
-old field while using the new `provider` and `model` selection:
-
-```json
-{
-  "llm": {
-    "provider": "minimax",
-    "model": "MiniMax-M3",
-    "default_provider": "minimax"
-  }
-}
-```
-
-A file containing only `default_provider` is invalid. The legacy root
-`providers` section is also invalid. Move provider configuration to
-`~/.skiller/settings/providers.json` or to the file selected by
-`AGENT_PROVIDERS_FILE`.
-
-## Global and flow-local selection
-
-The user-level file can provide a default selection:
-
-```json
-{
-  "llm": {
-    "provider": "moonshot",
-    "model": "kimi-k3"
-  }
-}
-```
-
-A flow-local file can replace that selection without repeating provider
-credentials:
-
-```json
-{
-  "llm": {
-    "provider": "codex",
-    "model": "gpt-5.6-luna"
-  }
-}
-```
-
-Credentials and provider runtime settings are resolved independently from the
-provider catalog. See [`agent-config-llm.md`](./agent-config-llm.md).
-
-## Debug
-
-```json
-{
-  "debug": {
-    "log_request": true,
-    "log_streaming": true,
-    "log_request_file": "logs/llm-request.json",
-    "log_override_file": true
-  }
-}
-```
-
-- `log_request` enables request logging. Default: `false`.
-- `log_streaming` captures and serializes provider streaming events in the response log when
-  `log_request` is enabled. Default: `false`.
-- `log_request_file` sets the destination. When omitted or empty, it defaults
-  to `~/.skiller/logs/request/<provider>/request.json`.
-- `log_override_file` replaces the destination on each request when `true`.
-  Default: `true`.
-
-## Loop
-
-```json
-{
-  "loop": {
-    "max_turns": 30,
-    "max_tool_calls": 10
-  }
-}
-```
-
-Both values must be positive integers. Their defaults are `30` and `10`.
-
-Environment overrides:
-
-- `AGENT_LOOP_MAX_TURNS`
-- `AGENT_LOOP_MAX_TOOL_CALLS`
-
-Agent step fields `max_turns` and `max_tool_calls` override these values for
-that step.
-
-## Context
-
-```json
-{
-  "context": {
-    "window_width_tokens": 100000,
-    "compaction": {
-      "compaction_trigger_ratio": 0.8,
-      "compaction_target_ratio": 0.5,
-      "keep_last_blocks": 5
-    }
-  }
-}
-```
-
-- `window_width_tokens` is an optional positive cap. When omitted, the selected
-  model's native context window is used. The effective window never exceeds the
-  model's declared context window.
-- `compaction_trigger_ratio` must be greater than `0` and at most `1`.
-  Default: `0.8`.
-- `compaction_target_ratio` must be greater than `0`, at most `1`, and lower
-  than the trigger ratio. Default: `0.5`.
-- `keep_last_blocks` must be between `1` and `100`. Default: `5`.
-
-There are no context environment overrides.
-
-Related behavior is documented in
-[`agent-context-compaction.md`](./agent-context-compaction.md) and
-[`agent-context-prune.md`](./agent-context-prune.md).
-
-## Agent event truncation
-
-```json
-{
-  "event_output": {
-    "truncate": {
-      "enabled": true,
-      "max_text_chars": 600,
-      "max_json_chars": 4000,
-      "max_array_items": 20
-    }
-  }
-}
-```
-
-The three limits must be positive integers. Environment overrides:
-
-- `AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED`
-- `AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS`
-- `AGENT_EVENT_OUTPUT_MAX_JSON_CHARS`
-- `AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS`
-
-Event truncation affects runtime event payloads. It does not change step output
-values, LLM context, or persisted agent context entries. See
-[`agent-event.md`](./agent-event.md).
+The mapper applies the existing loop and event-output environment overrides.
+Agent step `max_turns` and `max_tool_calls` fields take precedence over resolved
+loop settings in `StepConfigReader`. The scope and redundant controls of loop
+configuration are tracked for follow-up review; this documentation cleanup does
+not change execution behavior.
 
 ## Tools
 
@@ -271,25 +74,13 @@ to the executable allowlist.
 
 See [`agent-config-tools.md`](./agent-config-tools.md) for the complete contract.
 
-## Validation
+## Related implementation documentation
 
-Configuration loading fails for:
-
-- a missing effective configuration file;
-- invalid JSON;
-- missing `llm.provider` or `llm.model`;
-- unknown fields other than the tolerated `llm.default_provider` legacy field;
-- an unknown provider or a model not supported by that provider;
-- invalid loop, context, event output, debug, or tool values.
-
-Provider catalog validation, adapter fields, credentials, and merge rules are
-documented in [`agent-config-llm.md`](./agent-config-llm.md).
-
-## Related documentation
-
-- [`agent-config-llm.md`](./agent-config-llm.md)
-- [`agent-config-tools.md`](./agent-config-tools.md)
-- [`agent-context.md`](./agent-context.md)
-- [`agent-event.md`](./agent-event.md)
-- [`../config/config.md`](../config/config.md)
-- [`../steps/agent.md`](../steps/agent.md)
+- [LLM adapters](./agent-config-llm.md)
+- [Chat Completions reasoning](./completions-reasoning.md)
+- [Bedrock thinking](./bedrock-thinking.md)
+- [Context handling](./agent-context.md)
+- [Context compaction](./agent-context-compaction.md)
+- [Context pruning](./agent-context-prune.md)
+- [Agent events](./agent-event.md)
+- [Agent step](../steps/agent.md)

@@ -37,6 +37,16 @@ export default defineConfig({
             { label: 'Trigger an agent with a webhook', slug: 'docs/demos/agent-webhook' },
           ],
         },
+        {
+          label: 'Configuration',
+          items: [
+            { label: 'Runtime configuration', slug: 'docs/configuration/runtime' },
+            { label: 'LLM providers', slug: 'docs/configuration/llm-providers' },
+            { label: 'Global agent configuration', slug: 'docs/configuration/global-agent' },
+            { label: 'Agent profiles', slug: 'docs/configuration/agent-profiles' },
+            { label: 'Custom LLM providers', slug: 'docs/configuration/custom-llm-providers' },
+          ],
+        },
       ],
     }),
   ],

@@ -4,6 +4,21 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.47 - 2026-10-30
+
+### Added
+- Add website configuration references for Runtime, LLM providers, global agent settings, agent profiles, and custom LLM providers, with examples verified against the configuration contracts.
+
+### Changed
+- Centralize user-facing configuration documentation on the website and retain local adapter implementation references.
+- Explicitly dispatch package publication after release tag creation, checking existing tags before reusing them.
+- Separate package build and PyPI publication jobs, passing built artifacts to an OIDC-enabled publication job without rebuilding them.
+- Restrict deployment permissions by job, pin workflow actions to immutable revisions, and isolate GitHub Pages build from deployment permissions.
+
+### Notes
+- Includes PRs #169 and #170.
+- End-to-end publication against TestPyPI remains pending.
+
 ## 0.1.0-beta.46 - 2026-10-30
 
 ### Added

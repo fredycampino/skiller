@@ -12,7 +12,7 @@ on:
       - closed
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -21,13 +21,14 @@ jobs:
 
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
 
@@ -69,33 +70,45 @@ jobs:
   create_tag:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
 
     steps:
       - name: Checkout merged commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
-      - name: Ensure tag does not already exist
-        env:
-          RELEASE_TAG: v${{ github.event.pull_request.head.ref }}
-        run: |
-          release_version="${RELEASE_TAG#vrelease/}"
-          release_tag="v${release_version}"
-          if git rev-parse "$release_tag" >/dev/null 2>&1; then
-            echo "tag already exists: $release_tag" >&2
-            exit 1
-          fi
-
-      - name: Create and push tag
+      - name: Create or verify release tag
+        id: tag
         env:
           RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          release_version="${RELEASE_BRANCH#release/}"
-          release_tag="v${release_version}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$release_tag" "$MERGE_COMMIT_SHA"
-          git push origin "$release_tag"
+          set -euo pipefail
+          release_tag="v${RELEASE_BRANCH#release/}"
+          if git show-ref --verify --quiet "refs/tags/$release_tag"; then
+            tag_commit="$(git rev-parse "refs/tags/$release_tag^{commit}")"
+            if [[ "$tag_commit" != "$MERGE_COMMIT_SHA" ]]; then
+              echo "Release tag points to a different commit: $release_tag" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$release_tag" "$MERGE_COMMIT_SHA"
+          fi
+          git push origin "refs/tags/$release_tag"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Request PyPI publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run publish.yml --ref main --field "tag=$RELEASE_TAG"
+          echo "Publication requested for $RELEASE_TAG; completion is tracked in [Publish to PyPI](https://github.com/$GH_REPO/actions/workflows/publish.yml)." >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,20 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.48 - 2026-10-31
+
+### Added
+- Add website references for supported LLM APIs, the OpenAI, Codex, and Bedrock adapters, model selection, harness loop limits, context settings, event output, and debug settings.
+- Add a Harness tools section documenting tool selection, Shell and Files permissions, allowed path templates, and command path expansion.
+
+### Changed
+- Reorganize Configuration navigation into Runtime, LLM providers, and Agent harness, and add Harness tools as a top-level section.
+- Replace duplicated local configuration guides with technical implementation references that link to the website.
+
+### Notes
+- Includes PR #172.
+- Documentation only; runtime behavior is unchanged.
+
 ## 0.1.0-beta.47 - 2026-10-30
 
 ### Added

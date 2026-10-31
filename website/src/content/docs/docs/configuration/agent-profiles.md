@@ -7,17 +7,29 @@ An agent profile overrides selected sections of the [global agent configuration]
 
 ## Select a profile
 
-Create a JSON file, such as `~/.skiller/settings/agent.reviewer.json`, and reference it in the agent step:
+Create a JSON file, such as `~/.skiller/profiles/agent.reviewer.json`, and reference it in the agent step:
 
 ```yaml
 - agent: reviewer
   config:
-    file: "~/.skiller/settings/agent.reviewer.json"
+    file: "~/.skiller/profiles/agent.reviewer.json"
   system: "Review the submitted text."
   task: "Review this sentence: The service are ready."
 ```
 
 Relative file paths resolve from the workflow directory. An explicitly selected file must exist; Skiller does not fall back to another profile if it is missing or invalid.
+
+## Profile path references
+
+The profile reference accepts home paths and environment variables from the Runtime process, such as `$PROFILE_FILE` or `${PROFILE_DIR}/reviewer.json`:
+
+```yaml
+- agent: reviewer
+  config:
+    file: "${PROFILE_DIR}/reviewer.json"
+```
+
+Referenced variables must exist and be non-empty. Expansion happens once, without shell execution or recursive substitution. Workflow templates such as `{{runtime.cwd}}` are not supported in config.file.
 
 ## Inherit the global model
 
@@ -53,3 +65,7 @@ The same rule applies to other sections: a profile replaces complete root sectio
 When `config.file` is not declared, Skiller looks for `agent.json` next to the workflow YAML. If that file exists, it overrides the global configuration using the same rules. Otherwise, the agent uses only the global configuration.
 
 See [Global agent configuration](/docs/configuration/global-agent/) for available fields and defaults.
+
+## Saving a model change
+
+When you change the model through Skiller, the selection is saved to the selected profile if it contains an LLM section. Otherwise, it is saved to the global agent configuration. If writing fails, Skiller reports the error rather than saving to a different file.

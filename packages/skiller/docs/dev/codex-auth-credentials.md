@@ -20,16 +20,8 @@ http://localhost:1455/auth/callback
 
 It does not use the device-code flow.
 
-## Run From TUI
-
-```text
-/run auths/codex
-```
-
-The TUI shows an OpenAI authorization action. The user opens the link and
-authorizes in the browser. The browser returns to the local callback endpoint,
-then the flow exchanges the authorization code for tokens, saves the
-credentials, writes the Codex provider config, and validates the credentials.
+For user-facing setup, see [Add an LLM provider](https://skiller.run/docs/getting-started/add-an-llm-provider/).
+Provider fields are documented in [Codex adapter](https://skiller.run/docs/configuration/codex-adapter/).
 
 ## Flow
 

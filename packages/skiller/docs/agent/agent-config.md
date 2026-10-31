@@ -5,39 +5,9 @@ is [Global agent configuration](https://skiller.run/docs/configuration/global-ag
 Provider configuration is documented in
 [LLM providers](https://skiller.run/docs/configuration/llm-providers/).
 
-This document retains profile resolution and implementation details. User-facing
-profile documentation has not yet been moved to the website.
-
-## File resolution
-
-The user-level file is the base configuration:
-
-```text
-~/.skiller/settings/agent.json
-```
-
-The runtime applies at most one override file. The precedence is:
-
-1. the file explicitly selected by the agent step's `config.file`, when declared;
-2. otherwise, the `agent.json` next to the current flow, when present;
-3. otherwise, only the user-level file.
-
-The override is applied by root section. Sections are not deep-merged. For
-example, a local `llm` section replaces the complete user-level `llm` section
-and must contain both required fields.
-
-`agent.json` is not discovered from the process current working directory.
-Explicit references accept `$NAME`, `${NAME}`, and concatenations such as
-`${PROFILE_DIR}/reviewer.json`. Variables come from the Runtime process environment
-and must be present and non-empty. Expansion is performed once, without shell
-execution or recursive expansion. `~` uses the Runtime home directory; relative
-paths resolve from the current flow directory. Templates (`{{...}}`) are invalid.
-An explicit missing or invalid profile fails instead of falling back to local or
-global configuration. The selected file may be changed when permissions allow it;
-the reference is resolved again for subsequent operations, including resume.
-
-Changing the model writes to the selected profile when it contains `llm`, otherwise
-to the global file. A write failure never redirects the operation to another file.
+Profile selection, inheritance, path references, and model changes are documented
+in [Agent profiles](https://skiller.run/docs/configuration/agent-profiles/).
+This document covers implementation responsibilities and compatibility behavior.
 
 ## Validation and legacy input handling
 
@@ -53,26 +23,17 @@ Loading fails for missing effective files, invalid JSON, missing required LLM
 selection, other unknown fields, or invalid section values. Provider and model
 availability is checked separately against the effective catalog.
 
-## Execution limits
+## Execution configuration
 
-The mapper applies the existing loop and event-output environment overrides.
-Agent step `max_turns` and `max_tool_calls` fields take precedence over resolved
-loop settings in `StepConfigReader`. The scope and redundant controls of loop
-configuration are tracked for follow-up review; this documentation cleanup does
-not change execution behavior.
+`AgentConfigMapper` applies the loop and event-output environment overrides.
+`StepConfigReader` applies agent-step execution overrides after configuration
+loading. User-facing limits are documented in
+[Harness loop limits](https://skiller.run/docs/configuration/harness-loop-limits/).
 
-## Tools
-
-`tools` contains runtime configuration for registered configurable tools. Tool
-names and fields are validated, and relative paths are resolved against the
-directory containing the current flow YAML (`{{flow.dir}}`), regardless of
-whether the `tools` section comes from global, local, or external configuration.
-Neither the flow directory nor `{{runtime.cwd}}` is automatically permitted;
-permissions must be configured explicitly. Shell retains only the automatic
-path permission for the runtime Python executable, without adding its command
-to the executable allowlist.
-
-See [`agent-config-tools.md`](./agent-config-tools.md) for the complete contract.
+Tool payload mapping is delegated to registered tool runtime configuration
+mappers. See [Tool configuration internals](./agent-config-tools.md) for the
+implementation and [Harness tools](https://skiller.run/docs/tools/overview/)
+for configuration and permissions.
 
 ## Related implementation documentation
 

@@ -1,7 +1,7 @@
 # LLM Adapter Implementation
 
 User-facing provider configuration is documented in
-[LLM providers](https://skiller.run/docs/configuration/llm-providers/).
+[User LLM providers](https://skiller.run/docs/configuration/llm-providers/).
 This document covers the implementation behind those provider definitions, not
 the configuration file contract.
 
@@ -25,6 +25,8 @@ same adapter. Catalog parsing produces the typed definitions used by the resolve
 
 ## OpenAI-compatible adapter
 
+Configuration reference: [OpenAI-compatible adapter](https://skiller.run/docs/configuration/openai-adapter/).
+
 `OpenAILLMPort` uses the OpenAI SDK's `chat.completions.create` operation.
 `OpenAIMapper` translates requests and responses, while
 `OpenAIApiKeyDatasource` resolves the configured credential source before the
@@ -38,6 +40,8 @@ parameter handling.
 
 ## Bedrock adapter
 
+Configuration reference: [Bedrock adapter](https://skiller.run/docs/configuration/bedrock-adapter/).
+
 `ConverseLLMPort` constructs a Boto3 session using the configured AWS profile
 and creates a `bedrock-runtime` client. `BedrockMapper`,
 `CollectConverseResponse`, and `ConverseMapper` handle request mapping, stream
@@ -46,6 +50,8 @@ collection, and response mapping respectively.
 See [Bedrock thinking](./bedrock-thinking.md) for reasoning-specific behavior.
 
 ## Codex adapter
+
+Configuration reference: [Codex adapter](https://skiller.run/docs/configuration/codex-adapter/).
 
 `ResponsesLLMPort` uses the Codex Responses protocol. The resolver supplies
 `CodexMapper`, `ResponsesMapper`, `CollectCodexResponse`, and

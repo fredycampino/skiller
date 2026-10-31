@@ -38,13 +38,40 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Configuration',
+          label: 'Runtime',
           items: [
             { label: 'Runtime configuration', slug: 'docs/configuration/runtime' },
-            { label: 'LLM providers', slug: 'docs/configuration/llm-providers' },
+          ],
+        },
+        {
+          label: 'LLM providers',
+          items: [
+            { label: 'Supported LLM APIs', slug: 'docs/configuration/supported-llm-apis' },
+            { label: 'User LLM providers', slug: 'docs/configuration/llm-providers' },
+            { label: 'OpenAI adapter', slug: 'docs/configuration/openai-adapter' },
+            { label: 'Codex adapter', slug: 'docs/configuration/codex-adapter' },
+            { label: 'Bedrock adapter', slug: 'docs/configuration/bedrock-adapter' },
+            { label: 'Custom providers', slug: 'docs/configuration/custom-llm-providers' },
+          ],
+        },
+        {
+          label: 'Agent harness',
+          items: [
             { label: 'Global agent configuration', slug: 'docs/configuration/global-agent' },
             { label: 'Agent profiles', slug: 'docs/configuration/agent-profiles' },
-            { label: 'Custom LLM providers', slug: 'docs/configuration/custom-llm-providers' },
+            { label: 'Model selection', slug: 'docs/configuration/model-selection' },
+            { label: 'Harness loop limits', slug: 'docs/configuration/harness-loop-limits' },
+            { label: 'Context settings', slug: 'docs/configuration/context-settings' },
+            { label: 'Event output', slug: 'docs/configuration/event-output' },
+            { label: 'Debug settings', slug: 'docs/configuration/debug-settings' },
+          ],
+        },
+        {
+          label: 'Harness tools',
+          items: [
+            { label: 'Overview', slug: 'docs/tools/overview' },
+            { label: 'Shell', slug: 'docs/tools/shell' },
+            { label: 'Files', slug: 'docs/tools/files' },
           ],
         },
       ],

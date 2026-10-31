@@ -1,7 +1,9 @@
 # Agent Context Compaction Specification
 
-## Status and configuration
+User-facing fields, defaults, and configuration examples are documented in
+[Context settings](https://skiller.run/docs/configuration/context-settings/).
 
+## Compaction state and inputs
 
 ### Window state
 
@@ -14,12 +16,11 @@ Window pointers are persisted in a state object separate from context entries:
 If `start_sequence = compacted_sequence + 1`, the compacted range is empty and the queue contains
 only raw entries.
 
-### Configuration
+### Algorithm inputs
 
-- `window_tokens`: token capacity assigned to the message queue.
-- `keep_last_blocks`: maximum number of newest complete blocks to keep raw when they fit.
-- `compaction_trigger_ratio = 0.8`: window ratio that triggers compaction.
-- `compaction_target_ratio = 0.5`: window ratio that compaction must target.
+The algorithm receives the resolved window capacity (`window_tokens`), recent
+block retention count (`keep_last_blocks`), trigger ratio, and target ratio.
+These are effective inputs, not a separate user configuration schema.
 
 Derived limits:
 

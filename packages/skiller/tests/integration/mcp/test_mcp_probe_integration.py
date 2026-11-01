@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import json
+import os
 import socket
+import subprocess
 import sys
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -29,35 +32,51 @@ def _pick_free_port() -> int:
         pytest.skip("Local TCP sockets are not available in this environment")
 
 
-def _configure_test_mcp_autostart(
-    monkeypatch: pytest.MonkeyPatch, *, server_name: str, port: int
-) -> RenderedMcpConfig:
+@pytest.fixture
+def http_mcp_config() -> Iterator[RenderedMcpConfig]:
+    port = _pick_free_port()
     server_script = (
         Path(__file__).parents[1] / "runtime" / "fixtures" / "mcp" / "test_mcp_server.py"
     )
-    assert server_script.exists(), f"MCP fixture server script not found: {server_script}"
-
-    prefix = f"AGENT_MCP_{server_name.upper().replace('-', '_')}"
-    endpoint = f"http://127.0.0.1:{port}/mcp"
-
-    monkeypatch.setenv(f"{prefix}_AUTOSTART_COMMAND", sys.executable)
-    monkeypatch.setenv(f"{prefix}_AUTOSTART_ARGS", json.dumps([str(server_script)]))
-    project_root = Path(__file__).parents[3]
-    monkeypatch.setenv(f"{prefix}_AUTOSTART_CWD", str(project_root))
-    monkeypatch.setenv(f"{prefix}_AUTOSTART_ENV", json.dumps({}))
-    monkeypatch.setenv(f"{prefix}_AUTOSTART_TIMEOUT", "8")
-
-    return RenderedMcpConfig(
-        name=server_name,
+    config = RenderedMcpConfig(
+        name="test-mcp-int",
         transport="streamable-http",
-        url=endpoint,
+        url=f"http://127.0.0.1:{port}/mcp",
     )
+    process = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(server_script)],
+        env={
+            **os.environ,
+            "MCP_TRANSPORT": "streamable-http",
+            "MCP_HOST": "127.0.0.1",
+            "MCP_PORT": str(port),
+            "MCP_PATH": "/mcp",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        client = MCPClientTool()
+        deadline = time.monotonic() + 8.0
+        while not client.probe_server(config.name, config=config)["ok"]:
+            if process.poll() is not None:
+                pytest.fail(f"MCP fixture exited with code {process.returncode}")
+            if time.monotonic() >= deadline:
+                pytest.fail("MCP fixture did not become ready")
+            time.sleep(0.1)
+        yield config
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
 
 
-def test_mcp_probe_and_operations_integration(monkeypatch: pytest.MonkeyPatch) -> None:
-    server_name = "test-mcp-int"
-    port = _pick_free_port()
-    config = _configure_test_mcp_autostart(monkeypatch, server_name=server_name, port=port)
+def test_mcp_probe_and_operations_integration(http_mcp_config: RenderedMcpConfig) -> None:
+    config = http_mcp_config
+    server_name = config.name
 
     client = MCPClientTool()
     probe_result = client.probe_server(server_name, config=config)

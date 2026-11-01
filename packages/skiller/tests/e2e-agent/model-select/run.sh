@@ -7,9 +7,17 @@ cd "$(dirname "$0")/../../../../.."
 
 export HOME="${tmpdir}/home"
 export MODEL_SELECT_PROFILE="${tmpdir}/flow/profile.json"
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_WEBHOOKS_HOST="127.0.0.1"
-export AGENT_WEBHOOKS_PORT="${SKILLER_TEST_WEBHOOK_PORT:-18084}"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_RUNTIME_CONFIG_FILE="${tmpdir}/config.json"
+webhook_port="${SKILLER_TEST_WEBHOOK_PORT:-18084}"
+cat >"${SKILLER_RUNTIME_CONFIG_FILE}" <<JSON
+{
+  "webhooks": {
+    "host": "127.0.0.1",
+    "port": ${webhook_port}
+  }
+}
+JSON
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 cleanup() {

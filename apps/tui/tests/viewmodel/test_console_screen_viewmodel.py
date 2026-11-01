@@ -42,7 +42,11 @@ from stui.port.event_models import (
     WaitInputOutputValue,
     WaitWebhookOutputValue,
 )
-from stui.port.installation_state_port import InstallationState
+from stui.port.installation_state_port import (
+    InstallationError,
+    InstallationErrorKind,
+    InstallationState,
+)
 from stui.port.models_port import (
     AuthProvidersPortProviderItem,
     ModelsPortModelItem,
@@ -1825,3 +1829,35 @@ def test_console_screen_viewmodel_uses_run_name_on_resume_after_wait_input() -> 
         submit_waiting_input_use_case_module,
     ):
         asyncio.run(run())
+
+
+@pytest.mark.parametrize("initial_run_args", [(), ("@pr",)])
+def test_installation_error_blocks_startup(initial_run_args: tuple[str, ...]) -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(CommandAck(status=CommandAckStatus.ACCEPTED, run_id="unexpected"))
+        events = FakeEventsPort()
+
+        class UnreadSessionStore:
+            def read(self):  # noqa: ANN201
+                pytest.fail("Startup must not attempt to resume a session after a config error")
+
+        session_store = UnreadSessionStore()
+        viewmodel = build_viewmodel(
+            session_key="main",
+            initial_run_args=initial_run_args,
+            run_port=run_port,
+            events_port=events,
+            session_store_port=session_store,
+            waiting_port=FakeWaitingPort(),
+            installation_state_port=FakeInstallationStatePort(InstallationState(
+                runtime_db_exists=False,
+                error=InstallationError(InstallationErrorKind.COMMAND_FAILED, "Invalid config"),
+            )),
+        )
+        await viewmodel.on_start()
+        assert viewmodel.state.view_status.kind == ViewStatusKind.ERROR
+        assert viewmodel.state.session_key == "main"
+        assert run_port.called_with == []
+        assert events.subscribe_calls == []
+
+    asyncio.run(run())

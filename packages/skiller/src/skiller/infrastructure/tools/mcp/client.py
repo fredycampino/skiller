@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import subprocess
 import threading
-import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import urlparse
 
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 
@@ -20,14 +16,11 @@ class MCPResolvedTarget:
 
 
 class MCPClientTool:
-    _managed_processes: dict[str, subprocess.Popen[Any]] = {}
-
     def call(
         self, tool_name: str, args: dict[str, Any], config: RenderedMcpConfig | None = None
     ) -> dict[str, Any]:
         server_name, remote_tool_name = self._parse_tool_name(tool_name)
         target = self._resolve_server_target(server_name, config=config)
-        self._maybe_start_http_server(server_name, target.endpoint)
 
         try:
             payload = self._run_async(
@@ -62,7 +55,6 @@ class MCPClientTool:
     ) -> dict[str, Any]:
         try:
             target = self._resolve_server_target(server_name, config=config)
-            self._maybe_start_http_server(server_name, target.endpoint)
             tools = self._run_async(lambda: self._list_tools(target.transport))
         except Exception as exc:  # noqa: BLE001
             return {
@@ -86,7 +78,6 @@ class MCPClientTool:
     ) -> dict[str, Any]:
         try:
             target = self._resolve_server_target(server_name, config=config)
-            self._maybe_start_http_server(server_name, target.endpoint)
             payload = self._run_async(lambda: self._read_resource(target.transport, uri))
         except Exception as exc:  # noqa: BLE001
             return {
@@ -235,96 +226,6 @@ class MCPClientTool:
             headers={str(key): str(value) for key, value in config.headers.items()},
         )
 
-    def _maybe_start_http_server(self, server_name: str, endpoint: str) -> None:
-        if not endpoint.startswith("http"):
-            return
-
-        config = self._read_autostart_config(server_name)
-        if config is None:
-            return
-
-        if self._is_endpoint_ready(endpoint):
-            return
-
-        process = self._managed_processes.get(server_name)
-        if process is not None and process.poll() is None:
-            self._wait_until_endpoint_ready(
-                endpoint, process, timeout_seconds=config["timeout_seconds"]
-            )
-            return
-
-        env = os.environ.copy()
-        env.update(config["env"])
-        self._inject_http_server_env_defaults(env, endpoint)
-
-        process = subprocess.Popen(  # noqa: S603
-            [config["command"], *config["args"]],
-            cwd=config["cwd"],
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        self._managed_processes[server_name] = process
-        self._wait_until_endpoint_ready(
-            endpoint, process, timeout_seconds=config["timeout_seconds"]
-        )
-
-    def _read_autostart_config(self, server_name: str) -> dict[str, Any] | None:
-        env_prefix = f"AGENT_MCP_{server_name.upper().replace('-', '_')}"
-        command = (os.getenv(f"{env_prefix}_AUTOSTART_COMMAND") or "").strip()
-        if not command:
-            return None
-
-        return {
-            "command": command,
-            "args": self._parse_json_list_env(f"{env_prefix}_AUTOSTART_ARGS"),
-            "env": {
-                str(k): str(v)
-                for k, v in self._parse_json_object_env(f"{env_prefix}_AUTOSTART_ENV").items()
-            },
-            "cwd": (os.getenv(f"{env_prefix}_AUTOSTART_CWD") or "").strip() or None,
-            "timeout_seconds": self._parse_timeout_seconds(
-                f"{env_prefix}_AUTOSTART_TIMEOUT", default=10.0
-            ),
-        }
-
-    def _wait_until_endpoint_ready(
-        self,
-        endpoint: str,
-        process: subprocess.Popen[Any],
-        *,
-        timeout_seconds: float,
-    ) -> None:
-        deadline = time.monotonic() + timeout_seconds
-        while time.monotonic() < deadline:
-            if process.poll() is not None:
-                raise RuntimeError(
-                    "MCP autostart process exited with code "
-                    f"{process.returncode} before endpoint became ready: {endpoint}"
-                )
-            if self._is_endpoint_ready(endpoint):
-                return
-            time.sleep(0.2)
-
-        raise RuntimeError(f"MCP endpoint did not become ready before timeout: {endpoint}")
-
-    def _is_endpoint_ready(self, endpoint: str) -> bool:
-        try:
-            ready = self._run_async(lambda: self._probe_endpoint(endpoint))
-            return bool(ready)
-        except Exception:  # noqa: BLE001
-            return False
-
-    async def _probe_endpoint(self, endpoint: str) -> bool:
-        from fastmcp import Client
-
-        try:
-            async with Client(endpoint, init_timeout=1.5, timeout=1.5) as client:
-                await client.list_tools()
-            return True
-        except Exception:  # noqa: BLE001
-            return False
-
     @staticmethod
     def _run_async(awaitable_factory: Callable[[], Awaitable[Any]]) -> Any:
         try:
@@ -348,58 +249,6 @@ class MCPClientTool:
         if "error" in error:
             raise error["error"]
         return result.get("value")
-
-    @staticmethod
-    def _inject_http_server_env_defaults(env: dict[str, str], endpoint: str) -> None:
-        parsed = urlparse(endpoint)
-        env.setdefault("MCP_TRANSPORT", "streamable-http")
-        if parsed.hostname:
-            env.setdefault("MCP_HOST", parsed.hostname)
-        if parsed.port:
-            env.setdefault("MCP_PORT", str(parsed.port))
-        if parsed.path:
-            env.setdefault("MCP_PATH", parsed.path)
-
-    @staticmethod
-    def _parse_timeout_seconds(env_name: str, *, default: float) -> float:
-        raw = (os.getenv(env_name) or "").strip()
-        if not raw:
-            return default
-        try:
-            timeout = float(raw)
-        except ValueError as exc:
-            raise ValueError(f"Invalid {env_name}. Expected a numeric value in seconds.") from exc
-        if timeout <= 0:
-            raise ValueError(f"Invalid {env_name}. Timeout must be > 0.")
-        return timeout
-
-    @staticmethod
-    def _parse_json_list_env(env_name: str) -> list[str]:
-        raw = (os.getenv(env_name) or "").strip()
-        if not raw:
-            return []
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in {env_name}. Expected a JSON array.") from exc
-
-        if not isinstance(data, list) or not all(isinstance(item, str) for item in data):
-            raise ValueError(f"Invalid {env_name}. Expected a JSON array of strings.")
-        return data
-
-    @staticmethod
-    def _parse_json_object_env(env_name: str) -> dict[str, Any]:
-        raw = (os.getenv(env_name) or "").strip()
-        if not raw:
-            return {}
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in {env_name}. Expected a JSON object.") from exc
-
-        if not isinstance(data, dict):
-            raise ValueError(f"Invalid {env_name}. Expected a JSON object.")
-        return data
 
     @staticmethod
     def _extract_response_payload(response: Any) -> Any:

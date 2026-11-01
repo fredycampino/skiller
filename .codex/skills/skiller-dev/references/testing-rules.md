@@ -33,7 +33,7 @@
 ## Current Repo Intent
 
 - Prefer one script per operator flow under `tests/e2e/cli_*.sh`.
-- Isolate each run with a temporary DB via `AGENT_DB_PATH`.
+- Isolate each run with a temporary DB via `SKILLER_DB_PATH`.
 - Execute the real runtime entrypoint with `PYTHONPATH=src ... -m skiller`.
 - Assert a small final JSON contract such as `run_id`, `status`, and only the minimum extra fields needed for the flow.
 - Do not assert internal persistence details, event payloads, or intermediate state if `integration` already covers them.

@@ -7,6 +7,7 @@ from skiller.infrastructure.config.json_runtime_config_port import JsonRuntimeCo
 from skiller.infrastructure.config.json_skiller_config_datasource import (
     JsonSkillerConfigDatasource,
 )
+from skiller.infrastructure.config.settings_model import Settings
 from skiller.infrastructure.config.skiller_config_mapper import SkillerConfigMapper
 
 pytestmark = pytest.mark.unit
@@ -27,6 +28,7 @@ def test_json_runtime_config_port_returns_mapped_paths_in_order(
         encoding="utf-8",
     )
     port = JsonRuntimeConfigPort(
+        settings=Settings(db_path=str(tmp_path / "effective.db")),
         config_datasource=JsonSkillerConfigDatasource(
             mapper=SkillerConfigMapper(runtime_cwd=tmp_path),
         ),
@@ -46,6 +48,7 @@ def test_json_runtime_config_port_returns_empty_paths_when_not_configured(
     config_path = tmp_path / "config.json"
     config_path.write_text("{}", encoding="utf-8")
     port = JsonRuntimeConfigPort(
+        settings=Settings(db_path=str(tmp_path / "effective.db")),
         config_datasource=JsonSkillerConfigDatasource(
             mapper=SkillerConfigMapper(runtime_cwd=tmp_path),
         ),
@@ -54,3 +57,4 @@ def test_json_runtime_config_port_returns_empty_paths_when_not_configured(
     config = port.get_config(config_path)
 
     assert config.flow_paths == ()
+    assert config.runtime.db_path == str(tmp_path / "effective.db")

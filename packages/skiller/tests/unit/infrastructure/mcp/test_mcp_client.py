@@ -80,34 +80,6 @@ def test_resolve_target_requires_config() -> None:
         client._resolve_server_target("local-mcp")
 
 
-def test_read_autostart_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AGENT_MCP_LOCAL_MCP_AUTOSTART_COMMAND", "/usr/bin/python3")
-    monkeypatch.setenv("AGENT_MCP_LOCAL_MCP_AUTOSTART_ARGS", '["/tmp/local_mcp.py"]')
-    monkeypatch.setenv("AGENT_MCP_LOCAL_MCP_AUTOSTART_ENV", '{"FILES_ALLOWED_ROOTS":"/tmp/work"}')
-    monkeypatch.setenv("AGENT_MCP_LOCAL_MCP_AUTOSTART_CWD", "/tmp")
-    monkeypatch.setenv("AGENT_MCP_LOCAL_MCP_AUTOSTART_TIMEOUT", "3.5")
-
-    client = MCPClientTool()
-    config = client._read_autostart_config("local-mcp")
-
-    assert config is not None
-    assert config["command"] == "/usr/bin/python3"
-    assert config["args"] == ["/tmp/local_mcp.py"]
-    assert config["env"]["FILES_ALLOWED_ROOTS"] == "/tmp/work"
-    assert config["cwd"] == "/tmp"
-    assert config["timeout_seconds"] == 3.5
-
-
-def test_inject_http_server_env_defaults() -> None:
-    env = {"MCP_TRANSPORT": "streamable-http"}
-    MCPClientTool._inject_http_server_env_defaults(env, "http://127.0.0.1:7821/mcp")
-
-    assert env["MCP_TRANSPORT"] == "streamable-http"
-    assert env["MCP_HOST"] == "127.0.0.1"
-    assert env["MCP_PORT"] == "7821"
-    assert env["MCP_PATH"] == "/mcp"
-
-
 def test_call_inside_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_call_tool(  # noqa: ANN202
         self,
@@ -119,7 +91,6 @@ def test_call_inside_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"status": "success"}
 
     monkeypatch.setattr(MCPClientTool, "_call_tool", fake_call_tool)
-    monkeypatch.setattr(MCPClientTool, "_maybe_start_http_server", lambda *args: None)
 
     async def run_call() -> dict[str, object]:
         return MCPClientTool().call(
@@ -137,19 +108,6 @@ def test_call_inside_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["result"] == {"status": "success"}
 
 
-def test_endpoint_probe_inside_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_probe(self, endpoint: str) -> bool:  # noqa: ANN202
-        _ = (self, endpoint)
-        return True
-
-    monkeypatch.setattr(MCPClientTool, "_probe_endpoint", fake_probe)
-
-    async def run_probe() -> bool:
-        return MCPClientTool()._is_endpoint_ready("http://127.0.0.1:7821/mcp")
-
-    assert asyncio.run(run_probe()) is True
-
-
 def test_probe_server_reports_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_list_tools(self, transport: object) -> list[str]:  # noqa: ANN202
         _ = (self, transport)
@@ -163,7 +121,6 @@ def test_probe_server_reports_tools(monkeypatch: pytest.MonkeyPatch) -> None:
             endpoint="http://127.0.0.1:7821/mcp",
         ),
     )
-    monkeypatch.setattr(MCPClientTool, "_maybe_start_http_server", lambda *args: None)
     monkeypatch.setattr(MCPClientTool, "_list_tools", fake_list_tools)
 
     result = MCPClientTool().probe_server(

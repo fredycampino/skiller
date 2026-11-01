@@ -13,7 +13,7 @@ fi
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 
 run_case() {
   local yaml_path="$1"

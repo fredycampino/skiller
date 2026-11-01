@@ -10,19 +10,19 @@ def load_development_env() -> dict[str, str]:
 
     values: dict[str, str] = {}
     lines = env_path.read_text(encoding="utf-8").splitlines()
-    for line_number, raw_line in enumerate(lines, 1):
+    for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
             line = line.removeprefix("export ").strip()
         if "=" not in line:
-            raise RuntimeError(f"Invalid .env.development line {line_number}: missing '='")
+            continue
         key, value = line.split("=", 1)
         key = key.strip()
+        if key not in {"SKILLER_DB_PATH", "SKILLER_RUNTIME_CONFIG_FILE"}:
+            continue
         value = value.strip()
-        if not key:
-            raise RuntimeError(f"Invalid .env.development line {line_number}: empty key")
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1]
         values[key] = value
@@ -31,13 +31,13 @@ def load_development_env() -> dict[str, str]:
 
 def load_config(env_file: dict[str, str]) -> dict[str, object]:
     config_path, explicit = resolve_json_config_path(
-        env_name="AGENT_RUNTIME_CONFIG_FILE",
+        env_name="SKILLER_RUNTIME_CONFIG_FILE",
         env_file=env_file,
         default_path=Path.home() / ".skiller" / "settings" / "config.json",
     )
     return _load_json_config_file(
         config_path=config_path,
-        env_name="AGENT_RUNTIME_CONFIG_FILE",
+        env_name="SKILLER_RUNTIME_CONFIG_FILE",
         explicit=explicit,
     )
 

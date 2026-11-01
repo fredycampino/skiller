@@ -73,10 +73,10 @@ def _require_e2e_enabled() -> None:
 
 
 def _profile() -> str:
-    profile = os.environ.get("BEDROCK_E2E_PROFILE") or os.environ.get("AGENT_BEDROCK_PROFILE")
+    profile = os.environ.get("SKILLER_BEDROCK_PROFILE")
     if profile is not None and profile.strip():
         return profile
-    pytest.skip("BEDROCK_E2E_PROFILE is not configured")
+    pytest.skip("SKILLER_BEDROCK_PROFILE is not configured")
 
 
 def _model(*, max_output_tokens: int | None = None) -> LLMModelDefinition:

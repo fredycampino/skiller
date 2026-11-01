@@ -447,10 +447,8 @@ def test_config_prints_effective_runtime_configuration(
         webhooks=SimpleNamespace(host="127.0.0.1", port=8001),
         flow_paths=("/workspace/flows", "/workspace/apps/agents"),
     )
-    container = SimpleNamespace()
-    controller = SimpleNamespace(config=lambda: config)
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: container)
-    monkeypatch.setattr(cli_main, "_build_runtime_controller", lambda _: controller)
+    service = SimpleNamespace(get_runtime_config=lambda: config)
+    monkeypatch.setattr(cli_main, "build_runtime_config_service", lambda: service)
 
     exit_code = cli_main.main(["config"])
 
@@ -472,10 +470,8 @@ def test_config_returns_json_error_when_configuration_fails(
     def fail() -> None:
         raise FileNotFoundError("Missing config")
 
-    container = SimpleNamespace()
-    controller = SimpleNamespace(config=fail)
-    monkeypatch.setattr(cli_main, "build_runtime_container", lambda: container)
-    monkeypatch.setattr(cli_main, "_build_runtime_controller", lambda _: controller)
+    service = SimpleNamespace(get_runtime_config=fail)
+    monkeypatch.setattr(cli_main, "build_runtime_config_service", lambda: service)
 
     exit_code = cli_main.main(["config"])
 

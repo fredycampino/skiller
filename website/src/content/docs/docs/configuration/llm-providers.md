@@ -5,10 +5,10 @@ description: Configure LLM connections, credentials, and available models.
 
 This file is the catalog of LLM providers configured by the user: it defines how to connect to each provider and which models it offers.
 
-Authentication creates or updates this file at `~/.skiller/settings/providers.json`. Use `AGENT_PROVIDERS_FILE` to apply another override file:
+Authentication creates or updates this file at `~/.skiller/settings/providers.json`. Use `SKILLER_AGENT_PROVIDERS_FILE` to apply another override file:
 
 ```bash
-AGENT_PROVIDERS_FILE=~/custom-providers.json skiller run @flows
+SKILLER_AGENT_PROVIDERS_FILE=~/custom-providers.json skiller run @flows
 ```
 
 The file must exist. Its values override the included catalog and the user configuration; omitted fields keep their previously configured values.

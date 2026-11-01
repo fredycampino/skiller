@@ -1,93 +1,63 @@
 from __future__ import annotations
 
 import json
-import os
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from stui.port.installation_state_port import InstallationState
+from stui.adapter.cli_invoker import CliInvoker
+from stui.port.installation_state_port import (
+    InstallationError,
+    InstallationErrorKind,
+    InstallationState,
+)
 
 
 @dataclass(frozen=True)
 class DefaultInstallationStatePort:
-    home: Path = field(default_factory=Path.home)
-    cwd: Path = field(default_factory=Path.cwd)
-    environment: Mapping[str, str] = field(default_factory=lambda: os.environ)
+    invoker: CliInvoker
 
     def read(self) -> InstallationState:
-        db_path = self._runtime_db_path()
-        return InstallationState(
-            runtime_db_exists=db_path.exists(),
-        )
+        try:
+            completed = self.invoker.run("config")
+        except OSError as exc:
+            return _failure(InstallationErrorKind.COMMAND_FAILED, str(exc))
 
-    def _runtime_db_path(self) -> Path:
-        env_file = self._read_development_env()
-        explicit_db_path = self.environment.get("AGENT_DB_PATH", "").strip()
-        if not explicit_db_path:
-            explicit_db_path = env_file.get("AGENT_DB_PATH", "").strip()
-        if explicit_db_path:
-            return self._resolve_path(explicit_db_path)
+        if completed.returncode != 0:
+            return _failure(
+                InstallationErrorKind.COMMAND_FAILED,
+                _command_error(completed.stdout, completed.stderr),
+            )
 
-        config = self._read_runtime_config(env_file=env_file)
-        configured_db_path = _value_at(config, ("runtime", "db_path"))
-        if configured_db_path is not None:
-            return self._resolve_path(str(configured_db_path).strip())
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            return _failure(InstallationErrorKind.INVALID_RESPONSE, "Invalid config JSON response")
 
-        return self.cwd / "runtime.db"
+        runtime = payload.get("runtime") if isinstance(payload, dict) else None
+        db_path = runtime.get("db_path") if isinstance(runtime, dict) else None
+        if not isinstance(db_path, str) or not db_path.strip() or not Path(db_path).is_absolute():
+            return _failure(
+                InstallationErrorKind.INVALID_RESPONSE,
+                "Config response requires an absolute runtime.db_path",
+            )
 
-    def _read_runtime_config(self, *, env_file: dict[str, str]) -> dict[str, object]:
-        explicit_config_path = self.environment.get("AGENT_RUNTIME_CONFIG_FILE", "").strip()
-        if not explicit_config_path:
-            explicit_config_path = env_file.get("AGENT_RUNTIME_CONFIG_FILE", "").strip()
-        if explicit_config_path:
-            config_path = self._resolve_path(explicit_config_path)
-        else:
-            config_path = self.home / ".skiller" / "settings" / "config.json"
-
-        if not config_path.exists():
-            return {}
-
-        payload = json.loads(config_path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            return {}
-        return payload
-
-    def _read_development_env(self) -> dict[str, str]:
-        env_path = self.cwd / ".env.development"
-        if not env_path.exists():
-            return {}
-
-        values: dict[str, str] = {}
-        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("export "):
-                line = line.removeprefix("export ").strip()
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip()
-            if not key:
-                continue
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-                value = value[1:-1]
-            values[key] = value
-        return values
-
-    def _resolve_path(self, value: str) -> Path:
-        path = Path(value).expanduser()
-        if path.is_absolute():
-            return path
-        return self.cwd / path
+        return InstallationState(runtime_db_exists=Path(db_path).exists())
 
 
-def _value_at(config: dict[str, object], path: tuple[str, ...]) -> object | None:
-    value: object = config
-    for key in path:
-        if not isinstance(value, dict):
-            return None
-        value = value.get(key)
-    return value
+def _command_error(stdout: str, stderr: str) -> str:
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return stderr.strip() or stdout.strip() or "Runtime config command failed"
+    error = payload.get("error") if isinstance(payload, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    if isinstance(message, str) and message.strip():
+        return message
+    return stderr.strip() or stdout.strip() or "Runtime config command failed"
+
+
+def _failure(kind: InstallationErrorKind, message: str) -> InstallationState:
+    return InstallationState(
+        runtime_db_exists=False,
+        error=InstallationError(kind=kind, message=message),
+    )

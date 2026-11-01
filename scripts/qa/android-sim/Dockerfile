@@ -14,6 +14,6 @@ RUN python -m pip install --upgrade pip \
 USER droid
 WORKDIR /home/droid
 
-ENV AGENT_DB_PATH=/home/droid/runtime.db
+ENV SKILLER_DB_PATH=/home/droid/runtime.db
 
 CMD ["/bin/bash"]

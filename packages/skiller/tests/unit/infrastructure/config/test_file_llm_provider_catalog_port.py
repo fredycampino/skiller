@@ -110,7 +110,7 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
         mapper=mapper,
         default_path=default_path,
         user_path=user_path,
-        env={"AGENT_PROVIDERS_FILE": str(env_path)},
+        env={"SKILLER_AGENT_PROVIDERS_FILE": str(env_path)},
     )
 
     catalog = port.get_catalog()

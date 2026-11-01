@@ -100,7 +100,7 @@ def test_builtin_application_catalog_is_valid() -> None:
     assert deepseek.base_url == "https://api.deepseek.com"
     assert deepseek.api_key_source is not None
     assert deepseek.api_key_source.type.value == "env"
-    assert deepseek.api_key_source.value == "AGENT_DEEPSEEK_API_KEY"
+    assert deepseek.api_key_source.value == "SKILLER_DEEPSEEK_API_KEY"
     assert [model.model for model in deepseek.models] == [
         "deepseek-v4-flash",
         "deepseek-v4-pro",

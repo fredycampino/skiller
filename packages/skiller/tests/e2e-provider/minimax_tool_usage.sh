@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-api_key_file="${AGENT_MINIMAX_API_KEY_FILE:-${HOME}/.skiller/secrets/minimax_api_key}"
+api_key_file="${SKILLER_MINIMAX_API_KEY_FILE:-${HOME}/.skiller/secrets/minimax_api_key}"
 
 if [[ "${RUN_PROVIDER_E2E:-0}" != "1" && "${RUN_MINIMAX_PROVIDER_E2E:-0}" != "1" ]]; then
   python3 - <<'PY'
@@ -23,21 +23,21 @@ if [[ ! -x "${runtime_python}" ]]; then
   exit 1
 fi
 
-if [[ -z "${AGENT_MINIMAX_API_KEY:-}" && ! -f "${api_key_file}" ]]; then
+if [[ -z "${SKILLER_MINIMAX_API_KEY:-}" && ! -f "${api_key_file}" ]]; then
   python3 - <<'PY'
 import json
 
 print(json.dumps({
     "status": "SKIPPED",
-    "reason": "AGENT_MINIMAX_API_KEY is not configured and MiniMax api key file does not exist",
+    "reason": "SKILLER_MINIMAX_API_KEY is not configured and MiniMax api key file does not exist",
 }, indent=2))
 PY
   exit 0
 fi
 
-if [[ -z "${AGENT_MINIMAX_API_KEY:-}" ]]; then
-  AGENT_MINIMAX_API_KEY="$(<"${api_key_file}")"
-  export AGENT_MINIMAX_API_KEY
+if [[ -z "${SKILLER_MINIMAX_API_KEY:-}" ]]; then
+  SKILLER_MINIMAX_API_KEY="$(<"${api_key_file}")"
+  export SKILLER_MINIMAX_API_KEY
 fi
 
 PYTHONPATH=packages/skiller/src \
@@ -112,7 +112,7 @@ provider = OpenAILLMProviderDefinition(
     tool_choice=LLMToolChoiceMode.AUTO,
     api_key_source=LLMApiKeySource(
         type=LLMApiKeySourceType.ENV,
-        value="AGENT_MINIMAX_API_KEY",
+        value="SKILLER_MINIMAX_API_KEY",
     ),
     options={"reasoning_split": True},
 )

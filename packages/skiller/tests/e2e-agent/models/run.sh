@@ -6,9 +6,17 @@ tmpdir="$(mktemp -d)"
 cd "$(dirname "$0")/../../../../.."
 
 export HOME="${tmpdir}/home"
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_WEBHOOKS_HOST="127.0.0.1"
-export AGENT_WEBHOOKS_PORT="${SKILLER_TEST_WEBHOOK_PORT:-18083}"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_RUNTIME_CONFIG_FILE="${tmpdir}/config.json"
+webhook_port="${SKILLER_TEST_WEBHOOK_PORT:-18083}"
+cat >"${SKILLER_RUNTIME_CONFIG_FILE}" <<JSON
+{
+  "webhooks": {
+    "host": "127.0.0.1",
+    "port": ${webhook_port}
+  }
+}
+JSON
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 cleanup() {
@@ -108,7 +116,6 @@ moonshot_models = {model["name"]: model for model in moonshot["models"]}
 
 assert minimax_models["MiniMax-M3"]["active"] is True, minimax
 assert minimax_models["MiniMax-M3.1-Flash"]["active"] is False, minimax
-assert minimax_models["MiniMax-M3"]["active"] is False, minimax
 assert bedrock_models["us.anthropic.claude-sonnet-4-6"]["active"] is False, bedrock
 assert moonshot_models["kimi-k3"]["active"] is False, moonshot
 

@@ -16,7 +16,7 @@ trap cleanup EXIT
 
 cd "$(dirname "$0")/../../../.."
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 observe_output="${tmpdir}/observe.jsonl"
 observe_error="${tmpdir}/observe.stderr"

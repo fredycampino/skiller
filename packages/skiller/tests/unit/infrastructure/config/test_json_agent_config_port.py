@@ -171,7 +171,7 @@ def _config_port(
     resolved_env = env or {}
     return JsonAgentConfigPort(
         config_path_global=config_path,
-        config_mapper=AgentConfigMapper(env=resolved_env),
+        config_mapper=AgentConfigMapper(),
         env=resolved_env,
     )
 
@@ -208,7 +208,7 @@ def test_tools_paths_use_flow_directory_not_profile_directory(tmp_path, source) 
     env = {}
     port = JsonAgentConfigPort(
         config_path_global=global_path,
-        config_mapper=AgentConfigMapper(env=env, tools=(FilesTool(), ShellProcessTool())),
+        config_mapper=AgentConfigMapper(tools=(FilesTool(), ShellProcessTool())),
         env=env,
     )
     selected = profile if source == "local" else None
@@ -288,7 +288,73 @@ def test_json_agent_config_preserves_effort(tmp_path: Path, effort: int | None) 
 @pytest.mark.parametrize("effort", [0, 6, -1, True, False, 2.5, "3"])
 def test_json_agent_config_rejects_invalid_effort(tmp_path: Path, effort: object) -> None:
     with pytest.raises(ValueError, match="effort"):
-        AgentConfigMapper(env={}).from_json(
+        AgentConfigMapper().from_json(
             {"llm": {"provider": "bedrock", "model": "test", "effort": effort}},
             tools_base_path=tmp_path,
         )
+
+
+@pytest.mark.parametrize("source", ["global", "profile"])
+def test_json_agent_config_reads_loop_and_event_output(tmp_path: Path, source: str) -> None:
+    global_path = tmp_path / "global.json"
+    profile_path = tmp_path / "profile.json"
+    _write(global_path, _payload())
+    settings = {
+        "loop": {"max_turns": 12, "max_tool_calls": 3},
+        "event_output": {
+            "truncate": {
+                "enabled": False,
+                "max_text_chars": 1200,
+                "max_json_chars": 9000,
+                "max_array_items": 7,
+            }
+        },
+    }
+    _write(global_path if source == "global" else profile_path, {**_payload(), **settings})
+
+    config = _config_port(global_path).get_config(
+        flow_dir=tmp_path,
+        config_path=profile_path if source == "profile" else None,
+    )
+
+    assert config.loop.max_turns == 12
+    assert config.loop.max_tool_calls == 3
+    assert config.event_output.truncate.enabled is False
+    assert config.event_output.truncate.max_text_chars == 1200
+    assert config.event_output.truncate.max_json_chars == 9000
+    assert config.event_output.truncate.max_array_items == 7
+
+
+def test_json_agent_config_defaults_loop_and_event_output(tmp_path: Path) -> None:
+    path = tmp_path / "agent.json"
+    _write(path, _payload())
+
+    config = _config_port(path).get_config(flow_dir=tmp_path)
+
+    assert config.loop.max_turns == 30
+    assert config.loop.max_tool_calls == 10
+    assert config.event_output.truncate.enabled is True
+    assert config.event_output.truncate.max_text_chars == 600
+    assert config.event_output.truncate.max_json_chars == 4000
+    assert config.event_output.truncate.max_array_items == 20
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        {"loop": {"max_turns": 0}},
+        {"loop": {"max_tool_calls": -1}},
+        {"event_output": {"truncate": {"max_text_chars": 0}}},
+        {"event_output": {"truncate": {"max_json_chars": -1}}},
+        {"event_output": {"truncate": {"max_array_items": 0}}},
+        {"event_output": {"truncate": {"enabled": "invalid"}}},
+    ],
+)
+def test_json_agent_config_rejects_invalid_loop_and_event_output(tmp_path: Path, section) -> None:
+    path = tmp_path / "agent.json"
+    _write(path, {**_payload(), **section})
+
+    validation = _config_port(path).validate_config(flow_dir=tmp_path)
+
+    assert validation.ok is False
+    assert validation.error == AgentConfigValidationErrorCode.INVALID_SCHEMA

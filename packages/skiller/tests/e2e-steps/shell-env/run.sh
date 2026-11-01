@@ -7,7 +7,7 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
 output_path="${tmpdir}/event.json"
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 if [[ ! -x "${runtime_python}" ]]; then

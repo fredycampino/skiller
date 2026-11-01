@@ -1,4 +1,3 @@
-from collections.abc import Mapping
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -33,10 +32,8 @@ class AgentConfigMapper:
     def __init__(
         self,
         *,
-        env: Mapping[str, str],
         tools: tuple[ToolDefinition, ...] = (),
     ) -> None:
-        self.env = env
         self.tools = tools
 
     def from_json(
@@ -79,8 +76,8 @@ class AgentConfigMapper:
             ),
             log_override_file=config.debug.log_override_file,
         )
-        loop = _build_loop_config(config.loop, env=self.env)
-        event_output = _build_event_output_config(config.event_output, env=self.env)
+        loop = _build_loop_config(config.loop)
+        event_output = _build_event_output_config(config.event_output)
         tools = _build_tool_runtime_configs(
             raw_tools=config.tools,
             tools=self.tools,
@@ -147,69 +144,20 @@ def _build_tool_runtime_configs(
     return ToolRuntimeConfigs(items=tuple(runtime_config_items))
 
 
-def _build_loop_config(
-    loop: LoopConfigModel,
-    *,
-    env: Mapping[str, str],
-) -> AgentLoopConfig:
+def _build_loop_config(loop: LoopConfigModel) -> AgentLoopConfig:
     return AgentLoopConfig(
-        max_turns=_env_positive_int("AGENT_LOOP_MAX_TURNS", loop.max_turns, env),
-        max_tool_calls=_env_positive_int(
-            "AGENT_LOOP_MAX_TOOL_CALLS",
-            loop.max_tool_calls,
-            env,
-        ),
+        max_turns=loop.max_turns,
+        max_tool_calls=loop.max_tool_calls,
     )
 
 
-def _build_event_output_config(
-    event_output: EventOutputConfigModel,
-    *,
-    env: Mapping[str, str],
-) -> AgentEventOutputConfig:
+def _build_event_output_config(event_output: EventOutputConfigModel) -> AgentEventOutputConfig:
     truncate = event_output.truncate
     return AgentEventOutputConfig(
         truncate=AgentEventOutputTruncateConfig(
-            enabled=_env_bool("AGENT_EVENT_OUTPUT_TRUNCATE_ENABLED", truncate.enabled, env),
-            max_text_chars=_env_positive_int(
-                "AGENT_EVENT_OUTPUT_MAX_TEXT_CHARS",
-                truncate.max_text_chars,
-                env,
-            ),
-            max_json_chars=_env_positive_int(
-                "AGENT_EVENT_OUTPUT_MAX_JSON_CHARS",
-                truncate.max_json_chars,
-                env,
-            ),
-            max_array_items=_env_positive_int(
-                "AGENT_EVENT_OUTPUT_MAX_ARRAY_ITEMS",
-                truncate.max_array_items,
-                env,
-            ),
+            enabled=truncate.enabled,
+            max_text_chars=truncate.max_text_chars,
+            max_json_chars=truncate.max_json_chars,
+            max_array_items=truncate.max_array_items,
         ),
     )
-
-
-def _env_bool(env_name: str, default: bool, env: Mapping[str, str]) -> bool:
-    value = env.get(env_name)
-    if value is None:
-        return default
-    normalized = value.lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(f"{env_name} must be a boolean")
-
-
-def _env_positive_int(env_name: str, default: int, env: Mapping[str, str]) -> int:
-    value = env.get(env_name)
-    if value is None:
-        return default
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise ValueError(f"{env_name} must be a positive integer") from exc
-    if parsed <= 0:
-        raise ValueError(f"{env_name} must be a positive integer")
-    return parsed

@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-profile="${AGENT_BEDROCK_PROFILE:-testBedrock}"
+profile="${SKILLER_BEDROCK_PROFILE:-testBedrock}"
 model="${AGENT_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1}"
 timeout_seconds="${AGENT_BEDROCK_TIMEOUT_SECONDS:-120}"
 
@@ -26,22 +26,20 @@ if [[ ! -x "${runtime_python}" ]]; then
 fi
 
 PYTHONPATH=packages/skiller/src \
-AGENT_BEDROCK_PROFILE="${profile}" \
+SKILLER_BEDROCK_PROFILE="${profile}" \
 AGENT_BEDROCK_MODEL="${model}" \
 AGENT_BEDROCK_TIMEOUT_SECONDS="${timeout_seconds}" \
 "${runtime_python}" - <<'PY'
 import json
 import os
-import tempfile
-from pathlib import Path
 
-from skiller.di.llm_client_factory import LLMClientFactory
-from skiller.domain.agent.llm.provider_bedrock import (
-    BEDROCK_MODELS,
-    AgentBedrockLLMModel,
-    AgentBedrockProvider,
-    BedrockLLMRequest,
+from skiller.domain.agent.llm.provider_bedrock import BedrockLLMRequest
+from skiller.domain.agent.llm.provider_catalog import (
+    BedrockLLMProviderDefinition,
+    LLMModelDefinition,
 )
+from skiller.infrastructure.llm.default_llm_client_resolver import DefaultLLMClientResolver
+from skiller.infrastructure.llm.openai.openai_api_key_datasource import OpenAIApiKeyDatasource
 from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMSystemMessage, LLMUserMessage
 from skiller.domain.tool.tool_contract import (
@@ -77,15 +75,20 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
         return ToolRequestResult.valid(ToolRequest())
 
 
-model = AgentBedrockLLMModel(os.environ["AGENT_BEDROCK_MODEL"])
-provider = AgentBedrockProvider(
-    model=model,
-    models=BEDROCK_MODELS,
-    profile=os.environ["AGENT_BEDROCK_PROFILE"],
+model = LLMModelDefinition(
+    model=os.environ["AGENT_BEDROCK_MODEL"],
+    context_window_tokens=1000000,
+    max_output_tokens=4096,
+)
+provider = BedrockLLMProviderDefinition(
+    name="bedrock",
+    models=(model,),
+    enabled=True,
+    profile=os.environ["SKILLER_BEDROCK_PROFILE"],
     timeout_seconds=float(os.environ["AGENT_BEDROCK_TIMEOUT_SECONDS"]),
 )
-client = LLMClientFactory(
-    request_log_dir=Path(tempfile.mkdtemp(prefix="skiller-bedrock-e2e-")),
+client = DefaultLLMClientResolver(
+    api_key_datasource=OpenAIApiKeyDatasource(env=os.environ),
 ).resolve(provider)
 
 command = "echo skiller-bedrock-tool-usage-ok"
@@ -120,7 +123,7 @@ print(
         {
             "status": "SUCCEEDED",
             "provider": "bedrock",
-            "model": response.model.value,
+            "model": response.model.model,
             "finish_type": response.finish_type.value,
             "tool_calls": len(response.tool_calls),
             "usage": {

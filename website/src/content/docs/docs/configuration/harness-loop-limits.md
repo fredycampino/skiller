@@ -67,7 +67,7 @@ An agent step can override either limit directly:
   max_tool_calls: 3
 ```
 
-These step values take precedence over the resolved configuration. Runtime also supports environment overrides through `AGENT_LOOP_MAX_TURNS` and `AGENT_LOOP_MAX_TOOL_CALLS`; they apply before step overrides.
+These step values take precedence over the resolved configuration.
 
 ## Defaults
 

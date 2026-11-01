@@ -5,7 +5,7 @@ description: Connect a custom LLM service using a supported adapter.
 
 Customize providers to connect another LLM service, use separate credentials, or choose the models and token limits available to your agents.
 
-Add these definitions to `~/.skiller/settings/providers.json` or the file selected by `AGENT_PROVIDERS_FILE`. Each new provider has its own name and declares a supported adapter.
+Add these definitions to `~/.skiller/settings/providers.json` or the file selected by `SKILLER_AGENT_PROVIDERS_FILE`. Each new provider has its own name and declares a supported adapter.
 
 ## Custom OpenAI-compatible provider
 

@@ -15,36 +15,22 @@ def get_settings() -> Settings:
 
     return Settings(
         db_path=_path_setting(
-            "AGENT_DB_PATH",
+            "SKILLER_DB_PATH",
             env_file,
             config,
             ("runtime", "db_path"),
             "~/.skiller/runtime/global.db",
         ),
-        log_level=_string_setting(
-            "AGENT_LOG_LEVEL",
-            env_file,
-            config,
-            ("runtime", "log_level"),
-            "INFO",
-        ),
-        webhooks_host=_string_setting(
-            "AGENT_WEBHOOKS_HOST",
-            env_file,
-            config,
-            ("webhooks", "host"),
-            "127.0.0.1",
-        ),
-        webhooks_port=int(
-            _setting("AGENT_WEBHOOKS_PORT", env_file, config, ("webhooks", "port"), 8001)
-        ),
+        log_level=str(_config_setting(config, ("runtime", "log_level"), "INFO")).strip(),
+        webhooks_host=str(_config_setting(config, ("webhooks", "host"), "127.0.0.1")).strip(),
+        webhooks_port=int(_config_setting(config, ("webhooks", "port"), 8001)),
     )
 
 
 def get_config_file_environment_value() -> str | None:
     env_file = load_development_env()
     config_path, explicit = resolve_json_config_path(
-        env_name="AGENT_RUNTIME_CONFIG_FILE",
+        env_name="SKILLER_RUNTIME_CONFIG_FILE",
         env_file=env_file,
         default_path=Path.home() / ".skiller" / "settings" / "config.json",
     )
@@ -53,31 +39,11 @@ def get_config_file_environment_value() -> str | None:
     return str(config_path)
 
 
-def _setting(
-    env_name: str,
-    env_file: dict[str, str],
-    config: dict[str, object],
-    path: tuple[str, ...],
-    default: object,
+def _config_setting(
+    config: dict[str, object], path: tuple[str, ...], default: object,
 ) -> object:
-    if env_name in os.environ:
-        return os.environ[env_name]
-    if env_name in env_file:
-        return env_file[env_name]
     value = _value_at(config, path)
-    if value is not None:
-        return value
-    return default
-
-
-def _string_setting(
-    env_name: str,
-    env_file: dict[str, str],
-    config: dict[str, object],
-    path: tuple[str, ...],
-    default: str,
-) -> str:
-    return str(_setting(env_name, env_file, config, path, default)).strip()
+    return default if value is None else value
 
 
 def _path_setting(
@@ -87,7 +53,9 @@ def _path_setting(
     path: tuple[str, ...],
     default: str,
 ) -> str:
-    value = _string_setting(env_name, env_file, config, path, default)
+    value = str(
+        os.environ.get(env_name, env_file.get(env_name, _config_setting(config, path, default)))
+    ).strip()
     if value.startswith("~"):
         return str(Path(value).expanduser())
     return value

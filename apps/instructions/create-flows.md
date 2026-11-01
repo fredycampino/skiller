@@ -130,7 +130,7 @@ Use `<path-docs>/flows/flow-readiness-checker.md` when a flow depends on local s
 
 ### Test A Flow Safely
 
-Use an isolated `AGENT_DB_PATH` for end-to-end checks. Do not test flows that change user configuration, credentials, external services, or user data without explicit approval.
+Use an isolated `SKILLER_DB_PATH` for end-to-end checks. Do not test flows that change user configuration, credentials, external services, or user data without explicit approval.
 
 Run a flow from an effective `flow_paths` entry with its canonical `@` reference, or pass its YAML path directly:
 

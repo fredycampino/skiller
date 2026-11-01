@@ -154,7 +154,7 @@ def build_tui_container(
         command_adapter=CliNotifyActionAdapter(invoker=resolved_cli_invoker),
     )
     resolved_installation_state_port = (
-        installation_state_port or DefaultInstallationStatePort()
+        installation_state_port or DefaultInstallationStatePort(invoker=resolved_cli_invoker)
     )
     resolved_session_store_port = session_store_port or FileSessionStoreAdapter(
         path=default_session_store_path(),

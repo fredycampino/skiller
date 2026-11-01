@@ -5,8 +5,8 @@ cd "$(dirname "$0")/../../../../.."
 
 tmpdir="$(mktemp -d)"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_WEBHOOKS_HOST="127.0.0.1"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_RUNTIME_CONFIG_FILE="${tmpdir}/config.json"
 # Keep the configured provider available to server-spawned workers.
 unset SKILLER_DEBUG_HOME
 
@@ -28,7 +28,15 @@ skiller() {
 start_output=""
 base_port="${SKILLER_TEST_WEBHOOK_PORT:-18300}"
 for attempt in {0..19}; do
-  export AGENT_WEBHOOKS_PORT="$((base_port + attempt))"
+  webhook_port="$((base_port + attempt))"
+  cat >"${SKILLER_RUNTIME_CONFIG_FILE}" <<JSON
+{
+  "webhooks": {
+    "host": "127.0.0.1",
+    "port": ${webhook_port}
+  }
+}
+JSON
   if start_output="$(skiller server start 2>/dev/null)"; then
     started="$(printf '%s\n' "${start_output}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["started"])')"
     if [[ "${started}" == "True" ]]; then
@@ -58,7 +66,7 @@ import json, sys
 assert json.load(sys.stdin)["status"] == "WAITING"
 '
 
-endpoint_base="${SKILLER_TEST_WEBHOOK_ENDPOINT:-http://${AGENT_WEBHOOKS_HOST}:${AGENT_WEBHOOKS_PORT}}"
+endpoint_base="${SKILLER_TEST_WEBHOOK_ENDPOINT:-http://127.0.0.1:${webhook_port}}"
 endpoint="${endpoint_base%/}/webhooks/agent-wh/inbox"
 unauthorized_status="$(curl --max-time 20 -sS -o "${tmpdir}/unauthorized.json" -w '%{http_code}' -X POST "${endpoint}" -H 'Content-Type: application/json' --data '{"message":"ignored"}')"
 if [[ "${unauthorized_status}" != "401" ]]; then

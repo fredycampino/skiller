@@ -52,7 +52,7 @@ def test_runtime_reloads_configured_flow_paths_for_each_run(
     _write_flow(first_root / "reports" / "daily.yaml", name="daily")
     _write_flow(second_root / "reports" / "monthly.yaml", name="monthly")
     _write_config(config_path, database_path=database_path, flow_path=first_root)
-    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("SKILLER_RUNTIME_CONFIG_FILE", str(config_path))
 
     settings = Settings(db_path=str(database_path))
     container = build_runtime_container(settings=settings)

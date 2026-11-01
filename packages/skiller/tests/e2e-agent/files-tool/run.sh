@@ -24,7 +24,7 @@ trap cleanup EXIT
 mkdir -p "${workspace}"
 expected_content="files e2e content"
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 
 run_output="$(
   PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller run \

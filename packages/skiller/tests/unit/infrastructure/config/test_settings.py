@@ -13,11 +13,8 @@ from skiller.infrastructure.config.json_runtime_config_initializer import (
 pytestmark = pytest.mark.unit
 
 _SETTINGS_ENV_NAMES = (
-    "AGENT_RUNTIME_CONFIG_FILE",
-    "AGENT_DB_PATH",
-    "AGENT_LOG_LEVEL",
-    "AGENT_WEBHOOKS_HOST",
-    "AGENT_WEBHOOKS_PORT",
+    "SKILLER_RUNTIME_CONFIG_FILE",
+    "SKILLER_DB_PATH",
 )
 
 
@@ -42,7 +39,7 @@ def test_get_settings_loads_development_env_file(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     (tmp_path / ".env.development").write_text(
-        "AGENT_DB_PATH=dev-runtime.db\n",
+        "SKILLER_DB_PATH=dev-runtime.db\n",
         encoding="utf-8",
     )
 
@@ -74,7 +71,7 @@ def test_get_settings_loads_explicit_structured_config(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("SKILLER_RUNTIME_CONFIG_FILE", str(config_path))
 
     settings = settings_module.get_settings()
 
@@ -84,27 +81,19 @@ def test_get_settings_loads_explicit_structured_config(
     assert settings.webhooks_port == 9002
 
 
-def test_get_settings_environment_overrides_structured_config(
+def test_get_settings_uses_default_server_settings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     _clear_settings_env(monkeypatch)
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "webhooks": {"port": 9002},
-            }
-        ),
-        encoding="utf-8",
-    )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(config_path))
-    monkeypatch.setenv("AGENT_WEBHOOKS_PORT", "9010")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
     settings = settings_module.get_settings()
 
-    assert settings.webhooks_port == 9010
+    assert settings.log_level == "INFO"
+    assert settings.webhooks_host == "127.0.0.1"
+    assert settings.webhooks_port == 8001
 
 
 def test_get_settings_environment_overrides_development_env_file(
@@ -114,9 +103,9 @@ def test_get_settings_environment_overrides_development_env_file(
     _clear_settings_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("AGENT_DB_PATH", "real-env.db")
+    monkeypatch.setenv("SKILLER_DB_PATH", "real-env.db")
     (tmp_path / ".env.development").write_text(
-        "AGENT_DB_PATH=dev-runtime.db\n",
+        "SKILLER_DB_PATH=dev-runtime.db\n",
         encoding="utf-8",
     )
 
@@ -131,9 +120,9 @@ def test_get_settings_raises_when_explicit_config_is_missing(
 ) -> None:
     _clear_settings_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_RUNTIME_CONFIG_FILE", str(tmp_path / "missing.json"))
+    monkeypatch.setenv("SKILLER_RUNTIME_CONFIG_FILE", str(tmp_path / "missing.json"))
 
-    with pytest.raises(RuntimeError, match="AGENT_RUNTIME_CONFIG_FILE does not exist"):
+    with pytest.raises(RuntimeError, match="SKILLER_RUNTIME_CONFIG_FILE does not exist"):
         settings_module.get_settings()
 
 
@@ -181,9 +170,9 @@ def test_explicit_database_does_not_create_global_config(monkeypatch, tmp_path, 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     if development_file:
-        (tmp_path / ".env.development").write_text("AGENT_DB_PATH=local.db\n")
+        (tmp_path / ".env.development").write_text("SKILLER_DB_PATH=local.db\n")
     else:
-        monkeypatch.setenv("AGENT_DB_PATH", "local.db")
+        monkeypatch.setenv("SKILLER_DB_PATH", "local.db")
     _initialize_config()
     assert settings_module.get_settings().db_path == "local.db"
     assert not (tmp_path / "home/.skiller/settings/config.json").exists()
@@ -218,3 +207,81 @@ def test_initializer_preserves_existing_profiles_and_database(monkeypatch, tmp_p
     assert profile.read_text() == '{"loop":{"max_turns":7}}'
     assert config.read_text() == '{"runtime":{"db_path":"custom.db"}}'
     assert settings_module.get_settings().db_path == "custom.db"
+
+
+@pytest.mark.parametrize("explicit_config", [False, True])
+def test_development_env_only_overrides_database_and_config_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    explicit_config: bool,
+) -> None:
+    _clear_settings_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    config_path = tmp_path / "development.json"
+    config_path.write_text(
+        json.dumps({
+            "runtime": {"log_level": "WARNING"},
+            "webhooks": {"host": "localhost", "port": 9002},
+        })
+    )
+    lines = [
+        "SKILLER_DB_PATH=development.db",
+        "UNRELATED_SETTING=ignored",
+    ]
+    if explicit_config:
+        lines.append(f"SKILLER_RUNTIME_CONFIG_FILE={config_path}")
+    (tmp_path / ".env.development").write_text("\n".join(lines) + "\n")
+
+    settings = settings_module.get_settings()
+
+    assert settings.db_path == "development.db"
+    assert settings_module.get_config_file_environment_value() == (
+        str(config_path) if explicit_config else None
+    )
+    assert settings.log_level == ("WARNING" if explicit_config else "INFO")
+    assert settings.webhooks_host == ("localhost" if explicit_config else "127.0.0.1")
+    assert settings.webhooks_port == (9002 if explicit_config else 8001)
+
+
+def test_process_config_file_overrides_development_config_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _clear_settings_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "process.json"
+    config_path.write_text('{"runtime":{"db_path":"process.db"}}')
+    monkeypatch.setenv("SKILLER_RUNTIME_CONFIG_FILE", str(config_path))
+    (tmp_path / ".env.development").write_text(
+        "SKILLER_RUNTIME_CONFIG_FILE=missing.json\n"
+    )
+
+    assert settings_module.get_settings().db_path == "process.db"
+    assert settings_module.get_config_file_environment_value() == str(config_path)
+
+
+@pytest.mark.parametrize(
+    "invalid_line", ["invalid line", "=value", "export =value", "SKILLER_DB_PATH"]
+)
+def test_development_env_ignores_malformed_lines(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    invalid_line: str,
+) -> None:
+    _clear_settings_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    config_path = tmp_path / "development.json"
+    config_path.write_text('{"runtime":{"log_level":"WARNING"}}')
+    (tmp_path / ".env.development").write_text(
+        'export SKILLER_DB_PATH="development.db"\n'
+        f"{invalid_line}\n"
+        f"SKILLER_RUNTIME_CONFIG_FILE='{config_path}'\n"
+    )
+
+    settings = settings_module.get_settings()
+
+    assert settings.db_path == "development.db"
+    assert settings.log_level == "WARNING"
+    assert settings_module.get_config_file_environment_value() == str(config_path)

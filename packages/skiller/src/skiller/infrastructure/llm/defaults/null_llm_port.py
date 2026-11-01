@@ -11,8 +11,8 @@ class NullLLMPort(LLMPort[LLMRequest]):
             finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
             error=(
                 "LLM is not configured (provider='null'). "
-                "Set 'llm.default_provider' in ~/.skiller/settings/agent.json "
-                "or set AGENT_LLM_PROVIDER."
+                "Configure 'llm.provider' and 'llm.model' in "
+                "~/.skiller/settings/agent.json or the agent profile."
             ),
             error_code="provider_not_configured",
         )

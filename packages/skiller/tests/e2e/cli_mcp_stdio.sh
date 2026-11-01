@@ -7,7 +7,7 @@ tmpdir="$(mktemp -d)"
 output_file="${tmpdir}/stdio-mcp-e2e.txt"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 if [[ ! -x "${runtime_python}" ]]; then

@@ -52,7 +52,7 @@ class FileLLMProviderCatalogPort(LLMProviderCatalogPort):
             sources.update(
                 {override.name: LLMProviderCatalogSource.USER for override in user_overrides}
             )
-        env_path_value = self.env.get("AGENT_PROVIDERS_FILE", "").strip()
+        env_path_value = self.env.get("SKILLER_AGENT_PROVIDERS_FILE", "").strip()
         if env_path_value:
             env_path = Path(env_path_value).expanduser()
             env_overrides = self.datasource.get_override_providers(env_path)

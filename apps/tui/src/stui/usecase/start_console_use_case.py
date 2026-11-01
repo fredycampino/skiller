@@ -37,7 +37,14 @@ class StartConsoleUseCase:
         *,
         state: ConsoleScreenState,
     ) -> StartConsoleResult:
-        installation_state = self.installation_state_port.read()
+        installation_state = await asyncio.to_thread(self.installation_state_port.read)
+        if installation_state.error is not None:
+            message = installation_state.error.message
+            state.transcript.items.append(DispatchErrorItem(message=f"error: {message}"))
+            state.set_status(kind=ViewStatusKind.ERROR, message=message)
+            self.context.status = RunStatus.FAILED
+            return StartConsoleResult(state=state)
+
         if installation_state.runtime_db_exists:
             return StartConsoleResult(state=state)
 

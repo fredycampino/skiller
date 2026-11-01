@@ -26,10 +26,10 @@ class JsonRuntimeConfigInitializer:
 
 def _ensure_database_config() -> None:
     env_file = load_development_env()
-    if "AGENT_DB_PATH" in os.environ or "AGENT_DB_PATH" in env_file:
+    if "SKILLER_DB_PATH" in os.environ or "SKILLER_DB_PATH" in env_file:
         return
     config_path, _ = resolve_json_config_path(
-        env_name="AGENT_RUNTIME_CONFIG_FILE",
+        env_name="SKILLER_RUNTIME_CONFIG_FILE",
         env_file=env_file,
         default_path=Path.home() / ".skiller" / "settings" / "config.json",
     )

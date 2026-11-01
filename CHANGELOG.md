@@ -4,6 +4,23 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+### Breaking changes
+- Rename the following environment variables. **When upgrading, users who configure any of these variables must update their exported environment, deployment configuration, scripts, and applicable `.env.development` entries. The old names are no longer recognized; there are no compatibility aliases.**
+
+  | Previous name | New name |
+  | --- | --- |
+  | `AGENT_DB_PATH` | `SKILLER_DB_PATH` |
+  | `AGENT_RUNTIME_CONFIG_FILE` | `SKILLER_RUNTIME_CONFIG_FILE` |
+  | `AGENT_PROVIDERS_FILE` | `SKILLER_AGENT_PROVIDERS_FILE` |
+  | `AGENT_MINIMAX_API_KEY` | `SKILLER_MINIMAX_API_KEY` |
+  | `AGENT_MOONSHOT_API_KEY` | `SKILLER_MOONSHOT_API_KEY` |
+  | `AGENT_DEEPSEEK_API_KEY` | `SKILLER_DEEPSEEK_API_KEY` |
+
+- The Bedrock E2E profile selector is also renamed from `AGENT_BEDROCK_PROFILE` to `SKILLER_BEDROCK_PROFILE`; this is a test setting, not a Runtime override.
+- Existing provider configurations with an explicit `api_key_env` retain that user-defined reference. To adopt a renamed credential variable, update both the exported name and its `api_key_env` reference. Credential files are unaffected.
+- Remove environment overrides for Runtime logs and webhook host/port, harness loop limits, and event-output truncation. Configure these through their Runtime or agent JSON sections instead. `.env.development` now reads only `SKILLER_DB_PATH` and `SKILLER_RUNTIME_CONFIG_FILE`.
+- Remove MCP HTTP autostart through environment variables. HTTP MCP servers must already be running; HTTP connections and stdio process launching remain supported.
+
 ## 0.1.0-beta.48 - 2026-10-31
 
 ### Added

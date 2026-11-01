@@ -21,7 +21,7 @@ printf 'shell-script-ok\n'
 SH
 chmod +x "${script_path}"
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
 runtime_python="${SKILLER_RUNTIME_PYTHON:-./.venv/bin/python}"
 
 if [[ ! -x "${runtime_python}" ]]; then

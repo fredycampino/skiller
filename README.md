@@ -1,208 +1,150 @@
-# Skiller.run
+# Skiller
 
-**A runtime for agentic workflows.**
+**Runtime for YAML-defined AI agents.**
 
-Skiller runs agentic flows as durable executions with persistent state, safe resume, and full observability logs.
+Durable runs, persistent loops, terminal UI, tools, and multiple LLM providers.
 
-## What It Does
+[Website](https://skiller.run) · [Documentation](https://skiller.run/docs/getting-started/installation/) · [PyPI](https://pypi.org/project/skiller/)
 
-Skiller turns a YAML flow into a durable execution. Define the work, start a run,
-resume it when new input arrives, and inspect every step along the way.
+![STUI showing an agent responding to a webhook and waiting for the next message.](website/public/images/docs/agent-webhook.svg)
 
-1. **Define the flow.** Combine agents, tools, deterministic steps, and external
-   input in YAML. With an [LLM provider](https://skiller.run/docs/configuration/llm-providers/)
-   and [tool policies](packages/skiller/docs/agent/agent-config-tools.md) configured,
-   this two-step flow runs an ongoing agent session:
+## Why Skiller
+
+- **Agents defined in YAML.** Combine agents, tools, deterministic steps, and external input in readable workflows.
+- **Persistent executions.** Keep run state and history across process restarts. Wait for a message or webhook and continue the same run later.
+- **Your models and tools.** Choose OpenAI-compatible, Codex, or Bedrock connections per agent, with configurable tools and operational guardrails—not a security sandbox.
+- **Visibility from your terminal.** Chat with agents and follow their execution in STUI, or start runs, send tasks, and inspect events through the CLI.
+
+## Get started
+
+Install Skiller and open the terminal UI:
+
+```bash
+pipx install skiller
+skiller
+```
+
+First-time setup guides you through connecting an LLM provider, then starts **Flows**, the built-in agent that helps you create workflows and custom agents.
+
+[Installation guide](https://skiller.run/docs/getting-started/installation/) · [Meet Flows](https://skiller.run/docs/getting-started/your-first-agent/)
+
+## Create your own agent
+
+Define an agent that receives a task, responds, and waits for the next message:
 
 ```yaml
-name: mono
+name: helper
+description: "A helpful custom agent"
+version: "0.1"
 start: ask_user
 
 steps:
   - wait_input: ask_user
-    prompt: "What should the agent do?"
-    next: mono_agent
+    prompt: "Write a task."
+    next: helper
 
-  - agent: mono_agent
-    system: |
-      Complete the user's task and report the result clearly.
+  - agent: helper
+    config:
+      file: "~/.skiller/profiles/agent.helper.json"
+    system:
+      file: "./system.md"
     task: '{{output_value("ask_user").payload.text}}'
     tools:
       - shell
-      - files
     next: ask_user
 ```
 
-2. **Start a durable run.** Skiller persists its state, outputs, and runtime
-   events instead of keeping the execution only in memory.
+Save this as `helper/helper.yaml`. Follow [Create a custom agent](https://skiller.run/docs/demos/custom-agent/) to add the system prompt and tool profile. The profile inherits your configured provider and model.
 
-```bash
-skiller run ./mono.yaml
+## Run in STUI
+
+The interactive terminal UI is the best way for people to work with agents: send tasks, follow tool calls, and read responses in one conversation.
+
+From the directory containing `helper/`, open `skiller` and enter:
+
+```text
+/run @helper
 ```
 
-3. **Resume when input arrives.** Waiting state survives process restarts. Send
-   input later and continue the same run from the exact step where it paused.
+## Run from the CLI
+
+The CLI is designed for automation, scripting, and invocation by other agents. It uses the same runtime, workflow definitions, and persisted runs as STUI.
+
+**1. Create a run.** From the directory containing `helper/`, start the agent:
 
 ```bash
-skiller input receive <run_id> --text "Audit the dependencies" --wait
+skiller run @helper
 ```
 
-4. **Observe and manage the run.** Check its current state, stream new events,
-   or inspect the complete persisted history.
+The agent waits for input. Copy the returned run ID for the following commands.
+
+**2. Send a task and wait for the response.** Use `--wait` to stay attached until the run finishes or reaches its next waiting state:
 
 ```bash
-skiller status <run_id>
-skiller observe <run_id>
-skiller logs <run_id>
+skiller input receive <run_id> --text "List the files in the current directory." --wait
 ```
 
-Prefer an interactive experience? Open the TUI to chat with agents, launch
-flows, and return to previous runs:
+Reuse the same run ID to send another task.
 
-```bash
-skiller
-```
-
-## Install
-For regular CLI usage, install it with `pipx`:
-
-```bash
-pipx install skiller
-```
-
-## Usage
-
-### STUI: chat and launch runs
-
-Use `skiller` when you want an interactive terminal UI to chat, launch runs, and
-manage persisted runs.
-
-```bash
-skiller
-```
-
-### CLI: run and manage flows
-
-Run a packaged, local, or configured flow reference:
-
-```bash
-skiller run @flows
-skiller run @group/name
-```
-
-Direct paths are also supported:
-
-```bash
-skiller run ./my-flow.yaml
-skiller run ~/flows/my-flow.yaml
-```
-
-Inspect and manage runs:
+**3. Inspect the run.** Check its current state with `status` and read its persisted events, including responses and errors, with `logs`:
 
 ```bash
 skiller status <run_id>
 skiller logs <run_id>
-skiller delete <run_id>
 ```
 
-## Flow Steps
+## Trigger a task via webhook
 
-Deterministic:
+A workflow can wait for an HTTP request instead of terminal input. This minimal flow receives a message, runs the agent, and waits for the next request:
 
-- `assign`
-- `notify`
-- `switch`
-- `when`
+```yaml
+name: agent-wh
+start: wait_task
 
-Execution:
+steps:
+  - wait_webhook: wait_task
+    webhook: agent-wh
+    key: inbox
+    next: respond
 
-- `agent`
-- `shell`
+  - agent: respond
+    system: "Respond to the user's message clearly and concisely."
+    task: '{{output_value("wait_task").payload.message}}'
+    tools: []
+    next: wait_task
+```
 
-Waiting:
+The agent uses your global model configuration and exposes no tools. Follow the [webhook demo](https://skiller.run/docs/demos/agent-webhook/) to start the server, register the webhook, and launch the run. Then send a message using the registered secret in `WEBHOOK_SECRET`:
 
-- `wait_input`
-- `wait_webhook`
+```bash
+curl --fail-with-body -X POST http://127.0.0.1:8001/webhooks/agent-wh/inbox \
+  -H 'Content-Type: application/json' \
+  -H "X-Webhook-Token: $WEBHOOK_SECRET" \
+  --data '{"message":"Hello! What can you help me with?"}'
+```
 
-## Persistence
+Observe the response in STUI or inspect the run through the CLI. The HTTP response acknowledges delivery; it does not contain the agent's answer.
 
-Skiller persists:
+## Explore the demos
 
-- run state
-- step outputs
-- runtime log events
-- waiting states
-- external event receipts
-- persisted output bodies
-
-Waiting is persisted, not simulated in memory. A run can stop in `WAITING` and
-resume later from stored state.
-
-## Project Layout
-
-- `packages/skiller/src/skiller`: runtime and CLI code
-- `apps/agents`: bundled agents and authentication flows
-- `packages/skiller/docs`: runtime and CLI documentation
-- `packages/skiller/tests`: runtime, CLI, and integration tests
-- `apps/tui`: Textual UI app
-
-## Dependencies
-
-Runtime dependencies are grouped by the capability that uses them:
-
-| Area | Dependencies | Used for |
-| --- | --- | --- |
-| Core | `pydantic`, `PyYAML` | Configuration validation and YAML flow loading |
-| LLM providers | `openai`, `boto3` | OpenAI, Codex, and Amazon Bedrock adapters |
-| MCP | `fastmcp` | MCP client connections and tool execution |
-| Webhooks | `fastapi`, `uvicorn` | Local webhook server |
-| Terminal UI | `textual` | Interactive agent chat and run management |
-
-Development uses `pytest` for tests, `httpx` for HTTP test clients, and `ruff`
-for linting. Packages are built with `hatchling`. Direct dependency constraints
-live in [`pyproject.toml`](pyproject.toml); the resolved dependency graph lives in
-[`uv.lock`](uv.lock).
+- [Create a custom agent](https://skiller.run/docs/demos/custom-agent/) — define its behavior, tools, and profile.
+- [Automate a pull request](https://skiller.run/docs/demos/automate-a-pull-request/) — let an agent invoke a workflow to create a PR.
+- [Trigger an agent with a webhook](https://skiller.run/docs/demos/agent-webhook/) — send a task over HTTP and observe the response.
 
 ## Documentation
 
-Core guides:
+- [Runtime](https://skiller.run/docs/configuration/runtime/) — database, logging, webhook server, and workflow search paths.
+- [LLM providers](https://skiller.run/docs/configuration/supported-llm-apis/) — supported APIs, connections, credentials, and models.
+- [Agent harness](https://skiller.run/docs/configuration/global-agent/) — profiles, model selection, context, loop limits, events, and debugging.
+- [Harness tools](https://skiller.run/docs/tools/overview/) — available tools, configuration, and permission guardrails.
 
-- [`apps/instructions/skiller-user.md`](apps/instructions/skiller-user.md)
-- [`packages/skiller/docs/flows/flow-schema.md`](packages/skiller/docs/flows/flow-schema.md)
-- [`packages/skiller/docs/db/schema.md`](packages/skiller/docs/db/schema.md)
-- [`packages/skiller/docs/runtime/execution-model.md`](packages/skiller/docs/runtime/execution-model.md)
-- [`packages/skiller/docs/steps/agent.md`](packages/skiller/docs/steps/agent.md)
-- [`packages/skiller/docs/steps/wait_input.md`](packages/skiller/docs/steps/wait_input.md)
-- [`packages/skiller/docs/steps/wait_webhook.md`](packages/skiller/docs/steps/wait_webhook.md)
+## Contributing
 
-Step references:
+See the [development instructions](apps/instructions/skiller-dev.md) for setup and checks, and the [Runtime architecture](packages/skiller/docs/architecture/architecture.md) for implementation boundaries.
 
-- [`packages/skiller/docs/steps/assign.md`](packages/skiller/docs/steps/assign.md)
-- [`packages/skiller/docs/steps/shell.md`](packages/skiller/docs/steps/shell.md)
-- [`packages/skiller/docs/steps/notify.md`](packages/skiller/docs/steps/notify.md)
-- [`packages/skiller/docs/steps/switch.md`](packages/skiller/docs/steps/switch.md)
-- [`packages/skiller/docs/steps/when.md`](packages/skiller/docs/steps/when.md)
+## License & disclaimer
 
-## Development
-
-Run the main checks:
-
-```bash
-./.venv/bin/python -m ruff check packages/skiller/src apps/tui/src packages/skiller/tests apps/tui/tests
-./.venv/bin/python -m pytest packages/skiller/tests apps/tui/tests
-./.venv/bin/python -m build --no-isolation
-```
-
-Manual CLI E2E flows live in `packages/skiller/tests/e2e/cli_*.sh`. Step-specific
-flows live in `packages/skiller/tests/e2e-steps/<test>/run.sh`. Use them when you
-need to exercise the real CLI path without mixing those checks into the default
-`pytest` suite.
-
-## License
-
-Apache-2.0. See [`LICENSE`](LICENSE).
-
-## Disclaimer
+Apache-2.0. See [LICENSE](LICENSE).
 
 This project is provided "as is", without warranties of any kind. The authors and
 contributors are not responsible for production incidents, data loss, service

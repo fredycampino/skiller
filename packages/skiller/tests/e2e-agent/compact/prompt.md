@@ -61,10 +61,10 @@ export PYTHONPATH=packages/skiller/src
 export RUNTIME_PYTHON=./.venv/bin/python
 export COMPACT_DIR=packages/skiller/tests/e2e-agent/compact
 export COMPACT_SCRIPT="$COMPACT_DIR/scripts/compact_e2e.py"
-export AGENT_DB_PATH="$PWD/$COMPACT_DIR/workspace/compact-manual-runtime.db"
+export SKILLER_DB_PATH="$PWD/$COMPACT_DIR/workspace/compact-manual-runtime.db"
 export REPORT_PATH="$PWD/$COMPACT_DIR/reports/compact-context-e2e-results.md"
 export STATUS_PATH="$PWD/$COMPACT_DIR/reports/compact-context-e2e-status.json"
-export REQUEST_LOG_DIR="$(dirname "$AGENT_DB_PATH")/llm-requests/lmstudio"
+export REQUEST_LOG_DIR="$(dirname "$SKILLER_DB_PATH")/llm-requests/lmstudio"
 
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" prepare
 rm -f "$REPORT_PATH" "$STATUS_PATH"
@@ -115,7 +115,7 @@ Read the current snapshot:
 
 ```bash
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" snapshot \
-  --db-path "$AGENT_DB_PATH" \
+  --db-path "$SKILLER_DB_PATH" \
   --log-dir "$REQUEST_LOG_DIR"
 ```
 
@@ -165,7 +165,7 @@ Read the current snapshot:
 
 ```bash
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" snapshot \
-  --db-path "$AGENT_DB_PATH" \
+  --db-path "$SKILLER_DB_PATH" \
   --log-dir "$REQUEST_LOG_DIR"
 ```
 
@@ -242,7 +242,7 @@ Read the current snapshot:
 
 ```bash
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" snapshot \
-  --db-path "$AGENT_DB_PATH" \
+  --db-path "$SKILLER_DB_PATH" \
   --log-dir "$REQUEST_LOG_DIR"
 ```
 
@@ -331,7 +331,7 @@ Read the current snapshot:
 
 ```bash
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" snapshot \
-  --db-path "$AGENT_DB_PATH" \
+  --db-path "$SKILLER_DB_PATH" \
   --log-dir "$REQUEST_LOG_DIR"
 ```
 
@@ -403,7 +403,7 @@ Expected final status: `SUCCEEDED`.
 ```bash
 "$RUNTIME_PYTHON" "$COMPACT_SCRIPT" write-report \
   --run-id "$RUN_ID" \
-  --db-path "$AGENT_DB_PATH" \
+  --db-path "$SKILLER_DB_PATH" \
   --log-dir "$REQUEST_LOG_DIR" \
   --status-path "$STATUS_PATH" \
   --report-path "$REPORT_PATH"

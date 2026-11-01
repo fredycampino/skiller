@@ -25,7 +25,8 @@ availability is checked separately against the effective catalog.
 
 ## Execution configuration
 
-`AgentConfigMapper` applies the loop and event-output environment overrides.
+`AgentConfigMapper` converts validated JSON settings and schema defaults into
+runtime loop and event-output configuration.
 `StepConfigReader` applies agent-step execution overrides after configuration
 loading. User-facing limits are documented in
 [Harness loop limits](https://skiller.run/docs/configuration/harness-loop-limits/).

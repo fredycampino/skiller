@@ -2,7 +2,7 @@
 
 Install the current wheel with pipx in Ubuntu 26.04 / Python 3.14, as a new
 non-root user. No repository imports or host configuration are mounted.
-Requires Docker, `uv`, internet access and `AGENT_MINIMAX_API_KEY` exported in the
+Requires Docker, `uv`, internet access and `SKILLER_MINIMAX_API_KEY` exported in the
 calling environment. Never put the key in this directory or the Dockerfile.
 
 From the repository root:
@@ -12,7 +12,7 @@ bash packages/skiller/tests/e2e-install/run.sh
 ```
 
 The script builds only the current wheel in a temporary Docker build context.
-It injects `AGENT_MINIMAX_API_KEY` at container runtime, not during image creation.
+It injects `SKILLER_MINIMAX_API_KEY` at container runtime, not during image creation.
 The clean home receives only a MiniMax selection and an `api_key_env`
 reference; the secret is not written to configuration files.
 

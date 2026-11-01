@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import pytest
 
 import stui.usecase.start_console_use_case as start_console_use_case_module
 from stui.port.event_models import LogEvent
-from stui.port.installation_state_port import InstallationState
+from stui.port.installation_state_port import (
+    InstallationError,
+    InstallationErrorKind,
+    InstallationState,
+)
 from stui.port.run_port import (
     RunDispatch,
     RunDispatchError,
@@ -211,3 +216,51 @@ def _dispatch_error() -> RunDispatch:
             message="agent not found: auths/auth",
         ),
     )
+
+
+def test_installation_error_prevents_onboarding() -> None:
+    async def run() -> None:
+        run_port = FakeRunPort(_dispatch())
+        events = FakeEventsPort()
+        use_case = _use_case(
+            installation_state=InstallationState(
+                runtime_db_exists=False,
+                error=InstallationError(InstallationErrorKind.COMMAND_FAILED, "Invalid config"),
+            ),
+            run_port=run_port,
+            events_port=events,
+        )
+        result = await use_case.execute(
+            FakeObserver(), state=ConsoleScreenState(session_key="main")
+        )
+        assert result.state.view_status.kind == ViewStatusKind.ERROR
+        assert result.state.transcript.items == [DispatchErrorItem(message="error: Invalid config")]
+        assert not result.started_auth
+        assert run_port.called_with == []
+        assert events.subscribe_calls == []
+
+    asyncio.run(run())
+
+
+def test_installation_read_runs_outside_ui_thread() -> None:
+    async def run() -> None:
+        ui_thread = threading.get_ident()
+        read_threads: list[int] = []
+
+        class ThreadCheckingPort:
+            def read(self) -> InstallationState:
+                read_threads.append(threading.get_ident())
+                return InstallationState(runtime_db_exists=True)
+
+        use_case = StartConsoleUseCase(
+            installation_state_port=ThreadCheckingPort(),
+            run_port=FakeRunPort(_dispatch()),
+            events_port=FakeEventsPort(),
+            context=_run_context(),
+        )
+        state = ConsoleScreenState(session_key="main")
+        await use_case.execute(FakeObserver(), state=state)
+        assert len(read_threads) == 1
+        assert read_threads[0] != ui_thread
+
+    asyncio.run(run())

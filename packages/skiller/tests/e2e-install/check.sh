@@ -4,18 +4,18 @@ set -euo pipefail
 # Run only inside the disposable image, never against the host home.
 [[ "$HOME" == /home/tester ]]
 [[ ! -e "$HOME/.skiller" ]]
-[[ ! -v AGENT_DB_PATH ]]
-[[ ! -v AGENT_RUNTIME_CONFIG_FILE ]]
+[[ ! -v SKILLER_DB_PATH ]]
+[[ ! -v SKILLER_RUNTIME_CONFIG_FILE ]]
 mkdir -p "$HOME/workspace/a" "$HOME/workspace/b"
 cd "$HOME/workspace/a"
 
-: "${AGENT_MINIMAX_API_KEY:?Missing injected MiniMax credential}"
+: "${SKILLER_MINIMAX_API_KEY:?Missing injected MiniMax credential}"
 mkdir -p "$HOME/.skiller/settings"
 cat > "$HOME/.skiller/settings/agent.json" <<'JSON'
 {"llm": {"provider": "minimax", "model": "MiniMax-M3.1-Flash"}}
 JSON
 cat > "$HOME/.skiller/settings/providers.json" <<'JSON'
-{"providers": {"minimax": {"api_key_env": "AGENT_MINIMAX_API_KEY"}}}
+{"providers": {"minimax": {"api_key_env": "SKILLER_MINIMAX_API_KEY"}}}
 JSON
 
 # First installed-CLI launch initializes Runtime, not the test setup.

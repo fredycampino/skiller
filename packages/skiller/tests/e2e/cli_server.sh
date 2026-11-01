@@ -12,14 +12,22 @@ if [[ ! -x "${runtime_python}" ]]; then
   exit 1
 fi
 
-export AGENT_DB_PATH="${tmpdir}/runtime.db"
-export AGENT_WEBHOOKS_HOST="127.0.0.1"
+export SKILLER_DB_PATH="${tmpdir}/runtime.db"
+export SKILLER_RUNTIME_CONFIG_FILE="${tmpdir}/config.json"
 start_output=""
 attempt=0
 base_port="${SKILLER_TEST_WEBHOOK_PORT:-18081}"
 
 while (( attempt < 20 )); do
-  export AGENT_WEBHOOKS_PORT="$((base_port + attempt))"
+  webhook_port="$((base_port + attempt))"
+  cat >"${SKILLER_RUNTIME_CONFIG_FILE}" <<JSON
+{
+  "webhooks": {
+    "host": "127.0.0.1",
+    "port": ${webhook_port}
+  }
+}
+JSON
   if start_output="$(PYTHONPATH=packages/skiller/src "${runtime_python}" -m skiller server start 2>/dev/null)"; then
     break
   fi

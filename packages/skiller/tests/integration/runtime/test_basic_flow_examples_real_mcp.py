@@ -71,6 +71,7 @@ from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
 from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.domain.flow.flow_reference import FlowReference
+from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
 from skiller.infrastructure.db.datasource.sqlite_agent_context_datasource import (
     SqliteAgentContextDatasource,
@@ -285,7 +286,12 @@ def _pick_free_port() -> int:
 def _wait_until_http_endpoint_ready(endpoint: str, timeout_seconds: float = 8.0) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        if MCPClientTool()._is_endpoint_ready(endpoint):
+        if MCPClientTool().probe_server(
+            "test-mcp",
+            config=RenderedMcpConfig(
+                name="test-mcp", transport="streamable-http", url=endpoint
+            ),
+        )["ok"]:
             return
         time.sleep(0.1)
     raise RuntimeError(f"Timed out waiting for MCP endpoint {endpoint}")

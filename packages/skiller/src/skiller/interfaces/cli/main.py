@@ -9,7 +9,7 @@ from typing import Any
 from skiller.application.observations.errors import ObserveRunError
 from skiller.application.observations.models import MAX_OBSERVE_TAIL
 from skiller.application.runs.errors import WebhookWaitConflictError
-from skiller.di.container import build_runtime_container
+from skiller.di.container import build_runtime_config_service, build_runtime_container
 from skiller.domain.flow.flow_load_error import FlowLoadError, FlowNotFoundError
 from skiller.domain.run.run_model import RunStatus
 from skiller.domain.run.runtime_bootstrap_port import RuntimeBootstrapError
@@ -624,10 +624,11 @@ def _print_runtime_config_error(error: Exception) -> int:
     return 1
 
 
-def _config_command(controller: RuntimeController) -> int:
+def _config_command() -> int:
     try:
-        config = controller.config()
-    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        service = build_runtime_config_service()
+        config = service.get_runtime_config()
+    except (OSError, RuntimeError, ValueError) as exc:
         return _print_runtime_config_error(exc)
 
     print(json.dumps(RuntimeConfigOutputMapper().to_dict(config), indent=2))
@@ -841,12 +842,7 @@ def main(argv: list[str] | None = None) -> int:
         return _observe_command(args)
 
     if args.command == "config":
-        try:
-            container = build_runtime_container()
-            controller = _build_runtime_controller(container)
-        except (OSError, RuntimeError, ValueError) as exc:
-            return _print_runtime_config_error(exc)
-        return _config_command(controller)
+        return _config_command()
 
     container = build_runtime_container()
     controller = _build_runtime_controller(container)

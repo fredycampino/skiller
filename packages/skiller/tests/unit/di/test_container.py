@@ -20,8 +20,8 @@ def test_build_runtime_container_initializes_config_before_opening_database(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.delenv("AGENT_DB_PATH", raising=False)
-    monkeypatch.delenv("AGENT_RUNTIME_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("SKILLER_DB_PATH", raising=False)
+    monkeypatch.delenv("SKILLER_RUNTIME_CONFIG_FILE", raising=False)
 
     container = build_runtime_container()
 

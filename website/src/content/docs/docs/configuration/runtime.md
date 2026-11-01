@@ -5,10 +5,10 @@ description: Configure the runtime database, logging, webhook server, and workfl
 
 Runtime configuration controls the database, logging, webhook server, and workflow search paths. By default, Skiller creates a minimal configuration at `~/.skiller/settings/config.json`.
 
-Use `AGENT_RUNTIME_CONFIG_FILE` to select another existing file:
+Use `SKILLER_RUNTIME_CONFIG_FILE` to select another existing file:
 
 ```bash
-AGENT_RUNTIME_CONFIG_FILE=~/skiller-config.json skiller run @flows
+SKILLER_RUNTIME_CONFIG_FILE=~/skiller-config.json skiller run @flows
 ```
 
 ## Configuration file
@@ -42,10 +42,10 @@ Controls the database used to persist runs and events, and the runtime logging l
 
 The default database is shared across working directories. Existing databases elsewhere are not moved or merged automatically.
 
-Use `AGENT_DB_PATH` to override the database path without changing the configuration file:
+Use `SKILLER_DB_PATH` to override the database path without changing the configuration file:
 
 ```bash
-AGENT_DB_PATH=/tmp/skiller-test.db skiller run @flows
+SKILLER_DB_PATH=/tmp/skiller-test.db skiller run @flows
 ```
 
 ## webhooks

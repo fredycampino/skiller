@@ -211,7 +211,6 @@ def build_runtime_container(
         flows_profile_template=packaged_flow_paths.get_paths()[0] / "flows" / "agent.flows.json",
     ).initialize(initialize_database_config=settings is None)
     cfg = settings or get_settings()
-    runtime_cwd = Path.cwd().resolve(strict=False)
     runtime_bootstrap = SqliteRuntimeBootstrap(cfg.db_path)
     store = SqliteRunStorePort(cfg.db_path)
     wait_datasource = SqliteWaitDatasource(cfg.db_path)
@@ -232,21 +231,8 @@ def build_runtime_container(
     flow_port = FilesystemFlowPort(
         mapper=FlowYamlMapper(),
     )
-    runtime_config_port = JsonRuntimeConfigPort(
-        config_datasource=JsonSkillerConfigDatasource(
-            mapper=SkillerConfigMapper(runtime_cwd=runtime_cwd),
-        ),
-    )
-    get_runtime_config_use_case = GetRuntimeConfigUseCase(
-        runtime_config=runtime_config_port,
-        packaged_flow_paths=FilesystemPackagedFlowPathsPort(),
-        environment_config_path=get_config_file_environment_value(),
-        default_config_path=Path.home() / ".skiller" / "settings" / "config.json",
-        runtime_cwd=runtime_cwd,
-    )
-    runtime_config_service = RuntimeConfigApplicationService(
-        get_runtime_config_use_case=get_runtime_config_use_case,
-    )
+    get_runtime_config_use_case = _build_get_runtime_config_use_case(cfg)
+    runtime_config_service = RuntimeConfigApplicationService(get_runtime_config_use_case)
     resolve_flow_use_case = ResolveFlowUseCase(
         home_path=Path.home(),
     )
@@ -261,7 +247,6 @@ def build_runtime_container(
     agent_config = JsonAgentConfigPort(
         config_path_global=Path.home() / ".skiller" / "settings" / "agent.json",
         config_mapper=AgentConfigMapper(
-            env=os.environ,
             tools=agent_tools,
         ),
         env=os.environ,
@@ -589,4 +574,29 @@ def build_runtime_container(
 def _build_agent_tool_manager(tools: tuple[ToolDefinition, ...]) -> ToolManager:
     return ToolManager(
         tools=list(tools),
+    )
+
+
+def build_runtime_config_service() -> RuntimeConfigApplicationService:
+    settings = get_settings()
+    get_runtime_config_use_case = _build_get_runtime_config_use_case(settings)
+    return RuntimeConfigApplicationService(
+        get_runtime_config_use_case=get_runtime_config_use_case,
+    )
+
+
+def _build_get_runtime_config_use_case(settings: Settings) -> GetRuntimeConfigUseCase:
+    runtime_cwd = Path.cwd().resolve(strict=False)
+    runtime_config_port = JsonRuntimeConfigPort(
+        settings=settings,
+        config_datasource=JsonSkillerConfigDatasource(
+            mapper=SkillerConfigMapper(runtime_cwd=runtime_cwd),
+        ),
+    )
+    return GetRuntimeConfigUseCase(
+        runtime_config=runtime_config_port,
+        packaged_flow_paths=FilesystemPackagedFlowPathsPort(),
+        environment_config_path=get_config_file_environment_value(),
+        default_config_path=Path.home() / ".skiller" / "settings" / "config.json",
+        runtime_cwd=runtime_cwd,
     )

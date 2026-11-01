@@ -4,6 +4,8 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.49 - 2026-11-01
+
 ### Breaking changes
 - Rename the following environment variables. **When upgrading, users who configure any of these variables must update their exported environment, deployment configuration, scripts, and applicable `.env.development` entries. The old names are no longer recognized; there are no compatibility aliases.**
 
@@ -20,6 +22,21 @@ All notable changes to this project should be summarized here before a version i
 - Existing provider configurations with an explicit `api_key_env` retain that user-defined reference. To adopt a renamed credential variable, update both the exported name and its `api_key_env` reference. Credential files are unaffected.
 - Remove environment overrides for Runtime logs and webhook host/port, harness loop limits, and event-output truncation. Configure these through their Runtime or agent JSON sections instead. `.env.development` now reads only `SKILLER_DB_PATH` and `SKILLER_RUNTIME_CONFIG_FILE`.
 - Remove MCP HTTP autostart through environment variables. HTTP MCP servers must already be running; HTTP connections and stdio process launching remain supported.
+
+### Added
+- Add a persistent Docker QA environment with Skiller installed through pipx for manual first-launch testing.
+
+### Fixed
+- Report the effective database path in `skiller config` without creating configuration, profiles, or databases.
+- Detect STUI installation state through the Runtime configuration command instead of duplicated configuration readers and an obsolete local database fallback. Surface configuration failures without triggering onboarding.
+
+### Changed
+- Refresh the README with CLI, STUI, and webhook examples and clarify screenshot titles.
+- Move E2E Runtime settings to explicit JSON configuration and update Bedrock provider checks to the current adapter contracts.
+- Remove obsolete Bedrock and Codex diagnostic scripts and their exclusive tests.
+
+### Notes
+- Includes PR #174. Review the breaking changes above before upgrading.
 
 ## 0.1.0-beta.48 - 2026-10-31
 

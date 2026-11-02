@@ -138,6 +138,23 @@ Observe the response in STUI or inspect the run through the CLI. The HTTP respon
 - [Agent harness](https://skiller.run/docs/configuration/global-agent/) — profiles, model selection, context, loop limits, events, and debugging.
 - [Harness tools](https://skiller.run/docs/tools/overview/) — available tools, configuration, and permission guardrails.
 
+## Dependencies
+
+Runtime dependencies are grouped by the capability that uses them:
+
+| Area | Dependencies | Used for |
+| --- | --- | --- |
+| Core | `pydantic`, `PyYAML` | Configuration validation and YAML flow loading |
+| LLM providers | `openai`, `boto3` | OpenAI, Codex, and Amazon Bedrock adapters |
+| MCP | `fastmcp` | MCP client connections and tool execution |
+| Webhooks | `fastapi`, `uvicorn` | Local webhook server |
+| Terminal UI | `textual` | Interactive agent chat and run management |
+
+Development uses `pytest` for tests, `httpx` for HTTP test clients, and `ruff`
+for linting. Packages are built with `hatchling`. Direct dependency constraints
+live in [`pyproject.toml`](pyproject.toml); the resolved dependency graph lives in
+[`uv.lock`](uv.lock).
+
 ## Contributing
 
 See the [development instructions](apps/instructions/skiller-dev.md) for setup and checks, and the [Runtime architecture](packages/skiller/docs/architecture/architecture.md) for implementation boundaries.

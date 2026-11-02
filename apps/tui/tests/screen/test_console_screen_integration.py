@@ -1098,20 +1098,19 @@ def test_console_screen_clears_agent_context_stats_when_autocomplete_appears() -
             waiting_port=NeverCalledWaitingPort(),
             runs_port=FakeRunsPort(),
         )
+        viewmodel.state.set_agent_context_stats(
+            AgentContextStatsState(
+                entries=24,
+                estimated_tokens=2618,
+                start_sequence=1,
+                end_sequence=24,
+                current_tokens=2618,
+                limit_tokens=80000,
+                capacity_tokens=100000,
+            )
+        )
         app = ConsoleScreen(viewmodel=viewmodel)
         async with app.run_test(size=(80, 24)) as pilot:
-            viewmodel.state.set_agent_context_stats(
-                AgentContextStatsState(
-                    entries=24,
-                    estimated_tokens=2618,
-                    start_sequence=1,
-                    end_sequence=24,
-                    current_tokens=2618,
-                    limit_tokens=80000,
-                    capacity_tokens=100000,
-                )
-            )
-            viewmodel.screen_resized()
             await pilot.pause()
 
             context_stats = app.query_one("#agent-context-stats", AgentContextStatsView)
@@ -1448,5 +1447,32 @@ def test_console_screen_renders_local_dev_status_without_mutating_state() -> Non
 
             prompt = app.query_one("#prompt", TextArea)
             assert prompt.text == "/dev"
+
+    asyncio.run(run())
+
+
+def test_resize_does_not_schedule_viewmodel_state_emission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        viewmodel = build_viewmodel(
+            session_key="main",
+            run_port=NeverCalledRunPort(),
+            waiting_port=NeverCalledWaitingPort(),
+        )
+        app = ConsoleScreen(viewmodel=viewmodel)
+        async with app.run_test(size=(140, 24)) as pilot:
+            await pilot.pause()
+
+            def unexpected_state_emission() -> None:
+                pytest.fail("Resize must be handled by views, not emit viewmodel state")
+
+            monkeypatch.setattr(viewmodel, "_emit_state", unexpected_state_emission)
+            await pilot.resize_terminal(60, 24)
+            await pilot.pause()
+            assert app.query_one("#footer-narrow").display is True
+            await pilot.resize_terminal(140, 24)
+            await pilot.pause()
+            assert app.query_one("#footer-wide").display is True
 
     asyncio.run(run())

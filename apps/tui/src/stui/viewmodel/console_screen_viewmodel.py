@@ -318,9 +318,6 @@ class ConsoleScreenViewModel(LogEventsListener):
         self._emit_state()
         return True
 
-    def screen_resized(self) -> None:
-        self._emit_state()
-
     async def prompt_enter(self) -> None:
         result = self._use_cases.prompt_enter.execute(state=self.state)
         self.state = result.state

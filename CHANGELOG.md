@@ -4,6 +4,18 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.50 - 2026-11-02
+
+### Fixed
+- Remove redundant delayed state emissions on STUI resize that could try to render widgets after teardown. Views continue to handle their own resize rendering.
+- Add regression coverage for narrow and wide layouts without resize-driven viewmodel state emissions.
+
+### Documentation
+- Restore the README Dependencies section with direct runtime dependencies grouped by capability, development tools, and build backend references.
+
+### Notes
+- Includes PR #176.
+
 ## 0.1.0-beta.49 - 2026-11-01
 
 ### Breaking changes

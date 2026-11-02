@@ -166,11 +166,6 @@ class ConsoleScreen(App[str]):
             self.action_transcript_end()
             event.stop()
 
-    def on_resize(self, _: events.Resize) -> None:
-        if self._transcript_view().size.width <= 0:
-            return
-        self.set_timer(0.05, self.viewmodel.screen_resized)
-
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         self.action_transcript_scroll_up()
         event.stop()

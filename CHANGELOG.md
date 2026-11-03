@@ -4,6 +4,23 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.51 - 2026-11-03
+
+### Added
+- Add DeepSeek to the first-launch provider setup menu using the existing OpenAI-compatible authentication flow and preserving session continuation.
+
+### Changed
+- Use `deepseek-flash` as the default DeepSeek catalog model while retaining `deepseek-v4-pro` as an alternative.
+- Simplify OpenAI-compatible provider setup instructions to a single API-key prompt heading.
+- Automatically open the first-launch QA shell after a successful image build without resetting existing container data.
+
+### Documentation
+- Refresh the first-launch provider selection screenshot and getting-started instructions.
+- Add website development instructions for the local server, consistent screenshot dimensions, isolated capture environments, and validation.
+
+### Notes
+- Includes PR #178.
+
 ## 0.1.0-beta.50 - 2026-11-02
 
 ### Fixed

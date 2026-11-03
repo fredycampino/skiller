@@ -53,7 +53,7 @@
       "tool_choice": "auto",
       "models": [
         {
-          "model": "deepseek-v4-flash",
+          "model": "deepseek-flash",
           "context_window_tokens": 1000000
         },
         {

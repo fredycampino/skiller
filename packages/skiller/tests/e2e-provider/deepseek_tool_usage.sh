@@ -96,7 +96,7 @@ class ShellSmokeTool(ToolDefinition[ToolRequest]):
 
 
 model = LLMModelDefinition(
-    model=os.environ.get("AGENT_DEEPSEEK_MODEL", "deepseek-v4-flash"),
+    model=os.environ.get("AGENT_DEEPSEEK_MODEL", "deepseek-flash"),
     context_window_tokens=128000,
     max_output_tokens=4096,
 )

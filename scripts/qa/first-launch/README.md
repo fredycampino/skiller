@@ -8,8 +8,10 @@ From the repository root:
 
 ```bash
 bash scripts/qa/first-launch/qa.sh build
-bash scripts/qa/first-launch/qa.sh start
 ```
+
+`build` automatically runs `start` after building the image and requires an interactive terminal.
+It does not reset an existing container: that container keeps its installed version and data.
 
 `start` opens Bash as the non-root user `tester`. The first time, the home has
 no Skiller configuration, credentials, database or STUI session. No host home,

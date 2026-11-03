@@ -502,6 +502,30 @@ def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
     )
 
 
+
+@pytest.mark.parametrize(
+    ("choice", "target"),
+    [("6", "start_deepseek"), ("7", "configure_later"), ("8", "exit_app")],
+)
+def test_auth_menu_routes_deepseek_and_exit_options(choice: str, target: str) -> None:
+    agent = yaml.safe_load(
+        Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8")
+    )
+    steps = _steps_by_name(agent)
+
+    assert steps["route_provider"]["cases"][choice] == target
+    assert "6 DeepSeek" in steps["show_menu"]["message"]
+    assert "8" in steps["select_provider"]["prompt"]
+    assert "`8`" in steps["invalid_choice"]["message"]
+    assert steps["start_deepseek"]["action"] == {
+        "type": "run",
+        "label": "Start DeepSeek setup",
+        "arg": "auths/openai",
+        "params": "--arg provider=deepseek --arg continue_id={{inputs.continue_id}}",
+        "auto": True,
+    }
+
+
 def _steps_by_name(agent: dict[str, object]) -> dict[str, dict[str, object]]:
     result: dict[str, dict[str, object]] = {}
     for step in agent["steps"]:

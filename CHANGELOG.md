@@ -342,7 +342,7 @@ All notable changes to this project should be summarized here before a version i
 
 ### Added
 - Add Codex lite protocol support for `gpt-5.6-*` models with model capabilities resolution, turn session management (`x-codex-turn-state` replay), split general/lite request mappers, and sensitive state redaction in request logs.
-- Add DeepSeek provider catalog entry via the OpenAI adapter (`deepseek-v4-flash`, `deepseek-v4-pro`) with provider catalog coverage and an end-to-end tool-usage script.
+- Add DeepSeek provider catalog entry via the OpenAI adapter (`deepseek-flash`, `deepseek-v4-pro`) with provider catalog coverage and an end-to-end tool-usage script.
 
 ### Removed
 - Remove the legacy per-provider domain layer (model enums, provider configs, registry and defaults). `LLMModelDefinition` from the provider catalog is now the single model representation.

@@ -102,7 +102,7 @@ def test_builtin_application_catalog_is_valid() -> None:
     assert deepseek.api_key_source.type.value == "env"
     assert deepseek.api_key_source.value == "SKILLER_DEEPSEEK_API_KEY"
     assert [model.model for model in deepseek.models] == [
-        "deepseek-v4-flash",
+        "deepseek-flash",
         "deepseek-v4-pro",
     ]
     assert all(model.context_window_tokens == 1_000_000 for model in deepseek.models)

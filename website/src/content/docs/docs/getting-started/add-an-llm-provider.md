@@ -15,7 +15,7 @@ skiller
 
 ## Choose your provider
 
-On first launch, Skiller opens the provider setup automatically.
+On first launch, Skiller asks you to choose an LLM provider. Select your provider and follow the setup prompts.
 
 ![Skiller on first launch, showing the LLM provider selection menu.](/images/docs/first-launch-provider-selection.svg)
 

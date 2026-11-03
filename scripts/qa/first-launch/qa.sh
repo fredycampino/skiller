@@ -29,6 +29,7 @@ case "${1:-}" in
         docker build -t "$image" "$context"
         printf '\nImage ready. Existing QA containers keep their installed version.\n'
         printf 'Use reset, then start to evaluate this build in a clean environment.\n'
+        bash "$root/scripts/qa/first-launch/qa.sh" start
         ;;
     start)
         if [[ ! -t 0 || ! -t 1 ]]; then

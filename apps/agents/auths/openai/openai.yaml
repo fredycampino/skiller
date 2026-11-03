@@ -56,13 +56,7 @@ steps:
   - notify: explain_provider
     format: markdown
     message: |
-      # {{inputs.provider}} setup
-
-      Paste your **{{inputs.provider}} API key** in the next prompt. Skiller will:
-
-      1. Validate the key.
-      2. Save it to `~/.skiller/secrets/{{inputs.provider}}_api_key`.
-      3. Update the provider config and verify the connection.
+      # Paste your {{inputs.provider}} API key in the prompt.
     next: ask_api_key
 
   - wait_input: ask_api_key

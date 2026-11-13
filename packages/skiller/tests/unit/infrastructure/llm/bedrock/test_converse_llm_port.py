@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ReadTimeoutError
 
 from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMUserMessage
@@ -121,9 +122,7 @@ def test_converse_llm_port_collects_and_maps_response(monkeypatch: pytest.Monkey
     logger = _FakeLogger()
     port = _port(monkeypatch, response={"stream": _stream()}, logger=logger)
 
-    response = port.generate(
-        _request(log_request_file="request.json", log_streaming=True)
-    )
+    response = port.generate(_request(log_request_file="request.json", log_streaming=True))
 
     assert response.finish_type == LLMFinishType.STOP
     assert response.content == "Hello"
@@ -150,9 +149,7 @@ def test_converse_llm_port_returns_stream_error_with_received_events(
     stream = _stream()[:-1]
     port = _port(monkeypatch, response={"stream": stream}, logger=logger)
 
-    response = port.generate(
-        _request(log_request_file="request.json", log_streaming=True)
-    )
+    response = port.generate(_request(log_request_file="request.json", log_streaming=True))
 
     assert response.finish_type == LLMFinishType.ERROR_STREAM
     assert response.error_code == "stream_failed"
@@ -163,6 +160,30 @@ def test_converse_llm_port_returns_stream_error_with_received_events(
             "Bedrock stream ended without metadata event",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ReadTimeoutError(endpoint_url="https://bedrock.example"), TimeoutError("read timed out")],
+)
+def test_converse_llm_port_returns_error_when_stream_times_out(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    def timed_out_stream() -> Iterator[object]:
+        yield from _stream()[:2]
+        raise error
+
+    logger = _FakeLogger()
+    port = _port(monkeypatch, response={"stream": timed_out_stream()}, logger=logger)
+
+    response = port.generate(_request(log_request_file="request.json"))
+
+    assert response.finish_type == LLMFinishType.ERROR_STREAM
+    assert response.error_code == "request_timeout"
+    assert response.content is None
+    assert not response.tool_calls
+    assert response.error == f"Bedrock Converse stream timed out: {error}"
+    assert logger.errors == [response.error]
 
 
 def test_converse_llm_port_returns_request_error(monkeypatch: pytest.MonkeyPatch) -> None:

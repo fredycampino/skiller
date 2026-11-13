@@ -16,6 +16,9 @@ from skiller.infrastructure.llm.bedrock.converse_response_model import (
     ConverseTextContentBlock,
 )
 
+# Explicit default avoids Bedrock's implicit small output limit.
+_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
+
 
 class BedrockMapper:
     def to_kwargs(self, request: BedrockLLMRequest) -> dict[str, object]:
@@ -26,8 +29,10 @@ class BedrockMapper:
         }
         if "anthropic" in request.model.value.split("."):
             payload["additionalModelRequestFields"] = _anthropic_thinking_fields(request)
-        if request.model.max_output_tokens is not None:
-            payload["inferenceConfig"] = {"maxTokens": request.model.max_output_tokens}
+        max_output_tokens = request.model.max_output_tokens
+        if max_output_tokens is None:
+            max_output_tokens = _DEFAULT_MAX_OUTPUT_TOKENS
+        payload["inferenceConfig"] = {"maxTokens": max_output_tokens}
         if system:
             payload["system"] = system
         if request.tools:

@@ -128,15 +128,25 @@ def test_bedrock_mapper_groups_consecutive_tool_results() -> None:
     ]
 
 
-def test_bedrock_mapper_omits_inference_config_when_model_has_no_limit() -> None:
+@pytest.mark.parametrize(
+    ("max_output_tokens", "expected_max_tokens"),
+    [(None, 128_000), (4096, 4096), (256_000, 256_000)],
+)
+def test_bedrock_mapper_resolves_output_token_limit(
+    max_output_tokens: int | None, expected_max_tokens: int
+) -> None:
     request = BedrockLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=_model("us.anthropic.claude-opus-4-6-v1", 200_000),
+        model=_model(
+            "us.anthropic.claude-opus-4-6-v1",
+            1_000_000,
+            max_output_tokens=max_output_tokens,
+        ),
     )
 
     kwargs = BedrockMapper().to_kwargs(request)
 
-    assert "inferenceConfig" not in kwargs
+    assert kwargs["inferenceConfig"] == {"maxTokens": expected_max_tokens}
 
 
 @pytest.mark.parametrize(

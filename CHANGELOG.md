@@ -4,6 +4,18 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.52 - 2026-11-14
+
+### Fixed
+- Send an explicit 128,000-token output limit for Bedrock requests when no model limit is configured, preserving explicit overrides.
+- Handle Bedrock stream read timeouts as controlled LLM errors so agent steps continue through their configured next transition instead of failing the run.
+
+### Changed
+- Increase default request timeouts to 600 seconds for all built-in LLM providers.
+
+### Notes
+- Includes PRs #183 and #184.
+
 ## 0.1.0-beta.51 - 2026-11-03
 
 ### Added

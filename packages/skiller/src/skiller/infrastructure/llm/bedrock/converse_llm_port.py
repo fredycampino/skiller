@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+from botocore.exceptions import ReadTimeoutError
+
 from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import LLMResponse
 from skiller.domain.agent.llm.port import LLMPort
@@ -80,6 +82,16 @@ class ConverseLLMPort(LLMPort[BedrockLLMRequest]):
             response = self.collector.collect(
                 stream,
                 log_streaming=capture_stream,
+            )
+        except (ReadTimeoutError, TimeoutError) as exc:
+            error = f"Bedrock Converse stream timed out: {exc}"
+            if log_file is not None:
+                self.request_logger.log_error(error=error)
+            return LLMResponse(
+                model=request.model,
+                finish_type=LLMFinishType.ERROR_STREAM,
+                error=error,
+                error_code="request_timeout",
             )
         except CollectConverseResponseError as exc:
             error = f"Bedrock Converse stream failed: {exc}"

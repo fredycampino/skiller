@@ -80,6 +80,8 @@ def test_builtin_application_catalog_is_valid() -> None:
 
     catalog = port.get_catalog()
 
+    assert all(provider.timeout_seconds == 600 for provider in catalog.providers)
+
     minimax = catalog.get("minimax")
     assert minimax.adapter == LLMAdapterType.OPENAI
     assert [model.model for model in minimax.models] == [

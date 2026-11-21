@@ -23,6 +23,8 @@ class RunServiceMapper:
         self,
         flow_reference: str,
         inputs: dict[str, Any],
+        *,
+        last: bool,
     ) -> RunRequest:
         sanitized_reference = flow_reference.strip()
         if not sanitized_reference:
@@ -30,13 +32,15 @@ class RunServiceMapper:
         return RunRequest(
             reference=FlowReference(sanitized_reference),
             inputs=inputs,
+            last=last,
         )
 
     def to_run_dict(self, result: RunResult) -> dict[str, str]:
-        return {
-            "run_id": result.run_id,
-            "status": result.status.value,
-        }
+        response = {"run_id": result.run_id, "status": result.status.value}
+        if result.waiting is not None:
+            response["wait_type"] = result.waiting.wait_type
+            response["prompt"] = result.waiting.prompt
+        return response
 
     def to_worker_start_dict(self, result: WorkerStartResult) -> dict[str, str]:
         return {

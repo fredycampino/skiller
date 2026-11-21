@@ -26,6 +26,7 @@ from skiller.interfaces.cli.run_output import (
     RunCommandError,
     RunCommandFailure,
     RunCommandRequest,
+    RunCommandResult,
     RunCommandWatchResult,
     RunErrorCode,
     RunOutputMapper,
@@ -346,6 +347,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         dest="flow_file",
         help="Flow YAML path (deprecated compatibility alias for a direct path)",
+    )
+    run_parser.add_argument(
+        "--last", action="store_true",
+        help="Reuse the latest waiting run of this flow, otherwise start a new run",
     )
     run_parser.add_argument("--arg", action="append", default=[], help="Input pair key=value")
     run_parser.add_argument(
@@ -696,6 +701,7 @@ def _resolve_run_request(
         return RunCommandRequest(
             flow_reference=flow_reference,
             inputs=inputs,
+            last=args.last,
         )
     except ValueError as exc:
         return _run_failure(RunErrorCode.ARGUMENT_INVALID, str(exc), run_result=None)
@@ -721,6 +727,7 @@ def _create_cli_run(
         return controller.create_run(
             request.flow_reference,
             request.inputs,
+            last=request.last,
         )
     except WebhookWaitConflictError as exc:
         return _run_failure(RunErrorCode.WEBHOOK_WAIT_CONFLICT, str(exc), run_result=None)
@@ -793,32 +800,46 @@ def _run_command(args: argparse.Namespace) -> int:
     if isinstance(run_result, RunCommandFailure):
         return _print_run_failure(run_result)
 
-    run_result = _start_cli_run_worker(run_result)
-    if isinstance(run_result, RunCommandFailure):
-        return _print_run_failure(run_result)
+    reused = run_result["status"] == RunStatus.WAITING.value
+    if reused:
+        run_result["worker_pid"] = None
+    else:
+        run_result = _start_cli_run_worker(run_result)
+        if isinstance(run_result, RunCommandFailure):
+            return _print_run_failure(run_result)
 
-    if not args.detach:
-        watched = _watch_cli_run(controller, run_result)
-        if isinstance(watched, RunCommandFailure):
-            return _print_run_failure(watched)
-        run_result = watched.run_result
-        if run_result["status"] == RunStatus.FAILED.value:
-            if args.logs:
-                logs_result = _add_cli_run_logs(controller, run_result)
-                if not isinstance(logs_result, RunCommandFailure):
-                    run_result = logs_result
-            failure = _run_failure(
-                RunErrorCode.EXECUTION_FAILED,
-                _execution_error_message(list(watched.events)),
-                run_result=run_result,
-            )
-            return _print_run_failure(failure)
+        if not args.detach:
+            watched = _watch_cli_run(controller, run_result)
+            if isinstance(watched, RunCommandFailure):
+                return _print_run_failure(watched)
+            run_result = watched.run_result
+            if run_result["status"] == RunStatus.FAILED.value:
+                if args.logs:
+                    logs_result = _add_cli_run_logs(controller, run_result)
+                    if not isinstance(logs_result, RunCommandFailure):
+                        run_result = logs_result
+                failure = _run_failure(
+                    RunErrorCode.EXECUTION_FAILED,
+                    _execution_error_message(list(watched.events)),
+                    run_result=run_result,
+                )
+                return _print_run_failure(failure)
 
     if args.logs and "logs" not in run_result:
         run_result = _add_cli_run_logs(controller, run_result)
         if isinstance(run_result, RunCommandFailure):
             return _print_run_failure(run_result)
-    print(json.dumps(run_result, indent=2))
+    result = RunCommandResult(
+        run_id=run_result["run_id"],
+        status=run_result["status"],
+        worker_pid=run_result["worker_pid"],
+        wait_type=run_result.get("wait_type"),
+        prompt=run_result.get("prompt"),
+    )
+    response = RunOutputMapper().to_result_dict(result)
+    if "logs" in run_result:
+        response["logs"] = run_result["logs"]
+    print(json.dumps(response, indent=2))
     return 0
 
 

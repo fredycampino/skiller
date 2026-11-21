@@ -8,6 +8,7 @@ Runs a flow and writes JSON to `stdout`.
 | --- | --- | --- |
 | `skiller run <reference>` | Runs a flow resolved from the effective flow paths. | When the run finishes or reaches a stable state. |
 | `skiller run <reference> --arg key=value` | Runs with explicit inputs. | When the run finishes or reaches a stable state. |
+| `skiller run <reference> --last` | Returns the newest waiting run of the resolved flow, or starts normally if none exists. | Immediately when reusing; otherwise as a normal run. |
 | `skiller run <reference> --detach` | Starts the worker without watching the run. | After the worker is started. |
 | `skiller run <reference> --logs` | Runs and includes raw events in the output. | When the run finishes or reaches a stable state. |
 
@@ -209,3 +210,18 @@ and is not mixed with the final JSON document.
 
 - `0`: the command ran and the final observed status is not `FAILED`.
 - `1`: creating the run, starting the worker, watching the run, or the final observed status failed.
+
+## Reuse a Waiting Run
+
+`skiller run @agent --last` resolves the flow reference and returns its most recently
+created run whose status is `WAITING`. The response includes the existing run id,
+status, and waiting metadata. It does not dispatch a worker, resume execution,
+change inputs, or send an input. `--logs` includes existing events; `--detach`
+does not change reuse behavior. `worker_pid` is `null` when reusing; no worker is started.
+The run and waiting metadata come from the same selected snapshot: no second
+status lookup is performed. Other processes may change the run after that read.
+
+If no matching waiting run exists, the command follows exactly the normal run
+path, including inputs, validation, worker dispatch, and watching behavior.
+Runs of other flows and runs in any other status are ignored. Use
+`skiller input receive <run_id> --text start --wait` to continue a reused run.

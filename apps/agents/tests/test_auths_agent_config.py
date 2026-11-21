@@ -321,6 +321,64 @@ def test_lmstudio_auth_updates_user_catalog_and_verifies_with_agent() -> None:
     assert not Path("apps/agents/auths/lmstudio/agent.json").exists()
 
 
+def test_lmstudio_connection_menu_routes_choices_and_failures() -> None:
+    flow = yaml.safe_load(
+        Path("apps/agents/auths/lmstudio/lmstudio.yaml").read_text(encoding="utf-8")
+    )
+    steps = _steps_by_name(flow)
+
+    assert flow["start"] == "explain_lmstudio"
+    assert steps["explain_lmstudio"]["next"] == "select_connection"
+    assert steps["select_connection"]["next"] == "route_connection"
+    assert steps["route_connection"]["cases"] == {
+        "1": "check_lmstudio_connection",
+        "2": "explain_base_url",
+        "3": "exit_setup",
+    }
+    invalid_choice = steps["route_connection"]["default"]
+    assert steps[invalid_choice]["next"] == "explain_lmstudio"
+    for route, backup in (
+        ("route_lmstudio_connection", "backup_lmstudio_config_existing"),
+        ("route_custom_base_url", "backup_lmstudio_config_custom"),
+    ):
+        assert steps[route]["cases"]["ready"] == backup
+        failure = steps[route]["default"]
+        assert steps[failure]["next"] == "explain_lmstudio"
+    assert "http://192.168.1.202:1234/v1" in steps["explain_base_url"]["message"]
+    assert steps["explain_base_url"]["next"] == "ask_base_url"
+    assert steps["ask_base_url"]["prompt"] == "Server URL, or exit."
+    assert steps["ask_base_url"]["next"] == "route_base_url_input"
+    assert steps["route_validation_action"]["cases"]["1"] == "explain_lmstudio"
+
+
+@pytest.mark.parametrize("probe_exit_code, expected", [(0, "ready"), (1, "unavailable")])
+def test_lmstudio_local_connection_probes_default_url(
+    tmp_path: Path, probe_exit_code: int, expected: str,
+) -> None:
+    flow = yaml.safe_load(
+        Path("apps/agents/auths/lmstudio/lmstudio.yaml").read_text(encoding="utf-8")
+    )
+    steps = _steps_by_name(flow)
+    helper = tmp_path / "lmstudio_auth.py"
+    helper.write_text(
+        "import sys\n"
+        "assert sys.argv[1:] == ['probe', 'http://127.0.0.1:1234/v1']\n"
+        f"sys.exit({probe_exit_code})\n",
+        encoding="utf-8",
+    )
+    command = steps["check_lmstudio_connection"]["command"]
+    command = command.replace("{{runtime.python}}", sys.executable)
+    command = command.replace("{{flow.dir}}", str(tmp_path))
+    result = subprocess.run(["sh", "-c", command], capture_output=True, text=True)
+
+    assert result.returncode == 0
+    assert result.stdout == expected
+    assert result.stderr == ""
+    configure_command = steps["write_lmstudio_config_existing"]["command"]
+    assert 'base_url="http://127.0.0.1:1234/v1"' in configure_command
+    assert 'configure "$base_url"' in configure_command
+
+
 def test_lmstudio_auth_helper_writes_and_restores_configuration(
     tmp_path: Path,
     monkeypatch,

@@ -98,7 +98,7 @@ class _FakeRunService:
 
     def create_run(self, request):  # noqa: ANN001, ANN201
         self.create_request = request
-        return RunResult(run_id="run-1", status=RunStatus.CREATED)
+        return RunResult(run_id="run-1", status=RunStatus.CREATED, waiting=None)
 
     def mark_notify_action_done(self, request):  # noqa: ANN001, ANN201
         self.mark_action_call = request
@@ -260,6 +260,7 @@ def test_controller_maps_create_run_to_typed_service_input() -> None:
     result = controller.create_run(
         " notify_test ",
         {"message": "ok"},
+        last=False,
     )
 
     assert run_service.create_request.reference.value == "notify_test"

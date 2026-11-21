@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from helpers.agent_config import FakeAgentConfigPort, FakeLLMProviderCatalogPort
@@ -61,6 +62,7 @@ from skiller.application.use_cases.run.resolve_end_action_config import (
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
 from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.infrastructure.agent.agent_context_store import AgentContextStore
@@ -246,6 +248,9 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         ),
         get_run_use_case=GetRunUseCase(store),
         run_executor=run_executor,
+        get_last_waiting_run_use_case=Mock(),
+        get_waiting_metadata_use_case=Mock(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
     return runtime
 
@@ -262,7 +267,7 @@ def test_basic_flow_examples_succeed(
 
         runtime = _build_runtime(store)
         run_result = runtime.run(
-            RunRequest(reference=FlowReference(f"@{skill_ref}"), inputs=inputs)
+            RunRequest(reference=FlowReference(f"@{skill_ref}"), inputs=inputs, last=False)
         )
 
         run_id = run_result.run_id
@@ -319,6 +324,7 @@ def test_assign_step_succeeds_from_external_flow_file() -> None:
             RunRequest(
                 reference=FlowReference(str(skill_path)),
                 inputs={"issue": "dependency timeout"},
+                last=False,
             )
         )
 
@@ -392,7 +398,9 @@ def test_switch_step_routes_to_matching_branch_from_external_flow_file() -> None
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
+        run_result = runtime.run(
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={}, last=False)
+        )
 
         run = store.get_run(run_result.run_id)
         assert run is not None
@@ -454,7 +462,9 @@ def test_when_step_routes_to_first_matching_branch_from_external_flow_file() -> 
         SqliteRuntimeBootstrap(store.db_path).init_db()
         runtime = _build_runtime(store)
 
-        run_result = runtime.run(RunRequest(reference=FlowReference(str(skill_path)), inputs={}))
+        run_result = runtime.run(
+            RunRequest(reference=FlowReference(str(skill_path)), inputs={}, last=False)
+        )
 
         run = store.get_run(run_result.run_id)
         assert run is not None

@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -23,12 +24,15 @@ from skiller.application.use_cases.run.check_webhook_wait import (
 )
 from skiller.application.use_cases.run.create_run import CreateRunInput
 from skiller.application.use_cases.run.resume_run import ResumeRunResult, ResumeRunStatus
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
+from skiller.application.waits.waiting_metadata_resolver import InputWaitingMetadata
 from skiller.domain.event.event_model import (
     RuntimeEventPayload,
     RuntimeEventType,
     runtime_event_payload_to_dict,
 )
 from skiller.domain.flow.flow_reference import FlowReference, ResolvedFlow
+from skiller.domain.run.run_model import RunStatus
 
 pytestmark = pytest.mark.unit
 
@@ -224,6 +228,9 @@ def _build_service(
         ),
         get_run_use_case=final_get_run_use_case,
         run_executor=run_executor,
+        get_last_waiting_run_use_case=Mock(),
+        get_waiting_metadata_use_case=Mock(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
     return (
         service,
@@ -248,7 +255,7 @@ def test_create_run_only_creates_run() -> None:
     ) = _build_service()
 
     result = service.create_run(
-        RunRequest(reference=FlowReference("notify_test"), inputs={"message": "ok"})
+        RunRequest(reference=FlowReference("notify_test"), inputs={"message": "ok"}, last=False)
     )
 
     assert result.run_id == "run-1"
@@ -296,7 +303,7 @@ def test_create_run_rejects_duplicate_webhook_wait_before_persisting() -> None:
 
     with pytest.raises(ValueError, match="skiller delete existing-run"):
         service.create_run(
-            RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "42"})
+            RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "42"}, last=False)
         )
 
     assert len(check_use_case.calls) == 1
@@ -311,7 +318,7 @@ def test_create_run_allows_a_different_webhook_key() -> None:
     )
 
     result = service.create_run(
-        RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "43"})
+        RunRequest(reference=FlowReference("webhook_test"), inputs={"key": "43"}, last=False)
     )
 
     assert result.run_id == "run-1"
@@ -333,7 +340,7 @@ def test_run_prepares_dispatches_and_reads_final_status() -> None:
         worker_final_status="WAITING",
     )
 
-    result = service.run(RunRequest(reference=FlowReference("notify_test"), inputs={}))
+    result = service.run(RunRequest(reference=FlowReference("notify_test"), inputs={}, last=False))
 
     assert result.run_id == "run-1"
     assert result.status.value == "WAITING"
@@ -421,6 +428,9 @@ def test_resume_run_emits_runtime_event_and_dispatches_worker() -> None:
         ),
         get_run_use_case=get_run_use_case,
         run_executor=run_executor,
+        get_last_waiting_run_use_case=Mock(),
+        get_waiting_metadata_use_case=Mock(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
 
     result = service.resume_run("run-1")
@@ -471,7 +481,9 @@ def test_create_run_fails_when_flow_checker_reports_errors() -> None:
         ValueError,
         match="FLOW_NOTIFY_MESSAGE_MISSING: notify step requires message",
     ):
-        service.create_run(RunRequest(reference=FlowReference("notify_test"), inputs={}))
+        service.create_run(
+            RunRequest(reference=FlowReference("notify_test"), inputs={}, last=False)
+        )
 
     assert checker.calls == [{"flow_path": Path("notify_test")}]
     assert create_run_use_case.calls == []
@@ -507,9 +519,71 @@ def test_create_run_fails_when_flow_readiness_checker_reports_errors() -> None:
         ValueError,
         match="FLOW_SERVER_UNAVAILABLE: flow requires local server",
     ):
-        service.create_run(RunRequest(reference=FlowReference("whatsapp_demo"), inputs={}))
+        service.create_run(
+            RunRequest(reference=FlowReference("whatsapp_demo"), inputs={}, last=False)
+        )
 
     assert flow_checker_use_case.calls == [{"flow_path": Path("whatsapp_demo")}]
     assert flow_readiness_checker_use_case.calls == [{"flow_path": Path("whatsapp_demo")}]
     assert create_run_use_case.calls == []
     assert append_runtime_event_use_case.calls == []
+
+
+def test_last_reuses_waiting_run_without_creation_or_validation() -> None:
+    service, events, create, prepare, executor, checker, readiness = _build_service()
+    waiting_run = SimpleNamespace(id="waiting-run", status="WAITING")
+    service.get_last_waiting_run_use_case.execute.return_value = waiting_run
+    service.get_waiting_metadata_use_case.execute_for_run.return_value = InputWaitingMetadata(
+        prompt="Start or stop"
+    )
+    result = service.create_run(
+        RunRequest(reference=FlowReference("notify_test"), inputs={"message": "new"}, last=True)
+    )
+    assert result.run_id == "waiting-run"
+    assert result.waiting.prompt == "Start or stop"
+    service.get_waiting_metadata_use_case.execute_for_run.assert_called_once_with(waiting_run)
+    service.get_waiting_metadata_use_case.execute.assert_not_called()
+    assert result.status.value == "WAITING"
+    service.get_last_waiting_run_use_case.execute.assert_called_once_with(Path("notify_test"))
+    assert create.calls == events.calls == prepare.calls == executor.calls == []
+    assert checker.calls == readiness.calls == []
+
+
+def test_last_without_waiting_run_uses_normal_creation() -> None:
+    service, events, create, *_ = _build_service()
+    service.get_last_waiting_run_use_case.execute.return_value = None
+    result = service.create_run(
+        RunRequest(reference=FlowReference("notify_test"), inputs={"message": "ok"}, last=True)
+    )
+    assert result.status.value == "CREATED"
+    assert create.calls == [{"flow_path": Path("notify_test"), "inputs": {"message": "ok"}}]
+    assert len(events.calls) == 1
+
+
+def test_normal_creation_does_not_search_waiting_runs() -> None:
+    service, *_ = _build_service()
+    service.create_run(RunRequest(reference=FlowReference("notify_test"), inputs={}, last=False))
+    service.get_last_waiting_run_use_case.execute.assert_not_called()
+
+
+
+def test_run_last_returns_waiting_run_without_preparing_or_executing() -> None:
+    service, events, create, prepare, executor, checker, readiness = _build_service()
+    waiting_run = SimpleNamespace(id="waiting-run", status="WAITING")
+    service.get_last_waiting_run_use_case.execute.return_value = waiting_run
+    service.get_waiting_metadata_use_case.execute_for_run.return_value = InputWaitingMetadata(
+        prompt="Start or stop"
+    )
+
+    result = service.run(
+        RunRequest(reference=FlowReference("notify_test"), inputs={}, last=True)
+    )
+
+    assert result.run_id == "waiting-run"
+    assert result.status == RunStatus.WAITING
+    assert result.waiting.prompt == "Start or stop"
+    assert create.calls == events.calls == prepare.calls == executor.calls == []
+    assert checker.calls == readiness.calls == []
+    service.get_last_waiting_run_use_case.execute.assert_called_once_with(Path("notify_test"))
+    service.get_waiting_metadata_use_case.execute_for_run.assert_called_once_with(waiting_run)
+    service.get_waiting_metadata_use_case.execute.assert_not_called()

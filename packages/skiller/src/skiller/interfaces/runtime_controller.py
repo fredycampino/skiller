@@ -60,10 +60,13 @@ class RuntimeController:
         self,
         flow_reference: str,
         inputs: dict[str, Any],
+        *,
+        last: bool,
     ) -> dict[str, str]:
         request = self.run_mapper.to_create_input(
             flow_reference,
             inputs,
+            last=last,
         )
         result = self.run_service.create_run(request)
         return self.run_mapper.to_run_dict(result)

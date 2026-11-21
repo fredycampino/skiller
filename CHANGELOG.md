@@ -4,6 +4,20 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.53 - 2026-11-21
+
+### Added
+- Add `skiller run --last` to reuse the latest waiting run for the resolved flow without starting a worker; fall back to normal run creation when no waiting run exists.
+
+### Changed
+- Make LM Studio onboarding explicitly offer a local connection, a custom server URL, or exit, with retries returning to connection selection.
+
+### Documentation
+- Add a guide for running LM Studio headlessly with `llmster` and `lms`.
+
+### Notes
+- Includes PRs #186 and #187.
+
 ## 0.1.0-beta.52 - 2026-11-14
 
 ### Fixed

@@ -1,0 +1,29 @@
+---
+import '../styles/landing.css';
+import '../styles/blog.css';
+interface Props { title: string; description: string; }
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <title>{title} — skiller.run</title>
+  </head>
+  <body class="blog-site">
+    <header class="site-header">
+      <a class="brand" href="/">skiller.run</a>
+      <nav aria-label="Main navigation">
+        <a href="/blog/" aria-current={Astro.url.pathname === '/blog/' ? 'page' : undefined}>Blog</a>
+        <a href="/docs/getting-started/installation/">Docs</a>
+        <a href="https://github.com/fredycampino/skiller">GitHub</a>
+      </nav>
+    </header>
+    <main class="blog-main"><slot /></main>
+    <footer><p><strong>skiller.run</strong> · Durable, observable agent workflows.</p><nav aria-label="Footer navigation"><a href="/blog/">Blog</a><a href="https://github.com/fredycampino/skiller">GitHub</a></nav></footer>
+  </body>
+</html>

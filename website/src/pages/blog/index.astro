@@ -1,0 +1,20 @@
+---
+import { getCollection } from 'astro:content';
+import BlogLayout from '../../layouts/BlogLayout.astro';
+const posts = (await getCollection('blog')).sort((a, b) => b.data.publishedAt.getTime() - a.data.publishedAt.getTime());
+---
+<BlogLayout title="Blog" description="Experiments and engineering notes from skiller.run.">
+  <header class="blog-hero">
+    <p class="eyebrow">From the lab</p>
+    <h1>Engineering<br />in practice.</h1>
+    <p class="intro">Experiments and engineering notes from skiller.run.</p>
+  </header>
+  <ul class="post-list">
+    {posts.map(post => <li class="post-card">
+      <time class="eyebrow" datetime={post.data.publishedAt.toISOString()}>{post.data.publishedAt.toISOString().slice(0, 10)}</time>
+      <h2><a href={`/blog/${post.id}/`}>{post.data.title}</a></h2>
+      <p>{post.data.description}</p>
+      <a class="post-link" href={`/blog/${post.id}/`}>Read article <span aria-hidden="true">↗</span></a>
+    </li>)}
+  </ul>
+</BlogLayout>

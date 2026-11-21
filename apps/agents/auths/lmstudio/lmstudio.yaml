@@ -1,7 +1,7 @@
 name: auths/lmstudio
 description: "Configure the LM Studio provider for Skiller agents"
 version: "0.1"
-start: check_lmstudio_connection
+start: explain_lmstudio
 
 inputs:
   continue_id: string
@@ -25,7 +25,7 @@ steps:
     command: |
       set -eu
 
-      base_url="$({{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" base-url)"
+      base_url="http://127.0.0.1:1234/v1"
       if {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" probe "$base_url" >/dev/null; then
         printf '%s' ready
       else
@@ -40,25 +40,42 @@ steps:
     value: '{{output_value("check_lmstudio_connection").stdout}}'
     cases:
       ready: backup_lmstudio_config_existing
-    default: explain_lmstudio
+    default: invalid_base_url
 
   - notify: explain_lmstudio
     format: markdown
     message: |
-      # LM Studio setup
+      # Connect to LM Studio
 
-      Start the LM Studio local server and load a model. Then enter its
-      OpenAI-compatible base URL.
+      Start the LM Studio server, load at least one model, and choose an option:
 
-      The default URL is:
+      1. Local connection at `http://127.0.0.1:1234/v1`
+      2. Use another URL
+      3. Exit
+    next: select_connection
 
-      ```text
-      http://127.0.0.1:1234/v1
-      ```
+  - wait_input: select_connection
+    prompt: "Choose 1, 2, or 3."
+    next: route_connection
+
+  - switch: route_connection
+    value: '{{output_value("select_connection").payload.text}}'
+    cases:
+      "1": check_lmstudio_connection
+      "2": explain_base_url
+      "3": exit_setup
+    default: invalid_connection_choice
+
+  - notify: invalid_connection_choice
+    message: "Invalid option. Choose 1, 2, or 3."
+    next: explain_lmstudio
+
+  - notify: explain_base_url
+    message: "Enter the server URL. Example: http://192.168.1.202:1234/v1 (or type exit to cancel)."
     next: ask_base_url
 
   - wait_input: ask_base_url
-    prompt: "LM Studio base URL, or exit"
+    prompt: "Server URL, or exit."
     next: route_base_url_input
 
   - switch: route_base_url_input
@@ -95,8 +112,8 @@ steps:
     default: invalid_base_url
 
   - notify: invalid_base_url
-    message: "LM Studio did not return any models from that URL. Check the server and URL."
-    next: ask_base_url
+    message: "Could not connect to a model. Check the URL and make sure the server is running with a model loaded."
+    next: explain_lmstudio
 
   - shell: backup_lmstudio_config_existing
     allowed_paths:
@@ -114,7 +131,7 @@ steps:
       - "~/.skiller"
     command: |
       set -eu
-      base_url="$({{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" base-url)"
+      base_url="http://127.0.0.1:1234/v1"
       {{runtime.python}} "{{flow.dir}}/lmstudio_auth.py" configure "$base_url"
     cwd: .
     timeout: 15
@@ -204,10 +221,10 @@ steps:
   - switch: route_validation_action
     value: '{{output_value("select_validation_action").payload.text}}'
     cases:
-      "1": check_lmstudio_connection
-      retry: check_lmstudio_connection
-      Retry: check_lmstudio_connection
-      try again: check_lmstudio_connection
+      "1": explain_lmstudio
+      retry: explain_lmstudio
+      Retry: explain_lmstudio
+      try again: explain_lmstudio
       "2": exit_setup
       exit: exit_setup
       Exit: exit_setup
@@ -222,4 +239,4 @@ steps:
     message: "LM Studio responded. Agent configuration is ready."
 
   - notify: exit_setup
-    message: "LM Studio setup closed."
+    message: "LM Studio connection canceled."

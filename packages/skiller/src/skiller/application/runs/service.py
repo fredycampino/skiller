@@ -21,7 +21,9 @@ from skiller.application.use_cases.flow.resolve_flow import (
     ResolveFlowStatus,
     ResolveFlowUseCase,
 )
+from skiller.application.use_cases.query.get_last_waiting_run import GetLastWaitingRunUseCase
 from skiller.application.use_cases.query.get_run import GetRunUseCase
+from skiller.application.use_cases.query.get_waiting_metadata import GetWaitingMetadataUseCase
 from skiller.application.use_cases.run.append_runtime_event import AppendRuntimeEventUseCase
 from skiller.application.use_cases.run.bootstrap_runtime import BootstrapRuntimeUseCase
 from skiller.application.use_cases.run.check_webhook_wait import (
@@ -38,6 +40,7 @@ from skiller.application.use_cases.run.mark_notify_action_done import (
     MarkNotifyActionDoneUseCase,
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunStatus, ResumeRunUseCase
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
 from skiller.domain.event.event_model import (
     RunCreatedPayload,
     RunFinishedPayload,
@@ -66,6 +69,9 @@ class RunApplicationService:
         mark_notify_action_done_use_case: MarkNotifyActionDoneUseCase,
         get_run_use_case: GetRunUseCase,
         run_executor: RunExecutor,
+        get_last_waiting_run_use_case: GetLastWaitingRunUseCase,
+        get_waiting_metadata_use_case: GetWaitingMetadataUseCase,
+        waiting_metadata_mapper: WaitingMetadataMapper,
     ) -> None:
         self.bootstrap_runtime_use_case = bootstrap_runtime_use_case
         self.append_runtime_event_use_case = append_runtime_event_use_case
@@ -82,12 +88,17 @@ class RunApplicationService:
         self.mark_notify_action_done_use_case = mark_notify_action_done_use_case
         self.get_run_use_case = get_run_use_case
         self.run_executor = run_executor
+        self.get_last_waiting_run_use_case = get_last_waiting_run_use_case
+        self.get_waiting_metadata_use_case = get_waiting_metadata_use_case
+        self.waiting_metadata_mapper = waiting_metadata_mapper
 
     def initialize(self) -> None:
         self.bootstrap_runtime_use_case.initialize()
 
     def run(self, request: RunRequest) -> RunResult:
         created = self.create_run(request)
+        if created.status == RunStatus.WAITING:
+            return created
         self.prepare_run(created.run_id)
         self.dispatch_run(created.run_id)
         return self.get_run_result(created.run_id)
@@ -140,6 +151,15 @@ class RunApplicationService:
             raise ValueError("Flow resolution returned no path")
         flow_path = resolve_result.flow.flow_path
 
+        if request.last:
+            waiting_run = self.get_last_waiting_run_use_case.execute(flow_path)
+            if waiting_run is not None:
+                metadata = self.get_waiting_metadata_use_case.execute_for_run(waiting_run)
+                waiting = self.waiting_metadata_mapper.to_status(metadata)
+                return RunResult(
+                    run_id=waiting_run.id, status=RunStatus(waiting_run.status), waiting=waiting
+                )
+
         check_result = self.flow_checker_use_case.execute(flow_path)
         if check_result.status == FlowCheckStatus.INVALID:
             messages = [item.message for item in check_result.errors]
@@ -167,7 +187,7 @@ class RunApplicationService:
             event_type=RuntimeEventType.RUN_CREATE,
             payload=RunCreatedPayload(flow_path=str(flow_path)),
         )
-        return RunResult(run_id=run_id, status=RunStatus.CREATED)
+        return RunResult(run_id=run_id, status=RunStatus.CREATED, waiting=None)
 
     def prepare_run(self, run_id: str) -> None:
         try:
@@ -189,7 +209,7 @@ class RunApplicationService:
         status = RunStatus.FAILED
         if run is not None:
             status = RunStatus(run.status)
-        return RunResult(run_id=run_id, status=status)
+        return RunResult(run_id=run_id, status=status, waiting=None)
 
     def delete_run(self, run_id: str) -> DeleteRunResult:
         return self.delete_run_use_case.execute(run_id)

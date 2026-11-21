@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from helpers.agent_config import FakeAgentConfigPort, FakeLLMProviderCatalogPort
@@ -69,6 +70,7 @@ from skiller.application.use_cases.run.resolve_end_action_config import (
 )
 from skiller.application.use_cases.run.resume_run import ResumeRunUseCase
 from skiller.application.use_cases.run.sync_snapshot import SyncSnapshotUseCase
+from skiller.application.waits.waiting_metadata_mapper import WaitingMetadataMapper
 from skiller.domain.event.event_model import StepSuccessPayload
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.mcp.mcp_config_model import RenderedMcpConfig
@@ -270,6 +272,9 @@ def _build_runtime(store: SqliteRunStorePort) -> RunApplicationService:
         ),
         get_run_use_case=GetRunUseCase(store),
         run_executor=run_executor,
+        get_last_waiting_run_use_case=Mock(),
+        get_waiting_metadata_use_case=Mock(),
+        waiting_metadata_mapper=WaitingMetadataMapper(),
     )
     return runtime
 
@@ -288,9 +293,7 @@ def _wait_until_http_endpoint_ready(endpoint: str, timeout_seconds: float = 8.0)
     while time.monotonic() < deadline:
         if MCPClientTool().probe_server(
             "test-mcp",
-            config=RenderedMcpConfig(
-                name="test-mcp", transport="streamable-http", url=endpoint
-            ),
+            config=RenderedMcpConfig(name="test-mcp", transport="streamable-http", url=endpoint),
         )["ok"]:
             return
         time.sleep(0.1)
@@ -337,6 +340,7 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
             RunRequest(
                 reference=FlowReference("@stdio_mcp_test"),
                 inputs={"file_path": str(file_path), "content": "hola-e2e"},
+                last=False,
             )
         )
 
@@ -347,9 +351,7 @@ def test_stdio_mcp_test_with_real_fixture() -> None:
         assert file_path.read_text(encoding="utf-8") == "hola-e2e"
         events = _event_store(store).list_events(run_result.run_id)
         mcp_event = next(
-            event
-            for event in events
-            if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
+            event for event in events if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
         )
         assert isinstance(mcp_event.payload, StepSuccessPayload)
         assert mcp_event.payload.output["value"]["data"]["ok"] is True
@@ -367,6 +369,7 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
             RunRequest(
                 reference=FlowReference("@http_mcp_test"),
                 inputs={"mcp_url": http_mcp_server},
+                last=False,
             )
         )
 
@@ -376,9 +379,7 @@ def test_http_mcp_test_with_real_fixture(http_mcp_server: str) -> None:
         assert run.status == "SUCCEEDED"
         events = _event_store(store).list_events(run_result.run_id)
         mcp_event = next(
-            event
-            for event in events
-            if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
+            event for event in events if event.type == "STEP_SUCCESS" and event.step_type == "mcp"
         )
         assert isinstance(mcp_event.payload, StepSuccessPayload)
         assert mcp_event.payload.output["value"]["data"]["ok"] is True

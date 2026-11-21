@@ -25,6 +25,16 @@ class RunCommandError:
 class RunCommandRequest:
     flow_reference: str
     inputs: dict[str, str]
+    last: bool
+
+
+@dataclass(frozen=True)
+class RunCommandResult:
+    run_id: str
+    status: str
+    worker_pid: int | None
+    wait_type: str | None
+    prompt: str | None
 
 
 @dataclass(frozen=True)
@@ -40,6 +50,18 @@ class RunCommandWatchResult:
 
 
 class RunOutputMapper:
+    def to_result_dict(self, result: RunCommandResult) -> dict[str, Any]:
+        response = {
+            "run_id": result.run_id,
+            "status": result.status,
+            "worker_pid": result.worker_pid,
+        }
+        if result.wait_type is not None:
+            response["wait_type"] = result.wait_type
+        if result.prompt is not None:
+            response["prompt"] = result.prompt
+        return response
+
     def to_error_dict(
         self,
         error: RunCommandError,

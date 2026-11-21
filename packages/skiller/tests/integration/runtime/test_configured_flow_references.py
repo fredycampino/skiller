@@ -59,13 +59,13 @@ def test_runtime_reloads_configured_flow_paths_for_each_run(
     container.run_service.initialize()
 
     first = container.run_service.create_run(
-        RunRequest(reference=FlowReference("@reports/daily"), inputs={})
+        RunRequest(reference=FlowReference("@reports/daily"), inputs={}, last=False)
     )
     first_run = container.run_service.get_run_use_case.execute(first.run_id)
 
     _write_config(config_path, database_path=database_path, flow_path=second_root)
     second = container.run_service.create_run(
-        RunRequest(reference=FlowReference("@reports/monthly"), inputs={})
+        RunRequest(reference=FlowReference("@reports/monthly"), inputs={}, last=False)
     )
     second_run = container.run_service.get_run_use_case.execute(second.run_id)
 

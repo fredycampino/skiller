@@ -8,7 +8,7 @@ from skiller.domain.wait.match_type import MatchType
 from skiller.domain.wait.source_type import SourceType
 from skiller.domain.wait.wait_type import WaitType
 from skiller.infrastructure.db.datasource.sqlite_wait_datasource import SqliteWaitDatasource
-from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_run_query_port import SqliteRunQueryPort
 from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_wait_store_port import SqliteWaitStorePort
@@ -20,7 +20,7 @@ def test_list_runs_returns_recent_runs_first(tmp_path) -> None:
     db_path = tmp_path / "runs.db"
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
-    query_store = SqliteRunQueryStore(str(db_path))
+    query_store = SqliteRunQueryPort(str(db_path))
 
     first_run_id = "550e8400-e29b-41d4-a716-446655440010"
     second_run_id = "550e8400-e29b-41d4-a716-446655440011"
@@ -52,7 +52,7 @@ def test_list_runs_can_filter_by_status(tmp_path) -> None:
     db_path = tmp_path / "runs-filter.db"
     run_store = SqliteRunStorePort(str(db_path))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
-    query_store = SqliteRunQueryStore(str(db_path))
+    query_store = SqliteRunQueryPort(str(db_path))
 
     waiting_run_id = "550e8400-e29b-41d4-a716-446655440012"
     failed_run_id = "550e8400-e29b-41d4-a716-446655440013"
@@ -83,7 +83,7 @@ def test_list_runs_includes_wait_type_and_webhook_detail(tmp_path) -> None:
     run_store = SqliteRunStorePort(str(db_path))
     wait_store = SqliteWaitStorePort(SqliteWaitDatasource(str(db_path)))
     SqliteRuntimeBootstrap(str(db_path)).init_db()
-    query_store = SqliteRunQueryStore(str(db_path))
+    query_store = SqliteRunQueryPort(str(db_path))
 
     webhook_run_id = "550e8400-e29b-41d4-a716-446655440014"
     input_run_id = "550e8400-e29b-41d4-a716-446655440015"
@@ -128,3 +128,26 @@ def test_list_runs_includes_wait_type_and_webhook_detail(tmp_path) -> None:
     assert runs[0].wait_detail is None
     assert runs[1].wait_type == "webhook"
     assert runs[1].wait_detail == "github-ci:42"
+
+
+def test_last_waiting_run_filters_flow_and_status_and_orders_by_creation(tmp_path) -> None:
+    db_path = str(tmp_path / "runs.db")
+    SqliteRuntimeBootstrap(db_path).init_db()
+    store = SqliteRunStorePort(db_path)
+    query = SqliteRunQueryPort(db_path)
+    flow = tmp_path / "flow.yaml"
+    assert query.get_last_waiting_run(flow) is None
+    for run_id, path, status in (
+        ("older", flow, RunStatus.WAITING),
+        ("newer", flow, RunStatus.WAITING),
+        ("other", tmp_path / "other.yaml", RunStatus.WAITING),
+        ("finished", flow, RunStatus.SUCCEEDED),
+        ("running", flow, RunStatus.RUNNING),
+    ):
+        store.create_run(path, {}, RunContext(inputs={}, step_executions={}), run_id=run_id)
+        store.update_run(run_id, status=status)
+    assert query.get_last_waiting_run(flow).id == "newer"
+    store.update_run("newer", status=RunStatus.CANCELLED)
+    assert query.get_last_waiting_run(flow).id == "older"
+    store.update_run("older", status=RunStatus.SUCCEEDED)
+    assert query.get_last_waiting_run(flow) is None

@@ -99,6 +99,8 @@ class _FakeController:
         self,
         flow_reference: str,
         inputs: dict[str, str],
+        *,
+        last: bool,
     ) -> dict[str, object]:
         self.create_run_calls.append((flow_reference, inputs))
         return dict(self.run_result)
@@ -1708,3 +1710,58 @@ def test_local_process_commands_dispatch_to_selected_service(
     assert exit_code == 0
     assert service_class.calls == [(method, fake_container.settings)]
     assert expected_key in data
+
+
+@pytest.mark.parametrize("detach", [False, True])
+def test_last_returns_waiting_run_without_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+    detach: bool,
+) -> None:
+    controller = _FakeController()
+    worker = _FakeWorkerProcessService()
+    _install_runtime(monkeypatch, fake_container, controller, worker_process_service=worker)
+    calls = []
+
+    def create(flow_reference, inputs, *, last):
+        calls.append((flow_reference, inputs, last))
+        return {"run_id": "run-1", "status": "WAITING",
+                "wait_type": "input", "prompt": "Start or stop"}
+
+    controller.create_run = create
+    controller.status_results = [{"run_id": "run-1", "status": "WAITING",
+                                  "wait_type": "input", "prompt": "Start or stop"}]
+    args = ["run", SKILL_NAME, "--last", "--logs"]
+    if detach:
+        args.append("--detach")
+    assert cli_main.main(args) == 0
+    data, _ = _read_json(capsys)
+    assert calls == [(f"@{SKILL_NAME}", {}, True)]
+    assert worker.calls == []
+    assert data["prompt"] == "Start or stop"
+    assert data["worker_pid"] is None
+    assert controller.status_calls == []
+    assert "logs" in data
+
+
+def test_last_no_match_starts_normal_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_container: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controller = _FakeController()
+    worker = _FakeWorkerProcessService()
+    _install_runtime(monkeypatch, fake_container, controller, worker_process_service=worker)
+    create = controller.create_run
+
+    def create_last(flow_reference, inputs, *, last):
+        assert last is True
+        return create(flow_reference, inputs, last=last)
+
+    controller.create_run = create_last
+    assert cli_main.main(["run", SKILL_NAME, "--last", "--arg", "message=ok", "--detach"]) == 0
+    data, _ = _read_json(capsys)
+    assert controller.create_run_calls == [(f"@{SKILL_NAME}", {"message": "ok"})]
+    assert worker.calls == [("start", "run-1")]
+    assert data["status"] == "CREATED"

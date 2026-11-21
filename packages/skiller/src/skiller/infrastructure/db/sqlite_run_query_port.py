@@ -2,11 +2,22 @@ from pathlib import Path
 from typing import Any
 
 from skiller.domain.run.run_list_item_model import RunListItem
+from skiller.domain.run.run_model import Run
 from skiller.domain.run.run_query_port import RunQueryPort
 from skiller.infrastructure.db.datasource.sqlite_connection_source import SqliteConnectionSource
+from skiller.infrastructure.db.sqlite_run_mapper import build_run_from_row
 
 
-class SqliteRunQueryStore(SqliteConnectionSource, RunQueryPort):
+class SqliteRunQueryPort(SqliteConnectionSource, RunQueryPort):
+    def get_last_waiting_run(self, flow_path: Path) -> Run | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """SELECT * FROM runs WHERE flow_path = ? AND status = 'WAITING'
+                   ORDER BY created_at DESC, rowid DESC LIMIT 1""",
+                (str(flow_path),),
+            ).fetchone()
+        return build_run_from_row(row) if row is not None else None
+
     def list_runs(
         self,
         *,

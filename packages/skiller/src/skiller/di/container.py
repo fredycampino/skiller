@@ -79,6 +79,7 @@ from skiller.application.use_cases.flow.resolve_flow import ResolveFlowUseCase
 from skiller.application.use_cases.ingress.handle_channel import HandleChannelUseCase
 from skiller.application.use_cases.ingress.handle_input import HandleInputUseCase
 from skiller.application.use_cases.ingress.handle_webhook import HandleWebhookUseCase
+from skiller.application.use_cases.query.get_last_waiting_run import GetLastWaitingRunUseCase
 from skiller.application.use_cases.query.get_run import GetRunUseCase
 from skiller.application.use_cases.query.get_run_logs import GetRunLogsUseCase
 from skiller.application.use_cases.query.get_run_status import GetRunStatusUseCase
@@ -163,7 +164,7 @@ from skiller.infrastructure.db.sqlite_agent_context_state_port import (
 from skiller.infrastructure.db.sqlite_agent_steering_store import SqliteAgentSteeringStore
 from skiller.infrastructure.db.sqlite_external_event_store import SqliteExternalEventStore
 from skiller.infrastructure.db.sqlite_run_agent_store import SqliteRunAgentStore
-from skiller.infrastructure.db.sqlite_run_query_store import SqliteRunQueryStore
+from skiller.infrastructure.db.sqlite_run_query_port import SqliteRunQueryPort
 from skiller.infrastructure.db.sqlite_run_store_port import SqliteRunStorePort
 from skiller.infrastructure.db.sqlite_runtime_bootstrap import SqliteRuntimeBootstrap
 from skiller.infrastructure.db.sqlite_runtime_event_store import SqliteRuntimeEventStore
@@ -224,7 +225,7 @@ def build_runtime_container(
     run_agent_datasource = SqliteRunAgentDatasource(cfg.db_path)
     run_agent_store = SqliteRunAgentStore(run_agent_datasource)
     agent_steering_store = SqliteAgentSteeringStore(cfg.db_path)
-    run_query = SqliteRunQueryStore(cfg.db_path)
+    run_query = SqliteRunQueryPort(cfg.db_path)
     webhook_registry = SqliteWebhookRegistryPort(cfg.db_path)
     filesystem_runner_port = FilesystemRunnerPort()
     skill_runner: RunnerPort = filesystem_runner_port
@@ -535,6 +536,9 @@ def build_runtime_container(
         mark_notify_action_done_use_case=mark_notify_action_done_use_case,
         get_run_use_case=get_run_use_case,
         run_executor=run_executor,
+        get_last_waiting_run_use_case=GetLastWaitingRunUseCase(run_query),
+        get_waiting_metadata_use_case=get_waiting_metadata_use_case,
+        waiting_metadata_mapper=waiting_metadata_mapper,
     )
     run_mapper = RunServiceMapper()
     status_mapper = RunStatusMapper()

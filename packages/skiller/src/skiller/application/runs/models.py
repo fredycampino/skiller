@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any
 
 from skiller.application.use_cases.run.resume_run import ResumeRunStatus
+from skiller.application.waits.waiting_metadata_mapper import WaitingStatus
 from skiller.domain.flow.flow_reference import FlowReference
 from skiller.domain.run.run_model import RunStatus
 
@@ -16,12 +17,14 @@ class WorkerStartStatus(str, Enum):
 class RunRequest:
     reference: FlowReference
     inputs: dict[str, Any]
+    last: bool
 
 
 @dataclass(frozen=True)
 class RunResult:
     run_id: str
     status: RunStatus
+    waiting: WaitingStatus | None
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,21 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.55 - 2026-11-25
+
+### Added
+- Propagate generation metrics alongside usage in assistant message events and final agent step output without database schema changes.
+- Show muted generation speed per agent response in STUI, with inline speed for text-free tool-cycle messages.
+
+### Changed
+- Keep text-free assistant tool-cycle messages in the transcript and update footer usage and metrics from them.
+
+### Documentation
+- Separate runtime and agent event contracts, document optional generation metrics, and update references.
+
+### Notes
+- Includes PR #192.
+
 ## 0.1.0-beta.54 - 2026-11-24
 
 ### Added

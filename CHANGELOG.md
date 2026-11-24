@@ -4,6 +4,26 @@ All notable changes to this project should be summarized here before a version i
 
 ## Unreleased
 
+## 0.1.0-beta.54 - 2026-11-24
+
+### Added
+- Add native Ollama inference with tool calls, per-model sampling and effort mapping, explicit context limits, and generation metrics retained in responses and native logs.
+- Add Ollama onboarding with local or custom server connections, model discovery, validation, and run-owned configuration backups protected against concurrent setup attempts.
+- Add an isolated Ollama QA launcher and adapter/provider end-to-end tests.
+
+### Changed
+- Present STUI authentication providers in a three-column table with muted headers and use the same provider priority in `/auth` and `/models`.
+- Reorder first-launch provider setup, include OpenRouter, and keep a single final Configure later option.
+
+### Fixed
+- Ignore unsupported adapters and unknown providers without adapter definitions in user and environment provider catalogs before validating their fields, allowing supported providers to remain usable.
+
+### Documentation
+- Document the native Ollama adapter and add the website blog with the V100 cooling experiment.
+
+### Notes
+- Includes PRs #189 and #190.
+
 ## 0.1.0-beta.53 - 2026-11-21
 
 ### Added

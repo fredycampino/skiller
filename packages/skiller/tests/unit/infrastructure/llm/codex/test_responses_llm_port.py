@@ -152,7 +152,11 @@ def _request(
 ) -> CodexLLMRequest:
     return CodexLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=LLMModelDefinition(model=model, context_window_tokens=1_000, max_output_tokens=None),
+        model=LLMModelDefinition(
+            model=model,
+            context_window_tokens=1_000,
+            max_output_tokens=None,
+        ),
         parallel_tool_calls=False,
         session_id="session-1",
         log_request_file=log_request_file,
@@ -246,9 +250,7 @@ def test_responses_llm_port_collects_and_maps_generic_response(
     events = [SimpleNamespace(type="response.completed", response=_text_response())]
     port, logger, sessions = _port(monkeypatch, events=events, logger=_FakeLogger())
 
-    response = port.generate(
-        _request(log_request_file="request.json", log_streaming=True)
-    )
+    response = port.generate(_request(log_request_file="request.json", log_streaming=True))
 
     assert response.finish_type == LLMFinishType.STOP
     assert response.content == "hello"
@@ -340,9 +342,7 @@ def test_responses_llm_port_returns_stream_error_with_received_events(
     event = SimpleNamespace(type="response.output_text.delta", delta="partial")
     port, logger, sessions = _port(monkeypatch, events=[event], logger=_FakeLogger())
 
-    response = port.generate(
-        _request(log_request_file="request.json", log_streaming=True)
-    )
+    response = port.generate(_request(log_request_file="request.json", log_streaming=True))
 
     assert response.finish_type == LLMFinishType.ERROR_STREAM
     assert response.error_code == "stream_failed"

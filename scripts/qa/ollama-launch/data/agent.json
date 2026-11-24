@@ -1,0 +1,13 @@
+{
+  "llm": {
+    "provider": "ollama",
+    "model": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q6_K",
+    "effort": 3
+  },
+  "debug": {
+    "log_request": true,
+    "log_request_file": "/data/logs/llm.json",
+    "log_streaming": true,
+    "log_override_file": true
+  }
+}

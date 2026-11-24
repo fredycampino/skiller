@@ -96,7 +96,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -307,6 +309,7 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         runtime_event_store=runtime_events,
     )
     response = LLMResponse(
+        generation_metrics=None,
         model=_model("model1", 100_000),
         finish_type=LLMFinishType.TOOL_CALLS,
         tool_calls=(
@@ -690,6 +693,7 @@ def _request_with_tool(tool: str, arguments_json: str) -> ToolExecutionRequest:
         ),
         turn_id="turn-1",
         response=LLMResponse(
+            generation_metrics=None,
             model=_model("model1", 100_000),
             finish_type=LLMFinishType.TOOL_CALLS,
             tool_calls=(

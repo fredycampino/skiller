@@ -25,8 +25,11 @@ from skiller.domain.agent.llm.provider_catalog import (
     LLMApiKeySource,
     LLMApiKeySourceType,
     LLMModelDefinition,
+    LLMModelParams,
     LLMProviderCatalog,
     LLMProviderDefinition,
+    OllamaLLMModelDefinition,
+    OllamaLLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
 from skiller.infrastructure.config.adapter_config import (
@@ -39,6 +42,8 @@ from skiller.infrastructure.config.adapter_config import (
     LLMProviderCatalogOverride,
     LLMProviderCatalogOverrideSourceModel,
     LLMProviderCatalogSourceModel,
+    OllamaAdapterConfigModel,
+    OllamaAdapterOverrideModel,
     OpenAIAdapterConfigModel,
     OpenAIAdapterOverrideModel,
 )
@@ -78,6 +83,9 @@ class FileLLMProviderCatalogMapper:
         self,
         override: LLMProviderCatalogOverride,
     ) -> LLMProviderDefinition:
+        if override.fields.get("adapter") == LLMAdapterType.OLLAMA:
+            fields = {key: value for key, value in override.fields.items() if key != "adapter"}
+            _validate_override(OllamaAdapterOverrideModel, {"name": override.name, **fields})
         raw_config = {"providers": {override.name: dict(override.fields)}}
         providers = self.to_provider_configs(raw_config)
         return providers[0]
@@ -103,6 +111,10 @@ class FileLLMProviderCatalogMapper:
             config = _validate_override(CodexAdapterOverrideModel, raw_override)
             updates = _to_provider_override_updates(config)
             return dataclasses.replace(base, **updates)
+        if isinstance(base, OllamaLLMProviderDefinition):
+            config = _validate_override(OllamaAdapterOverrideModel, raw_override)
+            updates = _to_provider_override_updates(config)
+            return dataclasses.replace(base, **updates)
         raise ValueError(f"Unsupported LLM provider adapter: {base.adapter}")
 
     def to_catalog(
@@ -114,6 +126,8 @@ class FileLLMProviderCatalogMapper:
     @staticmethod
     def _to_provider_config(entry: LLMAdapterConfigModel) -> LLMProviderDefinition:
         match entry.adapter:
+            case LLMAdapterType.OLLAMA:
+                return FileLLMProviderCatalogMapper._to_ollama_provider(entry)
             case LLMAdapterType.BEDROCK:
                 return FileLLMProviderCatalogMapper._to_bedrock_provider(entry)
             case LLMAdapterType.OPENAI:
@@ -122,15 +136,19 @@ class FileLLMProviderCatalogMapper:
                 return FileLLMProviderCatalogMapper._to_codex_provider(entry)
 
     @staticmethod
-    def _to_bedrock_provider(config: BedrockAdapterConfigModel) -> LLMProviderDefinition:
-        models = tuple(
-            LLMModelDefinition(
-                model=m.model,
-                context_window_tokens=m.context_window_tokens,
-                max_output_tokens=m.max_output_tokens,
-            )
-            for m in config.models
+    def _to_ollama_provider(config: OllamaAdapterConfigModel) -> LLMProviderDefinition:
+        return OllamaLLMProviderDefinition(
+            name=config.name,
+            enabled=config.enabled,
+            timeout_seconds=config.timeout_seconds,
+            models=_to_ollama_model_definitions(config.models),
+            base_url=config.base_url,
+            keep_alive=config.keep_alive,
         )
+
+    @staticmethod
+    def _to_bedrock_provider(config: BedrockAdapterConfigModel) -> LLMProviderDefinition:
+        models = _to_model_definitions(config.models)
         return BedrockLLMProviderDefinition(
             name=config.name,
             enabled=config.enabled,
@@ -141,14 +159,7 @@ class FileLLMProviderCatalogMapper:
 
     @staticmethod
     def _to_openai_provider(config: OpenAIAdapterConfigModel) -> LLMProviderDefinition:
-        models = tuple(
-            LLMModelDefinition(
-                model=m.model,
-                context_window_tokens=m.context_window_tokens,
-                max_output_tokens=m.max_output_tokens,
-            )
-            for m in config.models
-        )
+        models = _to_model_definitions(config.models)
         api_key_source = _resolve_openai_api_key_source(config)
         return OpenAILLMProviderDefinition(
             name=config.name,
@@ -166,14 +177,7 @@ class FileLLMProviderCatalogMapper:
 
     @staticmethod
     def _to_codex_provider(config: CodexAdapterConfigModel) -> LLMProviderDefinition:
-        models = tuple(
-            LLMModelDefinition(
-                model=m.model,
-                context_window_tokens=m.context_window_tokens,
-                max_output_tokens=m.max_output_tokens,
-            )
-            for m in config.models
-        )
+        models = _to_model_definitions(config.models)
         return CodexLLMProviderDefinition(
             name=config.name,
             enabled=config.enabled,
@@ -214,12 +218,19 @@ def _validate_override(
 
 
 def _to_provider_override_updates(
-    config: BedrockAdapterOverrideModel | CodexAdapterOverrideModel | OpenAIAdapterOverrideModel,
+    config: BedrockAdapterOverrideModel
+    | CodexAdapterOverrideModel
+    | OpenAIAdapterOverrideModel
+    | OllamaAdapterOverrideModel,
 ) -> dict[str, object]:
     values = config.model_dump(exclude_none=True)
     values.pop("name")
     if config.models is not None:
-        values["models"] = _to_model_definitions(config.models)
+        values["models"] = (
+            _to_ollama_model_definitions(config.models)
+            if isinstance(config, OllamaAdapterOverrideModel)
+            else _to_model_definitions(config.models)
+        )
     return values
 
 
@@ -253,11 +264,31 @@ def _to_openai_override_updates(config: OpenAIAdapterOverrideModel) -> dict[str,
 def _to_model_definitions(
     models: tuple[LLMModelConfigModel, ...],
 ) -> tuple[LLMModelDefinition, ...]:
+    for model in models:
+        if model.params is not None or model.effort_mapping is not None:
+            raise ValueError("Model params and effort_mapping require the Ollama adapter")
     return tuple(
         LLMModelDefinition(
             model=model.model,
             context_window_tokens=model.context_window_tokens,
             max_output_tokens=model.max_output_tokens,
+        )
+        for model in models
+    )
+
+
+def _to_ollama_model_definitions(
+    models: tuple[LLMModelConfigModel, ...],
+) -> tuple[OllamaLLMModelDefinition, ...]:
+    return tuple(
+        OllamaLLMModelDefinition(
+            model=model.model,
+            context_window_tokens=model.context_window_tokens,
+            max_output_tokens=model.max_output_tokens,
+            params=LLMModelParams(**model.params.model_dump())
+            if model.params is not None
+            else None,
+            effort_mapping=model.effort_mapping,
         )
         for model in models
     )

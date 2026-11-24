@@ -20,8 +20,16 @@ from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 pytestmark = pytest.mark.unit
 
 
-MODEL = LLMModelDefinition(model="model1", context_window_tokens=100_000, max_output_tokens=None)
-MODEL_2 = LLMModelDefinition(model="model2", context_window_tokens=200_000, max_output_tokens=None)
+MODEL = LLMModelDefinition(
+    model="model1",
+    context_window_tokens=100_000,
+    max_output_tokens=None,
+)
+MODEL_2 = LLMModelDefinition(
+    model="model2",
+    context_window_tokens=200_000,
+    max_output_tokens=None,
+)
 
 
 class _FakeLLM:
@@ -65,6 +73,7 @@ def test_llm_model_manager_uses_factory_client() -> None:
     request = _request()
     client_resolver = _FakeClientResolver(
         LLMResponse(
+            generation_metrics=None,
             model=MODEL,
             finish_type=LLMFinishType.STOP,
             content="fake",
@@ -75,6 +84,7 @@ def test_llm_model_manager_uses_factory_client() -> None:
     response = manager.generate(provider=provider, request=request)
 
     assert response == LLMResponse(
+        generation_metrics=None,
         model=MODEL,
         finish_type=LLMFinishType.STOP,
         content="fake",
@@ -89,6 +99,7 @@ def test_llm_model_manager_reuses_client_when_only_model_changes() -> None:
     second_request = _request(model=MODEL_2)
     client_resolver = _FakeClientResolver(
         LLMResponse(
+            generation_metrics=None,
             model=MODEL,
             finish_type=LLMFinishType.STOP,
             content="fake",
@@ -106,6 +117,7 @@ def test_llm_model_manager_reuses_client_when_only_model_changes() -> None:
 def test_llm_model_manager_adds_provider_usage_metadata() -> None:
     provider = _provider()
     response = LLMResponse(
+        generation_metrics=None,
         model=MODEL,
         finish_type=LLMFinishType.STOP,
         content="fake",
@@ -175,6 +187,7 @@ def test_llm_model_manager_rejects_provider_request_mismatch(
 ) -> None:
     client_resolver = _FakeClientResolver(
         LLMResponse(
+            generation_metrics=None,
             model=MODEL,
             finish_type=LLMFinishType.STOP,
         )

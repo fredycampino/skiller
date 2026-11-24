@@ -207,10 +207,9 @@ def test_console_screen_opens_auth_panel_and_closes_it_with_escape() -> None:
             assert prompt.text == ""
             assert "Enter configure" in str(help_view.content)
             assert auth_table.size.height <= 10
-            assert auth_table.render_providers_text().splitlines()[:2] == [
-                "moonshot · openai ✓",
-                "codex · codex ✓",
-            ]
+            table = auth_table.query_one(DataTable)
+            assert table.get_row("moonshot") == ["moonshot", "openai", "✓"]
+            assert table.get_row("codex") == ["codex", "codex", "✓"]
 
             await pilot.press("escape")
             await pilot.pause()

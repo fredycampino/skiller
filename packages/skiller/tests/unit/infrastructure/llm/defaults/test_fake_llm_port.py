@@ -11,7 +11,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -29,6 +31,7 @@ def test_fake_llm_returns_configured_text_payload() -> None:
     )
 
     assert result == LLMResponse(
+        generation_metrics=None,
         content='{"summary":"ok","severity":"low","next_action":"retry"}',
         model=_model("model1", 100_000),
         finish_type=LLMFinishType.STOP,

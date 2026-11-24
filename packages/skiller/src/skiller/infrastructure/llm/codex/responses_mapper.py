@@ -37,6 +37,7 @@ class ResponsesMapper:
             malformed_error_code=malformed_error_code,
         )
         return LLMResponse(
+            generation_metrics=None,
             model=request.model,
             content=content or None,
             tool_calls=tool_calls,
@@ -100,9 +101,7 @@ def _finish(
         return LLMFinishType.STOP, None, None
     if response.status == "incomplete":
         reason = (
-            response.incomplete_details.reason
-            if response.incomplete_details is not None
-            else None
+            response.incomplete_details.reason if response.incomplete_details is not None else None
         )
         if reason == "max_output_tokens":
             return _error(LLMFinishType.INVALID_RESPONSE_LENGTH, "response_length")

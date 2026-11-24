@@ -94,6 +94,7 @@ def _model(*, value: str, max_output_tokens: int | None) -> LLMModelDefinition:
         model=value,
         context_window_tokens=int(os.environ.get("CODEX_E2E_CONTEXT_WINDOW_TOKENS", "1050000")),
         max_output_tokens=max_output_tokens,
+
     )
 
 

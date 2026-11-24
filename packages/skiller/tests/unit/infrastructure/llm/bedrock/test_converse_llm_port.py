@@ -84,7 +84,11 @@ def _request(
 ) -> BedrockLLMRequest:
     return BedrockLLMRequest(
         messages=(LLMUserMessage("hello"),),
-        model=LLMModelDefinition(model="test", context_window_tokens=1_000, max_output_tokens=None),
+        model=LLMModelDefinition(
+            model="test",
+            context_window_tokens=1_000,
+            max_output_tokens=None,
+        ),
         log_request_file=log_request_file,
         log_streaming=log_streaming,
     )

@@ -1,0 +1,8 @@
+{
+  "flow_paths": [
+    "/data/qa"
+  ],
+  "runtime": {
+    "db_path": "~/.skiller/runtime/global.db"
+  }
+}

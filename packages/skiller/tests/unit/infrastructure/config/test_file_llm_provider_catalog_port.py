@@ -38,7 +38,9 @@ class _FakeFileLLMProviderCatalogDatasource(FileLLMProviderCatalogDatasource):
         self.calls.append(path)
         return self.providers_by_path[path]
 
-    def get_override_providers(self, path: Path) -> tuple[LLMProviderCatalogOverride, ...]:
+    def get_override_providers(
+        self, path: Path, *, known_provider_names: frozenset[str]
+    ) -> tuple[LLMProviderCatalogOverride, ...]:
         self.calls.append(path)
         return self.overrides_by_path.get(path, ())
 
@@ -67,7 +69,9 @@ def test_port_merges_sources_by_precedence(monkeypatch: pytest.MonkeyPatch) -> N
         temperature=1.0,
         models=(
             LLMModelDefinition(
-                model="MiniMax-M3", context_window_tokens=204_800, max_output_tokens=None
+                model="MiniMax-M3",
+                context_window_tokens=204_800,
+                max_output_tokens=None,
             ),
         ),
         api_key_env="PROVIDER_API_KEY",
@@ -190,7 +194,9 @@ def _openai_provider(
     temperature: float = 1.0,
     models: tuple[LLMModelDefinition, ...] = (
         LLMModelDefinition(
-            model="MiniMax-M3", context_window_tokens=204_800, max_output_tokens=None
+            model="MiniMax-M3",
+            context_window_tokens=204_800,
+            max_output_tokens=None,
         ),
     ),
     api_key_env: str | None = "PROVIDER_API_KEY",
@@ -228,9 +234,58 @@ def _bedrock_provider() -> BedrockLLMProviderDefinition:
         timeout_seconds=45,
         models=(
             LLMModelDefinition(
-                model="bedrock-model", context_window_tokens=200_000, max_output_tokens=None
+                model="bedrock-model",
+                context_window_tokens=200_000,
+                max_output_tokens=None,
             ),
         ),
         enabled=True,
         profile="default",
     )
+
+
+@pytest.mark.parametrize("source", ["user", "env"])
+@pytest.mark.parametrize("explicit_adapter", [True, False])
+def test_catalog_ignores_future_provider_before_validating_its_fields(
+    tmp_path: Path, source: str, explicit_adapter: bool
+) -> None:
+    import json
+
+    default_path = Path(__file__).parents[4] / "src/skiller/application/config/providers.json"
+    override_path = tmp_path / "providers.json"
+    future = {"future_setting": {"unsupported": True}, "models": [{"future_model": True}]}
+    if explicit_adapter:
+        future["adapter"] = "future-adapter"
+    override_path.write_text(json.dumps({"providers": {"future": future}}))
+    mapper = FileLLMProviderCatalogMapper()
+    datasource = FileLLMProviderCatalogDatasource(mapper=mapper)
+    catalog = FileLLMProviderCatalogPort(
+        datasource=datasource,
+        mapper=mapper,
+        default_path=default_path,
+        user_path=override_path if source == "user" else None,
+        env={"SKILLER_AGENT_PROVIDERS_FILE": str(override_path)} if source == "env" else {},
+    ).get_catalog()
+    assert "future" not in {provider.name for provider in catalog.providers}
+    assert "future" not in catalog.sources
+    assert "codex" in {provider.name for provider in catalog.providers}
+
+
+@pytest.mark.parametrize(
+    "name,entry",
+    [
+        ("codex", {"future_setting": True}),
+        ("custom", {"adapter": "openai", "future_setting": True}),
+        ("custom", {"adapter": None}),
+    ],
+)
+def test_datasource_keeps_validation_for_supported_or_invalid_entries(
+    tmp_path: Path, name: str, entry: dict[str, object]
+) -> None:
+    import json
+
+    path = tmp_path / "providers.json"
+    path.write_text(json.dumps({"providers": {name: entry}}))
+    datasource = FileLLMProviderCatalogDatasource(mapper=FileLLMProviderCatalogMapper())
+    with pytest.raises(ValueError):
+        datasource.get_override_providers(path, known_provider_names=frozenset({"codex"}))

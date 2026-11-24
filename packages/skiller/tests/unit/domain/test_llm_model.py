@@ -22,7 +22,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -64,6 +66,7 @@ def test_assistant_message_requires_content_or_tool_calls() -> None:
 
 def test_llm_response_normalizes_metadata_strings() -> None:
     response = LLMResponse(
+        generation_metrics=None,
         content=" done ",
         model=_model("model1", 100_000),
         finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
@@ -79,6 +82,7 @@ def test_llm_response_normalizes_metadata_strings() -> None:
 
 def test_llm_response_converts_empty_metadata_to_none() -> None:
     response = LLMResponse(
+        generation_metrics=None,
         content=" \n ",
         model=_model("model1", 100_000),
         finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
@@ -94,6 +98,7 @@ def test_llm_response_converts_empty_metadata_to_none() -> None:
 
 def test_llm_response_exposes_semantic_properties() -> None:
     response = LLMResponse(
+        generation_metrics=None,
         model=_model("model1", 100_000),
         finish_type=LLMFinishType.STOP,
         content="done",

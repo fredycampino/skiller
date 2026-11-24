@@ -112,3 +112,50 @@ def _context(*, run_id: str) -> RunEventContext:
 
 def _models_command() -> Command:
     return Command(kind=CommandKind.MODELS, name="/models", raw_text="/models")
+
+
+def test_list_models_orders_providers_without_changing_models() -> None:
+    import asyncio
+
+    names = [
+        "custom-z",
+        "minimax",
+        "moonshot",
+        "deepseek",
+        "lmstudio",
+        "codex",
+        "bedrock",
+        "openrouter",
+        "ollama",
+        "custom-a",
+    ]
+    providers = [
+        ModelsPortProviderItem(
+            name=name,
+            source="user",
+            models=(ModelsPortModelItem(name=f"{name}-model", active=name == "ollama"),),
+        )
+        for name in names
+    ]
+    with patched_to_thread(list_models_use_case_module):
+        result = asyncio.run(
+            ListModelsUseCase(
+                models_port=FakeModelsPort(models=providers),
+                context=_context(run_id="run-123"),
+            ).execute(state=ConsoleScreenState(), command=_models_command())
+        )
+    rows = result.state.models_table.rows
+    assert [row.name for row in rows] == [
+        "codex",
+        "bedrock",
+        "ollama",
+        "lmstudio",
+        "openrouter",
+        "deepseek",
+        "moonshot",
+        "minimax",
+        "custom-z",
+        "custom-a",
+    ]
+    assert all(row is providers[names.index(row.name)] for row in rows)
+    assert rows[2].models[0].active is True

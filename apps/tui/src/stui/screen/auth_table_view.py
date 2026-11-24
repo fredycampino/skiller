@@ -32,7 +32,7 @@ class AuthTableView(Vertical):
         self._strings = strings
         self._providers_table = DataTable(
             id="auth-providers-table",
-            show_header=False,
+            show_header=True,
             show_row_labels=False,
             zebra_stripes=False,
             cursor_type="row",
@@ -47,7 +47,7 @@ class AuthTableView(Vertical):
         yield Static(self._strings.auth_table_help, id="auth-help")
 
     def on_mount(self) -> None:
-        self._render_table()
+        self.call_after_refresh(self._render_table)
 
     def set_state(self, state: AuthTableState) -> None:
         self.display = state.visible
@@ -91,26 +91,26 @@ class AuthTableView(Vertical):
     def action_select_cursor(self) -> None:
         self._providers_table.action_select_cursor()
 
-    def render_providers_text(self) -> str:
-        if not self._providers:
-            return self._strings.auth_table_no_providers_message
-        return "\n".join(
-            format_provider_label(provider, self._strings)
-            for provider in self._providers
-        )
-
     def _render_table(self) -> None:
         if not self.is_mounted:
             return
-        self._providers_table.styles.height = max(1, len(self._providers))
+        self._providers_table.styles.height = 1 + max(1, len(self._providers))
         self._providers_table.clear(columns=True)
-        self._providers_table.add_column("")
+        self._providers_table.add_column(self._strings.auth_table_provider_header)
+        self._providers_table.add_column(self._strings.auth_table_adapter_header)
+        self._providers_table.add_column(self._strings.auth_table_configured_header)
         if not self._providers:
-            self._providers_table.add_row(self._strings.auth_table_no_providers_message)
+            self._providers_table.add_row(self._strings.auth_table_no_providers_message, "", "")
             return
         for provider in self._providers:
             self._providers_table.add_row(
-                format_provider_label(provider, self._strings),
+                provider.name,
+                provider.adapter,
+                (
+                    self._strings.models_table_provider_configured_marker
+                    if provider.source == MODEL_PROVIDER_SOURCE_USER
+                    else ""
+                ),
                 key=provider.name,
             )
         self._providers_table.move_cursor(row=self._provider_index)
@@ -119,12 +119,3 @@ class AuthTableView(Vertical):
         if not self._providers:
             return 0
         return max(0, min(len(self._providers) - 1, index))
-
-
-def format_provider_label(
-    provider: AuthTableProviderRow,
-    strings: TuiStrings = DEFAULT_TUI_STRINGS,
-) -> str:
-    marker = f" {strings.models_table_provider_configured_marker}"
-    check = marker if provider.source == MODEL_PROVIDER_SOURCE_USER else ""
-    return f"{provider.name} · {provider.adapter}{check}"

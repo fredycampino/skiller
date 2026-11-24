@@ -493,7 +493,8 @@ def build_textual_css(theme: TuiTheme = DEFAULT_TUI_THEME) -> str:
             scrollbar-visibility: hidden;
         }}
 
-        #runs-table-data > .datatable--header {{
+        #runs-table-data > .datatable--header,
+        #auth-providers-table > .datatable--header {{
             color: {theme.color_text_muted};
             background: {theme.color_background};
             padding-bottom: 1;

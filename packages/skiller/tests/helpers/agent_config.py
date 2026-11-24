@@ -74,7 +74,9 @@ def fake_llm_provider_definition() -> OpenAILLMProviderDefinition:
         timeout_seconds=30,
         models=(
             LLMModelDefinition(
-                model="model1", context_window_tokens=100_000, max_output_tokens=None
+                model="model1",
+                context_window_tokens=100_000,
+                max_output_tokens=None,
             ),
         ),
         enabled=True,

@@ -12,6 +12,7 @@ _AUTH_FLOW_BY_ADAPTER = {
     "openai": "auths/openai",
     "codex": "auths/codex",
     "bedrock": "auths/bedrock",
+    "ollama": "auths/ollama",
 }
 _AUTH_FLOW_BY_PROVIDER = {
     "lmstudio": "auths/lmstudio",

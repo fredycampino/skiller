@@ -23,9 +23,11 @@ from skiller.domain.agent.llm.provider_catalog import (
     CodexLLMProviderDefinition,
     LLMModelDefinition,
     LLMProviderDefinition,
+    OllamaLLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_ollama import OllamaLLMRequest
 from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 from skiller.domain.tool.tool_contract import ToolDefinition
 
@@ -74,6 +76,16 @@ class AgentPromptBuilder:
             )
         if isinstance(provider, BedrockLLMProviderDefinition):
             return BedrockLLMRequest(
+                messages=messages,
+                model=model,
+                effort=effort,
+                tools=tools,
+                log_request_file=log_request_file,
+                log_override_file=log_override_file,
+                log_streaming=log_streaming,
+            )
+        if isinstance(provider, OllamaLLMProviderDefinition):
+            return OllamaLLMRequest(
                 messages=messages,
                 model=model,
                 effort=effort,

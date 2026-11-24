@@ -7,7 +7,9 @@ from skiller.domain.agent.llm.request import LLMRequest
 FAKE_LLM_RESPONSE_TEXT = '{"summary":"fake summary","severity":"low","next_action":"retry"}'
 
 FAKE_LLM_MODEL = LLMModelDefinition(
-    model="model1", context_window_tokens=100_000, max_output_tokens=None
+    model="model1",
+    context_window_tokens=100_000,
+    max_output_tokens=None,
 )
 
 
@@ -24,6 +26,7 @@ class FakeLLMPort(LLMPort[LLMRequest]):
     def generate(self, request: LLMRequest) -> LLMResponse:
         _ = request
         return LLMResponse(
+            generation_metrics=None,
             model=self.model,
             finish_type=LLMFinishType.STOP,
             content=self.response_text,

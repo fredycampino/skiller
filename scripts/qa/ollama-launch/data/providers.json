@@ -1,0 +1,23 @@
+{
+  "providers": {
+    "ollama": {
+      "base_url": "http://192.168.1.202:11434",
+      "timeout_seconds": 600,
+      "keep_alive": "5m",
+      "models": [
+        {
+          "model": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q6_K",
+          "context_window_tokens": 32768,
+          "max_output_tokens": 4096,
+          "effort_mapping": [
+            "low",
+            "low",
+            "medium",
+            "medium",
+            "xhigh"
+          ]
+        }
+      ]
+    }
+  }
+}

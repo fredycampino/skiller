@@ -16,7 +16,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -135,3 +137,35 @@ def test_bedrock_llm_request_accepts_catalog_model_contract() -> None:
     )
 
     assert request.model == model
+
+
+def test_ollama_request_requires_its_specific_model() -> None:
+    from skiller.domain.agent.llm.provider_catalog import OllamaLLMModelDefinition
+    from skiller.domain.agent.llm.provider_ollama import OllamaLLMRequest
+
+    base = _model("qwen", 32768)
+    assert LLMRequest(messages=(), model=base).model is base
+    with pytest.raises(TypeError, match="OllamaLLMRequest model must be"):
+        OllamaLLMRequest(messages=(), model=base)
+    model = OllamaLLMModelDefinition(
+        model="qwen",
+        context_window_tokens=32768,
+        max_output_tokens=None,
+        params=None,
+        effort_mapping=None,
+    )
+    assert OllamaLLMRequest(messages=(), model=model).model is model
+
+
+@pytest.mark.parametrize("mapping", [(True,), (True, True, True, True, "")])
+def test_ollama_model_validates_effort_mapping(mapping) -> None:
+    from skiller.domain.agent.llm.provider_catalog import OllamaLLMModelDefinition
+
+    with pytest.raises(ValueError, match="effort mapping"):
+        OllamaLLMModelDefinition(
+            model="qwen",
+            context_window_tokens=32768,
+            max_output_tokens=None,
+            params=None,
+            effort_mapping=mapping,
+        )

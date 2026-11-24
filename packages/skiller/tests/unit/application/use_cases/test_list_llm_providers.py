@@ -92,7 +92,9 @@ def _provider(*, name: str, enabled: bool = True) -> OpenAILLMProviderDefinition
         timeout_seconds=30,
         models=(
             LLMModelDefinition(
-                model="kimi-k2", context_window_tokens=262_144, max_output_tokens=None
+                model="kimi-k2",
+                context_window_tokens=262_144,
+                max_output_tokens=None,
             ),
         ),
         enabled=enabled,

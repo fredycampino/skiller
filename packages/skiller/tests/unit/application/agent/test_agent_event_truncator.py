@@ -47,6 +47,7 @@ def test_agent_event_truncator_truncates_assistant_message_text() -> None:
                 window_width_tokens=100_000,
                 model_context_window_tokens=100_000,
             ),
+            generation_metrics=None,
         )
     )
 

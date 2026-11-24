@@ -45,6 +45,7 @@ def test_render_footer_context_omits_model_capacity_when_unavailable() -> None:
     )
     assert metrics.context is not None
     metrics = AgentMetricsState(
+        generation_metrics=None,
         usage=metrics.usage,
         context=AgentStepContext(
             effective_window_tokens=100000,
@@ -183,6 +184,7 @@ def _metrics(
     cached_tokens: int,
 ) -> AgentMetricsState:
     return AgentMetricsState(
+        generation_metrics=None,
         usage=AgentStepUsage(
             estimated_system_tokens=estimated_system_tokens,
             prompt_tokens=current_tokens,

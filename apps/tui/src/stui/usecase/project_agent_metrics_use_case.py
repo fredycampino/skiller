@@ -37,6 +37,7 @@ def _agent_metrics(
             continue
         return AgentMetricsState(
             usage=item.usage,
+            generation_metrics=item.generation_metrics,
             context=item.context,
         )
     return None

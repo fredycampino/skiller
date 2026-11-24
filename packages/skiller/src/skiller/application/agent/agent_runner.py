@@ -112,6 +112,7 @@ class AgentRunner:
                     entry=entry,
                     config=config.config.event_output,
                     context_metrics=context_metrics,
+                    generation_metrics=response.generation_metrics,
                 )
                 state.finish_final(final_text)
                 turn_loop.advance()
@@ -180,6 +181,7 @@ class AgentRunner:
             finish=state.finish or AgentStopReason.FINAL,
             response_model=state.response_model,
             usage=state.usage,
+            generation_metrics=state.generation_metrics,
             context_metrics=context_metrics,
             error=state.error,
         )

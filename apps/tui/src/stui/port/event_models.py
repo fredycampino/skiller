@@ -248,10 +248,21 @@ class ActionDonePayload:
 
 
 @dataclass(frozen=True)
+class AgentGenerationMetricsPayload:
+    total_duration_ns: int | None
+    model_load_duration_ns: int | None
+    input_tokens: int | None
+    input_processing_duration_ns: int | None
+    output_tokens: int | None
+    output_generation_duration_ns: int | None
+
+
+@dataclass(frozen=True)
 class AgentAssistantMessagePayload:
     text: str
     total_tokens: int
     usage: AgentUsagePayload | None
+    generation_metrics: AgentGenerationMetricsPayload | None
     context: AgentContextPayload | None
 
 
@@ -260,6 +271,7 @@ class AgentFinalAssistantMessagePayload:
     text: str
     total_tokens: int
     usage: AgentUsagePayload | None
+    generation_metrics: AgentGenerationMetricsPayload | None
     context: AgentContextPayload | None
 
 

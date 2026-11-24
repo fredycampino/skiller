@@ -117,13 +117,26 @@ class AgentContextCompactedItem(TranscriptItem):
 
 
 @dataclass(frozen=True)
+class AgentGenerationMetrics:
+    total_duration_ns: int | None
+    model_load_duration_ns: int | None
+    input_tokens: int | None
+    input_processing_duration_ns: int | None
+    output_tokens: int | None
+    output_generation_duration_ns: int | None
+
+
+@dataclass(frozen=True)
 class AgentAssistantMessageItem(TranscriptItem):
     run_id: str
     step_id: str
     message_type: str
+    is_empty: bool
     text: str
     total_tokens: int
     usage: AgentStepUsage | None
+    generation_metrics: AgentGenerationMetrics | None
+    output_tokens_per_second: float | None
     context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
@@ -135,6 +148,7 @@ class AgentFinalAssistantMessageItem(TranscriptItem):
     text: str
     total_tokens: int
     usage: AgentStepUsage | None
+    generation_metrics: AgentGenerationMetrics | None
     context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
@@ -166,6 +180,8 @@ class AgentStepFinalOutputItem(TranscriptItem):
     stop_reason: AgentStepStopReason
     final: str
     usage: AgentStepUsage | None
+    generation_metrics: AgentGenerationMetrics | None
+    output_tokens_per_second: float | None
     context: AgentStepContext | None
     format: OutputFormat = OutputFormat.MARKDOWN
 
@@ -377,6 +393,7 @@ class AuthTableState:
 @dataclass
 class AgentMetricsState:
     usage: AgentStepUsage | None
+    generation_metrics: AgentGenerationMetrics | None
     context: AgentStepContext | None
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from rich.console import Console
+from rich.style import Style
 from rich.text import Text
 
 from stui.di.strings import TuiStrings
@@ -325,8 +326,7 @@ def test_active_step_output_keeps_latest_step_output_primary_before_wait() -> No
     assert views[1] is wait
 
 
-def test_active_step_output_mutes_all_step_outputs_when_latest_view_is_not_step_output(
-) -> None:
+def test_active_step_output_mutes_all_step_outputs_when_latest_view_is_not_step_output() -> None:
     output = StepOutputView(
         item=StepOutputItem(
             run_id="run-1",
@@ -347,6 +347,7 @@ def test_active_step_output_mutes_all_step_outputs_when_latest_view_is_not_step_
 def test_final_assistant_message_view_renders_blank_line() -> None:
     view = AgentFinalAssistantMessageView(
         item=AgentFinalAssistantMessageItem(
+            generation_metrics=None,
             run_id="run-1",
             step_id="agent",
             text="truncated",
@@ -523,3 +524,68 @@ def test_render_markdown_inline_code_uses_theme_background() -> None:
     assert "pwd" in rendered
     assert "40m" not in rendered
     assert "48;2;40;44;52m" in rendered
+
+
+@pytest.mark.parametrize("speed", [None, 25.01])
+def test_generation_speed_is_optional_muted_and_right_aligned(speed: float | None) -> None:
+    from stui.screen.transcript.view_helpers import with_generation_speed
+
+    theme = DEFAULT_TUI_THEME
+    console = Console(width=40, record=True)
+    renderable = with_generation_speed(
+        Text("‹ Answer"),
+        output_tokens_per_second=speed,
+        theme=theme,
+    )
+    console.print(renderable)
+    lines = console.export_text().splitlines()
+    assert lines[0] == "‹ Answer"
+    if speed is None:
+        assert len(lines) == 1
+    else:
+        assert lines[1] == "25 t/s".rjust(40)
+        segments = list(console.render(renderable))
+        assert any(
+            "25 t/s" in segment.text
+            and segment.style.color == Style.parse(theme.color_text_muted).color
+            for segment in segments
+            if segment.style
+        )
+
+
+@pytest.mark.parametrize("speed", [None, 26.0])
+def test_empty_assistant_message_is_muted_with_inline_speed(speed: float | None) -> None:
+    from stui.screen.transcript.agent_assistant_message_view import AgentAssistantMessageView
+    from stui.viewmodel.console_screen_state import AgentAssistantMessageItem
+
+    theme = DEFAULT_TUI_THEME
+    item = AgentAssistantMessageItem(
+        sequence=1,
+        run_id="run-1",
+        step_id="qa",
+        message_type="assistant",
+        is_empty=True,
+        text="▪▪▪",
+        total_tokens=0,
+        usage=None,
+        generation_metrics=None,
+        output_tokens_per_second=speed,
+        context=None,
+    )
+    rendered = AgentAssistantMessageView(item=item).render(theme=theme)
+    console = Console(width=40, record=True)
+    console.print(rendered)
+    lines = console.export_text().splitlines()
+    assert len(lines) == 1
+    assert lines[0].startswith("‹ ▪▪▪")
+    if speed is not None:
+        assert lines[0].endswith("26 t/s")
+        assert len(lines[0]) == 40
+    else:
+        assert lines[0].rstrip() == "‹ ▪▪▪"
+    segments = list(console.render(rendered))
+    assert all(
+        segment.style.color == Style.parse(theme.color_text_muted).color
+        for segment in segments
+        if segment.text.strip() and segment.style
+    )

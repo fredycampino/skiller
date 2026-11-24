@@ -8,6 +8,7 @@ from skiller.application.agent.event.agent_event_truncator import (
 )
 from skiller.domain.agent.config.model import AgentEventOutputConfig
 from skiller.domain.agent.context.model import AgentContextEntry, AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMGenerationMetrics
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
 )
@@ -32,11 +33,13 @@ class AgentEventPublisher:
         entry: AgentContextEntry,
         config: AgentEventOutputConfig,
         context_metrics: AgentContextMetrics,
+        generation_metrics: LLMGenerationMetrics | None,
     ) -> None:
         self._append_observable_event(
             self.draft_builder.assistant_message(
                 entry=entry,
                 context_metrics=context_metrics,
+                generation_metrics=generation_metrics,
             ),
             config=config,
         )
@@ -47,11 +50,13 @@ class AgentEventPublisher:
         entry: AgentContextEntry,
         config: AgentEventOutputConfig,
         context_metrics: AgentContextMetrics,
+        generation_metrics: LLMGenerationMetrics | None,
     ) -> None:
         self._append_observable_event(
             self.draft_builder.final_assistant_message(
                 entry=entry,
                 context_metrics=context_metrics,
+                generation_metrics=generation_metrics,
             ),
             config=config,
         )

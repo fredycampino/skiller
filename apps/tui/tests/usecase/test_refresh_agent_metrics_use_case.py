@@ -16,6 +16,7 @@ pytestmark = pytest.mark.unit
 def test_refresh_agent_metrics_updates_state() -> None:
     state = ConsoleScreenState()
     metrics = AgentMetricsState(
+        generation_metrics=None,
         usage=AgentStepUsage(
             estimated_system_tokens=None,
             prompt_tokens=3000,

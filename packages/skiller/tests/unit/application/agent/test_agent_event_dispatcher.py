@@ -18,7 +18,7 @@ from skiller.domain.agent.context.model import (
     AgentContextMetrics,
     AgentToolCallPayload,
 )
-from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.model import LLMGenerationMetrics, LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentMessageEventBody,
@@ -76,6 +76,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
         ),
         config=event_output,
         context_metrics=CONTEXT_METRICS,
+        generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
     )
 
     assert len(store.events) == 1
@@ -100,6 +101,7 @@ def test_agent_event_publisher_emits_assistant_message_from_context_entry() -> N
         model="gpt-5",
     )
     assert event.payload.body.context == CONTEXT_METRICS
+    assert event.payload.body.generation_metrics == LLMGenerationMetrics(1000, 100, 20, 200, 5, 700)
 
 
 def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload() -> None:
@@ -138,6 +140,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
         ),
         config=event_output,
         context_metrics=CONTEXT_METRICS,
+        generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
     )
 
     event = store.events[0]
@@ -157,6 +160,7 @@ def test_agent_event_publisher_emits_final_assistant_message_with_plain_payload(
         model="gpt-5",
     )
     assert event.payload.body.context == CONTEXT_METRICS
+    assert event.payload.body.generation_metrics == LLMGenerationMetrics(1000, 100, 20, 200, 5, 700)
 
 
 def test_agent_event_publisher_emits_agent_lifecycle_events() -> None:

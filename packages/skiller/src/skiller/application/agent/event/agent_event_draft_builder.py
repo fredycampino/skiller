@@ -7,6 +7,7 @@ from skiller.domain.agent.context.model import (
     AgentToolCallPayload,
     AgentToolResultPayload,
 )
+from skiller.domain.agent.llm.model import LLMGenerationMetrics
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -23,6 +24,7 @@ class AgentEventDraftBuilder:
         *,
         entry: AgentContextEntry,
         context_metrics: AgentContextMetrics,
+        generation_metrics: LLMGenerationMetrics | None,
     ) -> RuntimeEventDraft:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Assistant event requires assistant_message entry")
@@ -43,6 +45,7 @@ class AgentEventDraftBuilder:
                     text=entry.payload.text,
                     usage=entry.usage,
                     context=context_metrics,
+                    generation_metrics=generation_metrics,
                 ),
             ),
         )
@@ -52,6 +55,7 @@ class AgentEventDraftBuilder:
         *,
         entry: AgentContextEntry,
         context_metrics: AgentContextMetrics,
+        generation_metrics: LLMGenerationMetrics | None,
     ) -> RuntimeEventDraft:
         if entry.entry_type != AgentContextEntryType.ASSISTANT_MESSAGE:
             raise ValueError("Final assistant event requires assistant_message entry")
@@ -72,6 +76,7 @@ class AgentEventDraftBuilder:
                     text=entry.payload.text,
                     usage=entry.usage,
                     context=context_metrics,
+                    generation_metrics=generation_metrics,
                 ),
             ),
         )

@@ -49,6 +49,7 @@ class AgentEventTruncator:
             text=self._truncate_text(payload.text),
             usage=payload.usage,
             context=payload.context,
+            generation_metrics=payload.generation_metrics,
         )
 
     def truncate_tool_call(

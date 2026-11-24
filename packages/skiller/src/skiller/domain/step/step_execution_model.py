@@ -8,6 +8,7 @@ from skiller.domain.action.action_model import (
     action_to_public_dict,
 )
 from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMGenerationMetrics
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_type import StepType
 
@@ -58,6 +59,7 @@ class AgentFinalOutputData:
     turn_count: int
     tool_call_count: int
     context: AgentContextMetrics | None
+    generation_metrics: LLMGenerationMetrics | None
     usage: AgentUsageOutput | None = None
 
 
@@ -224,6 +226,7 @@ def _build_agent_output_data(raw_data: dict[str, Any]) -> AgentOutputData:
             tool_call_count=int(raw_data.get("tool_call_count", 0)),
             context=_agent_context_metrics(raw_data.get("context")),
             usage=usage,
+            generation_metrics=_build_generation_metrics(raw_data.get("generation_metrics")),
         )
 
     return AgentStopOutputData(
@@ -353,3 +356,16 @@ class StepExecution:
             evaluation=raw_evaluation if isinstance(raw_evaluation, dict) else {},
             output=_build_output(step_type, raw.get("output")),
         )
+
+
+def _build_generation_metrics(value: object) -> LLMGenerationMetrics | None:
+    if not isinstance(value, dict):
+        return None
+    return LLMGenerationMetrics(
+        total_duration_ns=_optional_int(value.get("total_duration_ns")),
+        model_load_duration_ns=_optional_int(value.get("model_load_duration_ns")),
+        input_tokens=_optional_int(value.get("input_tokens")),
+        input_processing_duration_ns=_optional_int(value.get("input_processing_duration_ns")),
+        output_tokens=_optional_int(value.get("output_tokens")),
+        output_generation_duration_ns=_optional_int(value.get("output_generation_duration_ns")),
+    )

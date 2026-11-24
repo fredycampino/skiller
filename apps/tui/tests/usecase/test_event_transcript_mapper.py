@@ -83,6 +83,7 @@ def test_event_transcript_mapper_renders_agent_tool_turn() -> None:
                 step_id="support_agent",
                 step_type="agent",
                 payload=AgentAssistantMessagePayload(
+                    generation_metrics=None,
                     text="I will inspect the repository state.",
                     total_tokens=1000,
                     usage=AgentUsagePayload(
@@ -287,6 +288,7 @@ def test_event_transcript_mapper_uses_final_assistant_message_as_agent_final_out
                 step_id="support_agent",
                 step_type="agent",
                 payload=AgentFinalAssistantMessagePayload(
+                    generation_metrics=None,
                     text="Hecho completo.",
                     total_tokens=2144,
                     usage=AgentUsagePayload(

@@ -4,7 +4,7 @@ This document defines the runtime event contract for agent internal observabilit
 
 Agent events are persisted in `log_events`, the same stream used by `logs`, CLI,
 and TUI consumers. The full common event contract is defined in
-[`../events/event.md`](../events/event.md).
+[`../events/runtime-events.md`](../events/runtime-events.md).
 
 ## Event Envelope
 
@@ -52,8 +52,9 @@ Current agent event types:
 
 ## `AGENT_ASSISTANT_MESSAGE`
 
-Emitted when the assistant returns visible content that introduces one or more
-tool calls.
+Emitted once when an assistant response starts a tool-call cycle. The text may
+be empty. The message carries usage and optional `generation_metrics` for that
+generation, not for each individual tool call.
 
 ```json
 {
@@ -81,7 +82,8 @@ tool calls.
     "context": {
       "effective_window_tokens": 100000,
       "max_total_tokens_ratio": 0.8
-    }
+    },
+    "generation_metrics": { "...": "..." }
   }
 }
 ```
@@ -97,7 +99,8 @@ Rules:
   the configured context window and the model context window, plus
   `max_total_tokens_ratio`.
 - truncation: `text` is truncated by the agent event output policy.
-- not truncated: `total_tokens` and `usage`.
+- `generation_metrics` is optional. See [field rules](#generation-metrics-fields).
+- not truncated: `total_tokens`, `usage`, and `generation_metrics`.
 
 ## `AGENT_FINAL_ASSISTANT_MESSAGE`
 
@@ -129,7 +132,8 @@ Emitted when the agent finishes with a final assistant message.
     "context": {
       "effective_window_tokens": 100000,
       "max_total_tokens_ratio": 0.8
-    }
+    },
+    "generation_metrics": { "...": "..." }
   }
 }
 ```
@@ -142,7 +146,8 @@ Rules:
   cache write counters when the provider reports them.
 - `context` uses the same shape as the assistant message event context.
 - truncation: `text` is truncated by the agent event output policy.
-- not truncated: `total_tokens` and `usage`.
+- `generation_metrics` is optional. See [field rules](#generation-metrics-fields).
+- not truncated: `total_tokens`, `usage`, and `generation_metrics`.
 - if the provider returns no visible content, this event is omitted.
 
 Older persisted events may not contain `usage`; consumers must treat it as absent.
@@ -353,3 +358,31 @@ Agent event payloads must be safe to show in logs and UI:
 - redact common secret token text patterns in free text.
 - truncate assistant text and tool result text before persistence.
 - cap large JSON values before persistence.
+
+
+## Generation metrics fields
+
+```json
+{
+  "total_duration_ns": 1000000000,
+  "model_load_duration_ns": 100000000,
+  "input_tokens": 3000,
+  "input_processing_duration_ns": 200000000,
+  "output_tokens": 500,
+  "output_generation_duration_ns": 700000000
+}
+```
+
+Rules:
+
+- All fields are nullable; `null` means not reported by the provider.
+- `total_duration_ns`: total duration of the generation request, in nanoseconds.
+- `model_load_duration_ns`: time spent loading or preparing the model, in nanoseconds.
+- `input_tokens`: input tokens reported for the generation; not a count of uncached tokens.
+- `input_processing_duration_ns`: time spent processing the input, in nanoseconds.
+- `output_tokens`: generated tokens, including reasoning when counted by the provider.
+- `output_generation_duration_ns`: time spent generating output tokens, in nanoseconds.
+- Values come directly from `LLMResponse.generation_metrics`, without recalculation.
+- Final agent results also expose these metrics in `STEP_SUCCESS` at
+  `payload.output.value.data.generation_metrics`, alongside `usage`; both describe the last
+  LLM response, not accumulated step totals.

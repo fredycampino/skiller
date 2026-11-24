@@ -131,11 +131,12 @@ class AgentToolExecutor(ToolProcessInterruptSignal):
                 )
                 state.parent_sequence = assistant_message_entry.sequence
 
-            if assistant_message_entry is not None and request.response.has_text_content:
+            if assistant_message_entry is not None:
                 self.event_publisher.emit_assistant_message(
                     entry=assistant_message_entry,
                     config=request.event_config,
                     context_metrics=request.context_metrics,
+                    generation_metrics=request.response.generation_metrics,
                 )
 
             agent_tool_call = AgentToolCall(

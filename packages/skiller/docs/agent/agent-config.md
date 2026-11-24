@@ -44,5 +44,5 @@ for configuration and permissions.
 - [Context handling](./agent-context.md)
 - [Context compaction](./agent-context-compaction.md)
 - [Context pruning](./agent-context-prune.md)
-- [Agent events](./agent-event.md)
+- [Agent events](./agent-events.md)
 - [Agent step](../steps/agent.md)

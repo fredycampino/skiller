@@ -18,6 +18,8 @@ def test_project_agent_metrics_from_latest_agent_step_final_output() -> None:
     state = ConsoleScreenState()
     state.transcript.items.append(
         AgentStepFinalOutputItem(
+            output_tokens_per_second=None,
+            generation_metrics=None,
             run_id="run-1234",
             step_id="support_agent",
             stop_reason=AgentStepStopReason.FINAL,
@@ -52,6 +54,8 @@ def test_project_agent_metrics_clears_when_agent_step_has_no_metrics() -> None:
     state = ConsoleScreenState()
     state.transcript.items.append(
         AgentStepFinalOutputItem(
+            output_tokens_per_second=None,
+            generation_metrics=None,
             run_id="run-1234",
             step_id="support_agent",
             stop_reason=AgentStepStopReason.FINAL,

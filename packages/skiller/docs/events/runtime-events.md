@@ -1,4 +1,4 @@
-# Event
+# Runtime events
 
 This document defines the common event envelope currently used by Skiller
 persisted events.
@@ -70,6 +70,7 @@ RuntimeEventPayload: TypeAlias = (
     | ActionDonePayload
     | AgentEventPayload
     | AgentLifecyclePayload
+    | AgentContextCompactedPayload
     | InputReceivedPayload
 )
 ```
@@ -95,6 +96,7 @@ class RuntimeEventType(StrEnum):
     AGENT_TOOL_RESULT = "AGENT_TOOL_RESULT"
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
     AGENT_MAX_TURNS_EXHAUSTED = "AGENT_MAX_TURNS_EXHAUSTED"
+    AGENT_CONTEXT_COMPACTED = "AGENT_CONTEXT_COMPACTED"
     INPUT_RECEIVED = "INPUT_RECEIVED"
 ```
 
@@ -285,6 +287,7 @@ validated and persisted for the run. It is a run-level event, so `step_id` and
             "provider": "codex",
             "model": "gpt-5"
           },
+          "generation_metrics": { "...": "..." },
           "context": {
             "effective_window_tokens": 100000,
             "max_total_tokens_ratio": 0.8
@@ -298,7 +301,13 @@ validated and persisted for the run. It is a run-level event, so `step_id` and
 }
 ```
 
-`payload.next` is present when the successful step points to another step.
+Rules:
+
+- `payload.next` is present when the successful step points to another step.
+- For final agent results, `usage` and `generation_metrics` describe the last
+  LLM response, not accumulated step totals.
+- `payload.output.value.data.generation_metrics` is optional. See
+  [field rules](../agent/agent-events.md#generation-metrics-fields).
 
 ### `STEP_ERROR`
 
@@ -467,205 +476,14 @@ step.
 }
 ```
 
-## Agent Event Example
+## Agent events
 
-Agent events use the same envelope. `agent_sequence` points to the matching
-agent context entry. `payload` mirrors the agent context payload.
+- `AGENT_ASSISTANT_MESSAGE`
+- `AGENT_FINAL_ASSISTANT_MESSAGE`
+- `AGENT_TOOL_CALL`
+- `AGENT_TOOL_RESULT`
+- `AGENT_INTERRUPTED`
+- `AGENT_MAX_TURNS_EXHAUSTED`
+- `AGENT_CONTEXT_COMPACTED`
 
-```json
-{
-  "sequence": 101,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_TOOL_RESULT",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": 32,
-  "created_at": "2026-05-12T10:30:16Z",
-  "payload": {
-    "type": "tool_result",
-    "turn_id": "turn-4",
-    "parent_sequence": 30,
-    "tool_call_id": "call_abc",
-    "tool": "shell",
-    "status": "COMPLETED",
-    "data": {
-      "ok": true,
-      "exit_code": 0
-    },
-    "text": "ok",
-    "error": null
-  }
-}
-```
-
-Rules:
-
-- `sequence` always belongs to the persisted event stream.
-- for agent events, `agent_sequence` belongs to the agent context.
-- for agent events, `payload.parent_sequence` links a tool call or result
-  to its parent agent context entry.
-- `sequence` and `agent_sequence` are different counters.
-
-## Agent Events
-
-### `AGENT_ASSISTANT_MESSAGE`
-
-Assistant message that introduces tool calls:
-
-```json
-{
-  "sequence": 101,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_ASSISTANT_MESSAGE",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": 32,
-  "created_at": "2026-05-12T10:30:15Z",
-  "payload": {
-    "total_tokens": 1000,
-    "text": "I will inspect the branch state before continuing."
-  }
-}
-```
-
-Truncation:
-
-- `text` is truncated by the agent event output policy.
-- `total_tokens` is not truncated.
-
-### `AGENT_FINAL_ASSISTANT_MESSAGE`
-
-```json
-{
-  "sequence": 102,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_FINAL_ASSISTANT_MESSAGE",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": 33,
-  "created_at": "2026-05-12T10:30:16Z",
-  "payload": {
-    "total_tokens": 2144,
-    "text": "Done"
-  }
-}
-```
-
-Truncation:
-
-- `text` is truncated by the agent event output policy.
-- `total_tokens` is not truncated.
-
-### `AGENT_TOOL_CALL`
-
-```json
-{
-  "sequence": 102,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_TOOL_CALL",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": 33,
-  "created_at": "2026-05-12T10:30:16Z",
-  "payload": {
-    "type": "tool_call",
-    "turn_id": "turn-1",
-    "parent_sequence": 32,
-    "tool_call_id": "call-1",
-    "tool": "shell",
-    "args": {
-      "command": "git status --short"
-    }
-  }
-}
-```
-
-`agent_sequence` is the persisted agent context entry sequence.
-
-Truncation:
-
-- string fields inside `args` can be truncated; arrays can be capped; JSON
-  payload size can be capped by the agent event output policy.
-- `turn_id`, `parent_sequence`, `tool_call_id`, and `tool` are not truncated.
-
-### `AGENT_TOOL_RESULT`
-
-```json
-{
-  "sequence": 103,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_TOOL_RESULT",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": 34,
-  "created_at": "2026-05-12T10:30:17Z",
-  "payload": {
-    "type": "tool_result",
-    "turn_id": "turn-1",
-    "parent_sequence": 32,
-    "tool_call_id": "call-1",
-    "tool": "shell",
-    "status": "COMPLETED",
-    "data": {
-      "ok": true,
-      "exit_code": 0,
-      "stdout": "",
-      "stderr": ""
-    },
-    "text": "Command completed successfully.",
-    "error": null
-  }
-}
-```
-
-`payload` uses the same shape as the matching agent context tool result.
-
-Truncation:
-
-- `text`, `error`, and string fields inside `data` can be truncated; arrays can
-  be capped; JSON payload size can be capped by the agent event output policy.
-- `turn_id`, `parent_sequence`, `tool_call_id`, `tool`, and `status` are not
-  truncated.
-
-### `AGENT_INTERRUPTED`
-
-```json
-{
-  "sequence": 104,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_INTERRUPTED",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": null,
-  "created_at": "2026-05-12T10:30:18Z",
-  "payload": {
-    "turn_id": "turn-1",
-    "stop_reason": "interrupted"
-  }
-}
-```
-
-### `AGENT_MAX_TURNS_EXHAUSTED`
-
-```json
-{
-  "sequence": 105,
-  "id": "event-uuid",
-  "run_id": "run-123",
-  "type": "AGENT_MAX_TURNS_EXHAUSTED",
-  "step_id": "support_agent",
-  "step_type": "agent",
-  "agent_sequence": null,
-  "created_at": "2026-05-12T10:30:19Z",
-  "payload": {
-    "turn_id": "turn-2",
-    "stop_reason": "max_turns_exhausted"
-  }
-}
-```
+See [Agent events](../agent/agent-events.md) for payloads and rules.

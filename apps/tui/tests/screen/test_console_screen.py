@@ -36,12 +36,10 @@ def test_resolve_run_row_status_maps_wait_variants() -> None:
 
 def test_resolve_run_row_status_maps_non_waiting_statuses() -> None:
     assert (
-        _resolve_run_row_status(_run_item(status="CREATED", wait_type=None))
-        == RunRowStatus.CREATED
+        _resolve_run_row_status(_run_item(status="CREATED", wait_type=None)) == RunRowStatus.CREATED
     )
     assert (
-        _resolve_run_row_status(_run_item(status="FAILED", wait_type=None))
-        == RunRowStatus.FAILED
+        _resolve_run_row_status(_run_item(status="FAILED", wait_type=None)) == RunRowStatus.FAILED
     )
     assert (
         _resolve_run_row_status(_run_item(status="SUCCEEDED", wait_type=None))
@@ -52,8 +50,7 @@ def test_resolve_run_row_status_maps_non_waiting_statuses() -> None:
         == RunRowStatus.CANCELLED
     )
     assert (
-        _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None))
-        == RunRowStatus.RUNNING
+        _resolve_run_row_status(_run_item(status="RUNNING", wait_type=None)) == RunRowStatus.RUNNING
     )
 
 
@@ -72,6 +69,7 @@ def test_format_agent_tokens_uses_compact_k_units() -> None:
 def test_build_footer_usage_text_shows_usage_when_available() -> None:
     state = ConsoleScreenState(
         agent_metrics=AgentMetricsState(
+            generation_metrics=None,
             usage=AgentStepUsage(
                 estimated_system_tokens=None,
                 prompt_tokens=3155,
@@ -86,17 +84,23 @@ def test_build_footer_usage_text_shows_usage_when_available() -> None:
         )
     )
 
-    assert _build_footer_usage_text(
-        metrics=state.agent_metrics,
-        fallback_text="/ for commands",
-    ) == "MiniMax-M2.5\n3.2k"
+    assert (
+        _build_footer_usage_text(
+            metrics=state.agent_metrics,
+            fallback_text="/ for commands",
+        )
+        == "MiniMax-M2.5\n3.2k"
+    )
 
 
 def test_build_footer_usage_text_falls_back_to_commands_hint() -> None:
-    assert _build_footer_usage_text(
-        metrics=None,
-        fallback_text="/ for commands",
-    ) == "/ for commands"
+    assert (
+        _build_footer_usage_text(
+            metrics=None,
+            fallback_text="/ for commands",
+        )
+        == "/ for commands"
+    )
 
 
 def test_build_footer_session_text_shows_run_id_and_compact_run_name() -> None:

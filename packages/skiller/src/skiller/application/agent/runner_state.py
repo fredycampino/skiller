@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from skiller.application.agent.config.step_config_reader import AgentRunnerConfig
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.model import LLMModelLike, LLMResponse, LLMUsage
+from skiller.domain.agent.llm.model import LLMGenerationMetrics, LLMModelLike, LLMResponse, LLMUsage
 from skiller.domain.agent.run.identity import AgentRun
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.tool.tool_execution_model import ToolExecutionResults
@@ -13,6 +13,7 @@ class AgentRunnerState:
     final_text: str | None = None
     finish: AgentStopReason | None = None
     response_model: LLMModelLike | None = None
+    generation_metrics: LLMGenerationMetrics | None = None
     usage: LLMUsage | None = None
     error: str | None = None
     tool_call_count: int = 0
@@ -28,6 +29,7 @@ class AgentRunnerState:
     def record_llm_response(self, response: LLMResponse) -> None:
         self.response_model = response.model
         self.usage = response.usage
+        self.generation_metrics = response.generation_metrics
 
     def fail_llm_request(self, error: str) -> None:
         self.finish = AgentStopReason.LLM_REQUEST_FAILED
@@ -68,4 +70,5 @@ class AgentRunnerResult:
     response_model: LLMModelLike | None
     usage: LLMUsage | None
     context_metrics: AgentContextMetrics
+    generation_metrics: LLMGenerationMetrics | None
     error: str | None = None

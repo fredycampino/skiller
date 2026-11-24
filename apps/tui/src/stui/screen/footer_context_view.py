@@ -77,7 +77,11 @@ class FooterContextView(Static):
 def _metrics_snapshot(metrics: AgentMetricsState | None) -> AgentMetricsState | None:
     if metrics is None:
         return None
-    return AgentMetricsState(usage=metrics.usage, context=metrics.context)
+    return AgentMetricsState(
+        usage=metrics.usage,
+        context=metrics.context,
+        generation_metrics=metrics.generation_metrics,
+    )
 
 
 def _render_footer_context(

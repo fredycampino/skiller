@@ -12,7 +12,7 @@ from skiller.domain.action.action_model import (
     action_to_public_dict,
 )
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.model import LLMGenerationMetrics, LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentContextCompactedPayload,
     AgentEventBody,
@@ -213,6 +213,8 @@ def agent_event_body_to_dict(
             result["usage"] = _to_public_value(asdict(payload.usage))
         if payload.context is not None:
             result["context"] = _to_public_value(asdict(payload.context))
+        if payload.generation_metrics is not None:
+            result["generation_metrics"] = _to_public_value(asdict(payload.generation_metrics))
         return result
     if isinstance(payload, AgentToolCallEventBody):
         return {
@@ -396,6 +398,7 @@ def _agent_event_body_from_dict(
             text=str(value.get("text", "")),
             usage=_llm_usage_from_dict(value.get("usage")),
             context=_agent_context_metrics_from_dict(value.get("context")),
+            generation_metrics=_generation_metrics_from_dict(value.get("generation_metrics")),
         )
     if event_type == RuntimeEventType.AGENT_TOOL_CALL:
         args = value.get("args")
@@ -497,3 +500,16 @@ def _optional_string(value: object) -> str | None:
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}
+
+
+def _generation_metrics_from_dict(value: object) -> LLMGenerationMetrics | None:
+    if not isinstance(value, dict):
+        return None
+    return LLMGenerationMetrics(
+        total_duration_ns=_optional_int(value.get("total_duration_ns")),
+        model_load_duration_ns=_optional_int(value.get("model_load_duration_ns")),
+        input_tokens=_optional_int(value.get("input_tokens")),
+        input_processing_duration_ns=_optional_int(value.get("input_processing_duration_ns")),
+        output_tokens=_optional_int(value.get("output_tokens")),
+        output_generation_duration_ns=_optional_int(value.get("output_generation_duration_ns")),
+    )

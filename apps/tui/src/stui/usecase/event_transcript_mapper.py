@@ -14,6 +14,7 @@ from stui.port.event_models import (
     AgentContextCompactedPayload,
     AgentContextPayload,
     AgentFinalAssistantMessagePayload,
+    AgentGenerationMetricsPayload,
     AgentOutputValue,
     AgentToolCallPayload,
     AgentToolResultPayload,
@@ -45,6 +46,7 @@ from stui.viewmodel.console_screen_state import (
     AgentAssistantMessageItem,
     AgentContextCompactedItem,
     AgentFinalAssistantMessageItem,
+    AgentGenerationMetrics,
     AgentStepContext,
     AgentStepFinalOutputItem,
     AgentStepStopReason,
@@ -153,16 +155,18 @@ class EventTranscriptMapper:
 
         if event.event_type == LogEventType.AGENT_ASSISTANT_MESSAGE:
             payload = _payload(event, AgentAssistantMessagePayload)
-            if not payload.text.strip():
-                return None
+            generation_metrics = _agent_generation_metrics(payload.generation_metrics)
             return AgentAssistantMessageItem(
                 sequence=event.sequence,
                 run_id=event.run_id,
                 step_id=event.step_id or "",
+                output_tokens_per_second=_output_tokens_per_second(generation_metrics),
                 message_type="assistant",
-                text=payload.text,
+                is_empty=not payload.text.strip(),
+                text=payload.text if payload.text.strip() else "▪▪▪",
                 total_tokens=payload.total_tokens,
                 usage=_agent_step_usage(payload.usage),
+                generation_metrics=generation_metrics,
                 context=_agent_step_context(payload.context),
             )
 
@@ -177,6 +181,7 @@ class EventTranscriptMapper:
                 text=payload.text,
                 total_tokens=payload.total_tokens,
                 usage=_agent_step_usage(payload.usage),
+                generation_metrics=_agent_generation_metrics(payload.generation_metrics),
                 context=_agent_step_context(payload.context),
             )
 
@@ -238,6 +243,7 @@ class EventTranscriptMapper:
             final = cast(str, data["final"])
             usage_data = cast(dict[str, object], data["usage"]) if "usage" in data else None
             usage = _agent_step_usage(usage_data)
+            generation_metrics = _agent_generation_metrics(data.get("generation_metrics"))
             context_data = cast(dict[str, object], data["context"]) if "context" in data else None
             return AgentStepFinalOutputItem(
                 sequence=event.sequence,
@@ -245,7 +251,9 @@ class EventTranscriptMapper:
                 step_id=step_id,
                 stop_reason=stop_reason,
                 final=final,
+                output_tokens_per_second=_output_tokens_per_second(generation_metrics),
                 usage=usage,
+                generation_metrics=generation_metrics,
                 context=_agent_step_context(context_data),
                 format=OutputFormat.MARKDOWN,
             )
@@ -572,3 +580,37 @@ def _agent_tool_result_preview(payload: AgentToolResultPayload) -> str:
         return error
 
     return payload.status.value
+
+
+def _agent_generation_metrics(
+    value: AgentGenerationMetricsPayload | dict[str, object] | None,
+) -> AgentGenerationMetrics | None:
+    if value is None:
+        return None
+    if isinstance(value, AgentGenerationMetricsPayload):
+        return AgentGenerationMetrics(
+            total_duration_ns=value.total_duration_ns,
+            model_load_duration_ns=value.model_load_duration_ns,
+            input_tokens=value.input_tokens,
+            input_processing_duration_ns=value.input_processing_duration_ns,
+            output_tokens=value.output_tokens,
+            output_generation_duration_ns=value.output_generation_duration_ns,
+        )
+    return AgentGenerationMetrics(
+        total_duration_ns=cast(int | None, value.get("total_duration_ns")),
+        model_load_duration_ns=cast(int | None, value.get("model_load_duration_ns")),
+        input_tokens=cast(int | None, value.get("input_tokens")),
+        input_processing_duration_ns=cast(int | None, value.get("input_processing_duration_ns")),
+        output_tokens=cast(int | None, value.get("output_tokens")),
+        output_generation_duration_ns=cast(int | None, value.get("output_generation_duration_ns")),
+    )
+
+
+def _output_tokens_per_second(metrics: AgentGenerationMetrics | None) -> float | None:
+    if metrics is None:
+        return None
+    tokens = metrics.output_tokens
+    duration_ns = metrics.output_generation_duration_ns
+    if tokens is None or duration_ns is None or tokens < 0 or duration_ns <= 0:
+        return None
+    return tokens * 1_000_000_000 / duration_ns

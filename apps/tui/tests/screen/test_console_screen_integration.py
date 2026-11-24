@@ -577,6 +577,7 @@ def test_console_screen_limits_wide_footer_context_bar_width() -> None:
             runs_port=FakeRunsPort(),
         )
         viewmodel.state.agent_metrics = AgentMetricsState(
+            generation_metrics=None,
             usage=AgentStepUsage(
                 estimated_system_tokens=None,
                 prompt_tokens=59500,
@@ -618,6 +619,7 @@ def test_console_screen_uses_stacked_footer_on_narrow_width() -> None:
             run_name="stui.yaml",
         )
         viewmodel.state.agent_metrics = AgentMetricsState(
+            generation_metrics=None,
             usage=AgentStepUsage(
                 estimated_system_tokens=None,
                 prompt_tokens=79200,
@@ -1236,6 +1238,8 @@ def test_console_screen_renders_agent_markdown_without_literal_markers() -> None
                     step_id="support_agent",
                 ),
                 AgentStepFinalOutputItem(
+                    output_tokens_per_second=None,
+                    generation_metrics=None,
                     run_id="run-1",
                     step_id="support_agent",
                     stop_reason=AgentStepStopReason.FINAL,
@@ -1278,6 +1282,8 @@ def test_console_screen_renders_agent_fenced_code_block_without_prefixed_backtic
                     step_id="support_agent",
                 ),
                 AgentStepFinalOutputItem(
+                    output_tokens_per_second=None,
+                    generation_metrics=None,
                     run_id="run-1",
                     step_id="support_agent",
                     stop_reason=AgentStepStopReason.FINAL,

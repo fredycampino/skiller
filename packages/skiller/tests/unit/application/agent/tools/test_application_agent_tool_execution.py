@@ -48,6 +48,7 @@ from skiller.domain.agent.context.stats_model import (
 )
 from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
+    LLMGenerationMetrics,
     LLMResponse,
     LLMToolCall,
     LLMToolCallFunction,
@@ -383,6 +384,48 @@ def test_agent_tool_execution_runs_multiple_native_tool_calls() -> None:
         "tool_call",
         "tool_result",
     ]
+
+
+def test_empty_tool_message_emits_metrics_once_before_multiple_tools() -> None:
+    context_store = _FakeAgentContextStore()
+    events = _FakeRuntimeEventStore()
+    executor = _build_executor(context_store=context_store, runtime_event_store=events)
+    request = _request_with_tool("notify", '{"message":"hello"}')
+    metrics = LLMGenerationMetrics(1000, 100, 20, 200, 5, 700)
+    usage = LLMUsage(
+        prompt_tokens=20,
+        output_tokens=5,
+        total_tokens=25,
+        estimated_system_tokens=None,
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+        provider=None,
+        model=None,
+    )
+    response = replace(
+        request.response,
+        content=None,
+        usage=usage,
+        generation_metrics=metrics,
+        tool_calls=(
+            request.response.tool_calls[0],
+            replace(request.response.tool_calls[0], id="call-2"),
+        ),
+    )
+    executor.execute(replace(request, response=response))
+    assert [call["type"] for call in events.calls] == [
+        "assistant_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+    ]
+    body = events.calls[0]["event"].payload.body
+    assert body.text == ""
+    assert body.usage == usage
+    assert body.generation_metrics == metrics
+    assert len(context_store.appended) == 5
+    assert context_store.entries[0].usage == usage
 
 
 def test_agent_tool_execution_persists_prepare_failure_as_tool_result() -> None:

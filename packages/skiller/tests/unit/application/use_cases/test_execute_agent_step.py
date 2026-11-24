@@ -39,6 +39,7 @@ from skiller.domain.agent.context.stats_model import (
 from skiller.domain.agent.llm.finish_type import LLMFinishType
 from skiller.domain.agent.llm.model import (
     LLMAssistantMessage,
+    LLMGenerationMetrics,
     LLMMessage,
     LLMResponse,
     LLMToolCall,
@@ -681,7 +682,15 @@ def test_execute_agent_step_advances_with_config_error_when_agent_config_is_inva
 def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
     store = _FakeStore()
     context_store = _FakeAgentContextStore()
-    llm = _FakeLLM()
+    metrics = LLMGenerationMetrics(1000, 100, 20, 200, 5, 700)
+    llm = _FakeLLM(
+        response=LLMResponse(
+            model=_model("model1", 100_000),
+            finish_type=LLMFinishType.STOP,
+            content="Hello back.",
+            generation_metrics=metrics,
+        )
+    )
     use_case = _build_use_case(
         store=store,
         context_store=context_store,
@@ -727,6 +736,7 @@ def test_execute_agent_step_appends_context_and_moves_to_next() -> None:
                 window_width_tokens=100_000,
                 model_context_window_tokens=100_000,
             ),
+            generation_metrics=metrics,
         ),
     )
     assert context.step_executions["support_agent"] == result.execution
@@ -851,6 +861,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 provider="fake",
                 model="model1",
             ),
+            generation_metrics=None,
         ),
     )
     assert tool_manager.get_tool_definitions_calls == [["notify"]]

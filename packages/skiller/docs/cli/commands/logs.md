@@ -6,7 +6,7 @@ Reads persisted runtime events for a run and writes raw JSON to `stdout`.
 the runtime.
 
 For the full event envelope and event type examples, see
-[`../../events/event.md`](../../events/event.md).
+[`../../events/runtime-events.md`](../../events/runtime-events.md).
 
 ## Combinations
 

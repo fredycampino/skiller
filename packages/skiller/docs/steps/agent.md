@@ -5,7 +5,7 @@ This page is the YAML contract for the `agent` step.
 Agent runtime internals are documented in:
 
 - [`../agent/agent-config.md`](../agent/agent-config.md)
-- [`../agent/agent-event.md`](../agent/agent-event.md)
+- [`../agent/agent-events.md`](../agent/agent-events.md)
 - [`../agent/agent-context.md`](../agent/agent-context.md)
 - [`../agent/agent-tools.md`](../agent/agent-tools.md)
 

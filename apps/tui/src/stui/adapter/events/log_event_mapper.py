@@ -16,6 +16,7 @@ from stui.port.event_models import (
     AgentContextCompactedPayload,
     AgentContextPayload,
     AgentFinalAssistantMessagePayload,
+    AgentGenerationMetricsPayload,
     AgentLifecyclePayload,
     AgentOutputValue,
     AgentStopReason,
@@ -298,12 +299,24 @@ class AgentContextModel(BaseModel):
     model_context_window_tokens: int | None = None
 
 
+class AgentGenerationMetricsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total_duration_ns: int | None
+    model_load_duration_ns: int | None
+    input_tokens: int | None
+    input_processing_duration_ns: int | None
+    output_tokens: int | None
+    output_generation_duration_ns: int | None
+
+
 class AgentAssistantMessageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str
     total_tokens: int
     usage: AgentUsageModel | None
+    generation_metrics: AgentGenerationMetricsModel | None = None
     context: AgentContextModel | None
 
 
@@ -313,6 +326,7 @@ class AgentFinalAssistantMessageModel(BaseModel):
     text: str
     total_tokens: int
     usage: AgentUsageModel | None
+    generation_metrics: AgentGenerationMetricsModel | None = None
     context: AgentContextModel | None
 
 
@@ -458,6 +472,7 @@ class LogEventMapper:
                 text=model.text,
                 total_tokens=model.total_tokens,
                 usage=_to_agent_usage_payload(model.usage),
+                generation_metrics=_to_generation_metrics_payload(model.generation_metrics),
                 context=_to_agent_context_payload(model.context),
             )
 
@@ -471,6 +486,7 @@ class LogEventMapper:
                 text=model.text,
                 total_tokens=model.total_tokens,
                 usage=_to_agent_usage_payload(model.usage),
+                generation_metrics=_to_generation_metrics_payload(model.generation_metrics),
                 context=_to_agent_context_payload(model.context),
             )
 
@@ -715,3 +731,18 @@ def _validate_model(
         return model_type.model_validate(value)
     except ValidationError as exc:
         raise RuntimeError(f"logs command returned invalid {label}: {exc}") from exc
+
+
+def _to_generation_metrics_payload(
+    model: AgentGenerationMetricsModel | None,
+) -> AgentGenerationMetricsPayload | None:
+    if model is None:
+        return None
+    return AgentGenerationMetricsPayload(
+        total_duration_ns=model.total_duration_ns,
+        model_load_duration_ns=model.model_load_duration_ns,
+        input_tokens=model.input_tokens,
+        input_processing_duration_ns=model.input_processing_duration_ns,
+        output_tokens=model.output_tokens,
+        output_generation_duration_ns=model.output_generation_duration_ns,
+    )

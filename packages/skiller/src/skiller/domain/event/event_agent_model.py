@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.model import LLMGenerationMetrics, LLMUsage
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class AgentMessageEventBody:
     text: str
     usage: LLMUsage | None
     context: AgentContextMetrics | None
+    generation_metrics: LLMGenerationMetrics | None
 
 
 @dataclass(frozen=True)

@@ -128,6 +128,7 @@ def _footer_state(
     if metrics is not None:
         metrics_snapshot = AgentMetricsState(
             usage=metrics.usage,
+            generation_metrics=metrics.generation_metrics,
             context=metrics.context,
         )
     return FooterState(

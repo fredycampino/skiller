@@ -10,7 +10,7 @@ from skiller.domain.action.action_model import (
     RunAction,
 )
 from skiller.domain.agent.context.model import AgentContextMetrics
-from skiller.domain.agent.llm.model import LLMUsage
+from skiller.domain.agent.llm.model import LLMGenerationMetrics, LLMUsage
 from skiller.domain.event.event_agent_model import (
     AgentEventPayload,
     AgentLifecyclePayload,
@@ -403,6 +403,7 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                         provider="codex",
                         model="gpt-5",
                     ),
+                    generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
                 ),
             ),
         )
@@ -437,9 +438,18 @@ def test_runtime_event_store_roundtrips_assistant_message_event(tmp_path) -> Non
                 provider="codex",
                 model="gpt-5",
             ),
+            generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
         ),
     )
     assert event.model_dump(mode="json")["payload"] == {
+        "generation_metrics": {
+            "total_duration_ns": 1000,
+            "model_load_duration_ns": 100,
+            "input_tokens": 20,
+            "input_processing_duration_ns": 200,
+            "output_tokens": 5,
+            "output_generation_duration_ns": 700,
+        },
         "total_tokens": 1000,
         "text": "I will inspect.",
         "usage": {
@@ -492,6 +502,7 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                         window_width_tokens=100_000,
                         model_context_window_tokens=100_000,
                     ),
+                    generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
                 ),
             ),
         )
@@ -515,9 +526,18 @@ def test_runtime_event_store_roundtrips_final_assistant_message_context(tmp_path
                 window_width_tokens=100_000,
                 model_context_window_tokens=100_000,
             ),
+            generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
         ),
     )
     assert event.model_dump(mode="json")["payload"] == {
+        "generation_metrics": {
+            "total_duration_ns": 1000,
+            "model_load_duration_ns": 100,
+            "input_tokens": 20,
+            "input_processing_duration_ns": 200,
+            "output_tokens": 5,
+            "output_generation_duration_ns": 700,
+        },
         "total_tokens": 2144,
         "text": "Done.",
         "context": {
@@ -579,6 +599,7 @@ def test_runtime_event_store_preserves_null_cache_tokens_in_assistant_usage(
                         window_width_tokens=100_000,
                         model_context_window_tokens=100_000,
                     ),
+                    generation_metrics=LLMGenerationMetrics(1000, 100, 20, 200, 5, 700),
                 ),
             ),
         )

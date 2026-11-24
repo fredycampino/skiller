@@ -2,6 +2,7 @@ import pytest
 
 from skiller.domain.action.action_model import OpenUrlAction, RunAction
 from skiller.domain.agent.context.model import AgentContextMetrics
+from skiller.domain.agent.llm.model import LLMGenerationMetrics
 from skiller.domain.agent.run.model import AgentStopReason
 from skiller.domain.step.step_execution_model import (
     AgentFinalOutputData,
@@ -118,6 +119,7 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                     provider="codex",
                     model="gpt-5.5",
                 ),
+                generation_metrics=LLMGenerationMetrics(1000, 100, 100, 200, 25, 700),
             ),
         ),
     )
@@ -140,6 +142,14 @@ def test_agent_final_output_serializes_and_restores_typed_data() -> None:
                     "max_total_tokens_ratio": 0.8,
                     "window_width_tokens": 100000,
                     "model_context_window_tokens": 100000,
+                },
+                "generation_metrics": {
+                    "total_duration_ns": 1000,
+                    "model_load_duration_ns": 100,
+                    "input_tokens": 100,
+                    "input_processing_duration_ns": 200,
+                    "output_tokens": 25,
+                    "output_generation_duration_ns": 700,
                 },
                 "usage": {
                     "prompt_tokens": 100,
@@ -259,6 +269,7 @@ def test_agent_final_output_serializes_custom_usage_model_name() -> None:
                     provider="lmstudio",
                     model="google/gemma-4-12b-qat",
                 ),
+                generation_metrics=None,
             ),
         ),
     )
@@ -315,3 +326,26 @@ def test_agent_output_requires_data_when_restoring() -> None:
                 },
             }
         )
+
+
+@pytest.mark.parametrize("metrics", [None, "invalid"])
+def test_agent_final_output_ignores_non_object_generation_metrics(metrics: object) -> None:
+    execution = StepExecution.from_dict(
+        {
+            "step_type": "agent",
+            "output": {
+                "text": "Done.",
+                "value": {
+                    "data": {
+                        "stop_reason": "final",
+                        "context_id": "ctx-1",
+                        "final": "Done.",
+                        "generation_metrics": metrics,
+                    }
+                },
+            },
+        }
+    )
+    assert isinstance(execution.output.data, AgentFinalOutputData)
+    assert execution.output.data.generation_metrics is None
+    assert execution.output.data.final == "Done."

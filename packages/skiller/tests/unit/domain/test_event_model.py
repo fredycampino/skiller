@@ -87,3 +87,19 @@ def test_model_updated_payload_round_trips() -> None:
         "provider": "moonshot",
         "model": "kimi-k3",
     }
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        RuntimeEventType.AGENT_ASSISTANT_MESSAGE,
+        RuntimeEventType.AGENT_FINAL_ASSISTANT_MESSAGE,
+    ],
+)
+def test_historical_assistant_event_has_no_generation_metrics(event_type) -> None:
+    payload = runtime_event_payload_from_dict(
+        event_type=event_type,
+        value={"text": "", "total_tokens": 25},
+    )
+    assert payload.body.generation_metrics is None
+    assert "generation_metrics" not in runtime_event_payload_to_dict(payload)["body"]

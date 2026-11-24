@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from rich.console import RenderableType
+from rich.align import Align
+from rich.console import Group, RenderableType
 from rich.padding import Padding
 from rich.pretty import Pretty
 from rich.segment import Segment, Segments
@@ -295,3 +296,22 @@ def try_parse_json_output(output: str) -> object | None:
         return json.loads(output)
     except json.JSONDecodeError:
         return None
+
+
+def with_generation_speed(
+    content: RenderableType,
+    *,
+    output_tokens_per_second: float | None,
+    theme: TuiTheme,
+) -> RenderableType:
+    if output_tokens_per_second is None:
+        return content
+    return Group(
+        content,
+        Align.right(
+            Text(
+                f"{output_tokens_per_second:.0f} t/s",
+                style=theme.color_text_muted,
+            )
+        ),
+    )

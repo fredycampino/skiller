@@ -80,6 +80,7 @@ def _model(*, max_output_tokens: int | None = None) -> LLMModelDefinition:
         model=os.environ.get("OPENAI_E2E_MODEL", "gpt-4.1-mini"),
         context_window_tokens=int(os.environ.get("OPENAI_E2E_CONTEXT_WINDOW_TOKENS", "1000000")),
         max_output_tokens=max_output_tokens,
+
     )
 
 

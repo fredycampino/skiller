@@ -82,6 +82,7 @@ class ConverseMapper:
             request=request,
         )
         return LLMResponse(
+            generation_metrics=None,
             model=request.model,
             content="".join(content) or None,
             tool_calls=tuple(tool_calls),

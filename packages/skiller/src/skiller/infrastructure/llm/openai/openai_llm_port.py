@@ -48,6 +48,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
 
         if not self.api_key.strip():
             response = LLMResponse(
+                generation_metrics=None,
                 model=request.model,
                 finish_type=LLMFinishType.ERROR_API_KEY_MISSING,
                 error="API key is not configured for the selected model provider",
@@ -64,6 +65,7 @@ class OpenAILLMPort(LLMPort[RequestT], Generic[RequestT]):
             if log_file is not None:
                 self.request_logger.log_error(error=error)
             return LLMResponse(
+                generation_metrics=None,
                 model=request.model,
                 finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
                 error=error,

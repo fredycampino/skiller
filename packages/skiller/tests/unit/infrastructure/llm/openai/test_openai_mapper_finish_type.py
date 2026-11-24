@@ -18,7 +18,9 @@ def _request() -> OpenAILLMRequest:
     return OpenAILLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=LLMModelDefinition(
-            model="gpt-4.1", context_window_tokens=1_000_000, max_output_tokens=None
+            model="gpt-4.1",
+            context_window_tokens=1_000_000,
+            max_output_tokens=None,
         ),
         tool_choice=LLMToolChoiceMode.AUTO,
         temperature=1,

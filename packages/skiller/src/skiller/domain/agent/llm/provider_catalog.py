@@ -10,6 +10,7 @@ class LLMAdapterType(str, Enum):
     OPENAI = "openai"
     BEDROCK = "bedrock"
     CODEX = "codex"
+    OLLAMA = "ollama"
 
 
 class LLMProviderCatalogSource(str, Enum):
@@ -32,6 +33,16 @@ class LLMApiKeySource:
     def __post_init__(self) -> None:
         if not self.value:
             raise ValueError("LLM API key source requires value")
+
+
+@dataclass(frozen=True)
+class LLMModelParams:
+    temperature: float | None
+    top_p: float | None
+    top_k: int | None
+    seed: int | None
+    repeat_penalty: float | None
+    stop: tuple[str, ...] | None
 
 
 @dataclass(frozen=True)
@@ -58,6 +69,20 @@ class LLMModelDefinition:
 
 
 @dataclass(frozen=True)
+class OllamaLLMModelDefinition(LLMModelDefinition):
+    params: LLMModelParams | None
+    effort_mapping: tuple[bool | str, ...] | None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.effort_mapping is not None:
+            if len(self.effort_mapping) != 5:
+                raise ValueError("LLM model effort mapping requires exactly five values")
+            if any(type(value) not in (bool, str) or value == "" for value in self.effort_mapping):
+                raise ValueError("LLM model effort mapping requires booleans or non-empty strings")
+
+
+@dataclass(frozen=True)
 class OpenAILLMProviderDefinition:
     name: str
     timeout_seconds: float
@@ -80,6 +105,7 @@ class OpenAILLMProviderDefinition:
             name=self.name,
             timeout_seconds=self.timeout_seconds,
             models=self.models,
+            allow_empty_models=False,
         )
         if not self.base_url:
             raise ValueError("OpenAI LLM provider requires base_url")
@@ -107,6 +133,7 @@ class BedrockLLMProviderDefinition:
             name=self.name,
             timeout_seconds=self.timeout_seconds,
             models=self.models,
+            allow_empty_models=False,
         )
         if not self.profile:
             raise ValueError("Bedrock LLM provider requires profile")
@@ -130,13 +157,40 @@ class CodexLLMProviderDefinition:
             name=self.name,
             timeout_seconds=self.timeout_seconds,
             models=self.models,
+            allow_empty_models=False,
         )
         if not self.credentials_file:
             raise ValueError("Codex LLM provider requires credentials_file")
 
 
+@dataclass(frozen=True)
+class OllamaLLMProviderDefinition:
+    name: str
+    timeout_seconds: float
+    models: tuple[OllamaLLMModelDefinition, ...]
+    enabled: bool
+    base_url: str
+    keep_alive: str | int | None
+    adapter: Literal[LLMAdapterType.OLLAMA] = field(default=LLMAdapterType.OLLAMA, init=False)
+
+    def __post_init__(self) -> None:
+        _validate_provider_definition(
+            name=self.name,
+            timeout_seconds=self.timeout_seconds,
+            models=self.models,
+            allow_empty_models=True,
+        )
+        if any(not isinstance(model, OllamaLLMModelDefinition) for model in self.models):
+            raise TypeError("Ollama LLM provider requires OllamaLLMModelDefinition models")
+        if not self.base_url:
+            raise ValueError("Ollama LLM provider requires base_url")
+
+
 LLMProviderDefinition: TypeAlias = (
-    OpenAILLMProviderDefinition | BedrockLLMProviderDefinition | CodexLLMProviderDefinition
+    OpenAILLMProviderDefinition
+    | BedrockLLMProviderDefinition
+    | CodexLLMProviderDefinition
+    | OllamaLLMProviderDefinition
 )
 
 
@@ -187,12 +241,13 @@ def _validate_provider_definition(
     name: str,
     timeout_seconds: float,
     models: tuple[LLMModelDefinition, ...],
+    allow_empty_models: bool,
 ) -> None:
     if not name:
         raise ValueError("LLM provider definition requires name")
     if timeout_seconds <= 0:
         raise ValueError("LLM provider timeout must be positive")
-    if not models:
+    if not models and not allow_empty_models:
         raise ValueError("LLM provider models must not be empty")
     model_names = [model.model for model in models]
     if len(model_names) != len(set(model_names)):

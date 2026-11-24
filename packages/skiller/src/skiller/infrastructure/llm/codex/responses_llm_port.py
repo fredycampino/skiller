@@ -119,6 +119,7 @@ class ResponsesLLMPort(LLMPort[CodexLLMRequest]):
                     response={"stream": exc.stream, "stream_error": error}
                 )
             return LLMResponse(
+                generation_metrics=None,
                 model=request.model,
                 finish_type=LLMFinishType.ERROR_STREAM,
                 error=error,
@@ -180,6 +181,7 @@ class ResponsesLLMPort(LLMPort[CodexLLMRequest]):
         if log_file is not None:
             self.request_logger.log_error(error=error)
         return LLMResponse(
+            generation_metrics=None,
             model=request.model,
             finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
             error=error,

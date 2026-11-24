@@ -9,9 +9,11 @@ from skiller.domain.agent.llm.provider_catalog import (
     BedrockLLMProviderDefinition,
     CodexLLMProviderDefinition,
     LLMProviderDefinition,
+    OllamaLLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_ollama import OllamaLLMRequest
 from skiller.domain.agent.llm.request import LLMRequest, OpenAILLMRequest
 
 
@@ -41,6 +43,10 @@ class LLMModelManager:
                 raise RuntimeError("Bedrock LLM provider requires BedrockLLMRequest")
             client = self.client(provider)
             response = client.generate(request)
+        elif isinstance(provider, OllamaLLMProviderDefinition):
+            if not isinstance(request, OllamaLLMRequest):
+                raise RuntimeError("Ollama LLM provider requires OllamaLLMRequest")
+            response = self.client(provider).generate(request)
         else:
             raise RuntimeError(f"Unsupported LLM adapter: {provider.adapter}")
 
@@ -57,6 +63,9 @@ class LLMModelManager:
 
     @overload
     def client(self, provider: BedrockLLMProviderDefinition) -> LLMPort[BedrockLLMRequest]: ...
+
+    @overload
+    def client(self, provider: OllamaLLMProviderDefinition) -> LLMPort[OllamaLLMRequest]: ...
 
     @overload
     def client(self, provider: LLMProviderDefinition) -> ResolvedLLMPort: ...

@@ -70,10 +70,14 @@ class _FakeCatalogPort:
     def get_catalog(self) -> LLMProviderCatalog:
         models = (
             LLMModelDefinition(
-                model="model1", context_window_tokens=100_000, max_output_tokens=None
+                model="model1",
+                context_window_tokens=100_000,
+                max_output_tokens=None,
             ),
             LLMModelDefinition(
-                model="model2", context_window_tokens=100_000, max_output_tokens=None
+                model="model2",
+                context_window_tokens=100_000,
+                max_output_tokens=None,
             ),
         )
         provider = OpenAILLMProviderDefinition(

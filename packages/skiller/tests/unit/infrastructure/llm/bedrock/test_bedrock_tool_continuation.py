@@ -44,7 +44,9 @@ def _request(messages: tuple) -> BedrockLLMRequest:
     return BedrockLLMRequest(
         messages=messages,
         model=LLMModelDefinition(
-            model="test", context_window_tokens=200_000, max_output_tokens=None
+            model="test",
+            context_window_tokens=200_000,
+            max_output_tokens=None,
         ),
     )
 

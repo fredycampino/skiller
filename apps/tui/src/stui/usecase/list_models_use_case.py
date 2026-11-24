@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from stui.port.models_port import ModelsPort
 from stui.usecase.normalize_command_use_case import Command
+from stui.usecase.provider_priority import provider_priority
 from stui.usecase.run_event_context import RunEventContext
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
@@ -44,6 +45,8 @@ class ListModelsUseCase:
                 state=state,
                 message=str(exc).strip() or "models query failed",
             )
+
+        models = sorted(models, key=lambda provider: provider_priority(provider.name))
 
         state.set_runs_table()
         state.set_models_table(

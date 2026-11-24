@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from stui.port.models_port import ModelsPort
 from stui.usecase.normalize_command_use_case import Command
+from stui.usecase.provider_priority import provider_priority
 from stui.viewmodel.console_screen_state import (
     ConsoleScreenState,
     DispatchErrorItem,
@@ -35,6 +36,8 @@ class ListAuthProvidersUseCase:
                 state=state,
                 message=str(exc).strip() or "auth providers query failed",
             )
+
+        providers = sorted(providers, key=lambda provider: provider_priority(provider.name))
 
         state.set_runs_table()
         state.set_models_table()

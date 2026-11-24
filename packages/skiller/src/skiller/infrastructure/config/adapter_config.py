@@ -11,10 +11,30 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Annotated, Literal, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 
 from skiller.domain.agent.llm.model import LLMToolChoiceMode
 from skiller.domain.agent.llm.provider_catalog import LLMAdapterType
+
+
+class LLMModelParamsConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    temperature: float | None = Field(default=None, ge=0)
+    top_p: float | None = Field(default=None, gt=0, le=1)
+    top_k: int | None = Field(default=None, ge=0)
+    seed: int | None = None
+    repeat_penalty: float | None = Field(default=None, ge=0)
+    stop: tuple[str, ...] | None = None
 
 
 class LLMModelConfigModel(BaseModel):
@@ -23,6 +43,10 @@ class LLMModelConfigModel(BaseModel):
     model: str = Field(min_length=1)
     context_window_tokens: int = Field(gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
+    params: LLMModelParamsConfigModel | None = None
+    effort_mapping: tuple[StrictBool | Annotated[StrictStr, Field(min_length=1)], ...] | None = (
+        Field(default=None, min_length=5, max_length=5)
+    )
 
     @field_validator("model")
     @classmethod
@@ -126,6 +150,34 @@ class CodexAdapterConfigModel(_LLMAdapterConfigModelBase):
         return normalized
 
 
+class OllamaAdapterConfigModel(_LLMAdapterConfigModelBase):
+    models: tuple[LLMModelConfigModel, ...]
+    adapter: Literal[LLMAdapterType.OLLAMA] = LLMAdapterType.OLLAMA
+    base_url: str = Field(min_length=1)
+    keep_alive: StrictStr | StrictInt | None = None
+
+    @field_validator("base_url", "keep_alive")
+    @classmethod
+    def normalize_text(cls, value: str | int | None) -> str | int | None:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Ollama LLM provider text fields must not be empty")
+        return normalized
+
+
+class OllamaAdapterOverrideModel(_LLMAdapterOverrideModelBase):
+    models: tuple[LLMModelConfigModel, ...] = Field(min_length=1)
+    base_url: str | None = Field(default=None, min_length=1)
+    keep_alive: StrictStr | StrictInt | None = None
+
+    @field_validator("base_url", "keep_alive")
+    @classmethod
+    def normalize_text(cls, value: str | int | None) -> str | int | None:
+        return OllamaAdapterConfigModel.normalize_text(value)
+
+
 class BedrockAdapterOverrideModel(_LLMAdapterOverrideModelBase):
     profile: str | None = Field(default=None, min_length=1)
 
@@ -185,7 +237,10 @@ class CodexAdapterOverrideModel(_LLMAdapterOverrideModelBase):
 
 
 LLMAdapterConfigModel = Annotated[
-    BedrockAdapterConfigModel | OpenAIAdapterConfigModel | CodexAdapterConfigModel,
+    BedrockAdapterConfigModel
+    | OpenAIAdapterConfigModel
+    | CodexAdapterConfigModel
+    | OllamaAdapterConfigModel,
     Field(discriminator="adapter"),
 ]
 
@@ -209,6 +264,7 @@ class LLMProviderCatalogOverrideModel(BaseModel):
     api_key_env: str | None = Field(default=None, min_length=1)
     api_key_file: str | None = Field(default=None, min_length=1)
     options: dict[str, object] | None = None
+    keep_alive: StrictStr | StrictInt | None = None
 
     @model_validator(mode="before")
     @classmethod

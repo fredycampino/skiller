@@ -6,9 +6,11 @@ from skiller.domain.agent.llm.provider_catalog import (
     BedrockLLMProviderDefinition,
     CodexLLMProviderDefinition,
     LLMProviderDefinition,
+    OllamaLLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_ollama import OllamaLLMRequest
 from skiller.domain.agent.llm.request import OpenAILLMRequest
 from skiller.infrastructure.llm.bedrock.bedrock_mapper import BedrockMapper
 from skiller.infrastructure.llm.bedrock.bedrock_request_logger import (
@@ -41,7 +43,10 @@ from skiller.infrastructure.llm.codex.responses_general_mapper import (
 from skiller.infrastructure.llm.codex.responses_lite_mapper import ResponsesLiteMapper
 from skiller.infrastructure.llm.codex.responses_llm_port import ResponsesLLMPort
 from skiller.infrastructure.llm.codex.responses_mapper import ResponsesMapper
+from skiller.infrastructure.llm.logger.request_logger import FileLLMRequestLogger
 from skiller.infrastructure.llm.mapper.llm_usage_mapper import DefaultLLMUsageMapper
+from skiller.infrastructure.llm.ollama.ollama_llm_port import OllamaLLMPort
+from skiller.infrastructure.llm.ollama.ollama_mapper import OllamaMapper
 from skiller.infrastructure.llm.openai.openai_api_key_datasource import (
     OpenAIApiKeyDatasource,
 )
@@ -64,6 +69,9 @@ class DefaultLLMClientResolver:
 
     @overload
     def resolve(self, provider: BedrockLLMProviderDefinition) -> LLMPort[BedrockLLMRequest]: ...
+
+    @overload
+    def resolve(self, provider: OllamaLLMProviderDefinition) -> LLMPort[OllamaLLMRequest]: ...
 
     @overload
     def resolve(self, provider: LLMProviderDefinition) -> ResolvedLLMPort: ...
@@ -106,5 +114,14 @@ class DefaultLLMClientResolver:
                 request_mapper=BedrockMapper(),
                 response_mapper=ConverseMapper(usage_mapper=DefaultLLMUsageMapper()),
                 collector=CollectConverseResponse(),
+            )
+        if isinstance(provider, OllamaLLMProviderDefinition):
+            return OllamaLLMPort(
+                base_url=provider.base_url,
+                timeout_seconds=provider.timeout_seconds,
+                mapper=OllamaMapper(
+                    usage_mapper=DefaultLLMUsageMapper(), keep_alive=provider.keep_alive
+                ),
+                request_logger=FileLLMRequestLogger(),
             )
         raise RuntimeError(f"Unsupported LLM adapter: {provider.adapter}")

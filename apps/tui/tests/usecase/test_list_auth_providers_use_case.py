@@ -45,18 +45,18 @@ def test_list_auth_providers_use_case_opens_auth_table_with_port_providers() -> 
         assert port.called is False
         assert result.state.auth_table.visible is True
         assert [row.name for row in result.state.auth_table.rows] == [
-            "moonshot",
             "codex",
             "openrouter",
+            "moonshot",
         ]
         assert [row.adapter for row in result.state.auth_table.rows] == [
-            "openai",
             "codex",
+            "openai",
             "openai",
         ]
         assert result.state.auth_table.rows[0].source == "user"
-        assert result.state.auth_table.rows[1].source == "user"
-        assert result.state.auth_table.rows[2].source == "default"
+        assert result.state.auth_table.rows[1].source == "default"
+        assert result.state.auth_table.rows[2].source == "user"
         assert result.state.prompt.mode == PromptMode.AUTH_TABLE
 
     with patched_to_thread(list_auth_providers_use_case_module):
@@ -78,9 +78,7 @@ def test_list_auth_providers_use_case_reports_providers_query_failure() -> None:
         assert result.state.prompt.mode == PromptMode.DEFAULT
         assert result.state.view_status.kind == ViewStatusKind.ERROR
         assert isinstance(result.state.transcript.items[0], DispatchErrorItem)
-        assert (
-            result.state.transcript.items[0].message == "error: providers command failed"
-        )
+        assert result.state.transcript.items[0].message == "error: providers command failed"
 
     with patched_to_thread(list_auth_providers_use_case_module):
         asyncio.run(run())
@@ -88,3 +86,38 @@ def test_list_auth_providers_use_case_reports_providers_query_failure() -> None:
 
 def _auth_command() -> Command:
     return Command(kind=CommandKind.AUTH, name="/auth", raw_text="/auth")
+
+
+def test_auth_provider_priority_keeps_other_providers_after_known_ones() -> None:
+    names = [
+        "custom",
+        "moonshot",
+        "deepseek",
+        "openrouter",
+        "lmstudio",
+        "ollama",
+        "bedrock",
+        "codex",
+        "minimax",
+    ]
+    providers = [
+        AuthProvidersPortProviderItem(name=name, source="default", adapter="openai", models=())
+        for name in names
+    ]
+    with patched_to_thread(list_auth_providers_use_case_module):
+        result = asyncio.run(
+            ListAuthProvidersUseCase(models_port=FakeModelsPort(providers=providers)).execute(
+                state=ConsoleScreenState(), command=_auth_command()
+            )
+        )
+    assert [row.name for row in result.state.auth_table.rows] == [
+        "codex",
+        "bedrock",
+        "ollama",
+        "lmstudio",
+        "openrouter",
+        "deepseek",
+        "moonshot",
+        "minimax",
+        "custom",
+    ]

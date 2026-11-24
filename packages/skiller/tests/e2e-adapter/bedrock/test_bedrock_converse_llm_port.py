@@ -84,6 +84,7 @@ def _model(*, max_output_tokens: int | None = None) -> LLMModelDefinition:
         model=os.environ.get("BEDROCK_E2E_MODEL", "us.anthropic.claude-opus-4-6-v1"),
         context_window_tokens=int(os.environ.get("BEDROCK_E2E_CONTEXT_WINDOW_TOKENS", "200000")),
         max_output_tokens=max_output_tokens,
+
     )
 
 
@@ -95,6 +96,7 @@ def _unavailable_model(*, max_output_tokens: int | None = None) -> LLMModelDefin
         model=model,
         context_window_tokens=int(os.environ.get("BEDROCK_E2E_CONTEXT_WINDOW_TOKENS", "200000")),
         max_output_tokens=max_output_tokens,
+
     )
 
 
@@ -106,6 +108,7 @@ def _invalid_model(*, max_output_tokens: int | None = None) -> LLMModelDefinitio
         model=model,
         context_window_tokens=int(os.environ.get("BEDROCK_E2E_CONTEXT_WINDOW_TOKENS", "200000")),
         max_output_tokens=max_output_tokens,
+
     )
 
 

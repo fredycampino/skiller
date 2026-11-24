@@ -64,6 +64,7 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
             choices = raw_response.get("choices")
         if not isinstance(choices, list) or not choices:
             return LLMResponse(
+                generation_metrics=None,
                 model=request.model,
                 finish_type=LLMFinishType.ERROR_MISSING_CHOICES,
                 error="OpenAI response missing choices",
@@ -76,6 +77,7 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
             message = first_choice.get("message")
         if message is None:
             return LLMResponse(
+                generation_metrics=None,
                 model=request.model,
                 finish_type=LLMFinishType.ERROR_MISSING_MESSAGE,
                 error="OpenAI response missing message payload",
@@ -128,6 +130,7 @@ class OpenAIMapper(LLMProtocolMapper[OpenAILLMRequest, object]):
         usage = self.usage_mapper.to_usage(provider_usage, request=request)
 
         return LLMResponse(
+            generation_metrics=None,
             content=content,
             model=request.model,
             tool_calls=tool_calls,

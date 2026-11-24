@@ -149,9 +149,20 @@ def _usage_model_value(value: object) -> str:
 
 
 @dataclass(frozen=True)
+class LLMGenerationMetrics:
+    total_duration_ns: int | None
+    model_load_duration_ns: int | None
+    input_tokens: int | None
+    input_processing_duration_ns: int | None
+    output_tokens: int | None
+    output_generation_duration_ns: int | None
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     model: LLMModelLike
     finish_type: LLMFinishType
+    generation_metrics: LLMGenerationMetrics | None
     content: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
     usage: LLMUsage | None = None

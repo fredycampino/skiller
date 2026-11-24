@@ -50,7 +50,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -389,6 +391,7 @@ def _tool_request() -> ToolExecutionRequest:
         ),
         turn_id="turn-1",
         response=LLMResponse(
+            generation_metrics=None,
             model=_model("model1", 100_000),
             finish_type=LLMFinishType.TOOL_CALLS,
         ),

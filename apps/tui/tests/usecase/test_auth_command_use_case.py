@@ -20,6 +20,7 @@ _T = TypeVar("_T")
 
 _ADAPTER_BY_PROVIDER = {
     "codex": "codex",
+    "ollama": "ollama",
     "minimax": "openai",
     "bedrock": "bedrock",
     "moonshot": "openai",
@@ -53,6 +54,7 @@ def _port() -> FakeModelsPort:
     ("text", "run_args"),
     [
         ("/auth codex", "auths/codex"),
+        ("/auth ollama", "auths/ollama"),
         ("/auth minimax", "auths/openai --arg provider=minimax"),
         ("/auth bedrock", "auths/bedrock"),
         ("/auth moonshot", "auths/openai --arg provider=moonshot"),
@@ -154,18 +156,20 @@ def test_auth_command_use_case_rejects_extra_args() -> None:
         RunStatus.WAITING_CHANNEL,
     ],
 )
+@pytest.mark.parametrize("provider", ["codex", "ollama"])
 def test_auth_command_use_case_passes_continue_id_when_waiting(
     status: RunStatus,
+    provider: str,
 ) -> None:
     result = _run(
         AuthCommandUseCase(
             context=_context(run_id="waiting-run", status=status),
             models_port=_port(),
-        ).execute(command=NormalizeCommandUseCase().execute(text="/auth codex"))
+        ).execute(command=NormalizeCommandUseCase().execute(text=f"/auth {provider}"))
     )
 
     assert result.command is not None
-    assert result.command.args_text == "auths/codex --arg continue_id=waiting-run"
+    assert result.command.args_text == f"auths/{provider} --arg continue_id=waiting-run"
 
 
 def test_auth_command_use_case_does_not_pass_continue_id_when_running() -> None:

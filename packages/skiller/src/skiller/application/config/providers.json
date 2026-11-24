@@ -216,6 +216,13 @@
           "context_window_tokens": 1000000
         }
       ]
+    },
+    "ollama": {
+      "adapter": "ollama",
+      "enabled": true,
+      "base_url": "http://127.0.0.1:11434",
+      "timeout_seconds": 600,
+      "models": []
     }
   }
 }

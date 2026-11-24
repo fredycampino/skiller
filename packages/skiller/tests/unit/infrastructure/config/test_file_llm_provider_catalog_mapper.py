@@ -402,3 +402,151 @@ def _model(
     if max_output_tokens is not None:
         value["max_output_tokens"] = max_output_tokens
     return value
+
+
+def _ollama_entry() -> dict:
+    return {
+        "adapter": "ollama",
+        "enabled": True,
+        "base_url": " http://localhost:11434 ",
+        "timeout_seconds": 600,
+        "keep_alive": "5m",
+        "models": [
+            {
+                "model": "qwen",
+                "context_window_tokens": 32768,
+                "params": {"temperature": 0.6, "stop": ["END"]},
+                "effort_mapping": ["low", "low", "medium", "medium", "xhigh"],
+            }
+        ],
+    }
+
+
+def test_mapper_preserves_ollama_model_configuration_and_overrides() -> None:
+    from skiller.domain.agent.llm.provider_catalog import (
+        OllamaLLMModelDefinition,
+        OllamaLLMProviderDefinition,
+    )
+
+    mapper = FileLLMProviderCatalogMapper()
+    (provider,) = mapper.to_provider_configs({"providers": {"ollama": _ollama_entry()}})
+    assert isinstance(provider, OllamaLLMProviderDefinition)
+    assert provider.adapter == LLMAdapterType.OLLAMA
+    assert provider.base_url == "http://localhost:11434"
+    assert provider.keep_alive == "5m"
+    model = provider.models[0]
+    assert isinstance(model, OllamaLLMModelDefinition)
+    assert model.params.temperature == 0.6
+    assert model.params.top_p is None
+    assert model.params.stop == ("END",)
+    assert model.effort_mapping == ("low", "low", "medium", "medium", "xhigh")
+    (override,) = mapper.to_override_configs(
+        {
+            "providers": {
+                "ollama": {
+                    "keep_alive": 0,
+                    "models": [
+                        {
+                            "model": "other",
+                            "context_window_tokens": 4096,
+                            "params": {"seed": 42},
+                            "effort_mapping": [False] * 5,
+                        }
+                    ],
+                }
+            }
+        }
+    )
+    updated = mapper.apply_override(base=provider, override=override)
+    assert updated.keep_alive == 0
+    assert isinstance(updated.models[0], OllamaLLMModelDefinition)
+    assert updated.models[0].params.seed == 42
+    assert updated.models[0].effort_mapping == (False,) * 5
+    assert provider.models[0] == model
+
+
+def test_mapper_ollama_omitted_settings_remain_absent() -> None:
+    entry = _ollama_entry()
+    del entry["keep_alive"]
+    del entry["models"][0]["params"]
+    del entry["models"][0]["effort_mapping"]
+    (provider,) = FileLLMProviderCatalogMapper().to_provider_configs(
+        {"providers": {"ollama": entry}}
+    )
+    assert provider.keep_alive is None
+    assert provider.models[0].params is None
+    assert provider.models[0].effort_mapping is None
+
+
+@pytest.mark.parametrize("mapping", [[True] * 4, [True] * 6, [1] * 5, [""] * 5, [None] * 5])
+def test_mapper_rejects_invalid_effort_mapping(mapping: list) -> None:
+    entry = _ollama_entry()
+    entry["models"][0]["effort_mapping"] = mapping
+    with pytest.raises(ValueError, match="Invalid LLM provider catalog"):
+        FileLLMProviderCatalogMapper().to_provider_configs({"providers": {"ollama": entry}})
+
+
+@pytest.mark.parametrize("params", [{"temperature": -1}, {"top_p": 2}, {"unknown": 1}])
+def test_mapper_rejects_invalid_model_params(params: dict) -> None:
+    entry = _ollama_entry()
+    entry["models"][0]["params"] = params
+    with pytest.raises(ValueError, match="Invalid LLM provider catalog"):
+        FileLLMProviderCatalogMapper().to_provider_configs({"providers": {"ollama": entry}})
+
+
+def test_other_adapters_reject_ollama_model_fields() -> None:
+    entry = _openai_entry()
+    mapper = FileLLMProviderCatalogMapper()
+    (provider,) = mapper.to_provider_configs({"providers": {"openai": entry}})
+    entry["models"][0]["params"] = {"top_k": 20}
+    entry["models"][0]["effort_mapping"] = [True] * 5
+    with pytest.raises(ValueError, match="require the Ollama adapter"):
+        mapper.to_provider_configs({"providers": {"openai": entry}})
+    (override,) = mapper.to_override_configs({"providers": {"openai": {"models": entry["models"]}}})
+    with pytest.raises(ValueError, match="require the Ollama adapter"):
+        mapper.apply_override(base=provider, override=override)
+
+
+def test_default_ollama_catalog_has_no_assumed_models() -> None:
+    mapper = FileLLMProviderCatalogMapper()
+    providers = mapper.to_provider_configs(
+        Path("packages/skiller/src/skiller/application/config/providers.json")
+    )
+    assert mapper.to_catalog(providers).get("ollama").models == ()
+
+
+@pytest.mark.parametrize("fields", [{"base_url": "http://localhost:11434"}, {"models": []}])
+def test_user_ollama_override_requires_nonempty_models(fields) -> None:
+    mapper = FileLLMProviderCatalogMapper()
+    (base,) = mapper.to_provider_configs({"providers": {"ollama": _ollama_entry()}})
+    with pytest.raises(ValueError, match="models"):
+        (override,) = mapper.to_override_configs({"providers": {"ollama": fields}})
+        mapper.apply_override(base=base, override=override)
+
+
+@pytest.mark.parametrize("models", [None, []])
+def test_new_user_ollama_definition_requires_nonempty_models(models) -> None:
+    entry = _ollama_entry()
+    if models is None:
+        del entry["models"]
+    else:
+        entry["models"] = models
+    mapper = FileLLMProviderCatalogMapper()
+    with pytest.raises(ValueError, match="models"):
+        (override,) = mapper.to_override_configs({"providers": {"custom": entry}})
+        mapper.to_new_provider(override)
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_ollama_still_rejects_empty_model_names(name) -> None:
+    entry = _ollama_entry()
+    entry["models"][0]["model"] = name
+    with pytest.raises(ValueError, match="model"):
+        FileLLMProviderCatalogMapper().to_provider_configs({"providers": {"ollama": entry}})
+
+
+def test_other_adapters_still_require_models() -> None:
+    entry = _openai_entry()
+    entry["models"] = []
+    with pytest.raises(ValueError, match="models"):
+        FileLLMProviderCatalogMapper().to_provider_configs({"providers": {"openai": entry}})

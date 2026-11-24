@@ -1,0 +1,17 @@
+name: qa
+description: "Interactive QA for the native Ollama adapter"
+version: "0.1"
+start: ask_user
+inputs: {}
+steps:
+  - wait_input: ask_user
+    prompt: "Write a task for Ollama QA"
+    next: qa_agent
+  - agent: qa_agent
+    config:
+      file: /data/agent.json
+    system: "You are a helpful assistant. Respond clearly and concisely in the user's language."
+    task: '{{output_value("ask_user").payload.text}}'
+    tools: []
+    max_turns: 5
+    next: ask_user

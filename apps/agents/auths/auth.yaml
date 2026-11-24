@@ -18,31 +18,33 @@ steps:
 
       ```text
       1 Codex
-      2 MiniMax
-      3 Bedrock
+      2 Bedrock
+      3 Ollama
       4 LM Studio
-      5 Moonshot
+      5 OpenRouter
       6 DeepSeek
-      7 Configure later
-      8 Exit
+      7 Moonshot
+      8 MiniMax
+      9 Configure later
       ```
     next: select_provider
 
   - wait_input: select_provider
-    prompt: "Choose 1, 2, 3, 4, 5, 6, 7, or 8."
+    prompt: "Choose 1, 2, 3, 4, 5, 6, 7, 8, or 9."
     next: route_provider
 
   - switch: route_provider
     value: '{{output_value("select_provider").payload.text}}'
     cases:
       "1": start_codex
-      "2": start_minimax
-      "3": start_bedrock
+      "2": start_bedrock
+      "3": start_ollama
       "4": start_lmstudio
-      "5": start_moonshot
+      "5": start_openrouter
       "6": start_deepseek
-      "7": configure_later
-      "8": exit_app
+      "7": start_moonshot
+      "8": start_minimax
+      "9": configure_later
     default: invalid_choice
 
   - notify: start_codex
@@ -105,6 +107,26 @@ steps:
       params: "--arg provider=deepseek --arg continue_id={{inputs.continue_id}}"
       auto: true
 
+  - notify: start_ollama
+    format: markdown
+    message: Starting Ollama setup.
+    action:
+      type: run
+      label: Start Ollama setup
+      arg: auths/ollama
+      params: "--arg continue_id={{inputs.continue_id}}"
+      auto: true
+
+  - notify: start_openrouter
+    format: markdown
+    message: Starting OpenRouter setup.
+    action:
+      type: run
+      label: Start OpenRouter setup
+      arg: auths/openai
+      params: "--arg provider=openrouter --arg continue_id={{inputs.continue_id}}"
+      auto: true
+
   - notify: configure_later
     format: markdown
     message: |
@@ -122,13 +144,8 @@ steps:
       skiller run auths/auth
       ```
 
-  - notify: exit_app
-    format: markdown
-    message: |
-      Use `/` to see more commands.
-
   - notify: invalid_choice
     format: markdown
     message: |
-      Invalid option. Choose `1`, `2`, `3`, `4`, `5`, `6`, `7`, or `8`.
+      Invalid option. Choose `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, or `9`.
     next: select_provider

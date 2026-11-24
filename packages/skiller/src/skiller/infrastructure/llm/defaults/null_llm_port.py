@@ -7,6 +7,7 @@ from skiller.domain.agent.llm.request import LLMRequest
 class NullLLMPort(LLMPort[LLMRequest]):
     def generate(self, request: LLMRequest) -> LLMResponse:
         return LLMResponse(
+            generation_metrics=None,
             model=request.model,
             finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
             error=(

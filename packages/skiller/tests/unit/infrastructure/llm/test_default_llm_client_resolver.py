@@ -39,7 +39,9 @@ def test_resolver_creates_openai_client_from_provider_definition(
         timeout_seconds=30,
         models=(
             LLMModelDefinition(
-                model="kimi-k3", context_window_tokens=256_000, max_output_tokens=None
+                model="kimi-k3",
+                context_window_tokens=256_000,
+                max_output_tokens=None,
             ),
         ),
         enabled=True,
@@ -73,7 +75,9 @@ def test_resolver_creates_codex_client_with_internal_lite_capabilities() -> None
         timeout_seconds=120,
         models=(
             LLMModelDefinition(
-                model="gpt-5.6-luna", context_window_tokens=1_050_000, max_output_tokens=None
+                model="gpt-5.6-luna",
+                context_window_tokens=1_050_000,
+                max_output_tokens=None,
             ),
         ),
         enabled=True,
@@ -118,7 +122,11 @@ def test_resolver_creates_converse_client_for_bedrock(
         name="bedrock",
         timeout_seconds=45,
         models=(
-            LLMModelDefinition(model="test", context_window_tokens=1_000, max_output_tokens=None),
+            LLMModelDefinition(
+                model="test",
+                context_window_tokens=1_000,
+                max_output_tokens=None,
+            ),
         ),
         enabled=True,
         profile="bedrock-profile",

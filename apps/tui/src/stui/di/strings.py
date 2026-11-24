@@ -28,6 +28,9 @@ class TuiStrings:
     models_table_no_models_for_provider_template: str = "{provider}: no models available"
     models_table_provider_configured_marker: str = "✓"
     models_table_active_model_marker: str = "●"
+    auth_table_provider_header: str = "Provider"
+    auth_table_adapter_header: str = "Adapter"
+    auth_table_configured_header: str = "Configured"
     auth_table_help: str = "↑↓ select · Enter configure · Esc close"
     auth_table_no_providers_message: str = "No auth providers available."
     auth_unknown_provider_message: str = (

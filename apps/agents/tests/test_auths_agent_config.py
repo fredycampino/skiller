@@ -19,9 +19,7 @@ def test_codex_auth_writes_config_only_after_credentials_validate() -> None:
     assert steps["exchange_authorization_code"]["next"] == "require_credentials"
     assert steps["require_credentials"]["next"] == "prepare_verify_config"
     assert steps["prepare_verify_config"]["next"] == "verify_credentials"
-    assert steps["verify_codex"]["config"] == {
-        "file": "~/.skiller/settings/agent.tmp.json"
-    }
+    assert steps["verify_codex"]["config"] == {"file": "~/.skiller/settings/agent.tmp.json"}
     assert steps["verify_credentials"]["next"] == "backup_codex_config"
     assert steps["backup_codex_config"]["next"] == "write_codex_config"
     assert steps["write_codex_config"]["next"] == "verify_codex"
@@ -45,9 +43,7 @@ def test_codex_auth_check_does_not_delete_credentials_file() -> None:
 
 
 def test_codex_auth_updates_user_provider_catalog_and_global_selection() -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/codex/codex.yaml").read_text(encoding="utf-8")
-    )
+    agent = yaml.safe_load(Path("apps/agents/auths/codex/codex.yaml").read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
     write_command = steps["write_codex_config"]["command"]
     commit_command = steps["commit_codex_config"]["command"]
@@ -61,7 +57,7 @@ def test_codex_auth_updates_user_provider_catalog_and_global_selection() -> None
     assert 'llm["provider"] = provider.strip()' in commit_command
     assert 'llm["model"] = model.strip()' in commit_command
     assert 'local_config_file="$settings_dir/agent.tmp.json"' in commit_command
-    assert 'verify_codex' in steps
+    assert "verify_codex" in steps
 
 
 def test_codex_auth_helper_reads_credentials_path_from_user_provider_catalog(
@@ -73,9 +69,7 @@ def test_codex_auth_helper_reads_credentials_path_from_user_provider_catalog(
     credentials_path = tmp_path / ".skiller" / "secrets" / "codex.json"
     providers_path.parent.mkdir(parents=True)
     providers_path.write_text(
-        '{"providers": {"codex": {"credentials_file": "'
-        + str(credentials_path)
-        + '"}}}\n',
+        '{"providers": {"codex": {"credentials_file": "' + str(credentials_path) + '"}}}\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(module.Path, "home", staticmethod(lambda: tmp_path))
@@ -101,16 +95,12 @@ def test_codex_auth_temp_files_are_stored_outside_secrets(tmp_path, monkeypatch)
 
 
 def test_openai_auth_selects_temporary_profile_outside_installation() -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8")
-    )
+    agent = yaml.safe_load(Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
     assert steps["prepare_verify_config"]["next"] == "verify_provider"
     assert steps["prepare_verify_config"]["allowed_paths"] == ["~/.skiller"]
-    assert steps["verify_provider"]["config"] == {
-        "file": "~/.skiller/settings/agent.tmp.json"
-    }
+    assert steps["verify_provider"]["config"] == {"file": "~/.skiller/settings/agent.tmp.json"}
     assert steps["route_provider_validation"]["cases"]["final"] == "commit_provider_config"
     assert steps["route_provider_validation"]["default"] == "restore_failed_provider_config"
     for step in steps.values():
@@ -122,9 +112,7 @@ def test_openai_auth_temporary_profile_lifecycle(
     tmp_path: Path,
     validation_succeeded: bool,
 ) -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8")
-    )
+    agent = yaml.safe_load(Path("apps/agents/auths/openai/openai.yaml").read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
     home = tmp_path / "home"
     settings = home / ".skiller" / "settings"
@@ -154,9 +142,7 @@ def test_openai_auth_temporary_profile_lifecycle(
     installation_before = helper.read_bytes()
     environment = dict(os.environ, HOME=str(home))
     final_step = (
-        "commit_provider_config"
-        if validation_succeeded
-        else "restore_failed_provider_config"
+        "commit_provider_config" if validation_succeeded else "restore_failed_provider_config"
     )
     for step_name in ("prepare_verify_config", final_step):
         command = steps[step_name]["command"]
@@ -203,12 +189,8 @@ def test_moonshot_auth_updates_user_provider_catalog_and_global_selection() -> N
     commit_command = steps["commit_moonshot_config"]["command"]
 
     assert steps["write_moonshot_config"]["next"] == "verify_moonshot"
-    assert steps["route_moonshot_validation"]["cases"]["final"] == (
-        "commit_moonshot_config"
-    )
-    assert steps["route_moonshot_validation"]["default"] == (
-        "restore_failed_moonshot_config"
-    )
+    assert steps["route_moonshot_validation"]["cases"]["final"] == ("commit_moonshot_config")
+    assert steps["route_moonshot_validation"]["default"] == ("restore_failed_moonshot_config")
     assert 'config_file="$settings_dir/providers.json"' in write_command
     assert 'provider.pop("model", None)' in write_command
     assert 'provider["api_key_file"] = secret_file' in write_command
@@ -229,9 +211,7 @@ def test_moonshot_auth_helper_reads_api_key_path_from_user_provider_catalog(
     secret_path = tmp_path / ".skiller" / "secrets" / "moonshot.key"
     providers_path.parent.mkdir(parents=True)
     providers_path.write_text(
-        '{"providers": {"moonshot": {"api_key_file": "'
-        + str(secret_path)
-        + '"}}}\n',
+        '{"providers": {"moonshot": {"api_key_file": "' + str(secret_path) + '"}}}\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(module.Path, "home", staticmethod(lambda: tmp_path))
@@ -245,18 +225,12 @@ def test_bedrock_auth_updates_user_provider_catalog_and_global_selection() -> No
     )
     steps = _steps_by_name(agent)
 
-    assert steps["route_bedrock_config"]["cases"]["ready"] == (
-        "write_bedrock_config_existing"
-    )
+    assert steps["route_bedrock_config"]["cases"]["ready"] == ("write_bedrock_config_existing")
     assert steps["write_bedrock_config_existing"]["next"] == "verify_bedrock"
     assert steps["write_bedrock_config_skiller"]["next"] == "verify_bedrock"
     assert steps["write_bedrock_config_custom"]["next"] == "verify_bedrock"
-    assert steps["route_bedrock_validation"]["cases"]["final"] == (
-        "commit_bedrock_config"
-    )
-    assert steps["route_bedrock_validation"]["default"] == (
-        "restore_failed_bedrock_config"
-    )
+    assert steps["route_bedrock_validation"]["cases"]["final"] == ("commit_bedrock_config")
+    assert steps["route_bedrock_validation"]["default"] == ("restore_failed_bedrock_config")
     assert steps["commit_bedrock_config"]["next"] == "credentials_ready"
 
     for step_name in (
@@ -305,17 +279,11 @@ def test_lmstudio_auth_updates_user_catalog_and_verifies_with_agent() -> None:
     )
     steps = _steps_by_name(agent)
 
-    assert steps["backup_lmstudio_config_existing"]["next"] == (
-        "write_lmstudio_config_existing"
-    )
+    assert steps["backup_lmstudio_config_existing"]["next"] == ("write_lmstudio_config_existing")
     assert steps["write_lmstudio_config_existing"]["next"] == "verify_lmstudio"
     assert steps["write_lmstudio_config_custom"]["next"] == "verify_lmstudio"
-    assert steps["route_lmstudio_validation"]["cases"]["final"] == (
-        "commit_lmstudio_config"
-    )
-    assert steps["route_lmstudio_validation"]["default"] == (
-        "restore_failed_lmstudio_config"
-    )
+    assert steps["route_lmstudio_validation"]["cases"]["final"] == ("commit_lmstudio_config")
+    assert steps["route_lmstudio_validation"]["default"] == ("restore_failed_lmstudio_config")
     assert steps["commit_lmstudio_config"]["next"] == "done"
     assert "verify_lmstudio" in steps
     assert not Path("apps/agents/auths/lmstudio/agent.json").exists()
@@ -353,7 +321,9 @@ def test_lmstudio_connection_menu_routes_choices_and_failures() -> None:
 
 @pytest.mark.parametrize("probe_exit_code, expected", [(0, "ready"), (1, "unavailable")])
 def test_lmstudio_local_connection_probes_default_url(
-    tmp_path: Path, probe_exit_code: int, expected: str,
+    tmp_path: Path,
+    probe_exit_code: int,
+    expected: str,
 ) -> None:
     flow = yaml.safe_load(
         Path("apps/agents/auths/lmstudio/lmstudio.yaml").read_text(encoding="utf-8")
@@ -434,12 +404,8 @@ def test_lmstudio_auth_helper_writes_and_restores_configuration(
 
     restored_providers = yaml.safe_load(providers_path.read_text(encoding="utf-8"))
     restored_agent = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
-    assert restored_providers == {
-        "providers": {"moonshot": {"timeout_seconds": 30}}
-    }
-    assert restored_agent == {
-        "llm": {"provider": "moonshot", "model": "kimi-k3"}
-    }
+    assert restored_providers == {"providers": {"moonshot": {"timeout_seconds": 30}}}
+    assert restored_agent == {"llm": {"provider": "moonshot", "model": "kimi-k3"}}
 
 
 def test_lmstudio_auth_uses_api_catalog_context_windows(
@@ -475,9 +441,7 @@ def test_lmstudio_auth_uses_api_catalog_context_windows(
                         "type": "llm",
                         "key": "loaded",
                         "max_context_length": 262_144,
-                        "loaded_instances": [
-                            {"config": {"context_length": 131_072}}
-                        ],
+                        "loaded_instances": [{"config": {"context_length": 131_072}}],
                     },
                     {"type": "embedding", "key": "embedding"},
                 ]
@@ -514,9 +478,7 @@ def test_lmstudio_auth_uses_lm_api_token_for_model_catalog(monkeypatch) -> None:
 def test_auth_provider_flows_emit_load_session_post_action() -> None:
     for flow in ("codex", "moonshot", "bedrock", "lmstudio"):
         flow_path = Path(f"apps/agents/auths/{flow}/{flow}.yaml")
-        agent = yaml.safe_load(
-            flow_path.read_text(encoding="utf-8")
-        )
+        agent = yaml.safe_load(flow_path.read_text(encoding="utf-8"))
 
         expected_inputs = {"continue_id": "string"}
         if flow == "codex":
@@ -536,39 +498,33 @@ def test_auth_provider_flows_emit_load_session_post_action() -> None:
 
 
 def test_auth_menu_forwards_continue_id_to_provider_flows() -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8")
-    )
+    agent = yaml.safe_load(Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
     assert agent["inputs"] == {"continue_id": "string"}
     for step_name in (
         "start_codex",
+        "start_ollama",
         "start_bedrock",
         "start_lmstudio",
         "start_moonshot",
     ):
-        assert steps[step_name]["action"]["params"] == (
-            "--arg continue_id={{inputs.continue_id}}"
-        )
+        assert steps[step_name]["action"]["params"] == ("--arg continue_id={{inputs.continue_id}}")
         assert steps[step_name]["action"]["arg"].startswith("auths/")
 
-    assert steps["route_provider"]["cases"]["2"] == "start_minimax"
+    assert steps["route_provider"]["cases"]["8"] == "start_minimax"
     assert steps["start_minimax"]["action"]["arg"] == "auths/openai"
     assert steps["start_minimax"]["action"]["params"] == (
         "--arg provider=minimax --arg continue_id={{inputs.continue_id}}"
     )
 
 
-
 @pytest.mark.parametrize(
     ("choice", "target"),
-    [("6", "start_deepseek"), ("7", "configure_later"), ("8", "exit_app")],
+    [("6", "start_deepseek"), ("7", "start_moonshot"), ("9", "configure_later")],
 )
-def test_auth_menu_routes_deepseek_and_exit_options(choice: str, target: str) -> None:
-    agent = yaml.safe_load(
-        Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8")
-    )
+def test_auth_menu_routes_deepseek_moonshot_and_configure_later(choice: str, target: str) -> None:
+    agent = yaml.safe_load(Path("apps/agents/auths/auth.yaml").read_text(encoding="utf-8"))
     steps = _steps_by_name(agent)
 
     assert steps["route_provider"]["cases"][choice] == target
@@ -638,3 +594,47 @@ def _load_lmstudio_auth_module() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_auth_menu_priority_and_single_skip_option() -> None:
+    agent = yaml.safe_load(Path("apps/agents/auths/auth.yaml").read_text())
+    steps = _steps_by_name(agent)
+    targets = [
+        "start_codex",
+        "start_bedrock",
+        "start_ollama",
+        "start_lmstudio",
+        "start_openrouter",
+        "start_deepseek",
+        "start_moonshot",
+        "start_minimax",
+        "configure_later",
+    ]
+    assert steps["route_provider"]["cases"] == {
+        str(index): target for index, target in enumerate(targets, 1)
+    }
+    labels = [
+        "Codex",
+        "Bedrock",
+        "Ollama",
+        "LM Studio",
+        "OpenRouter",
+        "DeepSeek",
+        "Moonshot",
+        "MiniMax",
+        "Configure later",
+    ]
+    menu = steps["show_menu"]["message"]
+    for index, label in enumerate(labels, 1):
+        assert f"{index} {label}" in menu
+    assert "exit_app" not in steps
+    assert "Exit" not in menu
+    assert "9" in steps["select_provider"]["prompt"]
+    assert "`9`" in steps["invalid_choice"]["message"]
+    assert steps["start_openrouter"]["action"] == {
+        "type": "run",
+        "label": "Start OpenRouter setup",
+        "arg": "auths/openai",
+        "params": "--arg provider=openrouter --arg continue_id={{inputs.continue_id}}",
+        "auto": True,
+    }

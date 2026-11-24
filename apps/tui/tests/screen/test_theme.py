@@ -23,3 +23,14 @@ def test_build_textual_css_uses_nord_background_for_surfaces() -> None:
         "            height: 100%;\n"
         "            background: #282C34;"
     ) in css
+
+
+def test_auth_and_runs_headers_share_muted_style() -> None:
+    css = build_textual_css(DEFAULT_TUI_THEME)
+
+    assert (
+        "#runs-table-data > .datatable--header,\n"
+        "        #auth-providers-table > .datatable--header {\n"
+        f"            color: {DEFAULT_TUI_THEME.color_text_muted};\n"
+        f"            background: {DEFAULT_TUI_THEME.color_background};"
+    ) in css

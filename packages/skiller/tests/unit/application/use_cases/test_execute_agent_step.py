@@ -90,7 +90,9 @@ pytestmark = pytest.mark.unit
 
 def _model(value: str, context_window_tokens: int) -> LLMModelDefinition:
     return LLMModelDefinition(
-        model=value, context_window_tokens=context_window_tokens, max_output_tokens=None
+        model=value,
+        context_window_tokens=context_window_tokens,
+        max_output_tokens=None,
     )
 
 
@@ -451,6 +453,7 @@ class _FakeLLM:
         responses: list[LLMResponse] | None = None,
     ) -> None:
         default_response = LLMResponse(
+            generation_metrics=None,
             model=_model("model1", 100_000),
             finish_type=LLMFinishType.STOP,
             content="Hello back.",
@@ -754,6 +757,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
     llm = _FakeLLM(
         responses=[
             LLMResponse(
+                generation_metrics=None,
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
@@ -767,6 +771,7 @@ def test_execute_agent_step_supports_tool_call_then_success() -> None:
                 ),
             ),
             LLMResponse(
+                generation_metrics=None,
                 content="Done.",
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.STOP,
@@ -894,6 +899,7 @@ def test_execute_agent_step_interrupts_and_advances_to_next_step() -> None:
     context_store = _FakeAgentContextStore()
     llm = _FakeLLM(
         response=LLMResponse(
+            generation_metrics=None,
             model=_model("model1", 100_000),
             finish_type=LLMFinishType.TOOL_CALLS,
             tool_calls=(
@@ -967,6 +973,7 @@ def test_execute_agent_step_advances_when_agent_reaches_max_turns() -> None:
     llm = _FakeLLM(
         responses=[
             LLMResponse(
+                generation_metrics=None,
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
@@ -1040,6 +1047,7 @@ def test_execute_agent_step_advances_when_agent_returns_invalid_final_message() 
     llm = _FakeLLM(
         responses=[
             LLMResponse(
+                generation_metrics=None,
                 content="   ",
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.STOP,
@@ -1097,6 +1105,7 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
     llm = _FakeLLM(
         responses=[
             LLMResponse(
+                generation_metrics=None,
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.TOOL_CALLS,
                 tool_calls=(
@@ -1110,6 +1119,7 @@ def test_execute_agent_step_emits_agent_tool_events_from_agent_context_entries()
                 ),
             ),
             LLMResponse(
+                generation_metrics=None,
                 content="Done.",
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.STOP,
@@ -1177,6 +1187,7 @@ def test_execute_agent_step_advances_when_llm_request_fails() -> None:
         context_store=_FakeAgentContextStore(),
         llm=_FakeLLM(
             response=LLMResponse(
+                generation_metrics=None,
                 model=_model("model1", 100_000),
                 finish_type=LLMFinishType.ERROR_REQUEST_FAILED,
                 error="invalid params",

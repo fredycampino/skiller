@@ -24,7 +24,9 @@ def _request() -> CodexLLMRequest:
     return CodexLLMRequest(
         messages=(LLMUserMessage("hello"),),
         model=LLMModelDefinition(
-            model="gpt-5.6", context_window_tokens=1_000, max_output_tokens=None
+            model="gpt-5.6",
+            context_window_tokens=1_000,
+            max_output_tokens=None,
         ),
         parallel_tool_calls=False,
         session_id="session-1",

@@ -6,9 +6,11 @@ from skiller.domain.agent.llm.provider_catalog import (
     BedrockLLMProviderDefinition,
     CodexLLMProviderDefinition,
     LLMProviderDefinition,
+    OllamaLLMProviderDefinition,
     OpenAILLMProviderDefinition,
 )
 from skiller.domain.agent.llm.provider_codex import CodexLLMRequest
+from skiller.domain.agent.llm.provider_ollama import OllamaLLMRequest
 from skiller.domain.agent.llm.request import OpenAILLMRequest
 
 
@@ -21,6 +23,9 @@ class LLMClientResolver(Protocol):
 
     @overload
     def resolve(self, provider: BedrockLLMProviderDefinition) -> LLMPort[BedrockLLMRequest]: ...
+
+    @overload
+    def resolve(self, provider: OllamaLLMProviderDefinition) -> LLMPort[OllamaLLMRequest]: ...
 
     @overload
     def resolve(self, provider: LLMProviderDefinition) -> ResolvedLLMPort: ...

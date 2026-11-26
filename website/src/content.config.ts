@@ -7,7 +7,7 @@ import { docsSchema } from '@astrojs/starlight/schema';
 export const collections = {
   blog: defineCollection({
     loader: glob({ pattern: '**/*.md', base: './src/content/blog' }),
-    schema: z.object({ title: z.string(), description: z.string(), publishedAt: z.coerce.date() }),
+    schema: z.object({ title: z.string(), description: z.string(), publishedAt: z.coerce.date(), socialImage: z.string().optional() }),
   }),
   docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
 };

@@ -5,18 +5,21 @@ description: Configure providers that use the Codex Responses integration.
 
 Uses the Codex Responses integration with OAuth credentials. This adapter connects to the Codex service, not arbitrary OpenAI Responses endpoints.
 
-## Provider section shape
+Built-in provider using this adapter:
 
-Add the definition to your [user provider catalog](/docs/configuration/llm-providers/):
+- OpenAI Codex (`codex`)
+
+## Override providers
+
+Customize the built-in `codex` provider by overriding its definition in your [user provider catalog](/docs/configuration/llm-providers/):
 
 ```json
 {
   "providers": {
-    "my-codex": {
-      "adapter": "codex",
+    "codex": {
       "enabled": true,
       "credentials_file": "~/.skiller/secrets/openai-codex.json",
-      "timeout_seconds": 120,
+      "timeout_seconds": 600,
       "parallel_tool_calls": true,
       "models": [
         {
@@ -29,7 +32,24 @@ Add the definition to your [user provider catalog](/docs/configuration/llm-provi
 }
 ```
 
-This example defines a separate Codex provider. To customize the built-in codex entry, use that name, omit adapter, and include only the fields you want to change.
+Include only the fields you want to change. Omitted fields, including `adapter`, are inherited from the built-in catalog definition. If supplied, `models` replaces the entire inherited list. Use model identifiers available to your account.
+
+## Define new Codex-based providers
+
+Use a new provider name and declare `"adapter": "codex"`, following the definition above:
+
+```json
+{
+  "providers": {
+    "my-codex": {
+      "adapter": "codex",
+      "...": "..."
+    }
+  }
+}
+```
+
+`"..."` represents the remaining provider fields from the previous example; it is not a configuration field. This adds a separate connection without changing the built-in provider. Select its name in your [agent configuration](/docs/configuration/model-selection/).
 
 ## Provider fields
 
@@ -39,7 +59,7 @@ The defaults below are the values in the built-in codex definition. A new provid
 | --- | --- | --- |
 | `enabled` | Makes the provider available. | `true` |
 | `credentials_file` | Path to the OAuth credentials file. | `~/.skiller/secrets/openai-codex.json` |
-| `timeout_seconds` | Positive request timeout in seconds. | `120` |
+| `timeout_seconds` | Positive request timeout in seconds. | `600` |
 | `parallel_tool_calls` | Requests parallel tool calls in the general Responses transport; the lite transport disables them. | `true` |
 | `models` | Available models; replaces the complete inherited list. | From the included catalog |
 

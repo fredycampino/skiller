@@ -1,6 +1,10 @@
 ---
 import '../styles/landing.css';
+import MainNavigation from '../components/MainNavigation.astro';
+import SocialMetadata from '../components/SocialMetadata.astro';
 
+const title = 'skiller.run — Agentic workflows that keep running';
+const description = 'Define agentic workflows in YAML and run them with durable, observable execution.';
 const githubUrl = 'https://github.com/fredycampino/skiller';
 ---
 
@@ -9,20 +13,15 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta
-      name="description"
-      content="Define agentic workflows in YAML and run them with durable, observable execution."
-    />
+    <meta name="description" content={description} />
     <link rel="canonical" href="https://skiller.run/" />
-    <title>skiller.run — Agentic workflows that keep running</title>
+    <title>{title}</title>
+    <SocialMetadata title={title} description={description} />
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="/" aria-label="skiller.run home">skiller.run</a>
-      <nav aria-label="Main navigation">
-        <a href="/blog/">Blog</a>
-        <a href={githubUrl}>GitHub</a>
-      </nav>
+      <MainNavigation />
     </header>
 
     <main>

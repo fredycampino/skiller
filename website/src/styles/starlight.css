@@ -9,3 +9,13 @@
   --sl-color-accent: #1769aa;
   --sl-color-accent-high: #0b3455;
 }
+
+.site-title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--sl-color-text-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}

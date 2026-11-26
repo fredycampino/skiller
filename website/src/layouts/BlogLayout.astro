@@ -1,27 +1,32 @@
 ---
 import '../styles/landing.css';
+import MainNavigation from '../components/MainNavigation.astro';
 import '../styles/blog.css';
-interface Props { title: string; description: string; }
-const { title, description } = Astro.props;
+import SocialMetadata from '../components/SocialMetadata.astro';
+interface Props { title: string; description: string; publishedAt?: Date; socialImage?: string; }
+const { title, description, publishedAt, socialImage } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" class="blog-theme" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <title>{title} — skiller.run</title>
+    <SocialMetadata
+      title={`${title} — skiller.run`}
+      description={description}
+      type={publishedAt ? 'article' : 'website'}
+      publishedAt={publishedAt}
+      image={socialImage}
+    />
   </head>
   <body class="blog-site">
     <header class="site-header">
       <a class="brand" href="/">skiller.run</a>
-      <nav aria-label="Main navigation">
-        <a href="/blog/" aria-current={Astro.url.pathname === '/blog/' ? 'page' : undefined}>Blog</a>
-        <a href="/docs/getting-started/installation/">Docs</a>
-        <a href="https://github.com/fredycampino/skiller">GitHub</a>
-      </nav>
+      <MainNavigation />
     </header>
     <main class="blog-main"><slot /></main>
     <footer><p><strong>skiller.run</strong> · Durable, observable agent workflows.</p><nav aria-label="Footer navigation"><a href="/blog/">Blog</a><a href="https://github.com/fredycampino/skiller">GitHub</a></nav></footer>

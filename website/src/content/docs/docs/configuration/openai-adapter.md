@@ -3,17 +3,24 @@ title: OpenAI adapter
 description: Configure providers that use the OpenAI-compatible Chat Completions API.
 ---
 
-Uses the OpenAI-compatible Chat Completions API. MiniMax, Moonshot, DeepSeek, OpenRouter, and LM Studio use this adapter.
+Uses the OpenAI-compatible Chat Completions API.
 
-## Provider section shape
+Built-in providers using this adapter:
 
-Add the provider definition to your [user provider catalog](/docs/configuration/llm-providers/):
+- MiniMax (`minimax`)
+- Moonshot (`moonshot`)
+- DeepSeek (`deepseek`)
+- OpenRouter (`openrouter`)
+- LM Studio (`lmstudio`)
+
+## Override providers
+
+Customize a built-in provider by overriding its definition in your [user provider catalog](/docs/configuration/llm-providers/). Replace `<provider>` with its catalog name, such as `minimax`, `moonshot`, `deepseek`, `openrouter`, or `lmstudio`:
 
 ```json
 {
   "providers": {
-    "my-provider": {
-      "adapter": "openai",
+    "<provider>": {
       "enabled": true,
       "base_url": "https://llm.example.com/v1",
       "api_key_env": "MY_PROVIDER_API_KEY",
@@ -35,7 +42,24 @@ Add the provider definition to your [user provider catalog](/docs/configuration/
 }
 ```
 
-This example defines a new provider. When customizing a built-in provider, omit adapter and include only the fields you want to change.
+Include only the fields you want to change. Omitted fields, including `adapter`, are inherited from the built-in catalog definition. If supplied, `models` replaces the entire inherited list. The URL, credentials, and model above are placeholders: use values supported by your provider.
+
+## Define new OpenAI-based providers
+
+Use a new provider name and declare `"adapter": "openai"`, following the definition above:
+
+```json
+{
+  "providers": {
+    "my-provider": {
+      "adapter": "openai",
+      "...": "..."
+    }
+  }
+}
+```
+
+`"..."` represents the remaining provider fields from the previous example; it is not a configuration field. This adds a separate connection without changing any built-in provider. Select its name in your [agent configuration](/docs/configuration/model-selection/).
 
 ## Provider fields
 
@@ -119,4 +143,4 @@ Use options for body parameters specific to your service. For example, the inclu
 }
 ```
 
-Only use parameters supported by the service. To define a new connection rather than customize a built-in provider, see [Custom LLM providers](/docs/configuration/custom-llm-providers/).
+Only use parameters supported by the service. To add a separate connection, see [Define new OpenAI-based providers](#define-new-openai-based-providers).

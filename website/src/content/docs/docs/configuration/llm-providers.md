@@ -15,7 +15,7 @@ The file must exist. Its values override the included catalog and the user confi
 
 ## Built-in providers
 
-Skiller includes these provider definitions. Configure their credentials to use them:
+Skiller includes these provider definitions. Use authentication to configure credentials or discover local models as required:
 
 | Provider | Adapter |
 | --- | --- |
@@ -26,12 +26,22 @@ Skiller includes these provider definitions. Configure their credentials to use 
 | LM Studio (`lmstudio`) | `openai` |
 | OpenAI Codex (`codex`) | `codex` |
 | Amazon Bedrock (`bedrock`) | `bedrock` |
+| Ollama (`ollama`) | `ollama` |
 
 See [Supported LLM APIs](/docs/configuration/supported-llm-apis/) for the API used by each adapter.
 
-## Example providers.json
+## Override or add a provider
 
-This example shows the catalog of a user who has configured authentication for several providers and added local models through LM Studio:
+Entries are matched by provider name:
+
+- **Override a built-in provider:** use its existing name, such as `ollama` or `bedrock`. Omit `adapter` to inherit it. Supplied fields replace the catalog values; omitted fields retain their inherited values. A `models` list replaces the entire inherited list, rather than adding individual models.
+- **Add a provider:** choose a new name, such as `my-ollama`, and declare a supported `adapter` with its required configuration. This creates a separate connection without changing the built-in provider. It does not add a new adapter implementation.
+
+To define additional connections, follow the adapter documentation: [OpenAI](/docs/configuration/openai-adapter/), [Codex](/docs/configuration/codex-adapter/), [Bedrock](/docs/configuration/bedrock-adapter/), or [Ollama](/docs/configuration/ollama-adapter/).
+
+## Example provider overrides
+
+This `providers.json` example overrides built-in catalog providers with user credentials, connection settings, and local models:
 
 ```json
 {
@@ -70,6 +80,15 @@ This example shows the catalog of a user who has configured authentication for s
       ],
       "timeout_seconds": 120
     },
+    "ollama": {
+      "models": [
+        {
+          "model": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q6_K",
+          "context_window_tokens": 32768,
+          "effort_mapping": ["low", "low", "medium", "medium", "xhigh"]
+        }
+      ]
+    },
     "minimax": {
       "api_key_file": "~/.skiller/secrets/minimax_api_key",
       "timeout_seconds": 60
@@ -82,4 +101,6 @@ This example shows the catalog of a user who has configured authentication for s
 }
 ```
 
-See [OpenAI adapter](/docs/configuration/openai-adapter/) for its provider fields, credentials, models, and options.
+Ollama inherits the local server URL and timeout from the catalog. Its user configuration must include at least one installed model; `/auth ollama` discovers and writes this list.
+
+See [OpenAI adapter](/docs/configuration/openai-adapter/) and [Ollama adapter](/docs/configuration/ollama-adapter/) for their connection settings and model options.

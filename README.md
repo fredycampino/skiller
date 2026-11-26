@@ -12,7 +12,7 @@ Durable runs, persistent loops, terminal UI, tools, and multiple LLM providers.
 
 - **Agents defined in YAML.** Combine agents, tools, deterministic steps, and external input in readable workflows.
 - **Persistent executions.** Keep run state and history across process restarts. Wait for a message or webhook and continue the same run later.
-- **Your models and tools.** Choose OpenAI-compatible, Codex, or Bedrock connections per agent, with configurable tools and operational guardrails—not a security sandbox.
+- **Your models and tools.** Choose OpenAI-compatible, Codex, Bedrock, or native Ollama connections per agent, with configurable tools and operational guardrails—not a security sandbox.
 - **Visibility from your terminal.** Chat with agents and follow their execution in STUI, or start runs, send tasks, and inspect events through the CLI.
 
 ## Get started
@@ -145,7 +145,7 @@ Runtime dependencies are grouped by the capability that uses them:
 | Area | Dependencies | Used for |
 | --- | --- | --- |
 | Core | `pydantic`, `PyYAML` | Configuration validation and YAML flow loading |
-| LLM providers | `openai`, `boto3` | OpenAI, Codex, and Amazon Bedrock adapters |
+| LLM providers | `openai`, `boto3`, `ollama` | OpenAI, Codex, Amazon Bedrock, and native Ollama adapters |
 | MCP | `fastmcp` | MCP client connections and tool execution |
 | Webhooks | `fastapi`, `uvicorn` | Local webhook server |
 | Terminal UI | `textual` | Interactive agent chat and run management |

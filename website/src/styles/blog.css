@@ -1,8 +1,19 @@
+/* Expressive Code uses Starlight theme tokens, absent from the standalone blog layout. */
+:root.blog-theme {
+  --sl-color-gray-5: hsl(224, 10%, 23%);
+  --sl-color-gray-6: hsl(224, 14%, 16%);
+  --sl-color-black: hsl(224, 10%, 10%);
+  --sl-color-text: var(--text);
+  --sl-text-code: 0.875rem;
+  --sl-line-height: 1.75;
+  --__sl-font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --__sl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 /* Reuse landing tokens and typography; keep long-form content readable. */
 .blog-main { padding-bottom: 120px; }
 .blog-hero, .article-hero { padding-block: 100px 80px; }
 .blog-hero { max-width: 900px; }
-.article-hero { border-bottom: 1px solid var(--border); margin-bottom: 64px; }
+.article-hero { padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
 .article-hero h1 { margin-top: 24px; font-size: clamp(3rem, 6vw, 5.5rem); }
 .article-date { display: block; margin-top: 28px; color: var(--muted); font-size: 0.85rem; }
 .post-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; }
@@ -15,24 +26,26 @@
 .article-body > p, .article-body > ul { max-width: none; }
 .article-body p, .article-body li { overflow-wrap: anywhere; }
 .article-body strong { color: #d0d6d2; font-weight: 600; }
-.article-body h2 { margin: 72px 0 24px; padding-top: 32px; border-top: 1px solid var(--border); font-size: clamp(1.8rem, 3vw, 2.7rem); letter-spacing: -0.045em; line-height: 1.15; }
+.article-body h2 { margin: 32px 0 20px; padding-top: 20px; border-top: 1px solid var(--border); font-size: clamp(1.8rem, 3vw, 2.7rem); letter-spacing: -0.045em; line-height: 1.15; }
 .article-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .article-body blockquote { margin: 28px 0; padding: 24px 28px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 0.95rem; }
 .article-body blockquote p { margin-block: 0 16px; }
 .article-body blockquote p:last-child { margin-bottom: 0; }
 .article-body img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: transparent; margin-block: 32px; }
 .article-body > p:has(img) { max-width: none; }
-.article-body table { display: block; width: 100%; overflow-x: auto; margin-block: 28px; border: 1px solid var(--border); border-radius: 8px; border-spacing: 0; background: var(--surface); font-size: 0.85rem; }
+.article-body table { display: table; width: 100%; margin-block: 28px; border: 1px solid var(--border); border-radius: 8px; border-spacing: 0; background: var(--surface); font-size: 0.85rem; }
 .article-body th, .article-body td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .article-body th { color: var(--text); font-weight: 650; }
 .article-body tr:last-child td { border-bottom: 0; }
-.article-body code { color: var(--text); font-size: 0.9em; }
+.article-body :not(pre) > code:not(.expressive-code code) { color: var(--text); font-size: 0.9em; }
+/* Keep prose close to the shared Expressive Code console. */
+.article-body > p:has(+ .expressive-code) { margin-bottom: 8px; }
 @media (max-width: 760px) {
-  .blog-hero, .article-hero { padding-block: 64px 48px; }
+  .blog-hero { padding-block: 64px 48px; }
+  .article-hero { padding-top: 64px; }
   .blog-main { padding-bottom: 72px; }
   .post-list { grid-template-columns: 1fr; }
   .post-card { padding: 24px; }
-  .article-body h2 { margin-top: 48px; }
   .article-body blockquote { padding: 20px; }
   .blog-site .site-header nav a:first-child { display: inline; }
 }

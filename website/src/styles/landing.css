@@ -244,7 +244,7 @@
     text-transform: uppercase;
   }
   .code-header { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-  pre { overflow-x: auto; margin: 0; padding: 28px; font-size: 0.9rem; line-height: 1.75; }
+  pre:not(.expressive-code pre) { overflow-x: auto; margin: 0; padding: 28px; font-size: 0.9rem; line-height: 1.75; }
   .key { color: var(--accent); }
 
   .runtime-panel {

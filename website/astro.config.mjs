@@ -7,6 +7,7 @@ export default defineConfig({
   output: 'static',
   redirects: {
     '/docs/': '/docs/getting-started/installation/',
+    '/docs/configuration/custom-llm-providers/': '/docs/configuration/llm-providers/#override-or-add-a-provider',
   },
   integrations: [
     starlight({
@@ -20,6 +21,10 @@ export default defineConfig({
         },
       ],
       customCss: ['./src/styles/starlight.css'],
+      components: {
+        SocialIcons: './src/components/MainNavigation.astro',
+        SiteTitle: './src/components/DocsSiteTitle.astro',
+      },
       sidebar: [
         {
           label: 'Getting started',
@@ -51,7 +56,7 @@ export default defineConfig({
             { label: 'OpenAI adapter', slug: 'docs/configuration/openai-adapter' },
             { label: 'Codex adapter', slug: 'docs/configuration/codex-adapter' },
             { label: 'Bedrock adapter', slug: 'docs/configuration/bedrock-adapter' },
-            { label: 'Custom providers', slug: 'docs/configuration/custom-llm-providers' },
+            { label: 'Ollama adapter', slug: 'docs/configuration/ollama-adapter' },
           ],
         },
         {

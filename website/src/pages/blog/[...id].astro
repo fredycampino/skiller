@@ -7,7 +7,7 @@ export async function getStaticPaths() {
 const { post } = Astro.props;
 const { Content } = await render(post);
 ---
-<BlogLayout title={post.data.title} description={post.data.description}>
+<BlogLayout title={post.data.title} description={post.data.description} publishedAt={post.data.publishedAt} socialImage={post.data.socialImage}>
   <article class="blog-article">
     <header class="article-hero">
       <a class="eyebrow" href="/blog/">← Blog / Experiments</a>

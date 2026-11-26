@@ -23,6 +23,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       publishedAt={publishedAt}
       image={socialImage}
     />
+    <slot name="head" />
   </head>
   <body class="blog-site">
     <header class="site-header">

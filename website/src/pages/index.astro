@@ -2,10 +2,21 @@
 import '../styles/landing.css';
 import MainNavigation from '../components/MainNavigation.astro';
 import SocialMetadata from '../components/SocialMetadata.astro';
+import StructuredData from '../components/StructuredData.astro';
 
-const title = 'skiller.run — Agentic workflows that keep running';
+const title = 'skiller.run — Run AI agent workflows from your terminal';
 const description = 'Define agentic workflows in YAML and run them with durable, observable execution.';
 const githubUrl = 'https://github.com/fredycampino/skiller';
+const applicationData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'skiller.run',
+  description,
+  url: new URL('/', Astro.site).href,
+  applicationCategory: 'DeveloperApplication',
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  sameAs: githubUrl,
+};
 ---
 
 <!doctype html>
@@ -18,6 +29,7 @@ const githubUrl = 'https://github.com/fredycampino/skiller';
     <link rel="canonical" href="https://skiller.run/" />
     <title>{title}</title>
     <SocialMetadata title={title} description={description} />
+    <StructuredData data={applicationData} />
   </head>
   <body>
     <header class="site-header">

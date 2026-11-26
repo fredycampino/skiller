@@ -1,13 +1,38 @@
 ---
 import { getCollection, render } from 'astro:content';
 import BlogLayout from '../../layouts/BlogLayout.astro';
+import StructuredData from '../../components/StructuredData.astro';
 export async function getStaticPaths() {
   return (await getCollection('blog')).map(post => ({ params: { id: post.id }, props: { post } }));
 }
 const { post } = Astro.props;
 const { Content } = await render(post);
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const articleData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'BlogPosting',
+      headline: post.data.title,
+      description: post.data.description,
+      datePublished: post.data.publishedAt.toISOString(),
+      url: canonical,
+      mainEntityOfPage: canonical,
+      ...(post.data.socialImage ? { image: new URL(post.data.socialImage, Astro.site).href } : {}),
+    },
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: new URL('/', Astro.site).href },
+        { '@type': 'ListItem', position: 2, name: 'Blog', item: new URL('/blog/', Astro.site).href },
+        { '@type': 'ListItem', position: 3, name: post.data.title, item: canonical },
+      ],
+    },
+  ],
+};
 ---
 <BlogLayout title={post.data.title} description={post.data.description} publishedAt={post.data.publishedAt} socialImage={post.data.socialImage}>
+  <StructuredData slot="head" data={articleData} />
   <article class="blog-article">
     <header class="article-hero">
       <a class="eyebrow" href="/blog/">← Blog / Experiments</a>

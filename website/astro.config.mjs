@@ -12,6 +12,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'skiller.run',
+      favicon: '/favicon.svg',
       disable404Route: true,
       social: [
         {
